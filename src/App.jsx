@@ -344,11 +344,13 @@ function GenerateTab({ onShowPayment, onShowTokenPayment }) {
             <div className="glass-effect rounded-xl p-6">
               <StyleSelector onSelect={() => setWorkflowStep(2)} />
             </div>
+          </div>
+        </div>
 
-            {/* Generate Button - Moved to right column */}
-            <div className="glass-effect rounded-xl p-6">
-              <GenerateButton customPrompt={customPrompt} />
-            </div>
+        {/* Generate Button - Centered in middle of screen */}
+        <div className="flex justify-center my-8">
+          <div className="glass-effect rounded-xl p-6">
+            <GenerateButton customPrompt={customPrompt} />
           </div>
         </div>
 
