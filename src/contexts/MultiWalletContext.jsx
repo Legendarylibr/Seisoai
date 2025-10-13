@@ -188,45 +188,47 @@ export const MultiWalletProvider = ({ children }) => {
         throw new Error('MetaMask wallet not detected. Please make sure MetaMask is installed and enabled, or try refreshing the page.');
       }
     } else if (walletId === 'rabby') {
-      // Enhanced Rabby detection with multiple fallbacks
+      // Simplified Rabby detection
       console.log('🔍 Rabby detection details:', {
         isRabby: window.ethereum.isRabby,
         isMetaMask: window.ethereum.isMetaMask,
         hasState: !!window.ethereum._state,
         hasRequest: !!window.ethereum.request,
-        userAgent: navigator.userAgent.includes('Rabby')
+        userAgent: navigator.userAgent.includes('Rabby'),
+        allKeys: Object.keys(window.ethereum || {})
       });
       
+      // Primary detection: isRabby property
       if (window.ethereum.isRabby === true) {
         console.log('✅ Rabby detected via isRabby === true');
         walletProvider = window.ethereum;
         detectedWalletName = 'rabby';
-      } else if (window.ethereum.isMetaMask === false && window.ethereum.request) {
-        // Fallback: if MetaMask is false but ethereum exists, it might be Rabby
+      }
+      // Secondary detection: check providers array
+      else if (window.ethereum.providers) {
+        const rabbyProvider = window.ethereum.providers.find(provider => provider.isRabby === true);
+        if (rabbyProvider) {
+          console.log('✅ Rabby detected via providers array');
+          walletProvider = rabbyProvider;
+          detectedWalletName = 'rabby';
+        }
+      }
+      // Fallback: if MetaMask is explicitly false, it's likely Rabby
+      else if (window.ethereum.isMetaMask === false) {
         console.log('✅ Rabby detected via MetaMask false fallback');
         walletProvider = window.ethereum;
         detectedWalletName = 'rabby';
-      } else if (window.ethereum._state || window.ethereum.isRabby === false) {
-        // Another fallback: check for Rabby-specific properties
-        console.log('✅ Rabby detected via _state or isRabby false fallback');
+      }
+      // Last resort: if we have ethereum and it's not MetaMask, assume Rabby
+      else if (window.ethereum && window.ethereum.isMetaMask !== true) {
+        console.log('✅ Rabby detected via generic EVM fallback');
         walletProvider = window.ethereum;
         detectedWalletName = 'rabby';
-      } else if (navigator.userAgent.includes('Rabby')) {
-        // User agent fallback
-        console.log('✅ Rabby detected via user agent');
-        walletProvider = window.ethereum;
-        detectedWalletName = 'rabby';
-      } else {
-        // Final fallback: if we have ethereum but it's not MetaMask, assume it's Rabby
-        console.log('🔄 No specific Rabby detection, trying generic EVM fallback');
-        if (window.ethereum && !window.ethereum.isMetaMask) {
-          console.log('✅ Using generic EVM provider as Rabby fallback');
-          walletProvider = window.ethereum;
-          detectedWalletName = 'rabby';
-        } else {
-          console.log('❌ No suitable provider found for Rabby');
-          throw new Error('Rabby wallet not detected. Please make sure Rabby is installed and enabled.');
-        }
+      }
+      else {
+        console.log('❌ No suitable provider found for Rabby');
+        console.log('🔍 Available properties:', Object.keys(window.ethereum || {}));
+        throw new Error('Rabby wallet not detected. Please make sure Rabby is installed and enabled, or try refreshing the page.');
       }
     } else if (walletId === 'coinbase') {
       if (window.ethereum.isCoinbaseWallet) {
