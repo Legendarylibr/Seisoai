@@ -209,22 +209,22 @@ const GenerateButton = ({ customPrompt = '' }) => {
   return (
     <>
       <div className="w-full flex justify-center">
-    <button
-      onClick={handleGenerate}
-      disabled={isDisabled}
-      aria-label={isGenerating ? 'Generating image...' : 'Generate AI image'}
-      className={`
-        w-full flex items-center justify-center gap-3 px-8 py-4 text-lg font-semibold rounded-xl
-        transition-all duration-300 transform
-        ${isDisabled 
-          ? 'opacity-50 cursor-not-allowed bg-gray-600 text-gray-400' 
-          : (!hasFreeAccess && credits <= 0)
-            ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-400 hover:to-orange-400 hover:shadow-xl hover:shadow-yellow-500/30 hover:scale-105'
-            : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400 hover:shadow-xl hover:shadow-purple-500/30 hover:scale-105'
-        }
-        border border-white/20
-      `}
-    >
+        <button
+          onClick={handleGenerate}
+          disabled={isDisabled}
+          aria-label={isGenerating ? 'Generating image...' : 'Generate AI image'}
+          className={`
+            max-w-sm w-full flex items-center justify-center gap-3 px-8 py-4 text-lg font-semibold rounded-xl
+            transition-all duration-300 transform
+            ${isDisabled 
+              ? 'opacity-50 cursor-not-allowed bg-gray-600 text-gray-400' 
+              : (!hasFreeAccess && credits <= 0)
+                ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-400 hover:to-orange-400 hover:shadow-xl hover:shadow-yellow-500/30 hover:scale-105'
+                : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400 hover:shadow-xl hover:shadow-purple-500/30 hover:scale-105'
+            }
+            border border-white/20
+          `}
+        >
           {getButtonIcon()}
           <span>{getButtonText()}</span>
         </button>
