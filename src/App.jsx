@@ -326,11 +326,6 @@ function GenerateTab({ onShowPayment, onShowTokenPayment }) {
                 rows={3}
               />
             </div>
-
-            {/* Style Selection - Under Describe Generation */}
-            <div className="glass-effect rounded-lg p-4">
-              <StyleSelector onSelect={() => setWorkflowStep(2)} />
-            </div>
           </div>
 
           {/* Generated Image Output */}
@@ -343,6 +338,11 @@ function GenerateTab({ onShowPayment, onShowTokenPayment }) {
               <div className="min-h-[200px]">
                 <ImageOutput />
               </div>
+            </div>
+
+            {/* Style Selection - Moved to right column */}
+            <div className="glass-effect rounded-lg p-4">
+              <StyleSelector onSelect={() => setWorkflowStep(2)} />
             </div>
 
             {/* Generate Button - Moved to right column */}
