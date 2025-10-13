@@ -149,6 +149,9 @@ export const MultiWalletProvider = ({ children }) => {
     console.log(`🔍 window.ethereum:`, window.ethereum);
     console.log(`🔍 window.ethereum.isRabby:`, window.ethereum?.isRabby);
     console.log(`🔍 window.ethereum.isMetaMask:`, window.ethereum?.isMetaMask);
+    console.log(`🔍 window.ethereum.isCoinbaseWallet:`, window.ethereum?.isCoinbaseWallet);
+    console.log(`🔍 All ethereum properties:`, Object.keys(window.ethereum || {}));
+    console.log(`🔍 window.ethereum.providers:`, window.ethereum?.providers);
 
     // Get the correct wallet provider based on walletId
     let walletProvider = window.ethereum;
@@ -259,6 +262,17 @@ export const MultiWalletProvider = ({ children }) => {
       
       walletProvider = window.ethereum;
       console.log(`✅ Using ${detectedWalletName} as generic EVM wallet`);
+    }
+
+    // Fallback: If we still don't have a provider, try to use any available EVM wallet
+    if (!walletProvider && window.ethereum) {
+      console.log('🔄 No specific wallet detected, using generic EVM provider as fallback');
+      walletProvider = window.ethereum;
+      detectedWalletName = 'generic';
+    }
+
+    if (!walletProvider) {
+      throw new Error(`No suitable wallet provider found for ${walletId}. Please make sure you have an EVM wallet installed.`);
     }
 
     console.log(`✅ Using ${detectedWalletName} provider for connection`);
