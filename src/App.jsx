@@ -355,12 +355,10 @@ function GenerateTab({ onShowPayment, onShowTokenPayment }) {
         </div>
 
         {/* Credits Info - Minimal */}
-        <div className="glass-effect rounded p-2 max-w-md mx-auto">
-          <div className="text-center">
-            <p className="text-xs text-gray-400">
-              Need credits? Use "Buy Credits" in navigation.
-            </p>
-          </div>
+        <div className="text-center mt-2">
+          <p className="text-xs text-gray-500">
+            Need credits? Use "Buy Credits" in navigation.
+          </p>
         </div>
       </div>
     </div>
