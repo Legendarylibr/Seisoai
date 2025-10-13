@@ -165,10 +165,11 @@ const WalletConnect = () => {
         </div>
         <button
           onClick={disconnectWallet}
-          className="p-0.5 rounded hover:bg-white/10 transition-colors"
-          title="Disconnect"
+          className="flex items-center gap-1 px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 transition-colors"
+          title="Disconnect Wallet"
         >
-          <LogOut className="w-3 h-3 text-gray-400" />
+          <LogOut className="w-3 h-3 text-red-400" />
+          <span className="text-xs text-red-400 font-medium">Disconnect</span>
         </button>
       </div>
 
