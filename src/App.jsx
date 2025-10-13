@@ -323,7 +323,7 @@ function GenerateTab({ onShowPayment, onShowTokenPayment }) {
                 onChange={(e) => setCustomPrompt(e.target.value)}
                 placeholder="Describe what you want to change or add in the reference image excluding the style preset if selected. Describe desired changes in simple concise text"
                 className="w-full p-3 rounded bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none text-sm"
-                rows={6}
+                rows={5}
               />
             </div>
           </div>
