@@ -331,21 +331,23 @@ function GenerateTab({ onShowPayment, onShowTokenPayment }) {
             <div className="glass-effect rounded-lg p-4">
               <StyleSelector onSelect={() => setWorkflowStep(2)} />
             </div>
-
-            {/* Generate Button */}
-            <div className="glass-effect rounded-lg p-4">
-              <GenerateButton customPrompt={customPrompt} />
-            </div>
           </div>
 
           {/* Generated Image Output */}
-          <div className="glass-effect rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              <h2 className="text-base font-semibold text-white">Generated Image</h2>
+          <div className="space-y-4">
+            <div className="glass-effect rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                <h2 className="text-base font-semibold text-white">Generated Image</h2>
+              </div>
+              <div className="min-h-[200px]">
+                <ImageOutput />
+              </div>
             </div>
-            <div className="min-h-[200px]">
-              <ImageOutput />
+
+            {/* Generate Button - Moved to right column */}
+            <div className="glass-effect rounded-lg p-4">
+              <GenerateButton customPrompt={customPrompt} />
             </div>
           </div>
         </div>
