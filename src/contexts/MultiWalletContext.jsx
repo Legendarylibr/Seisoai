@@ -82,7 +82,7 @@ export const MultiWalletProvider = ({ children }) => {
       console.log(`🔗 Connecting to ${walletId} wallet...`);
 
       if (walletId === 'phantom') {
-        return await connectSolanaWallet();
+        return await connectSolanaWallet('phantom');
       } else {
         return await connectEVMWallet(walletId);
       }
@@ -100,6 +100,7 @@ export const MultiWalletProvider = ({ children }) => {
       walletName,
       isPhantom: walletName === 'phantom',
       isSolflare: walletName === 'solflare',
+      isRabby: walletName === 'rabby',
       isEVM: ['metamask', 'rabby', 'coinbase', 'walletconnect'].includes(walletName)
     });
     
@@ -117,7 +118,7 @@ export const MultiWalletProvider = ({ children }) => {
 
     if (walletName === 'phantom' || walletName === 'solflare') {
       console.log(`🔗 Routing to Solana wallet: ${walletName}`);
-      await connectSolanaWallet();
+      await connectSolanaWallet(walletName);
     } else if (walletName === 'metamask' || walletName === 'rabby' || walletName === 'coinbase' || walletName === 'walletconnect') {
       console.log(`🔗 Routing to EVM wallet: ${walletName}`);
       await connectEVMWallet(walletName);
@@ -364,7 +365,7 @@ export const MultiWalletProvider = ({ children }) => {
   };
 
   // Connect Solana wallet
-  const connectSolanaWallet = async () => {
+  const connectSolanaWallet = async (walletName = 'phantom') => {
     if (!window.solana) {
       throw new Error('No Solana wallet detected. Please install Phantom wallet.');
     }
@@ -375,14 +376,14 @@ export const MultiWalletProvider = ({ children }) => {
     setIsConnected(true);
     setAddress(address);
     setChainId('solana');
-    setWalletName('phantom');
+    setWalletName(walletName);
     setIsLoading(false);
 
     // Fetch user credits
     await fetchCredits(address);
 
-    console.log(`✅ Connected to Phantom wallet: ${address}`);
-    return { address, chainId: 'solana', walletName: 'phantom' };
+    console.log(`✅ Connected to ${walletName} wallet: ${address}`);
+    return { address, chainId: 'solana', walletName };
   };
 
   // Switch chain
