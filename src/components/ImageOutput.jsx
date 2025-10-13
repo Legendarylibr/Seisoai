@@ -83,23 +83,27 @@ const ImageOutput = () => {
       setGenerating(true);
       
       // Use the same parameters as the current generation
-      const result = await generateImage({
-        prompt: currentGeneration.prompt || '',
-        style: currentGeneration.style,
-        referenceImage: currentGeneration.referenceImage,
+      const advancedSettings = {
         guidanceScale: currentGeneration.guidanceScale || guidanceScale,
         imageSize: currentGeneration.imageSize || imageSize,
         numImages: currentGeneration.numImages || numImages,
         enableSafetyChecker: currentGeneration.enableSafetyChecker || enableSafetyChecker,
         generationMode: currentGeneration.generationMode || generationMode
-      });
+      };
       
-      setGeneratedImage(result.imageUrl);
+      const result = await generateImage(
+        currentGeneration.style,
+        currentGeneration.prompt || '',
+        advancedSettings,
+        currentGeneration.referenceImage
+      );
+      
+      setGeneratedImage(result);
       
       // Update current generation with new details
       setCurrentGeneration({
         ...currentGeneration,
-        image: result.imageUrl,
+        image: result,
         timestamp: new Date().toISOString()
       });
       
@@ -138,12 +142,12 @@ const ImageOutput = () => {
         generatedImage // Use current output as reference image
       );
       
-      setGeneratedImage(result.imageUrl);
+      setGeneratedImage(result);
       
       // Update current generation with new details
       setCurrentGeneration({
         ...currentGeneration,
-        image: result.imageUrl,
+        image: result,
         prompt: newPrompt.trim(),
         referenceImage: generatedImage, // Previous output becomes new input
         timestamp: new Date().toISOString()
