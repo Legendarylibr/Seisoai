@@ -69,12 +69,12 @@ const WalletConnect = () => {
 
   if (!isConnected) {
     return (
-      <div className="glass-effect rounded-lg p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <Wallet className="w-5 h-5 text-purple-400" />
+      <div className="glass-effect rounded p-2">
+        <div className="flex items-center gap-2 mb-2">
+          <Wallet className="w-4 h-4 text-purple-400" />
           <div>
-            <h3 className="text-sm font-semibold">Connect Wallet</h3>
-            <p className="text-xs text-gray-400">Choose your preferred wallet</p>
+            <h3 className="text-xs font-semibold">Connect Wallet</h3>
+            <p className="text-xs text-gray-400">Choose wallet</p>
           </div>
         </div>
         
@@ -91,18 +91,18 @@ const WalletConnect = () => {
             }
           }}
           disabled={isLoading}
-          className="w-full btn-primary flex items-center justify-center gap-2 py-2"
+          className="w-full btn-primary flex items-center justify-center gap-1 py-1 text-xs"
         >
           {isLoading ? (
             <>
-              <div className="w-4 h-4 animate-spin">⏳</div>
+              <div className="w-3 h-3 animate-spin">⏳</div>
               <span>Connecting...</span>
             </>
           ) : (
             <>
-              <Wallet className="w-4 h-4" />
-              <span>Connect Wallet</span>
-              {showWalletOptions ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              <Wallet className="w-3 h-3" />
+              <span>Connect</span>
+              {showWalletOptions ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </>
           )}
         </button>
@@ -154,39 +154,36 @@ const WalletConnect = () => {
   }
 
   return (
-    <div className="glass-effect rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{getWalletIcon(walletName)}</span>
+    <div className="glass-effect rounded p-2">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1">
+          <span className="text-sm">{getWalletIcon(walletName)}</span>
           <div>
-            <h3 className="text-sm font-semibold text-green-400">Connected</h3>
+            <h3 className="text-xs font-semibold text-green-400">Connected</h3>
             <p className="text-xs text-gray-400">{formatAddress(address)}</p>
-            <p className="text-xs text-purple-400">
-              {walletName === 'generic' ? 'EVM Wallet' : walletName?.charAt(0).toUpperCase() + walletName?.slice(1)} • {walletType?.toUpperCase()}
-            </p>
           </div>
         </div>
         <button
           onClick={disconnectWallet}
-          className="p-1 rounded hover:bg-white/10 transition-colors"
+          className="p-0.5 rounded hover:bg-white/10 transition-colors"
           title="Disconnect"
         >
-          <LogOut className="w-4 h-4 text-gray-400" />
+          <LogOut className="w-3 h-3 text-gray-400" />
         </button>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1">
         {/* Chain Info */}
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-400">Network:</span>
-          <span className="text-white">{getChainName(chainId)}</span>
+          <span className="text-white text-xs">{getChainName(chainId)}</span>
         </div>
 
         {/* Balance */}
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-400">Balance:</span>
-          <span className="text-white">
-            {parseFloat(balance).toFixed(4)} {walletType === 'solana' ? 'SOL' : 'ETH'}
+          <span className="text-white text-xs">
+            {parseFloat(balance).toFixed(3)} {walletType === 'solana' ? 'SOL' : 'ETH'}
           </span>
         </div>
 
@@ -194,7 +191,7 @@ const WalletConnect = () => {
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-400">Credits:</span>
           <div className="flex items-center gap-1">
-            <span className="text-purple-400 font-semibold">
+            <span className="text-purple-400 font-semibold text-xs">
               {hasFreeAccess ? '∞' : credits}
             </span>
             <button
@@ -202,23 +199,23 @@ const WalletConnect = () => {
               className="p-0.5 rounded hover:bg-white/10 transition-colors"
               title="Refresh credits"
             >
-              <RefreshCw className="w-3 h-3" />
+              <RefreshCw className="w-2 h-2" />
             </button>
           </div>
         </div>
 
         {/* Discount Information */}
         {discountInfo && (
-          <div className="pt-2 border-t border-white/10">
+          <div className="pt-1 border-t border-white/10">
             <div className="flex items-center gap-1 text-xs">
-              <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-green-400 font-medium">
+              <div className="w-1 h-1 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-green-400 text-xs">
                 {discountInfo.message}
               </span>
             </div>
             {hasFreeAccess && (
-              <div className="text-xs text-yellow-400 mt-1">
-                🎉 Free access granted!
+              <div className="text-xs text-yellow-400">
+                🎉 Free access!
               </div>
             )}
           </div>
@@ -226,26 +223,24 @@ const WalletConnect = () => {
 
         {/* NFT Holdings Summary */}
         {ownedNFTs && ownedNFTs.length > 0 && (
-          <div className="pt-2 border-t border-white/10">
-            <div className="text-xs text-gray-400 mb-1">NFT Holdings:</div>
+          <div className="pt-1 border-t border-white/10">
             <div className="text-xs text-purple-400">
-              {ownedNFTs.filter(nft => nft.owns).length} qualifying NFTs
+              {ownedNFTs.filter(nft => nft.owns).length} NFTs
             </div>
           </div>
         )}
 
         {/* Token Holdings Summary */}
         {tokenBalances && tokenBalances.length > 0 && (
-          <div className="pt-2 border-t border-white/10">
-            <div className="text-xs text-gray-400 mb-1">Token Holdings:</div>
+          <div className="pt-1 border-t border-white/10">
             <div className="text-xs text-purple-400">
-              {tokenBalances.filter(token => parseFloat(token.formattedBalance) > 0).length} qualifying tokens
+              {tokenBalances.filter(token => parseFloat(token.formattedBalance) > 0).length} tokens
             </div>
           </div>
         )}
 
         {/* View on Explorer */}
-        <div className="pt-2 border-t border-white/10">
+        <div className="pt-1 border-t border-white/10">
           <a
             href={
               walletType === 'solana' 
@@ -256,7 +251,7 @@ const WalletConnect = () => {
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
           >
-            <ExternalLink className="w-3 h-3" />
+            <ExternalLink className="w-2 h-2" />
             View on {walletType === 'solana' ? 'Solscan' : 'Etherscan'}
           </a>
         </div>
