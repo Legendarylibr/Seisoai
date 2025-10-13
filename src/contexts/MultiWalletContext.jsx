@@ -225,8 +225,27 @@ export const MultiWalletProvider = ({ children }) => {
           window.ethereum.isRabby === false || 
           navigator.userAgent.includes('Rabby') ||
           window.ethereum.constructor.name === 'RabbyProvider' ||
-          (window.ethereum.request && window.ethereum.request.toString().includes('rabby'))
+          (window.ethereum.request && window.ethereum.request.toString().includes('rabby')) ||
+          // Additional Rabby detection methods
+          window.ethereum.isRabby === undefined && window.ethereum._state ||
+          (window.ethereum.request && window.ethereum.request.toString().includes('rabby')) ||
+          // Check for Rabby-specific methods or properties
+          window.ethereum.rabby || 
+          window.ethereum.isRabby === false ||
+          // Check if the provider has Rabby-specific methods
+          (window.ethereum.request && typeof window.ethereum.request === 'function' && 
+           window.ethereum.request.toString().includes('rabby'))
         );
+        
+        console.log('🔍 Rabby masquerading check:', {
+          hasState: !!window.ethereum._state,
+          isRabbyFalse: window.ethereum.isRabby === false,
+          userAgentRabby: navigator.userAgent.includes('Rabby'),
+          constructorName: window.ethereum.constructor.name,
+          hasRabbyProperty: !!window.ethereum.rabby,
+          requestIncludesRabby: window.ethereum.request && window.ethereum.request.toString().includes('rabby'),
+          result: isRabbyMasquerading
+        });
         
         if (isRabbyMasquerading) {
           console.log('✅ Rabby detected masquerading as MetaMask');
@@ -234,7 +253,18 @@ export const MultiWalletProvider = ({ children }) => {
           detectedWalletName = 'rabby';
         } else {
           console.log('❌ This appears to be actual MetaMask, not Rabby');
-          throw new Error('Rabby wallet not detected. This appears to be MetaMask. Please use the MetaMask option instead.');
+          console.log('🔍 MetaMask properties:', {
+            isMetaMask: window.ethereum.isMetaMask,
+            isRabby: window.ethereum.isRabby,
+            _state: window.ethereum._state,
+            constructor: window.ethereum.constructor.name
+          });
+          
+          // Fallback: If user specifically requested Rabby, try to use the provider anyway
+          // This handles cases where both wallets are installed and MetaMask takes precedence
+          console.log('🔄 User requested Rabby specifically, attempting to use current provider as Rabby');
+          walletProvider = window.ethereum;
+          detectedWalletName = 'rabby';
         }
       }
       // Fallback: if MetaMask is explicitly false, it's likely Rabby
