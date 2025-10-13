@@ -123,16 +123,20 @@ const ImageOutput = () => {
       setGenerating(true);
       
       // Use the generated image as the reference image for the new generation
-      const result = await generateImage({
-        prompt: newPrompt.trim(),
-        style: currentGeneration.style,
-        referenceImage: generatedImage, // Use current output as input
+      const advancedSettings = {
         guidanceScale: currentGeneration.guidanceScale || guidanceScale,
         imageSize: currentGeneration.imageSize || imageSize,
         numImages: currentGeneration.numImages || numImages,
         enableSafetyChecker: currentGeneration.enableSafetyChecker || enableSafetyChecker,
         generationMode: currentGeneration.generationMode || generationMode
-      });
+      };
+      
+      const result = await generateImage(
+        currentGeneration.style,
+        newPrompt.trim(),
+        advancedSettings,
+        generatedImage // Use current output as reference image
+      );
       
       setGeneratedImage(result.imageUrl);
       
