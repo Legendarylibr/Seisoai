@@ -296,73 +296,73 @@ function GenerateTab({ onShowPayment, onShowTokenPayment }) {
         </div>
 
         {/* Top Section - Input and Output Images */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Input Image Section */}
-          <div className="space-y-6">
-            <div className="glass-effect rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <Image className="w-6 h-6 text-purple-400" />
-                <h2 className="text-xl font-semibold text-white">Reference Image</h2>
+          <div className="space-y-4">
+            <div className="glass-effect rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Image className="w-5 h-5 text-purple-400" />
+                <h2 className="text-lg font-semibold text-white">Reference Image</h2>
               </div>
-              <div className="min-h-[320px]">
+              <div className="min-h-[240px]">
                 <ReferenceImageInput />
               </div>
             </div>
 
             {/* Custom Prompt - Under Reference Image */}
-            <div className="glass-effect rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-6 h-6 text-purple-400 text-lg">✏️</div>
+            <div className="glass-effect rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-5 h-5 text-purple-400 text-sm">✏️</div>
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Describe Generation</h2>
-                  <p className="text-sm text-gray-400">What to change or add (optional)</p>
+                  <h2 className="text-base font-semibold text-white">Describe Generation</h2>
+                  <p className="text-xs text-gray-400">What to change or add (optional)</p>
                 </div>
               </div>
               <textarea
                 value={customPrompt}
                 onChange={(e) => setCustomPrompt(e.target.value)}
                 placeholder="Describe what you want to change or add in the reference image excluding the style preset if selected. Describe desired changes in simple concise text"
-                className="w-full p-4 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400 resize-none text-sm transition-all duration-200"
-                rows={4}
+                className="w-full p-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400 resize-none text-sm transition-all duration-200"
+                rows={3}
               />
             </div>
           </div>
 
           {/* Generated Image Output */}
-          <div className="space-y-6">
-            <div className="glass-effect rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <Sparkles className="w-6 h-6 text-purple-400" />
-                <h2 className="text-xl font-semibold text-white">Generated Image</h2>
+          <div className="space-y-4">
+            <div className="glass-effect rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-purple-400" />
+                <h2 className="text-lg font-semibold text-white">Generated Image</h2>
               </div>
-              <div className="min-h-[320px]">
+              <div className="min-h-[240px]">
                 <ImageOutput />
               </div>
             </div>
 
             {/* Style Selection - Moved to right column */}
-            <div className="glass-effect rounded-xl p-6">
+            <div className="glass-effect rounded-lg p-4">
               <StyleSelector onSelect={() => setWorkflowStep(2)} />
             </div>
           </div>
         </div>
 
         {/* Generate Button - Centered in middle of screen */}
-        <div className="flex justify-center my-8">
-          <div className="glass-effect rounded-xl p-6">
+        <div className="flex justify-center my-6">
+          <div className="glass-effect rounded-lg p-4">
             <GenerateButton customPrompt={customPrompt} />
           </div>
         </div>
 
 
         {/* Credits Info */}
-        <div className="glass-effect rounded-xl p-6 max-w-2xl mx-auto">
+        <div className="glass-effect rounded-lg p-4 max-w-xl mx-auto">
           <div className="text-center">
-            <p className="text-sm text-gray-400 mb-3">
+            <p className="text-xs text-gray-400 mb-2">
               Need more credits? Use the "Buy Credits" dropdown in the top right navigation.
             </p>
-            <div className="flex items-center justify-center gap-2 text-sm text-purple-400">
-              <Coins className="w-4 h-4" />
+            <div className="flex items-center justify-center gap-1 text-xs text-purple-400">
+              <Coins className="w-3 h-3" />
               <span>Credits available in navigation</span>
             </div>
           </div>

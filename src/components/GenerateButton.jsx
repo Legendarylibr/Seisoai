@@ -214,7 +214,7 @@ const GenerateButton = ({ customPrompt = '' }) => {
           disabled={isDisabled}
           aria-label={isGenerating ? 'Generating image...' : 'Generate AI image'}
           className={`
-            w-full flex items-center justify-center gap-3 px-12 py-5 text-xl font-semibold rounded-xl
+            w-full flex items-center justify-center gap-3 px-8 py-4 text-lg font-semibold rounded-lg
             transition-all duration-300 transform
             ${isDisabled 
               ? 'opacity-50 cursor-not-allowed bg-gray-600 text-gray-400' 
