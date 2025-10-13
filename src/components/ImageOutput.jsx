@@ -16,7 +16,6 @@ const ImageOutput = () => {
     setGenerating,
     setGeneratedImage,
     setError,
-    setControlNetImage,
     selectedStyle,
     guidanceScale,
     imageSize,
@@ -122,9 +121,6 @@ const ImageOutput = () => {
     
     try {
       setGenerating(true);
-      
-      // Set the generated image as the controlNetImage in context for FLUX.1 Kontext
-      setControlNetImage(generatedImage);
       
       // Use the generated image as the reference image for the new generation
       const result = await generateImage({
