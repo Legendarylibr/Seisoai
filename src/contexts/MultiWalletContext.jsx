@@ -192,7 +192,7 @@ export const MultiWalletProvider = ({ children }) => {
         throw new Error('MetaMask wallet not detected. Please make sure MetaMask is installed and enabled, or try refreshing the page.');
       }
     } else if (walletId === 'rabby') {
-      // Simplified Rabby detection
+      // Enhanced Rabby detection for when it masquerades as MetaMask
       console.log('🔍 Rabby detection details:', {
         isRabby: window.ethereum.isRabby,
         isMetaMask: window.ethereum.isMetaMask,
@@ -215,6 +215,26 @@ export const MultiWalletProvider = ({ children }) => {
           console.log('✅ Rabby detected via providers array');
           walletProvider = rabbyProvider;
           detectedWalletName = 'rabby';
+        }
+      }
+      // Special case: Rabby often masquerades as MetaMask, so we need to check for Rabby-specific properties
+      else if (window.ethereum.isMetaMask === true) {
+        // Check if this is actually Rabby masquerading as MetaMask
+        const isRabbyMasquerading = (
+          window.ethereum._state || 
+          window.ethereum.isRabby === false || 
+          navigator.userAgent.includes('Rabby') ||
+          window.ethereum.constructor.name === 'RabbyProvider' ||
+          (window.ethereum.request && window.ethereum.request.toString().includes('rabby'))
+        );
+        
+        if (isRabbyMasquerading) {
+          console.log('✅ Rabby detected masquerading as MetaMask');
+          walletProvider = window.ethereum;
+          detectedWalletName = 'rabby';
+        } else {
+          console.log('❌ This appears to be actual MetaMask, not Rabby');
+          throw new Error('Rabby wallet not detected. This appears to be MetaMask. Please use the MetaMask option instead.');
         }
       }
       // Fallback: if MetaMask is explicitly false, it's likely Rabby
