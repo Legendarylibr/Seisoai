@@ -16,6 +16,7 @@ import Settings from './components/Settings';
 import LegalDisclaimer from './components/LegalDisclaimer';
 import WalletErrorHandler from './components/WalletErrorHandler';
 import WalletConnect from './components/WalletConnect';
+import GenerateButton from './components/GenerateButton';
 import { Image, Grid, File, Settings as SettingsIcon2, Coins, Wand2, Wallet, ArrowRight, Sparkles } from 'lucide-react';
 
 function App() {
@@ -329,6 +330,11 @@ function GenerateTab({ onShowPayment, onShowTokenPayment }) {
             {/* Style Selection - Under Describe Generation */}
             <div className="glass-effect rounded-lg p-4">
               <StyleSelector onSelect={() => setWorkflowStep(2)} />
+            </div>
+
+            {/* Generate Button */}
+            <div className="glass-effect rounded-lg p-4">
+              <GenerateButton customPrompt={customPrompt} />
             </div>
           </div>
 
