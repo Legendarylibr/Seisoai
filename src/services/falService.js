@@ -83,24 +83,39 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     // Build optimized prompt - avoid unnecessary concatenation
     let basePrompt = '';
     
+    console.log('🔍 Prompt building debug:', {
+      customPrompt,
+      customPromptType: typeof customPrompt,
+      customPromptLength: customPrompt?.length,
+      customPromptTrimmed: customPrompt?.trim(),
+      hasStyle: !!style,
+      styleId: style?.id
+    });
+    
     // If we have a custom prompt, use it as the base
     if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
       basePrompt = customPrompt.trim();
+      console.log('✅ Using custom prompt as base:', basePrompt);
       
       // Add style prompt only if we have a style and it adds value
       if (style && style.id) {
         const stylePrompt = getStylePrompt(style.id);
         if (stylePrompt && stylePrompt !== 'artistic colors and lighting') {
           basePrompt = `${basePrompt}, ${stylePrompt}`;
+          console.log('✅ Added style prompt:', basePrompt);
         }
       }
     } else if (style && style.id) {
       // If no custom prompt but we have a style, use the style prompt
       basePrompt = getStylePrompt(style.id);
+      console.log('✅ Using style prompt only:', basePrompt);
     } else {
       // If no prompt and no style, use a default
       basePrompt = 'artistic image, high quality, detailed';
+      console.log('✅ Using default prompt:', basePrompt);
     }
+    
+    console.log('🎯 Final prompt being sent to API:', basePrompt);
     
     // Use FLUX.1 Kontext [max] for premium image generation
     const fluxEndpoint = getFluxEndpoint();
