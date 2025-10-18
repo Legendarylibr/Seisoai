@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Zap, Coins, ChevronDown, Wallet, RefreshCw, CreditCard } from 'lucide-react';
-import { useMultiWallet } from '../contexts/MultiWalletContext';
+import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
 const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment }) => {
-  const { isConnected, address, credits, hasFreeAccess, walletName, chainId } = useMultiWallet();
+  const { isConnected, address, credits } = useSimpleWallet();
   const [showCreditsDropdown, setShowCreditsDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -91,7 +91,7 @@ const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenP
                 <div className="flex items-center gap-1 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
                   <Coins className="w-4 h-4 text-purple-400" />
                   <span className="text-sm font-medium text-white">
-                    {hasFreeAccess ? '∞' : credits} credits
+                    {credits} credits
                   </span>
                 </div>
                 
@@ -147,14 +147,9 @@ const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenP
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-gray-400">Current Credits:</span>
                             <span className="text-purple-400 font-semibold">
-                              {hasFreeAccess ? '∞ (Free Access)' : credits}
+                              {credits}
                             </span>
                           </div>
-                          {hasFreeAccess && (
-                            <div className="mt-1 text-xs text-yellow-400">
-                              🎉 You have free access!
-                            </div>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -171,7 +166,7 @@ const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenP
               <div className="flex items-center gap-1 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
                 <Coins className="w-4 h-4 text-purple-400" />
                 <span className="text-xs font-medium text-white">
-                  {hasFreeAccess ? '∞' : credits}
+                  {credits}
                 </span>
               </div>
             )}

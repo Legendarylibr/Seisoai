@@ -250,7 +250,7 @@ export const WalletProvider = ({ children }) => {
 
   const fetchUserData = async (address) => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:30011';
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       console.log(`🔗 Fetching user data from: ${apiUrl}/api/users/${address}`);
       
       const response = await fetch(`${apiUrl}/api/users/${address}`);
@@ -744,11 +744,7 @@ export const WalletProvider = ({ children }) => {
     if (!state.address) return;
     
     try {
-      const apiUrl = import.meta.env.VITE_API_URL;
-      if (!apiUrl) {
-        console.warn('VITE_API_URL not configured, skipping credits refresh');
-        return;
-      }
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       const response = await fetch(`${apiUrl}/api/nft/check-credits`, {
         method: 'POST',
         headers: {

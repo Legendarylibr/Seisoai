@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
-import { useMultiWallet } from '../contexts/MultiWalletContext';
+import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { addGeneration } from '../services/galleryService';
 import { Upload, Play, Pause, Download, Trash2, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 
@@ -26,9 +26,8 @@ const BatchProcessor = () => {
     isConnected,
     address,
     credits,
-    hasFreeAccess,
-    refreshCredits
-  } = useMultiWallet();
+    fetchCredits
+  } = useSimpleWallet();
 
   const [newPrompt, setNewPrompt] = useState('');
   const [processingIndex, setProcessingIndex] = useState(0);
@@ -62,8 +61,8 @@ const BatchProcessor = () => {
       return;
     }
 
-    // Check if user has credits or free access
-    if (!hasFreeAccess && credits <= 0) {
+    // Check if user has credits
+    if (credits <= 0) {
       alert('You need credits to process batch images. Please purchase credits first.');
       return;
     }
@@ -144,8 +143,8 @@ const BatchProcessor = () => {
     }
 
     // Refresh credits after batch processing is complete
-    if (refreshCredits) {
-      await refreshCredits();
+    if (fetchCredits && address) {
+      await fetchCredits(address);
     }
 
     setBatchProcessing(false);

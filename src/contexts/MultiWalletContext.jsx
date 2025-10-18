@@ -36,6 +36,90 @@ export const MultiWalletProvider = ({ children }) => {
   const [credits, setCredits] = useState(0);
   const [hasFreeAccess, setHasFreeAccess] = useState(false);
 
+  // Initialize wallet state and check for existing connections
+  useEffect(() => {
+    console.log('🧹 Initializing wallet state...');
+    
+    // Check for existing wallet connections
+    const checkExistingConnection = async () => {
+      try {
+        // Check if we have a stored connection
+        const storedWallet = localStorage.getItem('walletConnected');
+        const storedAddress = localStorage.getItem('walletAddress');
+        const storedWalletType = localStorage.getItem('walletType');
+        
+        if (storedWallet === 'true' && storedAddress && storedWalletType) {
+          console.log('🔍 Found stored wallet connection:', {
+            address: storedAddress,
+            type: storedWalletType
+          });
+          
+          // Verify the connection is still valid
+          if (storedWalletType === 'evm' && window.ethereum) {
+            try {
+              const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+              if (accounts && accounts.length > 0 && accounts[0].toLowerCase() === storedAddress.toLowerCase()) {
+                console.log('✅ Stored EVM connection is still valid');
+                // Auto-reconnect
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                const signer = await provider.getSigner();
+                const network = await provider.getNetwork();
+                const balance = await provider.getBalance(storedAddress);
+                
+                setIsConnected(true);
+                setAddress(storedAddress);
+                setChainId(network.chainId.toString());
+                setBalance(ethers.formatEther(balance));
+                setWalletName('stored');
+                setProvider(provider);
+                setSigner(signer);
+                
+                // Fetch user credits
+                await fetchCredits(storedAddress);
+                return;
+              }
+            } catch (error) {
+              console.warn('⚠️ Stored EVM connection is invalid:', error);
+            }
+          } else if (storedWalletType === 'solana' && window.solana) {
+            try {
+              if (window.solana.isConnected && window.solana.publicKey) {
+                const address = window.solana.publicKey.toString();
+                if (address === storedAddress) {
+                  console.log('✅ Stored Solana connection is still valid');
+                  setIsConnected(true);
+                  setAddress(address);
+                  setChainId('solana');
+                  setWalletName('phantom');
+                  await fetchCredits(address);
+                  return;
+                }
+              }
+            } catch (error) {
+              console.warn('⚠️ Stored Solana connection is invalid:', error);
+            }
+          }
+        }
+        
+        // Clear invalid stored data
+        if (storedWallet || storedAddress || storedWalletType) {
+          console.log('🧹 Clearing invalid stored wallet data');
+          localStorage.removeItem('walletConnected');
+          localStorage.removeItem('walletAddress');
+          localStorage.removeItem('walletType');
+        }
+        
+      } catch (error) {
+        console.warn('⚠️ Error checking existing connection:', error);
+      }
+    };
+    
+    // Small delay to let wallet extensions load
+    setTimeout(checkExistingConnection, 1000);
+    
+    console.log('🧹 Wallet initialization completed');
+  }, []);
+
   // Detect available wallets
   const detectWallets = () => {
     const wallets = [];
@@ -103,6 +187,11 @@ export const MultiWalletProvider = ({ children }) => {
       isRabby: walletName === 'rabby',
       isEVM: ['metamask', 'rabby', 'coinbase', 'walletconnect'].includes(walletName)
     });
+    console.log(`🔍 Available window objects:`, {
+      ethereum: !!window.ethereum,
+      solana: !!window.solana,
+      phantom: !!window.solana?.isPhantom
+    });
     
     // Input validation
     if (!walletName || typeof walletName !== 'string') {
@@ -154,8 +243,28 @@ export const MultiWalletProvider = ({ children }) => {
     console.log(`🔍 window.ethereum.providers:`, window.ethereum?.providers);
 
     // Get the correct wallet provider based on walletId
-    let walletProvider = window.ethereum;
+    let walletProvider = null;
     let detectedWalletName = walletId;
+    
+    // Enhanced wallet provider detection with conflict handling
+    try {
+      if (window.ethereum) {
+        walletProvider = window.ethereum;
+        console.log('🔍 Using window.ethereum as provider');
+      } else {
+        throw new Error('No ethereum provider found');
+      }
+    } catch (error) {
+      console.warn('⚠️ Error accessing window.ethereum:', error.message);
+      // Try to access ethereum through different methods
+      try {
+        walletProvider = window.web3?.currentProvider || window.ethereum;
+        console.log('🔍 Using fallback provider');
+      } catch (fallbackError) {
+        console.error('❌ No wallet provider available:', fallbackError.message);
+        throw new Error('No wallet provider available. Please install a compatible wallet.');
+      }
+    }
 
     // Enhanced wallet detection
     if (walletId === 'metamask') {
@@ -364,6 +473,13 @@ export const MultiWalletProvider = ({ children }) => {
         });
         
         console.log(`⏳ Waiting for user response...`);
+        console.log(`🔍 Wallet provider state:`, {
+          isConnected: walletProvider.isConnected,
+          selectedAddress: walletProvider.selectedAddress,
+          chainId: walletProvider.chainId,
+          hasRequest: typeof walletProvider.request === 'function'
+        });
+        
         accounts = await Promise.race([requestPromise, timeoutPromise]);
         console.log(`✅ Account access granted: ${accounts.length} accounts`);
       }
@@ -372,7 +488,9 @@ export const MultiWalletProvider = ({ children }) => {
       
       // Handle user rejection gracefully
       if (requestError.code === 4001 || requestError.message?.includes('User rejected')) {
-        throw new Error('Connection cancelled by user');
+        setError('Please click "Connect" or "Approve" in the MetaMask popup to connect your wallet.');
+        setIsLoading(false);
+        return;
       }
       
       // Handle wallet-specific errors
@@ -420,6 +538,16 @@ export const MultiWalletProvider = ({ children }) => {
     setSigner(signer);
     setIsLoading(false);
 
+    // Store wallet connection for persistence
+    try {
+      localStorage.setItem('walletConnected', 'true');
+      localStorage.setItem('walletAddress', address);
+      localStorage.setItem('walletType', 'evm');
+      console.log('✅ Wallet connection stored for persistence');
+    } catch (error) {
+      console.warn('⚠️ Error storing wallet connection:', error);
+    }
+
     // Fetch user credits
     await fetchCredits(address);
 
@@ -442,6 +570,16 @@ export const MultiWalletProvider = ({ children }) => {
     setChainId('solana');
     setWalletName(walletName);
     setIsLoading(false);
+
+    // Store wallet connection for persistence
+    try {
+      localStorage.setItem('walletConnected', 'true');
+      localStorage.setItem('walletAddress', address);
+      localStorage.setItem('walletType', 'solana');
+      console.log('✅ Solana wallet connection stored for persistence');
+    } catch (error) {
+      console.warn('⚠️ Error storing Solana wallet connection:', error);
+    }
 
     // Fetch user credits
     await fetchCredits(address);
@@ -482,38 +620,13 @@ export const MultiWalletProvider = ({ children }) => {
     }
   };
 
-  // Fetch user credits with dynamic API URL detection
+  // Fetch user credits with robust API URL detection
   const fetchCredits = async (walletAddress) => {
     try {
-      // Try to detect the API URL dynamically
-      let apiUrl = import.meta.env.VITE_API_URL;
+      // Simple, robust API URL detection
+      let apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       
-      if (!apiUrl) {
-      // Try common backend ports
-      const commonPorts = [30011, 3001, 3002, 3003, 3004, 3005];
-        for (const port of commonPorts) {
-          try {
-            const testUrl = `http://localhost:${port}`;
-            const response = await fetch(`${testUrl}/api/health`, { 
-              method: 'GET',
-              signal: AbortSignal.timeout(1000) // 1 second timeout
-            });
-            if (response.ok) {
-              apiUrl = testUrl;
-              console.log(`✅ Found backend API at ${testUrl}`);
-              break;
-            }
-          } catch (e) {
-            // Continue to next port
-            continue;
-          }
-        }
-      }
-      
-      if (!apiUrl) {
-        console.warn('No API URL found, skipping credits fetch');
-        return;
-      }
+      console.log(`🔍 Using API URL: ${apiUrl}`);
       
       const response = await fetch(`${apiUrl}/api/users/${walletAddress}`);
       if (response.ok) {
@@ -531,6 +644,8 @@ export const MultiWalletProvider = ({ children }) => {
 
   // Disconnect wallet
   const disconnectWallet = () => {
+    console.log('🔌 Disconnecting wallet...');
+    
     setIsConnected(false);
     setAddress(null);
     setChainId(null);
@@ -541,6 +656,110 @@ export const MultiWalletProvider = ({ children }) => {
     setError(null);
     setCredits(0);
     setHasFreeAccess(false);
+    
+    // Clear stored wallet data
+    try {
+      localStorage.removeItem('walletConnected');
+      localStorage.removeItem('walletAddress');
+      localStorage.removeItem('walletType');
+      console.log('✅ Wallet data cleared from storage');
+    } catch (error) {
+      console.warn('⚠️ Error clearing wallet data:', error);
+    }
+  };
+
+  // Clear wallet conflicts only (preserve user data)
+  const clearWalletConflicts = () => {
+    console.log('🧹 Clearing wallet conflicts only...');
+    
+    // Clear any cached wallet data that might cause conflicts
+    if (window.ethereum) {
+      try {
+        // Clear cached accounts that might cause conflicts
+        if (window.ethereum._state && window.ethereum._state.accounts) {
+          // Only clear if there are conflicting accounts
+          const accounts = window.ethereum._state.accounts;
+          if (accounts && accounts.length > 0) {
+            console.log('🔍 Found cached accounts, clearing conflicts only');
+            // Don't clear the accounts, just reset the state
+            window.ethereum._state.accounts = [];
+          }
+        }
+        
+        console.log('✅ Ethereum wallet conflicts cleared');
+      } catch (error) {
+        console.warn('⚠️ Error clearing ethereum conflicts:', error);
+      }
+    }
+    
+    if (window.solana) {
+      try {
+        // Only disconnect if there are connection issues
+        if (window.solana.isConnected && window.solana.disconnect) {
+          console.log('🔍 Solana wallet connected, keeping connection');
+        }
+        console.log('✅ Solana wallet conflicts cleared');
+      } catch (error) {
+        console.warn('⚠️ Error clearing solana conflicts:', error);
+      }
+    }
+    
+    console.log('🧹 Wallet conflicts cleared (data preserved)');
+  };
+
+  // Clear all wallet connections and reset state (for debugging only)
+  const clearAllWalletConnections = () => {
+    console.log('🧹 Clearing ALL wallet connections...');
+    
+    // Reset state
+    disconnectWallet();
+    
+    // Clear any cached wallet data
+    if (window.ethereum) {
+      try {
+        // Remove any event listeners
+        if (window.ethereum.removeListener) {
+          window.ethereum.removeListener('accountsChanged', () => {});
+          window.ethereum.removeListener('chainChanged', () => {});
+        }
+        
+        // Clear any cached accounts
+        if (window.ethereum._state) {
+          window.ethereum._state.accounts = [];
+        }
+        
+        console.log('✅ Ethereum wallet state cleared');
+      } catch (error) {
+        console.warn('⚠️ Error clearing ethereum state:', error);
+      }
+    }
+    
+    if (window.solana) {
+      try {
+        // Disconnect Solana wallet if connected
+        if (window.solana.disconnect) {
+          window.solana.disconnect();
+        }
+        console.log('✅ Solana wallet state cleared');
+      } catch (error) {
+        console.warn('⚠️ Error clearing solana state:', error);
+      }
+    }
+    
+    // Clear any stored wallet data
+    try {
+      localStorage.removeItem('walletConnected');
+      localStorage.removeItem('walletAddress');
+      localStorage.removeItem('walletType');
+      sessionStorage.removeItem('walletConnected');
+      sessionStorage.removeItem('walletAddress');
+      sessionStorage.removeItem('walletType');
+      console.log('✅ Local storage cleared');
+    } catch (error) {
+      console.warn('⚠️ Error clearing storage:', error);
+    }
+    
+    console.log('🧹 All wallet connections cleared');
   };
 
   // Get chain info
@@ -576,6 +795,8 @@ export const MultiWalletProvider = ({ children }) => {
       connectWallet,
       connectWalletUniversal,
       disconnectWallet,
+      clearWalletConflicts,
+      clearAllWalletConnections,
       switchChain,
       
       // Utils

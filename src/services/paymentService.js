@@ -511,7 +511,7 @@ export const transferToPaymentWallet = async (tokenAddress, amount, chainId, sig
  */
 export const verifyPayment = async (txHash, walletAddress, tokenSymbol, amount, chainId, walletType = 'evm') => {
   try {
-    const apiUrl = import.meta.env.VITE_API_URL;
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     if (!apiUrl) {
       throw new Error('API URL not configured');
     }

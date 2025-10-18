@@ -180,7 +180,7 @@ export const logSafetyViolation = async (violation, walletAddress) => {
   
   // Send to backend for logging and monitoring
   try {
-    const apiUrl = import.meta.env.VITE_API_URL;
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     if (apiUrl) {
       await fetch(`${apiUrl}/api/safety/violation`, {
         method: 'POST',

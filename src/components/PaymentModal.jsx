@@ -1,17 +1,13 @@
 import React, { useState } from 'react';
-import { useMultiWallet } from '../contexts/MultiWalletContext';
+import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { X, CreditCard, Coins, RefreshCw } from 'lucide-react';
 
 const PaymentModal = ({ isOpen, onClose }) => {
   const { 
     address, 
     credits, 
-    refreshCredits, 
-    discountInfo, 
-    hasFreeAccess, 
-    isCheckingDiscounts,
-    checkDiscounts 
-  } = useMultiWallet();
+    fetchCredits
+  } = useSimpleWallet();
   const [amount, setAmount] = useState(10);
   const [selectedChain, setSelectedChain] = useState('ethereum');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -56,7 +52,7 @@ const PaymentModal = ({ isOpen, onClose }) => {
 
       if (response.ok) {
         const data = await response.json();
-        await refreshCredits();
+        await fetchCredits(address);
         onClose();
       } else {
         throw new Error('Payment verification failed');
@@ -148,52 +144,18 @@ const PaymentModal = ({ isOpen, onClose }) => {
             </select>
           </div>
 
-          {/* Discount Information */}
-          {discountInfo && (
-            <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-sm font-semibold text-green-400">
-                  {discountInfo.message}
-                </span>
-              </div>
-              {discountInfo.appliedDiscounts && discountInfo.appliedDiscounts.length > 0 && (
-                <div className="text-xs text-gray-400">
-                  <p className="mb-1">Applied discounts:</p>
-                  <ul className="list-disc list-inside space-y-1">
-                    {discountInfo.appliedDiscounts.map((discount, index) => (
-                      <li key={index} className="text-green-300">
-                        {discount.name} - {discount.discountType === 'free' ? 'Free Access' : `${discount.discountValue}% off`}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* Free Access Notice */}
-          {hasFreeAccess && (
-            <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-              <div className="flex items-center gap-2">
-                <div className="text-yellow-400">🎉</div>
-                <span className="text-sm font-semibold text-yellow-400">
-                  You have free access! No payment required.
-                </span>
-              </div>
-            </div>
-          )}
 
           {/* Credits Preview */}
           <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-300">You'll receive:</span>
               <span className="text-lg font-semibold text-purple-400">
-                {hasFreeAccess ? 'Unlimited' : amount} Credits
+                {amount} Credits
               </span>
             </div>
             <p className="text-xs text-gray-400 mt-1">
-              {hasFreeAccess ? 'Free access granted' : '1 USDC = 1 Credit'}
+              1 USDC = 1 Credit
             </p>
           </div>
 
@@ -220,19 +182,14 @@ const PaymentModal = ({ isOpen, onClose }) => {
               Cancel
             </button>
             <button
-              onClick={hasFreeAccess ? onClose : handlePayment}
-              disabled={isProcessing || (!hasFreeAccess && !txHash)}
+              onClick={handlePayment}
+              disabled={isProcessing || !txHash}
               className="flex-1 btn-primary py-2 flex items-center justify-center gap-2"
             >
               {isProcessing ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
                   <span>Processing...</span>
-                </>
-              ) : hasFreeAccess ? (
-                <>
-                  <div className="text-yellow-400">🎉</div>
-                  <span>Continue (Free)</span>
                 </>
               ) : (
                 <>

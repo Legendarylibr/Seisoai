@@ -1,4 +1,4 @@
-// Wallet conflict resolution utility
+// Enhanced wallet conflict resolution utility
 export const resolveWalletConflicts = () => {
   // Check if conflict resolution is already set up
   if (window.__walletConflictResolutionSetup) {
@@ -10,23 +10,32 @@ export const resolveWalletConflicts = () => {
   const originalDefineProperty = Object.defineProperty;
   
   Object.defineProperty = function(obj, prop, descriptor) {
-    // Prevent ethereum property redefinition conflicts
-    if (prop === 'ethereum' && obj === window) {
-      if (window.ethereum && descriptor.value) {
-        console.warn('🛡️ Wallet conflict detected, preserving existing ethereum provider');
-        return window.ethereum;
+    try {
+      // Prevent ethereum property redefinition conflicts
+      if (prop === 'ethereum' && obj === window) {
+        if (window.ethereum && descriptor.value) {
+          console.warn('🛡️ Wallet conflict detected, preserving existing ethereum provider');
+          return window.ethereum;
+        }
       }
-    }
-    
-    // Prevent originalDefineProperty conflicts
-    if (prop === 'originalDefineProperty' && obj === window) {
-      if (window.originalDefineProperty) {
-        console.warn('🛡️ originalDefineProperty already exists, skipping redefinition');
-        return window.originalDefineProperty;
+      
+      // Prevent originalDefineProperty conflicts
+      if (prop === 'originalDefineProperty' && obj === window) {
+        if (window.originalDefineProperty) {
+          console.warn('🛡️ originalDefineProperty already exists, skipping redefinition');
+          return window.originalDefineProperty;
+        }
       }
+      
+      return originalDefineProperty.call(this, obj, prop, descriptor);
+    } catch (error) {
+      // If there's a conflict error, just ignore it and return the existing property
+      if (error.message.includes('Cannot redefine property')) {
+        console.warn('🛡️ Property redefinition conflict ignored:', prop);
+        return obj[prop];
+      }
+      throw error;
     }
-    
-    return originalDefineProperty.call(this, obj, prop, descriptor);
   };
   
   // Store the original function
@@ -34,7 +43,9 @@ export const resolveWalletConflicts = () => {
     window.originalDefineProperty = originalDefineProperty;
   }
   
-  console.log('🛡️ Wallet conflict resolution utility initialized');
+  // Mark as initialized
+  window.__walletConflictResolutionSetup = true;
+  console.log('🛡️ Enhanced wallet conflict resolution utility initialized');
 };
 
 // Enhanced wallet detection with conflict resolution

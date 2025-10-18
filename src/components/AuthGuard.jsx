@@ -1,5 +1,5 @@
 import React from 'react';
-import { useMultiWallet } from '../contexts/MultiWalletContext';
+import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { Wallet, CreditCard, AlertCircle } from 'lucide-react';
 
 const AuthGuard = ({ children, requireCredits = true, fallback = null }) => {
@@ -7,10 +7,9 @@ const AuthGuard = ({ children, requireCredits = true, fallback = null }) => {
     isConnected, 
     address, 
     credits, 
-    hasFreeAccess, 
     isLoading,
     error 
-  } = useMultiWallet();
+  } = useSimpleWallet();
 
   // Show loading state
   if (isLoading) {

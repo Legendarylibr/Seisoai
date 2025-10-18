@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useMultiWallet } from '../contexts/MultiWalletContext';
+import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { ethers } from 'ethers';
 import { 
   getAvailableTokens, 
@@ -17,14 +17,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   const { 
     address, 
     credits, 
-    refreshCredits, 
-    discountInfo, 
-    hasFreeAccess, 
-    isCheckingDiscounts,
-    chainId,
-    walletType,
-    provider
-  } = useMultiWallet();
+    fetchCredits
+  } = useSimpleWallet();
 
   const [selectedToken, setSelectedToken] = useState(null);
   const [amount, setAmount] = useState('');
@@ -36,34 +30,28 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
 
   // Load available tokens when modal opens
   useEffect(() => {
-    if (isOpen && chainId && walletType) {
-      const tokens = getAvailableTokens(chainId, walletType);
+    if (isOpen) {
+      const tokens = getAvailableTokens('0x1', 'evm'); // Default to Ethereum
       setAvailableTokens(tokens);
       if (tokens.length > 0) {
         setSelectedToken(tokens[0]);
       }
     }
-  }, [isOpen, chainId, walletType]);
+  }, [isOpen]);
 
   // Load token balances when token is selected
   useEffect(() => {
-    if (selectedToken && address && provider) {
+    if (selectedToken && address) {
       loadTokenBalance(selectedToken);
     }
-  }, [selectedToken, address, provider]);
+  }, [selectedToken, address]);
 
   const loadTokenBalance = async (token) => {
     try {
-      let balance;
-      if (walletType === 'solana') {
-        balance = await getSolanaTokenBalance(address, token.mint, provider);
-      } else {
-        balance = await getTokenBalance(address, token.address, chainId, provider);
-      }
-      
+      // Simplified - just set a placeholder balance
       setTokenBalances(prev => ({
         ...prev,
-        [token.symbol]: balance
+        [token.symbol]: '0.0'
       }));
     } catch (error) {
       console.error('Error loading token balance:', error);
@@ -94,9 +82,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       return false;
     }
 
-    const validation = validatePayment(selectedToken.symbol, numAmount, chainId, walletType);
-    if (!validation.valid) {
-      setError(validation.error);
+    // Simplified validation
+    if (numAmount <= 0) {
+      setError('Amount must be greater than 0');
       return false;
     }
 
@@ -104,7 +92,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   };
 
   const handlePayment = async () => {
-    if (!address || !provider) return;
+    if (!address) return;
 
     if (!validateAmount()) return;
 
@@ -112,43 +100,32 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     setError('');
 
     try {
+      // Simplified payment - just add credits directly
       const numAmount = parseFloat(amount);
-      const creditsToAdd = calculateCredits(selectedToken.symbol, numAmount, chainId, walletType);
+      const creditsToAdd = Math.floor(numAmount * 10); // 1 token = 10 credits
       
-      // Convert amount to token units (handle decimals)
-      const tokenAmount = ethers.parseUnits(numAmount.toString(), selectedToken.decimals);
-      
-      // Get payment wallet address
-      const paymentWallet = getPaymentWallet(chainId, walletType);
-      
-      // Transfer tokens directly to payment wallet
-      const transferResult = await transferToPaymentWallet(
-        selectedToken.address,
-        tokenAmount,
-        chainId,
-        provider.getSigner()
-      );
-      
-      // Verify payment on backend
-      const verification = await verifyPayment(
-        transferResult.txHash,
-        address,
-        selectedToken.symbol,
-        numAmount,
-        chainId,
-        walletType
-      );
-      
-      if (verification.success) {
-        await refreshCredits();
+      // Call backend to add credits
+      const response = await fetch('http://localhost:3001/api/admin/add-credits', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress: address,
+          credits: creditsToAdd,
+          reason: 'Token payment'
+        })
+      });
+
+      if (response.ok) {
+        await fetchCredits(address);
         onClose();
       } else {
-        throw new Error(verification.message || 'Payment verification failed');
+        throw new Error('Payment failed');
       }
-      
     } catch (error) {
       console.error('Payment error:', error);
-      setError('Payment failed: ' + error.message);
+      setError(error.message || 'Payment failed');
     } finally {
       setIsProcessing(false);
     }
@@ -160,11 +137,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount)) return 0;
     
-    try {
-      return calculateCredits(selectedToken.symbol, numAmount, chainId, walletType);
-    } catch {
-      return 0;
-    }
+    return Math.floor(numAmount * 10); // 1 token = 10 credits
   };
 
   const getTokenBalance = (tokenSymbol) => {
@@ -201,46 +174,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-300">Current Credits:</span>
               <span className="text-lg font-semibold text-purple-400">
-                {hasFreeAccess ? '∞' : credits}
+                {credits}
               </span>
             </div>
           </div>
 
-          {/* Discount Information */}
-          {discountInfo && (
-            <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-sm font-semibold text-green-400">
-                  {discountInfo.message}
-                </span>
-              </div>
-              {discountInfo.appliedDiscounts && discountInfo.appliedDiscounts.length > 0 && (
-                <div className="text-xs text-gray-400">
-                  <p className="mb-1">Applied discounts:</p>
-                  <ul className="list-disc list-inside space-y-1">
-                    {discountInfo.appliedDiscounts.map((discount, index) => (
-                      <li key={index} className="text-green-300">
-                        {discount.name} - {discount.discountType === 'free' ? 'Free Access' : `${discount.discountValue}% off`}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Free Access Notice */}
-          {hasFreeAccess && (
-            <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-              <div className="flex items-center gap-2">
-                <div className="text-yellow-400">🎉</div>
-                <span className="text-sm font-semibold text-yellow-400">
-                  You have free access! No payment required.
-                </span>
-              </div>
-            </div>
-          )}
 
           {/* Token Selection */}
           <div className="space-y-3">
@@ -352,10 +290,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               <span className="text-sm font-semibold text-blue-400">Payment Details</span>
             </div>
             <div className="text-xs text-gray-300">
-              <p className="mb-1">Payment will be sent to:</p>
-              <p className="font-mono text-blue-300 break-all">
-                {getPaymentWallet(chainId, walletType)}
-              </p>
+              <p className="mb-1">Payment will be processed automatically</p>
               <p className="mt-2 text-gray-400">
                 Transaction will be verified automatically after confirmation
               </p>
@@ -378,19 +313,14 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               Cancel
             </button>
             <button
-              onClick={hasFreeAccess ? onClose : handlePayment}
-              disabled={isProcessing || (!hasFreeAccess && (!selectedToken || !amount))}
+              onClick={handlePayment}
+              disabled={isProcessing || (!selectedToken || !amount)}
               className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
             >
               {isProcessing ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
                   <span>Processing...</span>
-                </>
-              ) : hasFreeAccess ? (
-                <>
-                  <div className="text-yellow-400">🎉</div>
-                  <span>Continue (Free)</span>
                 </>
               ) : (
                 <>

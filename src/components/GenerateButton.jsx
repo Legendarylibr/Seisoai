@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
-import { useMultiWallet } from '../contexts/MultiWalletContext';
+import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateImage } from '../services/falService';
 import { addGeneration } from '../services/galleryService';
 import PaymentModal from './PaymentModal';
@@ -26,9 +26,8 @@ const GenerateButton = ({ customPrompt = '' }) => {
     isConnected,
     address,
     credits,
-    hasFreeAccess,
     isLoading: walletLoading
-  } = useMultiWallet();
+  } = useSimpleWallet();
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -98,8 +97,8 @@ const GenerateButton = ({ customPrompt = '' }) => {
       return;
     }
 
-    // Check if user has credits or free access
-    if (!hasFreeAccess && credits <= 0) {
+    // Check if user has credits
+    if (credits <= 0) {
       setShowPaymentModal(true);
       return;
     }
@@ -193,7 +192,7 @@ const GenerateButton = ({ customPrompt = '' }) => {
     if (isGenerating) return 'Generating...';
     if (walletLoading) return 'Loading...';
     if (!isConnected) return 'Connect Wallet First';
-    if (!hasFreeAccess && credits <= 0) return 'Buy Credits to Generate';
+    if (credits <= 0) return 'Buy Credits to Generate';
     return 'Generate Image';
   };
 
@@ -201,7 +200,7 @@ const GenerateButton = ({ customPrompt = '' }) => {
     if (isGenerating) return <div className="w-4 h-4 animate-spin text-lg">⏳</div>;
     if (walletLoading) return <div className="w-4 h-4 animate-pulse text-lg">⏳</div>;
     if (!isConnected) return <div className="w-4 h-4 text-lg">🔗</div>;
-    if (!hasFreeAccess && credits <= 0) return <div className="w-4 h-4 text-lg">💳</div>;
+    if (credits <= 0) return <div className="w-4 h-4 text-lg">💳</div>;
     if (!selectedStyle) return <div className="w-4 h-4 text-lg">🎨</div>;
     return <div className="w-4 h-4 text-lg">✨</div>;
   };
@@ -218,7 +217,7 @@ const GenerateButton = ({ customPrompt = '' }) => {
             transition-all duration-300 transform
             ${isDisabled 
               ? 'opacity-50 cursor-not-allowed bg-gray-600 text-gray-400' 
-              : (!hasFreeAccess && credits <= 0)
+              : (credits <= 0)
                 ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-400 hover:to-orange-400 hover:shadow-xl hover:shadow-yellow-500/30 hover:scale-105'
                 : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400 hover:shadow-xl hover:shadow-purple-500/30 hover:scale-105'
             }

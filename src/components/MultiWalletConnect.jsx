@@ -15,6 +15,8 @@ const MultiWalletConnect = () => {
     connectWallet,
     connectWalletUniversal,
     disconnectWallet,
+    clearWalletConflicts,
+    clearAllWalletConnections,
     switchChain,
     detectWallets,
     getChainInfo,
@@ -49,6 +51,8 @@ const MultiWalletConnect = () => {
     console.log(`🖱️ Wallet selected: ${walletId}`);
     console.log(`🔍 Selected chain: ${selectedChain}`);
     console.log(`🔍 Available wallets:`, selectedChain === 'evm' ? evmWallets : solanaWallets);
+    console.log(`🔍 Expected wallet type:`, selectedChain === 'evm' ? 'EVM' : 'Solana');
+    console.log(`🔍 Calling connectWalletUniversal with: ${walletId}`);
     connectWalletUniversal(walletId);
   };
 
@@ -98,6 +102,29 @@ const MultiWalletConnect = () => {
       <div className="text-center max-w-2xl mx-auto">
         {/* Wallet Error Handler */}
         <WalletErrorHandler />
+        
+        {/* Clear Conflicts Button */}
+        <div className="mb-4 flex justify-center gap-2">
+          <button
+            onClick={() => {
+              console.log('🧹 Clearing wallet conflicts...');
+              clearWalletConflicts();
+            }}
+            className="px-4 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/20 hover:border-yellow-500/30 rounded-lg text-yellow-300 hover:text-yellow-200 transition-colors text-sm"
+          >
+            🧹 Clear Conflicts
+          </button>
+          <button
+            onClick={() => {
+              console.log('🧹 Clearing all wallet connections...');
+              clearAllWalletConnections();
+              window.location.reload();
+            }}
+            className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 rounded-lg text-red-300 hover:text-red-200 transition-colors text-sm"
+          >
+            🧹 Clear All
+          </button>
+        </div>
         
         {/* Hero Section */}
         <div className="mb-8">

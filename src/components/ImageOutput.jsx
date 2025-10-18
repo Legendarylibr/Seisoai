@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
-import { useMultiWallet } from '../contexts/MultiWalletContext';
+import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateImage } from '../services/falService';
 import GenerateButton from './GenerateButton';
 
@@ -25,7 +25,7 @@ const ImageOutput = () => {
     controlNetImage
   } = useImageGenerator();
 
-  const { isConnected, address, credits, hasFreeAccess } = useMultiWallet();
+  const { isConnected, address, credits } = useSimpleWallet();
   
   const [isDownloading, setIsDownloading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);

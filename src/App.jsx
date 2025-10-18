@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ImageGeneratorProvider } from './contexts/ImageGeneratorContext';
-import { MultiWalletProvider, useMultiWallet } from './contexts/MultiWalletContext';
-import MultiWalletConnect from './components/MultiWalletConnect';
+import { SimpleWalletProvider, useSimpleWallet } from './contexts/SimpleWalletContext';
+import SimpleWalletConnect from './components/SimpleWalletConnect';
 import StyleSelector from './components/StyleSelector';
 import ImageOutput from './components/ImageOutput';
 import Navigation from './components/Navigation';
@@ -14,8 +14,6 @@ import BatchProcessor from './components/BatchProcessor';
 import Templates from './components/Templates';
 import Settings from './components/Settings';
 import LegalDisclaimer from './components/LegalDisclaimer';
-import WalletErrorHandler from './components/WalletErrorHandler';
-import WalletConnect from './components/WalletConnect';
 import GenerateButton from './components/GenerateButton';
 import { Image, Grid, File, Settings as SettingsIcon2, Coins, Wand2, Wallet, ArrowRight, Sparkles } from 'lucide-react';
 
@@ -33,7 +31,7 @@ function App() {
   ];
 
   return (
-    <MultiWalletProvider>
+    <SimpleWalletProvider>
       <ImageGeneratorProvider>
         <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900">
           <Navigation 
@@ -66,22 +64,21 @@ function App() {
           
         </div>
       </ImageGeneratorProvider>
-    </MultiWalletProvider>
+    </SimpleWalletProvider>
   );
 }
 
 function AppContent({ activeTab, onShowPayment, onShowTokenPayment }) {
-  const { isConnected } = useMultiWallet();
+  const { isConnected } = useSimpleWallet();
 
   // Show wallet connection prompt if not connected
   if (!isConnected) {
-    return <MultiWalletConnect />;
+    return <SimpleWalletConnect />;
   }
 
   // Show main content if wallet is connected (AuthGuard will handle credit requirements)
   return (
     <>
-      <WalletErrorHandler />
       <AuthGuard requireCredits={activeTab === 'generate' || activeTab === 'batch'}>
         {activeTab === 'generate' && <GenerateTab onShowPayment={onShowPayment} onShowTokenPayment={onShowTokenPayment} />}
         {activeTab === 'gallery' && <GalleryTab />}
@@ -113,13 +110,6 @@ function WalletPrompt({ onConnect }) {
     { id: 'solflare', name: 'Solflare', icon: '☀️' }
   ];
 
-  const handleChainSelect = (chainId) => {
-    setSelectedChain(chainId);
-  };
-
-  const handleWalletSelect = (walletId) => {
-    onConnect(walletId);
-  };
 
   const handleBack = () => {
     setSelectedChain(null);
@@ -128,9 +118,6 @@ function WalletPrompt({ onConnect }) {
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="text-center max-w-2xl mx-auto">
-        {/* Wallet Error Handler */}
-        <WalletErrorHandler />
-        
         {/* Hero Section */}
         <div className="mb-8">
           <div className="w-20 h-20 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -266,7 +253,7 @@ function WalletPrompt({ onConnect }) {
 function GenerateTab({ onShowPayment, onShowTokenPayment }) {
   const [customPrompt, setCustomPrompt] = useState('');
   const [workflowStep, setWorkflowStep] = useState(1);
-  const { credits, hasFreeAccess } = useMultiWallet();
+  const { credits } = useSimpleWallet();
 
   return (
     <div className="space-y-3">
@@ -277,7 +264,7 @@ function GenerateTab({ onShowPayment, onShowTokenPayment }) {
       </div>
 
       {/* Credits Status Banner */}
-      {!hasFreeAccess && credits <= 0 && (
+      {credits <= 0 && (
         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
           <div className="flex items-center gap-2 text-center justify-center">
             <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
@@ -292,7 +279,7 @@ function GenerateTab({ onShowPayment, onShowTokenPayment }) {
       <div className="space-y-4">
         {/* Wallet Connection - Compact */}
         <div className="glass-effect rounded-lg p-2 mb-3">
-          <WalletConnect />
+          <SimpleWalletConnect />
         </div>
 
         {/* Main Generation Area - Prioritized */}
