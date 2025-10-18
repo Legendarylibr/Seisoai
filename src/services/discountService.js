@@ -3,8 +3,10 @@ import { checkMultipleNFTs } from './nftService.js';
 import { checkMultipleTokens } from './tokenService.js';
 import { discountLogger as log } from '../utils/logger.js';
 
-// Base cost configuration
-const BASE_COST_CREDITS = 100;
+// Base cost configuration - dynamic pricing
+const BASE_COST_PER_CREDIT = 0.15; // $0.15 per credit for regular users
+const NFT_HOLDER_COST_PER_CREDIT = 0.08; // $0.08 per credit for NFT collection holders
+const CREDITS_PER_GENERATION = 1; // 1 credit per image generation
 
 // Cache configuration
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
@@ -304,17 +306,11 @@ export const calculateDiscount = async (walletAddress, serviceType, providers) =
       discount.appliesTo.includes(serviceType)
     );
     
-    if (applicableDiscounts.length === 0) {
-      return {
-        hasDiscount: false,
-        discountPercentage: 0,
-        isFree: false,
-        appliedDiscounts: [],
-        totalCredits: BASE_COST_CREDITS
-      };
-    }
+    // Calculate base cost based on NFT collection ownership
+    let isNFTHolder = false;
+    let costPerCredit = BASE_COST_PER_CREDIT;
     
-    // Check NFT holdings with retry logic
+    // Check if user owns any NFT collections
     const nftContracts = applicableDiscounts
       .filter(d => d.type === 'erc721' || d.type === 'erc1155' || d.type === 'solana')
       .map(d => ({
@@ -323,11 +319,44 @@ export const calculateDiscount = async (walletAddress, serviceType, providers) =
         type: d.type
       }));
     
-    let nftResults = [];
     if (nftContracts.length > 0) {
       try {
-        nftResults = await retryWithBackoff(checkMultipleNFTs, [walletAddress, nftContracts, providers]);
-        log.debug('NFT check completed', { contractCount: nftContracts.length, resultsCount: nftResults.length });
+        const nftResults = await retryWithBackoff(checkMultipleNFTs, [walletAddress, nftContracts, providers]);
+        isNFTHolder = nftResults.some(result => result.balance > 0);
+        if (isNFTHolder) {
+          costPerCredit = NFT_HOLDER_COST_PER_CREDIT;
+        }
+      } catch (error) {
+        log.warn('Failed to check NFT holdings for pricing', { error: error.message, walletAddress });
+      }
+    }
+    
+    if (applicableDiscounts.length === 0) {
+      return {
+        hasDiscount: false,
+        discountPercentage: 0,
+        isFree: false,
+        appliedDiscounts: [],
+        totalCredits: CREDITS_PER_GENERATION,
+        costPerCredit: costPerCredit,
+        isNFTHolder: isNFTHolder
+      };
+    }
+    
+    // Check NFT holdings with retry logic for discount calculation
+    const nftContractsForDiscounts = applicableDiscounts
+      .filter(d => d.type === 'erc721' || d.type === 'erc1155' || d.type === 'solana')
+      .map(d => ({
+        address: d.contractAddress,
+        chainId: d.chainId,
+        type: d.type
+      }));
+    
+    let nftResults = [];
+    if (nftContractsForDiscounts.length > 0) {
+      try {
+        nftResults = await retryWithBackoff(checkMultipleNFTs, [walletAddress, nftContractsForDiscounts, providers]);
+        log.debug('NFT check completed', { contractCount: nftContractsForDiscounts.length, resultsCount: nftResults.length });
       } catch (error) {
         log.error('Failed to check NFT holdings after retries', { error: error.message, walletAddress });
         nftResults = [];
@@ -394,7 +423,9 @@ export const calculateDiscount = async (walletAddress, serviceType, providers) =
       discountPercentage: maxDiscountPercentage,
       isFree,
       appliedDiscounts,
-      totalCredits: isFree ? 0 : Math.max(0, BASE_COST_CREDITS - maxDiscountPercentage)
+      totalCredits: isFree ? 0 : CREDITS_PER_GENERATION,
+      costPerCredit: costPerCredit,
+      isNFTHolder: isNFTHolder
     };
 
     // Cache the result
@@ -416,7 +447,9 @@ export const calculateDiscount = async (walletAddress, serviceType, providers) =
       discountPercentage: 0,
       isFree: false,
       appliedDiscounts: [],
-      totalCredits: BASE_COST_CREDITS,
+      totalCredits: CREDITS_PER_GENERATION,
+      costPerCredit: BASE_COST_PER_CREDIT,
+      isNFTHolder: false,
       error: error.message
     };
     
@@ -437,10 +470,14 @@ export const getDiscountConfig = () => {
 
 /**
  * Get base cost configuration
- * @returns {number} - Base cost in credits
+ * @returns {Object} - Base cost configuration
  */
 export const getBaseCost = () => {
-  return BASE_COST_CREDITS;
+  return {
+    creditsPerGeneration: CREDITS_PER_GENERATION,
+    costPerCredit: BASE_COST_PER_CREDIT,
+    nftHolderCostPerCredit: NFT_HOLDER_COST_PER_CREDIT
+  };
 };
 
 /**

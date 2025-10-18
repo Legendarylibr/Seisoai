@@ -496,6 +496,8 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
       throw new Error(`Amount mismatch. Expected: ${expectedAmount}, Actual: ${actualAmount}`);
     }
 
+    // Calculate credits with dynamic pricing based on NFT ownership
+    // For now, we'll use the base rate - this should be enhanced to check NFT ownership
     const credits = Math.floor(actualAmount * tokenConfig.creditRate);
 
     return {

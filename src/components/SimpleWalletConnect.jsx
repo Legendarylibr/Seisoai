@@ -89,6 +89,18 @@ const SimpleWalletConnect = () => {
             </button>
           </div>
         </div>
+        
+        {/* Pricing Info */}
+        <div className="text-xs text-gray-400">
+          <div className="flex items-center justify-between">
+            <span>Pricing:</span>
+            <span className="text-yellow-400">Regular: $0.15/credit</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>NFT Holders:</span>
+            <span className="text-green-400">$0.08/credit</span>
+          </div>
+        </div>
       </div>
     </div>
   );

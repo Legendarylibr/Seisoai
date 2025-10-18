@@ -352,14 +352,15 @@ export const transferTokens = async (tokenAddress, toAddress, amount, signer) =>
 };
 
 /**
- * Calculate credits for token amount
+ * Calculate credits for token amount with dynamic pricing
  * @param {string} tokenSymbol - The token symbol
  * @param {number} amount - The token amount
  * @param {string} chainId - The blockchain chain ID
  * @param {string} walletType - 'evm' or 'solana'
+ * @param {boolean} isNFTHolder - Whether user owns NFT collections
  * @returns {number} - Number of credits
  */
-export const calculateCredits = (tokenSymbol, amount, chainId, walletType = 'evm') => {
+export const calculateCredits = (tokenSymbol, amount, chainId, walletType = 'evm', isNFTHolder = false) => {
   let tokenConfig;
   
   if (walletType === 'solana') {
@@ -372,7 +373,12 @@ export const calculateCredits = (tokenSymbol, amount, chainId, walletType = 'evm
     throw new Error(`Token ${tokenSymbol} not supported on chain ${chainId}`);
   }
   
-  return Math.floor(amount * tokenConfig.creditRate);
+  // Apply dynamic pricing based on NFT ownership
+  const baseCreditRate = tokenConfig.creditRate;
+  const pricingMultiplier = isNFTHolder ? 0.08 / 0.15 : 1; // NFT holders get better rate
+  const adjustedCreditRate = baseCreditRate * pricingMultiplier;
+  
+  return Math.floor(amount * adjustedCreditRate);
 };
 
 /**

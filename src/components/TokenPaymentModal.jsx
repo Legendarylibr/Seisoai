@@ -137,6 +137,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount)) return 0;
     
+    // For now, use base rate - this should be enhanced to check NFT ownership
     return Math.floor(numAmount * 10); // 1 token = 10 credits
   };
 

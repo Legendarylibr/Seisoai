@@ -155,7 +155,7 @@ const PaymentModal = ({ isOpen, onClose }) => {
               </span>
             </div>
             <p className="text-xs text-gray-400 mt-1">
-              1 USDC = 1 Credit
+              1 USDC = 1 Credit (Regular: $0.15/credit, NFT Holders: $0.08/credit)
             </p>
           </div>
 
