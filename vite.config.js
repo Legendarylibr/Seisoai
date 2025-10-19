@@ -43,14 +43,14 @@ export default defineConfig({
     strictPort: false, // Allow Vite to find an available port
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:30011',
+        target: process.env.VITE_API_URL || 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
         configure: (proxy, options) => {
           proxy.on('error', (err, req, res) => {
             console.log('Proxy error:', err);
             // Try alternative ports if the default fails
-            const alternativePorts = [3001, 3002, 3003, 3004, 3005, 30011];
+            const alternativePorts = [3001, 3002, 3003, 3004, 3005];
             for (const port of alternativePorts) {
               try {
                 proxy.target = `http://localhost:${port}`;
