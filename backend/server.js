@@ -9,7 +9,6 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const winston = require('winston');
-const mongooseEncryption = require('mongoose-encryption');
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 require('dotenv').config();
 
@@ -168,8 +167,7 @@ const requiredEnvVars = [
   'POLYGON_RPC_URL',
   'ARBITRUM_RPC_URL',
   'OPTIMISM_RPC_URL',
-  'BASE_RPC_URL',
-  'ENCRYPTION_KEY'  // Add encryption key requirement
+  'BASE_RPC_URL'
 ];
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -178,11 +176,7 @@ if (missingVars.length > 0) {
   process.exit(1);
 }
 
-// Validate encryption key length (must be 32 characters for AES-256)
-if (process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.length !== 32) {
-  logger.error('ENCRYPTION_KEY must be exactly 32 characters long for AES-256 encryption');
-  process.exit(1);
-}
+// Encryption is disabled for now - no validation needed
 
 // MongoDB connection with encryption at rest
 const mongoOptions = {
