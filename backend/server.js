@@ -10,7 +10,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const winston = require('winston');
 const mongooseEncryption = require('mongoose-encryption');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 require('dotenv').config();
 
 // Initialize Sentry for error monitoring
@@ -767,6 +767,14 @@ app.post('/api/payments/verify', async (req, res) => {
  */
 app.post('/api/stripe/create-payment-intent', async (req, res) => {
   try {
+    // Check if Stripe is configured
+    if (!stripe) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stripe payment is not configured. Please use token payment instead.'
+      });
+    }
+
     const { 
       walletAddress, 
       amount, 
@@ -826,6 +834,14 @@ app.post('/api/stripe/create-payment-intent', async (req, res) => {
  */
 app.post('/api/stripe/verify-payment', async (req, res) => {
   try {
+    // Check if Stripe is configured
+    if (!stripe) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stripe payment is not configured. Please use token payment instead.'
+      });
+    }
+
     const { 
       paymentIntentId, 
       walletAddress 
@@ -923,6 +939,14 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
  * Stripe webhook handler
  */
 app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
+  // Check if Stripe is configured
+  if (!stripe) {
+    return res.status(400).json({
+      success: false,
+      error: 'Stripe payment is not configured'
+    });
+  }
+
   const sig = req.headers['stripe-signature'];
   let event;
 
