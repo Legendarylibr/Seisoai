@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Zap, Coins, ChevronDown, Wallet, RefreshCw, CreditCard } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
-const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment }) => {
+const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment, onShowStripePayment }) => {
   const { isConnected, address, credits } = useSimpleWallet();
   const [showCreditsDropdown, setShowCreditsDropdown] = useState(false);
   const dropdownRef = useRef(null);
@@ -116,6 +116,20 @@ const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenP
                           <button
                             onClick={() => {
                               setShowCreditsDropdown(false);
+                              onShowStripePayment && onShowStripePayment();
+                            }}
+                            className="w-full flex items-center gap-3 p-3 rounded-lg bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 transition-colors"
+                          >
+                            <CreditCard className="w-5 h-5 text-green-400" />
+                            <div className="text-left">
+                              <div className="text-sm font-medium text-white">Pay with Card</div>
+                              <div className="text-xs text-gray-400">Visa, Mastercard, etc.</div>
+                            </div>
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              setShowCreditsDropdown(false);
                               onShowTokenPayment && onShowTokenPayment();
                             }}
                             className="w-full flex items-center gap-3 p-3 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 transition-colors"
@@ -134,7 +148,7 @@ const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenP
                             }}
                             className="w-full flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/20 transition-colors"
                           >
-                            <CreditCard className="w-5 h-5 text-gray-400" />
+                            <Wallet className="w-5 h-5 text-gray-400" />
                             <div className="text-left">
                               <div className="text-sm font-medium text-white">Pay with USDC</div>
                               <div className="text-xs text-gray-400">Direct USDC payment</div>

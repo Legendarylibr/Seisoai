@@ -8,6 +8,7 @@ import Navigation from './components/Navigation';
 import ReferenceImageInput from './components/ReferenceImageInput';
 import PaymentModal from './components/PaymentModal';
 import TokenPaymentModal from './components/TokenPaymentModal';
+import StripePaymentModal from './components/StripePaymentModal';
 import AuthGuard from './components/AuthGuard';
 import ImageGallery from './components/ImageGallery';
 import BatchProcessor from './components/BatchProcessor';
@@ -21,6 +22,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('generate');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showTokenPaymentModal, setShowTokenPaymentModal] = useState(false);
+  const [showStripePaymentModal, setShowStripePaymentModal] = useState(false);
 
   const tabs = [
     { id: 'generate', name: 'Generate', icon: Sparkles },
@@ -40,6 +42,7 @@ function App() {
             tabs={tabs}
             onShowPayment={() => setShowPaymentModal(true)}
             onShowTokenPayment={() => setShowTokenPaymentModal(true)}
+            onShowStripePayment={() => setShowStripePaymentModal(true)}
           />
           
           <main className="container mx-auto px-4 py-6">
@@ -47,6 +50,7 @@ function App() {
               activeTab={activeTab} 
               onShowPayment={() => setShowPaymentModal(true)}
               onShowTokenPayment={() => setShowTokenPaymentModal(true)}
+              onShowStripePayment={() => setShowStripePaymentModal(true)}
             />
           </main>
 
@@ -60,6 +64,11 @@ function App() {
             onClose={() => setShowTokenPaymentModal(false)} 
           />
           
+          <StripePaymentModal 
+            isOpen={showStripePaymentModal} 
+            onClose={() => setShowStripePaymentModal(false)} 
+          />
+          
           <LegalDisclaimer />
           
         </div>
@@ -68,7 +77,7 @@ function App() {
   );
 }
 
-function AppContent({ activeTab, onShowPayment, onShowTokenPayment }) {
+function AppContent({ activeTab, onShowPayment, onShowTokenPayment, onShowStripePayment }) {
   const { isConnected } = useSimpleWallet();
 
   // Show wallet connection prompt if not connected
@@ -80,7 +89,7 @@ function AppContent({ activeTab, onShowPayment, onShowTokenPayment }) {
   return (
     <>
       <AuthGuard requireCredits={activeTab === 'generate' || activeTab === 'batch'}>
-        {activeTab === 'generate' && <GenerateTab onShowPayment={onShowPayment} onShowTokenPayment={onShowTokenPayment} />}
+        {activeTab === 'generate' && <GenerateTab onShowPayment={onShowPayment} onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
         {activeTab === 'gallery' && <GalleryTab />}
         {activeTab === 'templates' && <TemplatesTab />}
         {activeTab === 'batch' && <BatchTab />}
@@ -250,7 +259,7 @@ function WalletPrompt({ onConnect }) {
 }
 
 
-function GenerateTab({ onShowPayment, onShowTokenPayment }) {
+function GenerateTab({ onShowPayment, onShowTokenPayment, onShowStripePayment }) {
   const [customPrompt, setCustomPrompt] = useState('');
   const [workflowStep, setWorkflowStep] = useState(1);
   const { credits } = useSimpleWallet();

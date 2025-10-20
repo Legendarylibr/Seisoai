@@ -56,7 +56,24 @@
             }
           }
           
-          return originalDefineProperty.call(this, obj, prop, descriptor);
+          // Prevent other common wallet conflicts
+          if (prop === 'defineProperty' && obj === Object) {
+            if (window.originalDefineProperty) {
+              console.warn('🛡️ Wallet conflict prevented: defineProperty already exists');
+              return window.originalDefineProperty;
+            }
+          }
+          
+          try {
+            return originalDefineProperty.call(this, obj, prop, descriptor);
+          } catch (error) {
+            // If it's a redefinition error, just return the existing property
+            if (error.message.includes('Cannot redefine property')) {
+              console.warn('🛡️ Property redefinition prevented:', prop);
+              return obj[prop];
+            }
+            throw error;
+          }
         };
         
         // Enhanced defineProperties override
@@ -96,12 +113,17 @@
           const error = event.error;
           const message = error?.message || '';
           const stack = error?.stack || '';
+          const filename = event.filename || '';
           
           // Prevent ethereum property redefinition errors
           if (message.includes('Cannot redefine property: ethereum') ||
               message.includes('originalDefineProperty') ||
-              stack.includes('evmAsk.js')) {
+              message.includes('evmAsk.js') ||
+              stack.includes('evmAsk.js') ||
+              filename.includes('evmAsk.js') ||
+              message.includes('Cannot redefine property')) {
             event.preventDefault();
+            event.stopPropagation();
             console.warn('🛡️ Wallet conflict error prevented:', message);
             return false;
           }
@@ -111,16 +133,44 @@
         window.addEventListener('unhandledrejection', function(event) {
           const reason = event.reason;
           const message = reason?.message || '';
+          const stack = reason?.stack || '';
           
           // Prevent wallet-related promise rejections
           if (message.includes('Cannot redefine property: ethereum') ||
               message.includes('originalDefineProperty') ||
-              message.includes('evmAsk.js')) {
+              message.includes('evmAsk.js') ||
+              stack.includes('evmAsk.js') ||
+              message.includes('Cannot redefine property')) {
             event.preventDefault();
+            event.stopPropagation();
             console.warn('🛡️ Wallet conflict promise rejection prevented:', message);
             return false;
           }
         });
+        
+        // Intercept script loading to prevent problematic wallet scripts
+        const originalCreateElement = document.createElement;
+        document.createElement = function(tagName) {
+          const element = originalCreateElement.call(this, tagName);
+          
+          if (tagName.toLowerCase() === 'script') {
+            const originalSetAttribute = element.setAttribute;
+            element.setAttribute = function(name, value) {
+              if (name === 'src' && typeof value === 'string') {
+                // Block problematic wallet scripts
+                if (value.includes('evmAsk.js') || 
+                    value.includes('evmAsk') ||
+                    (value.includes('wallet') && value.includes('inject'))) {
+                  console.warn('🛡️ Blocked problematic wallet script:', value);
+                  return; // Don't set the src
+                }
+              }
+              return originalSetAttribute.call(this, name, value);
+            };
+          }
+          
+          return element;
+        };
         
         console.log('🛡️ Enhanced wallet conflict resolution initialized');
       })();

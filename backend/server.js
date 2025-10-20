@@ -10,6 +10,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const winston = require('winston');
 const mongooseEncryption = require('mongoose-encryption');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 require('dotenv').config();
 
 // Initialize Sentry for error monitoring
@@ -759,6 +760,194 @@ app.post('/api/payments/verify', async (req, res) => {
       error: error.message
     });
   }
+});
+
+/**
+ * Create Stripe payment intent
+ */
+app.post('/api/stripe/create-payment-intent', async (req, res) => {
+  try {
+    const { 
+      walletAddress, 
+      amount, 
+      currency = 'usd',
+      credits 
+    } = req.body;
+
+    if (!walletAddress || !amount || !credits) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
+      });
+    }
+
+    // Verify user exists
+    const user = await getOrCreateUser(walletAddress);
+
+    // Create payment intent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100), // Convert to cents
+      currency: currency.toLowerCase(),
+      metadata: {
+        walletAddress: walletAddress.toLowerCase(),
+        credits: credits.toString(),
+        userId: user._id.toString()
+      },
+      automatic_payment_methods: {
+        enabled: true,
+      },
+    });
+
+    logger.info('Stripe payment intent created', {
+      walletAddress: walletAddress.toLowerCase(),
+      amount,
+      credits,
+      paymentIntentId: paymentIntent.id
+    });
+
+    res.json({
+      success: true,
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id
+    });
+
+  } catch (error) {
+    logger.error('Stripe payment intent creation error:', error);
+    Sentry.captureException(error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Verify Stripe payment and award credits
+ */
+app.post('/api/stripe/verify-payment', async (req, res) => {
+  try {
+    const { 
+      paymentIntentId, 
+      walletAddress 
+    } = req.body;
+
+    if (!paymentIntentId || !walletAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
+      });
+    }
+
+    // Retrieve payment intent from Stripe
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({
+        success: false,
+        error: 'Payment not completed'
+      });
+    }
+
+    // Check if payment already processed
+    const user = await getOrCreateUser(walletAddress);
+    const existingPayment = user.paymentHistory.find(p => p.paymentIntentId === paymentIntentId);
+    
+    if (existingPayment) {
+      return res.json({
+        success: true,
+        credits: 0,
+        message: 'Payment already processed'
+      });
+    }
+
+    // Extract credits from metadata
+    const credits = parseInt(paymentIntent.metadata.credits);
+    const amount = paymentIntent.amount / 100; // Convert from cents
+
+    // Check for NFT holdings to apply discounts
+    let isNFTHolder = false;
+    try {
+      // This would integrate with your existing NFT checking logic
+      // For now, we'll set it to false, but you can enhance this
+      isNFTHolder = false;
+    } catch (error) {
+      logger.warn('Error checking NFT holdings for Stripe payment:', error);
+    }
+
+    // Apply NFT discount if applicable
+    const finalCredits = isNFTHolder ? Math.floor(credits * 1.2) : credits; // 20% bonus for NFT holders
+
+    // Update user credits
+    user.credits += finalCredits;
+    user.totalCreditsEarned += finalCredits;
+    
+    // Add to payment history
+    user.paymentHistory.push({
+      paymentIntentId,
+      paymentMethod: 'stripe',
+      amount: amount,
+      credits: finalCredits,
+      currency: paymentIntent.currency,
+      timestamp: new Date(),
+      isNFTHolder
+    });
+    
+    await user.save();
+    
+    logger.info('Stripe payment verified successfully', {
+      walletAddress: walletAddress.toLowerCase(),
+      credits: finalCredits,
+      paymentIntentId,
+      isNFTHolder
+    });
+    
+    res.json({
+      success: true,
+      credits: finalCredits,
+      totalCredits: user.credits,
+      message: `Payment verified! ${finalCredits} credits added to your account.`,
+      isNFTHolder
+    });
+
+  } catch (error) {
+    logger.error('Stripe payment verification error:', error);
+    Sentry.captureException(error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Stripe webhook handler
+ */
+app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    logger.error('Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the event
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      const paymentIntent = event.data.object;
+      logger.info('Payment succeeded via webhook', {
+        paymentIntentId: paymentIntent.id,
+        amount: paymentIntent.amount,
+        metadata: paymentIntent.metadata
+      });
+      break;
+    default:
+      logger.info(`Unhandled event type ${event.type}`);
+  }
+
+  res.json({received: true});
 });
 
 /**

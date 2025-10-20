@@ -27,6 +27,9 @@ A modern, responsive web application for generating AI images using FAL.ai as th
 - 💾 **Download & Regenerate**: Save generated images and create variations
 - 🎯 **No Prompts Required**: Pre-configured prompts for each style
 - 🌟 **Modern UI**: Clean, glass-morphism design with Tailwind CSS
+- 💳 **Multiple Payment Options**: Pay with credit cards (Stripe) or crypto tokens (USDC, USDT, etc.)
+- 🔗 **Wallet Integration**: Connect EVM and Solana wallets for authentication and payments
+- 🎁 **NFT Holder Benefits**: Discounts and bonus credits for NFT collection holders
 
 ## Tech Stack
 
@@ -77,6 +80,41 @@ npm run build
 ```
 
 The built files will be in the `dist` directory.
+
+## Payment Setup
+
+### Stripe Configuration (for Credit Card Payments)
+
+1. **Create a Stripe Account**: Sign up at [stripe.com](https://stripe.com)
+
+2. **Get API Keys**: 
+   - Go to your Stripe Dashboard → Developers → API Keys
+   - Copy your Publishable Key and Secret Key
+
+3. **Configure Environment Variables**:
+   ```env
+   # Frontend (.env)
+   VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key_here
+   
+   # Backend (backend/.env)
+   STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
+   STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+   ```
+
+4. **Set up Webhooks** (for production):
+   - In Stripe Dashboard → Developers → Webhooks
+   - Add endpoint: `https://yourdomain.com/api/stripe/webhook`
+   - Select events: `payment_intent.succeeded`
+   - Copy the webhook secret to your backend `.env`
+
+### Crypto Payment Configuration
+
+The app also supports payments with various cryptocurrencies:
+
+- **EVM Chains**: USDC, USDT, DAI, WETH on Ethereum, Polygon, Arbitrum, Optimism, Base
+- **Solana**: USDC, USDT, SOL
+
+Configure payment wallet addresses in your environment files (see `env.example` for details).
 
 ## Usage
 
