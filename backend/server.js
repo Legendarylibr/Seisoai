@@ -13,19 +13,24 @@ const mongooseEncryption = require('mongoose-encryption');
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 require('dotenv').config();
 
-// Initialize Sentry for error monitoring
+// Initialize Sentry for error monitoring (optional)
 const Sentry = require('@sentry/node');
 // const { nodeProfilingIntegration } = require('@sentry/profiling-node'); // Commented out for now
 
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  environment: process.env.NODE_ENV || 'development',
-  integrations: [
-    // nodeProfilingIntegration(), // Commented out for now
-  ],
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-  profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-});
+if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== 'your_sentry_dsn_here') {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+    integrations: [
+      // nodeProfilingIntegration(), // Commented out for now
+    ],
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  });
+  console.log('Sentry initialized for error monitoring');
+} else {
+  console.log('Sentry not configured - error monitoring disabled');
+}
 
 const app = express();
 
