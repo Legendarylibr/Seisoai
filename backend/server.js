@@ -155,8 +155,21 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Sentry request handler (commented out for now)
 // app.use(Sentry.requestHandler());
 
-// Validate required environment variables
+// Validate required environment variables (minimal set for basic functionality)
 const requiredEnvVars = [
+  'MONGODB_URI',
+  'JWT_SECRET',
+  'SESSION_SECRET'
+];
+
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+if (missingVars.length > 0) {
+  logger.error('Missing required environment variables:', { missingVars });
+  process.exit(1);
+}
+
+// Optional environment variables (payment-related)
+const optionalEnvVars = [
   'ETH_PAYMENT_WALLET',
   'POLYGON_PAYMENT_WALLET', 
   'ARBITRUM_PAYMENT_WALLET',
@@ -170,10 +183,9 @@ const requiredEnvVars = [
   'BASE_RPC_URL'
 ];
 
-const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-if (missingVars.length > 0) {
-  logger.error('Missing required environment variables:', { missingVars });
-  process.exit(1);
+const missingOptionalVars = optionalEnvVars.filter(varName => !process.env[varName]);
+if (missingOptionalVars.length > 0) {
+  logger.warn('Missing optional environment variables (payments will be disabled):', { missingOptionalVars });
 }
 
 // Encryption is disabled for now - no validation needed
@@ -526,9 +538,8 @@ app.get('/api/health', async (req, res) => {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      memory: process.memoryUsage(),
-      version: process.env.npm_package_version || '1.0.0',
-      environment: process.env.NODE_ENV || 'development'
+      environment: process.env.NODE_ENV || 'development',
+      version: '1.0.0'
     };
 
     // Check database connection
@@ -538,22 +549,9 @@ app.get('/api/health', async (req, res) => {
       state: dbState
     };
 
-    // Check recent metrics
-    const recentMetrics = await Metrics.find({
-      timestamp: { $gte: new Date(Date.now() - 5 * 60 * 1000) } // Last 5 minutes
-    }).limit(10);
-
-    health.recentActivity = {
-      requests: recentMetrics.length,
-      avgResponseTime: recentMetrics.length > 0 
-        ? Math.round(recentMetrics.reduce((sum, m) => sum + m.responseTime, 0) / recentMetrics.length)
-        : 0
-    };
-
     res.json(health);
   } catch (error) {
     logger.error('Health check error:', error);
-    Sentry.captureException(error);
     res.status(500).json({
       status: 'unhealthy',
       error: error.message,
