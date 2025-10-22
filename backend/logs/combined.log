@@ -841,3 +841,213 @@
 {"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T02:12:58.130Z"}
 {"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T02:29:40.229Z"}
 {"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T02:29:50.233Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T03:35:13.254Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T03:35:23.251Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T04:25:41.010Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T04:43:32.712Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T05:19:55.277Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T05:20:05.276Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T05:37:50.338Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T05:38:00.343Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T06:11:20.193Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T06:11:30.189Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T06:50:22.132Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T06:50:32.160Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T07:08:26.253Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T07:08:36.268Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T07:39:00.197Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T07:39:10.207Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T08:12:06.162Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T08:28:47.847Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T08:44:15.564Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T08:44:25.562Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T09:18:38.808Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T09:35:24.473Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T09:51:05.588Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T09:51:15.598Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T10:25:53.003Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T10:26:03.018Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T10:42:55.090Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T10:43:05.114Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T11:01:01.202Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T11:17:45.414Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T11:33:47.468Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T11:33:57.473Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T12:26:24.104Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T12:43:50.662Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T13:01:24.104Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T13:17:32.772Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T13:51:41.549Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T13:51:51.552Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T14:37:35.308Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T14:37:45.315Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T14:54:47.308Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T15:03:21.997Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T15:20:37.179Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T15:20:47.176Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T15:38:12.163Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T15:38:22.167Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T15:56:28.165Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T15:56:38.174Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T16:13:44.213Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T16:13:54.210Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T16:21:37.199Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T16:21:47.198Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T16:39:30.242Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T16:39:40.254Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T16:57:35.257Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T16:57:45.263Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T17:14:22.294Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T17:14:32.294Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T17:22:37.265Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T17:22:47.271Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T17:40:19.291Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T17:40:29.299Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T17:56:27.286Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T17:56:37.313Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T18:13:49.336Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T18:13:59.355Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T18:23:37.371Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T18:23:47.384Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T18:41:26.417Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T18:41:36.424Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T19:24:37.250Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T19:24:47.253Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T19:42:50.289Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T19:43:00.293Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T20:00:45.278Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T20:00:55.281Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T20:18:10.318Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T20:18:20.329Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T20:25:37.298Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T20:25:47.306Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T20:42:21.348Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T20:58:59.270Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T21:15:20.330Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T21:26:38.018Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T21:59:25.395Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T22:15:44.787Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T23:01:25.305Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T23:16:21.517Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T23:28:37.612Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T23:28:47.616Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-20T23:47:21.688Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-20T23:47:31.693Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T00:23:09.455Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T00:23:19.460Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T00:29:37.457Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T00:29:47.463Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T00:46:44.503Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T00:46:54.506Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T01:20:07.318Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T01:20:17.317Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T01:30:37.303Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T01:30:47.307Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T01:47:49.312Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T01:47:59.323Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T02:05:48.329Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T02:05:58.347Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T02:31:37.312Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T02:31:47.317Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T02:49:13.359Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T02:49:23.379Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T03:11:44.368Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T03:11:54.376Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T03:33:11.591Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T03:33:21.607Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T04:26:20.434Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T04:26:30.438Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T04:43:55.424Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T04:44:05.431Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T05:00:25.412Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T05:00:35.418Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T05:16:32.473Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T05:16:42.476Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T05:32:42.535Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T05:32:52.546Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T05:48:15.580Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T05:48:25.578Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T06:05:16.651Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T06:05:26.650Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T06:50:53.399Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T07:07:17.088Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T07:29:21.883Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T07:29:31.896Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T07:46:22.965Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T07:46:32.970Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T08:21:24.468Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T08:21:34.471Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T08:55:13.459Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T08:55:23.475Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T09:11:51.543Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T09:28:23.160Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T10:03:36.569Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T10:08:12.123Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T10:42:36.417Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T10:42:46.422Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T11:00:48.410Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T11:00:58.421Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T11:19:06.433Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T11:19:16.449Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T11:36:18.505Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T11:36:28.516Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T11:53:00.501Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T12:09:11.835Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T12:26:14.894Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T12:26:24.898Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T12:59:42.527Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T12:59:52.531Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T13:44:25.478Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T13:44:35.482Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T14:01:45.600Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T14:11:12.286Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T15:03:24.754Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T15:03:34.751Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T15:12:11.755Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T15:12:21.755Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T15:28:37.809Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T15:28:47.813Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T16:13:11.929Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T16:13:21.919Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T16:30:44.943Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T16:30:54.967Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T17:04:48.849Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T17:14:11.518Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T17:31:10.511Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T17:31:20.522Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T17:47:40.492Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T18:03:16.699Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T18:33:45.529Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T18:33:55.547Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T18:51:05.592Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T18:51:15.601Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T19:07:35.622Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T19:07:45.623Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T19:16:11.589Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T19:16:21.598Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T19:32:58.641Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T19:33:08.645Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T19:50:05.738Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T19:50:15.750Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T20:07:11.821Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T20:17:11.600Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T20:34:42.610Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T20:34:52.625Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T21:06:24.672Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T21:18:12.364Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T21:52:40.618Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T21:52:50.631Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T22:19:11.614Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T22:19:21.628Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T22:51:58.653Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T23:10:00.337Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T23:53:23.671Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T23:53:33.677Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-21T23:55:21.709Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-21T23:55:31.712Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-22T00:11:24.798Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-22T00:11:34.821Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-22T00:21:11.837Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-22T00:21:21.838Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-22T00:37:17.695Z"}
+{"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-22T00:37:27.698Z"}

@@ -26,7 +26,8 @@ const BatchProcessor = () => {
     isConnected,
     address,
     credits,
-    fetchCredits
+    fetchCredits,
+    isNFTHolder
   } = useSimpleWallet();
 
   const [newPrompt, setNewPrompt] = useState('');
@@ -86,7 +87,7 @@ const BatchProcessor = () => {
 
       try {
         // Import the generateImage function
-        const { generateImage } = await import('../services/falService');
+        const { generateImage } = await import('../services/smartImageService');
         
         const advancedSettings = {
           guidanceScale,
@@ -95,7 +96,8 @@ const BatchProcessor = () => {
           numImages,
           enableSafetyChecker,
           generationMode,
-          walletAddress: address // Pass wallet address for safety logging
+          walletAddress: address, // Pass wallet address for safety logging
+          isNFTHolder: isNFTHolder || false // Pass NFT holder status for routing
         };
 
         const imageUrl = await generateImage(

@@ -10,6 +10,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const winston = require('winston');
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
+const FastAPIService = require('./services/fastapiService');
 require('dotenv').config();
 
 // Initialize Sentry for error monitoring (optional)
@@ -32,6 +33,9 @@ if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== 'your_sentry_dsn_here')
 }
 
 const app = express();
+
+// Initialize FastAPI service for NFT holders
+const fastAPIService = new FastAPIService();
 
 // Trust proxy for accurate IP addresses
 app.set('trust proxy', 1);

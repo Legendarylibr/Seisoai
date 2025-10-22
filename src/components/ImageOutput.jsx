@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import { generateImage } from '../services/falService';
+import { generateImage } from '../services/smartImageService';
 import GenerateButton from './GenerateButton';
 
 const ImageOutput = () => {
@@ -25,7 +25,7 @@ const ImageOutput = () => {
     controlNetImage
   } = useImageGenerator();
 
-  const { isConnected, address, credits } = useSimpleWallet();
+  const { isConnected, address, credits, isNFTHolder } = useSimpleWallet();
   
   const [isDownloading, setIsDownloading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -88,7 +88,8 @@ const ImageOutput = () => {
         imageSize: currentGeneration.imageSize || imageSize,
         numImages: currentGeneration.numImages || numImages,
         enableSafetyChecker: currentGeneration.enableSafetyChecker || enableSafetyChecker,
-        generationMode: currentGeneration.generationMode || generationMode
+        generationMode: currentGeneration.generationMode || generationMode,
+        isNFTHolder: isNFTHolder || false
       };
       
       const result = await generateImage(
@@ -132,7 +133,8 @@ const ImageOutput = () => {
         imageSize: currentGeneration.imageSize || imageSize,
         numImages: currentGeneration.numImages || numImages,
         enableSafetyChecker: currentGeneration.enableSafetyChecker || enableSafetyChecker,
-        generationMode: currentGeneration.generationMode || generationMode
+        generationMode: currentGeneration.generationMode || generationMode,
+        isNFTHolder: isNFTHolder || false
       };
       
       const result = await generateImage(
@@ -175,16 +177,21 @@ const ImageOutput = () => {
       
       // For now, we'll simulate upscaling by regenerating with higher resolution
       // In a real implementation, you'd call an upscaling service
-      const result = await generateImage({
-        prompt: currentGeneration?.prompt || 'upscale this image',
-        style: currentGeneration?.style,
-        referenceImage: generatedImage,
+      const advancedSettings = {
         guidanceScale: (currentGeneration?.guidanceScale || 7.5) * 0.8, // Lower guidance for upscaling
         imageSize: 'square_hd', // Use highest quality
         numImages: 1,
         enableSafetyChecker: currentGeneration?.enableSafetyChecker || enableSafetyChecker,
-        generationMode: 'flux-pro' // Use best quality model
-      });
+        generationMode: 'flux-pro', // Use best quality model
+        isNFTHolder: isNFTHolder || false
+      };
+      
+      const result = await generateImage(
+        currentGeneration?.style,
+        currentGeneration?.prompt || 'upscale this image',
+        advancedSettings,
+        generatedImage // Use current image as reference
+      );
       
       setGeneratedImage(result.imageUrl);
       

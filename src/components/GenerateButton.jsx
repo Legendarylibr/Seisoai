@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import { generateImage } from '../services/falService';
+import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
 import PaymentModal from './PaymentModal';
 import { generationLogger as logger } from '../utils/logger.js';
@@ -26,7 +26,8 @@ const GenerateButton = ({ customPrompt = '' }) => {
     isConnected,
     address,
     credits,
-    isLoading: walletLoading
+    isLoading: walletLoading,
+    isNFTHolder
   } = useSimpleWallet();
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -119,7 +120,8 @@ const GenerateButton = ({ customPrompt = '' }) => {
         numImages,
         enableSafetyChecker,
         generationMode,
-        walletAddress: address // Pass wallet address for safety logging
+        walletAddress: address, // Pass wallet address for safety logging
+        isNFTHolder: isNFTHolder || false // Pass NFT holder status for routing
       };
 
       logger.info('Starting image generation');
