@@ -209,9 +209,10 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Debug environment variables
-console.log('🔍 Environment Debug - Version 2:');
+console.log('🔍 Environment Debug - Version 3:');
 console.log('MONGODB_URI exists:', !!process.env.MONGODB_URI);
 console.log('MONGODB_URI value:', process.env.MONGODB_URI ? 'Set' : 'Not set');
+console.log('MONGODB_URI actual value:', process.env.MONGODB_URI);
 console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('All env vars starting with MONGO:', Object.keys(process.env).filter(key => key.startsWith('MONGO')));
 
