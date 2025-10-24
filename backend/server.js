@@ -208,8 +208,15 @@ if (process.env.NODE_ENV === 'production') {
   mongoOptions.authSource = 'admin';
 }
 
+// Debug environment variables
+console.log('🔍 Environment Debug:');
+console.log('MONGODB_URI exists:', !!process.env.MONGODB_URI);
+console.log('MONGODB_URI value:', process.env.MONGODB_URI ? 'Set' : 'Not set');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+
 // Connect to MongoDB if URI is provided
 if (process.env.MONGODB_URI) {
+  console.log('📡 Connecting to MongoDB Atlas...');
   mongoose.connect(process.env.MONGODB_URI, mongoOptions);
 } else {
   console.warn('⚠️ MONGODB_URI not provided, running without database');
