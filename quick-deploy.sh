@@ -1,170 +1,90 @@
 #!/bin/bash
 
-# Quick Deployment Script for Seiso AI
-# This script provides multiple deployment options
+# Quick Deploy Script for AI Image Generator
+echo "🚀 Quick Deploy - AI Image Generator"
+echo "====================================="
 
-set -e
+# Check if Docker is running
+if ! docker info > /dev/null 2>&1; then
+    echo "❌ Docker is not running. Please start Docker first."
+    exit 1
+fi
 
-echo "🚀 Seiso AI Quick Deployment"
-echo "============================"
+# Check if docker-compose is available
+if ! command -v docker-compose &> /dev/null; then
+    echo "❌ docker-compose is not installed. Please install it first."
+    exit 1
+fi
+
+echo "✅ Docker is running"
+
+# Check if docker.env exists
+if [ ! -f "docker.env" ]; then
+    echo "❌ docker.env file not found. Creating from template..."
+    cp docker.env docker.env.backup 2>/dev/null || true
+fi
+
+echo "📋 Current environment configuration:"
+echo "====================================="
+echo "MongoDB URI: $(grep MONGODB_URI docker.env | cut -d'=' -f2)"
+echo "Node Environment: $(grep NODE_ENV docker.env | cut -d'=' -f2)"
+echo "Port: $(grep PORT docker.env | cut -d'=' -f2)"
 echo ""
 
-# Check if Docker is installed
-check_docker() {
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed. Please install Docker first:"
-        echo "   curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh"
-        exit 1
-    fi
-    
-    if ! command -v docker-compose &> /dev/null; then
-        echo "❌ Docker Compose is not installed. Please install Docker Compose first."
-        exit 1
-    fi
-    
-    echo "✅ Docker and Docker Compose are installed"
-}
+# Ask if user wants to proceed
+read -p "🤔 Do you want to proceed with Docker deployment? (y/N): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "❌ Deployment cancelled"
+    exit 1
+fi
 
-# Check if environment files exist
-check_env_files() {
-    if [ ! -f ".env" ]; then
-        echo "📝 Creating .env file from template..."
-        cp env.example .env
-        echo "⚠️  Please edit .env file with your actual values before continuing"
-        echo "   nano .env"
-        read -p "Press Enter when you've configured .env file..."
-    fi
-    
-    if [ ! -f "backend/.env" ]; then
-        echo "📝 Creating backend/.env file from template..."
-        cp backend/env.example backend/.env
-        echo "⚠️  Please edit backend/.env file with your actual values before continuing"
-        echo "   nano backend/.env"
-        read -p "Press Enter when you've configured backend/.env file..."
-    fi
-    
-    echo "✅ Environment files are ready"
-}
+echo "🐳 Starting Docker deployment..."
 
-# Deploy with Docker Compose
-deploy_docker() {
-    echo "🐳 Deploying with Docker Compose..."
-    
-    # Build and start services
-    docker-compose up -d --build
-    
-    echo "✅ Docker deployment completed!"
-    echo ""
-    echo "🌐 Your application is now running:"
-    echo "   Frontend: http://localhost:80"
-    echo "   Backend:  http://localhost:3001"
-    echo "   Grafana:  http://localhost:3000 (admin/admin)"
-    echo ""
-    echo "📊 Monitor with: docker-compose logs -f"
-    echo "🛑 Stop with: docker-compose down"
-}
+# Create necessary directories
+mkdir -p logs backup ssl
 
-# Deploy to cloud platform
-deploy_cloud() {
-    echo "☁️  Cloud Deployment Options:"
-    echo ""
-    echo "1. Railway (Recommended for beginners)"
-    echo "   - Connect GitHub repo"
-    echo "   - Set environment variables"
-    echo "   - Deploy automatically"
-    echo "   - Cost: $5-20/month"
-    echo ""
-    echo "2. Render"
-    echo "   - Connect GitHub repo"
-    echo "   - Configure build settings"
-    echo "   - Set environment variables"
-    echo "   - Cost: $7-25/month"
-    echo ""
-    echo "3. DigitalOcean App Platform"
-    echo "   - Connect GitHub repo"
-    echo "   - Configure app spec"
-    echo "   - Set environment variables"
-    echo "   - Cost: $12-24/month"
-    echo ""
-    echo "4. AWS Amplify + EC2"
-    echo "   - Deploy frontend to Amplify"
-    echo "   - Deploy backend to EC2"
-    echo "   - Cost: $15-30/month"
-    echo ""
-    echo "For detailed instructions, see DEPLOYMENT_GUIDE.md"
-}
+# Load environment variables
+export $(cat docker.env | grep -v '^#' | xargs)
 
-# Deploy to VPS
-deploy_vps() {
-    echo "🖥️  VPS Deployment (DigitalOcean, Linode, etc.)"
-    echo ""
-    echo "1. Create a VPS (4GB RAM minimum)"
-    echo "2. Install Docker:"
-    echo "   curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh"
-    echo "3. Clone your repository"
-    echo "4. Run this script: ./quick-deploy.sh"
-    echo ""
-    echo "For detailed instructions, see DEPLOYMENT_GUIDE.md"
-}
+# Start the services
+echo "📦 Starting services..."
+docker-compose --env-file docker.env up -d
 
-# Show deployment options
-show_options() {
-    echo "Choose your deployment method:"
-    echo ""
-    echo "1. 🐳 Docker Compose (Local/Development)"
-    echo "2. ☁️  Cloud Platform (Railway, Render, etc.)"
-    echo "3. 🖥️  VPS Deployment (DigitalOcean, Linode, etc.)"
-    echo "4. 📖 View detailed deployment guide"
-    echo "5. ❌ Exit"
-    echo ""
-    read -p "Enter your choice (1-5): " choice
-    
-    case $choice in
-        1)
-            check_docker
-            check_env_files
-            deploy_docker
-            ;;
-        2)
-            deploy_cloud
-            ;;
-        3)
-            deploy_vps
-            ;;
-        4)
-            echo "📖 Opening deployment guide..."
-            if command -v code &> /dev/null; then
-                code DEPLOYMENT_GUIDE.md
-            elif command -v nano &> /dev/null; then
-                nano DEPLOYMENT_GUIDE.md
-            else
-                cat DEPLOYMENT_GUIDE.md
-            fi
-            ;;
-        5)
-            echo "👋 Goodbye!"
-            exit 0
-            ;;
-        *)
-            echo "❌ Invalid choice. Please try again."
-            show_options
-            ;;
-    esac
-}
+# Wait for services to be ready
+echo "⏳ Waiting for services to start..."
+sleep 15
 
-# Main function
-main() {
-    echo "Welcome to Seiso AI deployment!"
-    echo ""
-    
-    # Check if we're in the right directory
-    if [ ! -f "package.json" ] || [ ! -f "docker-compose.yml" ]; then
-        echo "❌ Please run this script from the Seiso AI project root directory"
-        exit 1
-    fi
-    
-    show_options
-}
+# Check MongoDB health
+echo "🔍 Checking MongoDB..."
+if docker-compose exec -T mongodb mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
+    echo "✅ MongoDB is running"
+else
+    echo "⚠️  MongoDB is starting up (this may take a moment)"
+fi
 
-# Run main function
-main "$@"
+# Check application health
+echo "🔍 Checking application..."
+sleep 10
+if curl -f http://localhost:3001/api/health > /dev/null 2>&1; then
+    echo "✅ Application is running and healthy"
+    echo ""
+    echo "🎉 DEPLOYMENT SUCCESSFUL!"
+    echo "========================="
+    echo "📱 Frontend: http://localhost:3001"
+    echo "🔧 API: http://localhost:3001/api"
+    echo "📊 Grafana: http://localhost:3000 (admin/admin)"
+    echo "📈 Prometheus: http://localhost:9090"
+    echo ""
+    echo "📋 Useful commands:"
+    echo "   View logs: docker-compose logs -f"
+    echo "   Stop: docker-compose down"
+    echo "   Restart: docker-compose restart"
+    echo ""
+    echo "🔍 Test your deployment:"
+    echo "   curl http://localhost:3001/api/health"
+else
+    echo "❌ Application is not responding"
+    echo "📋 Check logs with: docker-compose logs app"
+    echo "🔄 Try restarting with: docker-compose restart app"
+fi

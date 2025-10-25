@@ -12,7 +12,7 @@ const winston = require('winston');
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 const FastAPIService = require('./services/fastapiService');
 require('dotenv').config();
-require('dotenv').config({ path: '.env.local' });
+
 // Initialize Sentry for error monitoring (optional)
 const Sentry = require('@sentry/node');
 // const { nodeProfilingIntegration } = require('@sentry/profiling-node'); // Commented out for now

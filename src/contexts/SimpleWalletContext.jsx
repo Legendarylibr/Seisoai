@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 
 const SimpleWalletContext = createContext();
 
-const API_URL = 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export const SimpleWalletProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
