@@ -292,8 +292,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           
           if (ethError.code === 4001 || ethError.message.includes('User rejected') || ethError.message.includes('user rejected')) {
             setError('Transaction cancelled by user.');
-          } else if (ethError.message.includes('insufficient funds') || ethError.message.includes('insufficient balance')) {
-            setError('Insufficient ETH balance. Please add ETH to your wallet and try again.');
+          } else if (ethError.code === 'INSUFFICIENT_FUNDS' || ethError.message.includes('insufficient funds') || ethError.message.includes('insufficient balance')) {
+            setError('Insufficient ETH balance. You need at least 0.001 ETH for this test transaction. Please add ETH to your wallet and try again.');
           } else {
             setError(`Transaction failed: ${ethError.message}`);
           }
