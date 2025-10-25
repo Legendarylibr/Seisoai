@@ -1,3 +1,10 @@
+#!/bin/bash
+
+# Development Environment Setup Script
+echo "🔧 Setting up development environment..."
+
+# Create backend .env file
+cat > backend/.env << 'EOF'
 # Backend Development Environment Configuration
 
 # Database (REQUIRED - replace with your MongoDB Atlas connection string)
@@ -53,3 +60,48 @@ LOG_FILE_PATH=logs/
 # Performance Configuration
 MAX_REQUEST_SIZE=10mb
 REQUEST_TIMEOUT=30000
+EOF
+
+# Create frontend .env file
+cat > .env << 'EOF'
+# Frontend Environment Configuration
+# This file is used by Vite for frontend environment variables
+
+# FAL.ai API Configuration
+VITE_FAL_API_KEY=a04e2397-ea04-41e8-9369-764c5bb18bb5:daf42f52c61eb5f089e094eee3bd4547
+
+# API Configuration - Update this to your actual Railway URL
+VITE_API_URL=http://localhost:3001
+
+# CDN Configuration (for production)
+VITE_CDN_URL=https://seiso.ai
+
+# Payment Wallet Addresses (REQUIRED)
+VITE_ETH_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+VITE_POLYGON_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+VITE_ARBITRUM_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+VITE_OPTIMISM_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+VITE_BASE_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+VITE_SOLANA_PAYMENT_WALLET=BZ9LR3nnVP4oh477rZAKdhGFAbYqvazv3Ru1MDk9rk99
+
+# Monitoring Configuration
+VITE_SENTRY_DSN=your_sentry_dsn_here
+
+# Feature Flags
+VITE_ENABLE_ANALYTICS=true
+VITE_ENABLE_ERROR_REPORTING=true
+VITE_ENABLE_PERFORMANCE_MONITORING=true
+
+# Stripe Configuration (REQUIRED for card payments)
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key_here
+EOF
+
+echo "✅ Environment files created successfully!"
+echo ""
+echo "📝 Next steps:"
+echo "1. Update the MongoDB URI in backend/.env with your actual connection string"
+echo "2. Update the RPC URLs in backend/.env with your actual API keys"
+echo "3. Update the Stripe keys if you want to use card payments"
+echo "4. Run 'npm run dev' to start the development server"
+echo ""
+echo "🚀 Your development environment is ready!"

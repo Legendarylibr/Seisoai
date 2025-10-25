@@ -12,13 +12,44 @@
   }
   window.__walletConflictResolutionSetup = true;
   
-  // Override Object.defineProperty to prevent ethereum conflicts
+  // ULTRA-AGGRESSIVE: Override Object.defineProperty to prevent ethereum conflicts
   Object.defineProperty = function(obj, prop, descriptor) {
-    // Prevent ethereum property redefinition
+    // COMPLETELY BLOCK ethereum property redefinition
     if (prop === 'ethereum' && obj === window) {
-      if (window.ethereum && descriptor.value) {
-        console.warn('🛡️ Wallet conflict prevented: ethereum property already exists');
+      console.warn('🛡️ BLOCKED: ethereum property redefinition attempt');
+      console.warn('🛡️ Stack trace:', new Error().stack);
+      
+      // Always return the existing ethereum object or create a safe one
+      if (window.ethereum) {
         return window.ethereum;
+      }
+      
+      // Create a safe ethereum object that won't conflict
+      const safeEthereum = {
+        isMetaMask: false,
+        isRabby: false,
+        isCoinbaseWallet: false,
+        isWalletConnect: false,
+        request: function() {
+          console.warn('🛡️ Safe ethereum object used - no wallet connected');
+          return Promise.reject(new Error('No wallet connected'));
+        },
+        on: function() {},
+        removeListener: function() {},
+        addListener: function() {}
+      };
+      
+      try {
+        return originalDefineProperty.call(this, obj, prop, {
+          value: safeEthereum,
+          configurable: true,
+          enumerable: true,
+          writable: true
+        });
+      } catch (error) {
+        console.warn('🛡️ Safe ethereum fallback applied');
+        window.ethereum = safeEthereum;
+        return safeEthereum;
       }
     }
     
@@ -30,7 +61,16 @@
       }
     }
     
-    return originalDefineProperty.call(this, obj, prop, descriptor);
+    try {
+      return originalDefineProperty.call(this, obj, prop, descriptor);
+    } catch (error) {
+      // If it's a redefinition error, just return the existing property
+      if (error.message.includes('Cannot redefine property')) {
+        console.warn('🛡️ Property redefinition prevented:', prop);
+        return obj[prop];
+      }
+      throw error;
+    }
   };
   
   // Override Object.defineProperties for additional protection

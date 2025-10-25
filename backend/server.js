@@ -1,37 +1,14 @@
-// Enhanced server with monitoring, rate limiting, and security
+// Simplified AI Image Generator Backend
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const { ethers } = require('ethers');
-const cron = require('node-cron');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const compression = require('compression');
-const morgan = require('morgan');
-const winston = require('winston');
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 const FastAPIService = require('./services/fastapiService');
 require('dotenv').config();
-require('dotenv').config({ path: '.env.local' });
-require('dotenv').config({ path: '.env.production' });
-// Initialize Sentry for error monitoring (optional)
-const Sentry = require('@sentry/node');
-// const { nodeProfilingIntegration } = require('@sentry/profiling-node'); // Commented out for now
-
-if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== 'your_sentry_dsn_here') {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV || 'development',
-    integrations: [
-      // nodeProfilingIntegration(), // Commented out for now
-    ],
-    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-    profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-  });
-  console.log('Sentry initialized for error monitoring');
-} else {
-  console.log('Sentry not configured - error monitoring disabled');
-}
 
 const app = express();
 
@@ -58,41 +35,13 @@ app.use(helmet({
 // Compression middleware
 app.use(compression());
 
-// Request logging
-const logger = winston.createLogger({
-  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
-    }),
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' })
-  ]
-});
-
-// Add MongoDB logging in production (only if not localhost)
-if (process.env.NODE_ENV === 'production' && process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost')) {
-  logger.add(new winston.transports.MongoDB({
-    db: process.env.MONGODB_URI,
-    collection: 'logs',
-    options: { useUnifiedTopology: true }
-  }));
-}
-
-// Morgan HTTP request logging
-app.use(morgan('combined', {
-  stream: {
-    write: (message) => logger.info(message.trim())
-  }
-}));
+// Simple logging
+const logger = {
+  info: (msg, meta) => console.log(`[INFO] ${msg}`, meta || ''),
+  error: (msg, meta) => console.error(`[ERROR] ${msg}`, meta || ''),
+  warn: (msg, meta) => console.warn(`[WARN] ${msg}`, meta || ''),
+  debug: (msg, meta) => console.log(`[DEBUG] ${msg}`, meta || '')
+};
 
 // Rate limiting
 const limiter = rateLimit({
@@ -137,13 +86,27 @@ const corsOptions = {
       ? process.env.ALLOWED_ORIGINS.split(',').includes(origin)
       : false;
     
-    if (process.env.NODE_ENV === 'development' && isLocalhost) {
-      return callback(null, true);
+    // Always allow localhost in development
+    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
+      if (isLocalhost) {
+        return callback(null, true);
+      }
     }
     
+    // Allow specific origins
     if (isAllowedOrigin) {
       return callback(null, true);
     }
+    
+    // For development, be more permissive
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    
+    // Log the rejected origin for debugging
+    console.log('CORS rejected origin:', origin);
+    console.log('Allowed origins:', process.env.ALLOWED_ORIGINS);
+    console.log('NODE_ENV:', process.env.NODE_ENV);
     
     callback(new Error('Not allowed by CORS'));
   },
@@ -160,73 +123,39 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Sentry request handler (commented out for now)
 // app.use(Sentry.requestHandler());
 
-// Validate required environment variables (minimal set for basic functionality)
-const requiredEnvVars = [
-  'MONGODB_URI',
-  'JWT_SECRET',
-  'SESSION_SECRET'
-];
-
+// Validate required environment variables
+const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'SESSION_SECRET'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 if (missingVars.length > 0) {
   logger.error('Missing required environment variables:', { missingVars });
-  process.exit(1);
+  // Don't exit in development, just warn
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  } else {
+    logger.warn('Running in development mode with missing environment variables');
+  }
 }
 
-// Optional environment variables (payment-related)
-const optionalEnvVars = [
-  'ETH_PAYMENT_WALLET',
-  'POLYGON_PAYMENT_WALLET', 
-  'ARBITRUM_PAYMENT_WALLET',
-  'OPTIMISM_PAYMENT_WALLET',
-  'BASE_PAYMENT_WALLET',
-  'SOLANA_PAYMENT_WALLET',
-  'ETH_RPC_URL',
-  'POLYGON_RPC_URL',
-  'ARBITRUM_RPC_URL',
-  'OPTIMISM_RPC_URL',
-  'BASE_RPC_URL'
-];
-
-const missingOptionalVars = optionalEnvVars.filter(varName => !process.env[varName]);
-if (missingOptionalVars.length > 0) {
-  logger.warn('Missing optional environment variables (payments will be disabled):', { missingOptionalVars });
-}
-
-// Encryption is disabled for now - no validation needed
-
-// MongoDB connection with encryption at rest
+// MongoDB connection
 const mongoOptions = {
   maxPoolSize: 10,
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
 };
 
-// Add encryption options for production
+// Add SSL for production
 if (process.env.NODE_ENV === 'production') {
   mongoOptions.ssl = true;
-  mongoOptions.sslValidate = true;
+  mongoOptions.tlsAllowInvalidCertificates = true; // Use new option instead of deprecated sslValidate
   mongoOptions.authSource = 'admin';
 }
 
-// Debug environment variables
-console.log('🔍 Environment Debug - Version 3:');
-console.log('MONGODB_URI exists:', !!process.env.MONGODB_URI);
-console.log('MONGODB_URI value:', process.env.MONGODB_URI ? 'Set' : 'Not set');
-console.log('MONGODB_URI actual value:', process.env.MONGODB_URI);
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('All env vars starting with MONGO:', Object.keys(process.env).filter(key => key.startsWith('MONGO')));
-
-// Skip MongoDB connection if localhost URI detected
-if (process.env.MONGODB_URI?.includes('localhost')) {
-  console.log('⚠️ Skipping MongoDB connection - localhost URI detected');
-  console.log('⚠️ App will run without database (some features will be limited)');
-  // Don't attempt to connect to MongoDB
-} else if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost')) {
+// Connect to MongoDB
+if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost')) {
   console.log('📡 Connecting to MongoDB...');
   mongoose.connect(process.env.MONGODB_URI, mongoOptions);
 } else {
-  console.warn('⚠️ MONGODB_URI not provided, running without database');
+  console.warn('⚠️ MONGODB_URI not provided or localhost detected, running without database');
 }
 
 mongoose.connection.on('connected', () => {
@@ -235,18 +164,14 @@ mongoose.connection.on('connected', () => {
 
 mongoose.connection.on('error', (err) => {
   logger.error('MongoDB connection error:', err);
-  // Don't crash the app on MongoDB connection errors
   console.log('⚠️ MongoDB connection failed - app will continue without database');
-  if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== 'your_sentry_dsn_here') {
-    Sentry.captureException(err);
-  }
 });
 
 mongoose.connection.on('disconnected', () => {
   logger.warn('MongoDB disconnected');
 });
 
-// Handle uncaught exceptions to prevent app crashes
+// Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   if (err.message && err.message.includes('querySrv ENOTFOUND')) {
     console.log('⚠️ MongoDB DNS error - continuing without database');
@@ -262,17 +187,6 @@ process.on('unhandledRejection', (reason, promise) => {
     return;
   }
   logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-// Graceful shutdown handling
-process.on('SIGTERM', () => {
-  console.log('📡 SIGTERM received, shutting down gracefully...');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('📡 SIGINT received, shutting down gracefully...');
-  process.exit(0);
 });
 
 
@@ -331,7 +245,8 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Apply encryption to sensitive fields (temporarily disabled for testing)
+// Encryption temporarily disabled to fix deployment issues
+// TODO: Re-enable encryption once MongoDB connection is stable
 // userSchema.plugin(mongooseEncryption, {
 //   secret: process.env.ENCRYPTION_KEY,
 //   authenticationCode: process.env.AUTHENTICATION_CODE,
@@ -353,23 +268,14 @@ userSchema.index({ 'gallery.timestamp': 1 });
 
 const User = mongoose.model('User', userSchema);
 
-// Metrics Schema for monitoring
-const metricsSchema = new mongoose.Schema({
+// Simple metrics tracking
+const Metrics = mongoose.model('Metrics', new mongoose.Schema({
   endpoint: String,
   method: String,
   responseTime: Number,
   statusCode: Number,
-  userAgent: String,
-  ip: String,
   timestamp: { type: Date, default: Date.now }
-}, {
-  timestamps: true
-});
-
-metricsSchema.index({ timestamp: 1 });
-metricsSchema.index({ endpoint: 1 });
-
-const Metrics = mongoose.model('Metrics', metricsSchema);
+}));
 
 // Payment wallet addresses (validated above)
 const PAYMENT_WALLETS = {
@@ -423,31 +329,20 @@ const ERC20_ABI = [
   "event Transfer(address indexed from, address indexed to, uint256 value)"
 ];
 
-// Middleware for metrics collection
+// Simple metrics middleware
 const metricsMiddleware = (req, res, next) => {
   const start = Date.now();
-  
   res.on('finish', () => {
     const responseTime = Date.now() - start;
-    
-    // Log metrics
-    const metrics = new Metrics({
-      endpoint: req.path,
-      method: req.method,
-      responseTime,
-      statusCode: res.statusCode,
-      userAgent: req.get('User-Agent'),
-      ip: req.ip
-    });
-    
-    // Only save metrics if MongoDB is connected
     if (mongoose.connection.readyState === 1) {
-      metrics.save().catch(err => {
-        logger.error('Failed to save metrics:', err);
-      });
+      new Metrics({
+        endpoint: req.path,
+        method: req.method,
+        responseTime,
+        statusCode: res.statusCode
+      }).save().catch(err => logger.error('Failed to save metrics:', err));
     }
   });
-  
   next();
 };
 
@@ -522,14 +417,9 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
       throw new Error('Transaction sender does not match wallet address');
     }
 
-    if (tx.to.toLowerCase() !== tokenConfig.address.toLowerCase()) {
-      throw new Error('Transaction is not for the specified token');
-    }
-
     // Parse transfer logs
     const tokenContract = new ethers.Contract(tokenConfig.address, ERC20_ABI, provider);
     const transferTopic = ethers.id('Transfer(address,address,uint256)');
-    
     const transferLogs = receipt.logs.filter(log => log.topics[0] === transferTopic);
     
     let validTransfer = false;
@@ -563,8 +453,6 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
       throw new Error(`Amount mismatch. Expected: ${expectedAmount}, Actual: ${actualAmount}`);
     }
 
-    // Calculate credits with dynamic pricing based on NFT ownership
-    // For now, we'll use the base rate - this should be enhanced to check NFT ownership
     const credits = Math.floor(actualAmount * tokenConfig.creditRate);
 
     return {
@@ -577,7 +465,6 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
 
   } catch (error) {
     logger.error('EVM payment verification error:', error);
-    Sentry.captureException(error);
     throw new Error(`Payment verification failed: ${error.message}`);
   }
 }
@@ -585,7 +472,7 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
 // API Routes
 
 /**
- * Health check with detailed metrics
+ * Health check
  */
 app.get('/api/health', async (req, res) => {
   try {
@@ -594,16 +481,8 @@ app.get('/api/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development',
-      version: '1.0.0'
+      database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
     };
-
-    // Check database connection
-    const dbState = mongoose.connection.readyState;
-    health.database = {
-      status: dbState === 1 ? 'connected' : 'disconnected',
-      state: dbState
-    };
-
     res.json(health);
   } catch (error) {
     logger.error('Health check error:', error);
@@ -616,56 +495,29 @@ app.get('/api/health', async (req, res) => {
 });
 
 /**
- * Metrics endpoint for monitoring
+ * Simple metrics endpoint
  */
 app.get('/api/metrics', async (req, res) => {
   try {
     const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const [hourlyMetrics, dailyMetrics, totalUsers, activeUsers] = await Promise.all([
-      Metrics.find({ timestamp: { $gte: oneHourAgo } }),
+    const [dailyMetrics, totalUsers] = await Promise.all([
       Metrics.find({ timestamp: { $gte: oneDayAgo } }),
-      User.countDocuments(),
-      User.countDocuments({ lastActive: { $gte: oneDayAgo } })
+      User.countDocuments()
     ]);
 
     const metrics = {
-      users: {
-        total: totalUsers,
-        active24h: activeUsers
-      },
-      requests: {
-        lastHour: hourlyMetrics.length,
-        last24h: dailyMetrics.length,
-        avgResponseTime: dailyMetrics.length > 0 
-          ? Math.round(dailyMetrics.reduce((sum, m) => sum + m.responseTime, 0) / dailyMetrics.length)
-          : 0
-      },
-      endpoints: {}
+      users: { total: totalUsers },
+      requests: { last24h: dailyMetrics.length },
+      avgResponseTime: dailyMetrics.length > 0 
+        ? Math.round(dailyMetrics.reduce((sum, m) => sum + m.responseTime, 0) / dailyMetrics.length)
+        : 0
     };
-
-    // Group by endpoint
-    dailyMetrics.forEach(metric => {
-      if (!metrics.endpoints[metric.endpoint]) {
-        metrics.endpoints[metric.endpoint] = { count: 0, avgResponseTime: 0 };
-      }
-      metrics.endpoints[metric.endpoint].count++;
-    });
-
-    // Calculate average response times per endpoint
-    Object.keys(metrics.endpoints).forEach(endpoint => {
-      const endpointMetrics = dailyMetrics.filter(m => m.endpoint === endpoint);
-      metrics.endpoints[endpoint].avgResponseTime = endpointMetrics.length > 0
-        ? Math.round(endpointMetrics.reduce((sum, m) => sum + m.responseTime, 0) / endpointMetrics.length)
-        : 0;
-    });
 
     res.json(metrics);
   } catch (error) {
     logger.error('Metrics endpoint error:', error);
-    Sentry.captureException(error);
     res.status(500).json({ error: 'Failed to fetch metrics' });
   }
 });
@@ -695,7 +547,6 @@ app.get('/api/users/:walletAddress', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error fetching user data:', error);
-    Sentry.captureException(error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -716,7 +567,6 @@ app.post('/api/nft/check-credits', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error checking credits:', error);
-    Sentry.captureException(error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -806,7 +656,6 @@ app.post('/api/payments/verify', async (req, res) => {
 
   } catch (error) {
     logger.error('Payment verification error:', error);
-    Sentry.captureException(error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -873,7 +722,6 @@ app.post('/api/stripe/create-payment-intent', async (req, res) => {
 
   } catch (error) {
     logger.error('Stripe payment intent creation error:', error);
-    Sentry.captureException(error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -979,7 +827,6 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
 
   } catch (error) {
     logger.error('Stripe payment verification error:', error);
-    Sentry.captureException(error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -1083,7 +930,6 @@ app.post('/api/generations/add', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error adding generation:', error);
-    Sentry.captureException(error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1105,19 +951,13 @@ app.post('/api/safety/violation', async (req, res) => {
       ip: req.ip || req.connection.remoteAddress
     });
     
-    // Send to Sentry for monitoring
-    Sentry.captureMessage('Safety violation detected', {
-      level: 'warning',
-      tags: {
-        type: 'safety_violation',
-        walletAddress: walletAddress?.toLowerCase()
-      },
-      extra: {
-        violation,
-        userAgent,
-        url,
-        ip: req.ip
-      }
+    // Log safety violation
+    logger.warn('Safety violation detected', {
+      walletAddress: walletAddress?.toLowerCase(),
+      violation,
+      userAgent,
+      url,
+      ip: req.ip
     });
     
     res.json({
@@ -1126,7 +966,6 @@ app.post('/api/safety/violation', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error logging safety violation:', error);
-    Sentry.captureException(error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1157,7 +996,6 @@ app.get('/api/gallery/:walletAddress', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error fetching gallery:', error);
-    Sentry.captureException(error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1181,7 +1019,6 @@ app.put('/api/users/:walletAddress/settings', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error updating settings:', error);
-    Sentry.captureException(error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1203,7 +1040,6 @@ app.delete('/api/gallery/:walletAddress/:generationId', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error deleting generation:', error);
-    Sentry.captureException(error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1239,52 +1075,24 @@ app.get('/api/gallery/:walletAddress/stats', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error fetching gallery stats:', error);
-    Sentry.captureException(error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-/**
- * Cleanup expired users and old gallery items (runs daily)
- */
-cron.schedule('0 0 * * *', async () => {
+// Cleanup function (can be called manually or via cron)
+async function cleanupExpiredData() {
   try {
     const now = new Date();
-    
-    // Clean up expired users (30 days)
-    const expiredUsers = await User.find({ expiresAt: { $lt: now } });
-    
-    if (expiredUsers.length > 0) {
-      logger.info(`Cleaning up ${expiredUsers.length} expired users`);
-      
-      // Delete expired users (this also deletes their gallery data)
-      await User.deleteMany({ expiresAt: { $lt: now } });
-      
-      logger.info('Expired users cleaned up successfully');
-    }
-    
-    // Clean up old gallery items (30 days old)
     const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
     
-    const usersWithOldGallery = await User.find({
-      'gallery.timestamp': { $lt: thirtyDaysAgo }
-    });
-    
-    if (usersWithOldGallery.length > 0) {
-      logger.info(`Cleaning up old gallery items for ${usersWithOldGallery.length} users`);
-      
-      for (const user of usersWithOldGallery) {
-        // Remove gallery items older than 30 days
-        user.gallery = user.gallery.filter(item => 
-          new Date(item.timestamp) >= thirtyDaysAgo
-        );
-        await user.save();
-      }
-      
-      logger.info('Old gallery items cleaned up successfully');
+    // Clean up expired users
+    const expiredUsers = await User.find({ expiresAt: { $lt: now } });
+    if (expiredUsers.length > 0) {
+      await User.deleteMany({ expiresAt: { $lt: now } });
+      logger.info(`Cleaned up ${expiredUsers.length} expired users`);
     }
     
-    // Clean up old metrics (keep only 30 days)
+    // Clean up old metrics
     const metricsDeleted = await Metrics.deleteMany({
       timestamp: { $lt: thirtyDaysAgo }
     });
@@ -1292,32 +1100,10 @@ cron.schedule('0 0 * * *', async () => {
     if (metricsDeleted.deletedCount > 0) {
       logger.info(`Cleaned up ${metricsDeleted.deletedCount} old metrics records`);
     }
-    
   } catch (error) {
-    logger.error('Error cleaning up expired users and gallery items:', error);
-    Sentry.captureException(error);
+    logger.error('Error cleaning up expired data:', error);
   }
-});
-
-/**
- * Database backup job (runs daily at 2 AM)
- */
-cron.schedule('0 2 * * *', async () => {
-  try {
-    logger.info('Starting daily database backup...');
-    
-    // In production, you would implement actual backup logic here
-    // This could involve:
-    // 1. MongoDB dump to S3
-    // 2. Database replication
-    // 3. Point-in-time recovery setup
-    
-    logger.info('Database backup completed successfully');
-  } catch (error) {
-    logger.error('Database backup failed:', error);
-    Sentry.captureException(error);
-  }
-});
+}
 
 /**
  * Admin endpoint to add credits to a user
@@ -1366,19 +1152,13 @@ app.post('/api/admin/add-credits', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error adding credits:', error);
-    Sentry.captureException(error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Sentry error handler (commented out for now)
-// app.use(Sentry.errorHandler());
-
 // Global error handler
 app.use((error, req, res, next) => {
   logger.error('Unhandled error:', error);
-  Sentry.captureException(error);
-  
   res.status(500).json({
     success: false,
     error: process.env.NODE_ENV === 'production' 

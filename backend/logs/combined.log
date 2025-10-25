@@ -1385,3 +1385,6 @@
 {"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-25T02:17:48.490Z"}
 {"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-25T02:27:31.984Z"}
 {"level":"info","message":"MongoDB connected successfully","timestamp":"2025-10-25T02:27:41.991Z"}
+{"level":"info","message":"::1 - - [25/Oct/2025:02:57:27 +0000] \"GET /api/users/0x686b86cd9f8792985904da924c9a21a65fca2176 HTTP/1.1\" 200 - \"http://localhost:5174/\" \"Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36\"","timestamp":"2025-10-25T02:57:27.793Z"}
+{"level":"info","message":"::1 - - [25/Oct/2025:02:57:27 +0000] \"GET /api/users/0x686b86cd9f8792985904da924c9a21a65fca2176 HTTP/1.1\" 200 - \"http://localhost:5174/\" \"Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36\"","timestamp":"2025-10-25T02:57:27.819Z"}
+{"level":"warn","message":"MongoDB disconnected","timestamp":"2025-10-25T04:02:53.698Z"}

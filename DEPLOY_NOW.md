@@ -1,153 +1,191 @@
-# 🚀 DEPLOY NOW - Step by Step Guide
+# 🚀 Seiso AI - Railway Deployment Guide
 
-## 🎯 **Quick Deploy Options**
+## Quick Deploy Steps
 
-### **Option 1: Railway (Easiest)**
+### 1. Prerequisites
+- [ ] Railway account (sign up at railway.app)
+- [ ] MongoDB Atlas account (sign up at mongodb.com/atlas)
+- [ ] GitHub repository connected to Railway
 
-#### **Step 1: Set up MongoDB Atlas (REQUIRED)**
-1. Go to [MongoDB Atlas](https://www.mongodb.com/atlas)
-2. Create free account
-3. Create cluster
-4. Get connection string (looks like: `mongodb+srv://username:password@cluster.mongodb.net/database`)
+### 2. Set Up MongoDB Atlas
 
-#### **Step 2: Deploy Backend to Railway**
-```bash
-# Install Railway CLI (if not installed)
-npm install -g @railway/cli
+1. **Create MongoDB Atlas Account**
+   - Go to https://mongodb.com/atlas
+   - Sign up for free account
+   - Create a new cluster (free tier available)
 
-# Login to Railway
-railway login
+2. **Get Connection String**
+   - In Atlas dashboard, click "Connect"
+   - Choose "Connect your application"
+   - Copy the connection string
+   - Replace `<password>` with your actual password
+   - Replace `<dbname>` with `ai-image-generator`
 
-# Create new project
-railway new
+3. **Example Connection String:**
+   ```
+   mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/ai-image-generator?retryWrites=true&w=majority
+   ```
 
-# Deploy backend
-railway up --service backend
+### 3. Deploy Backend to Railway
 
-# Set environment variables
-railway variables set MONGODB_URI="your_mongodb_connection_string"
-railway variables set JWT_SECRET="your-super-secret-jwt-key-here"
-railway variables set SESSION_SECRET="your-session-secret-here"
-railway variables set ENCRYPTION_KEY="your-32-character-encryption-key-here"
-railway variables set ETH_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set POLYGON_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set ARBITRUM_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set OPTIMISM_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set BASE_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set SOLANA_PAYMENT_WALLET="BZ9LR3nnVP4oh477rZAKdhGFAbYqvazv3Ru1MDk9rk99"
-railway variables set ETH_RPC_URL="https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
-railway variables set POLYGON_RPC_URL="https://polygon-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
-railway variables set ARBITRUM_RPC_URL="https://arb-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
-railway variables set OPTIMISM_RPC_URL="https://opt-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
-railway variables set BASE_RPC_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
-railway variables set FAL_API_KEY="a04e2397-ea04-41e8-9369-764c5bb18bb5:daf42f52c61eb5f089e094eee3bd4547"
-railway variables set NODE_ENV="production"
-railway variables set PORT="3001"
+1. **Connect Repository**
+   - Go to Railway dashboard
+   - Click "New Project"
+   - Select "Deploy from GitHub repo"
+   - Choose your repository
 
-# Get your backend URL
-railway domain
-```
+2. **Configure Service**
+   - Railway will detect the Dockerfile
+   - Set the service name to "seiso-ai-backend"
 
-#### **Step 3: Deploy Frontend to Railway**
-```bash
-# Create frontend service
-railway add --service frontend
+3. **Set Environment Variables**
+   Copy these to Railway environment variables:
 
-# Deploy frontend
-railway up --service frontend
+   ```bash
+   # Database (REQUIRED)
+   MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/ai-image-generator
+   
+   # Server Configuration
+   PORT=3001
+   NODE_ENV=production
+   
+   # Security (REQUIRED - generate secure keys)
+   JWT_SECRET=your-super-secret-jwt-key-here-32-chars-min
+   SESSION_SECRET=your-session-secret-here-32-chars-min
+   
+   # CORS Configuration (will be updated after frontend deploy)
+   ALLOWED_ORIGINS=https://your-frontend-domain.railway.app
+   
+   # Payment Wallets (REQUIRED)
+   ETH_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+   POLYGON_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+   ARBITRUM_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+   OPTIMISM_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+   BASE_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+   SOLANA_PAYMENT_WALLET=BZ9LR3nnVP4oh477rZAKdhGFAbYqvazv3Ru1MDk9rk99
+   
+   # RPC Endpoints (REQUIRED - get from Alchemy/Infura)
+   ETH_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+   POLYGON_RPC_URL=https://polygon-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+   ARBITRUM_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+   OPTIMISM_RPC_URL=https://opt-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+   BASE_RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+   
+   # Data Encryption (REQUIRED - 32 characters)
+   ENCRYPTION_KEY=your-32-character-encryption-key-here
+   AUTHENTICATION_CODE=your-authentication-code-here
+   
+   # Stripe Configuration (Optional)
+   STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
+   STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+   ```
 
-# Set frontend environment variables
-railway variables set VITE_API_URL="https://your-backend-url.railway.app" --service frontend
-railway variables set VITE_FAL_API_KEY="a04e2397-ea04-41e8-9369-764c5bb18bb5:daf42f52c61eb5f089e094eee3bd4547" --service frontend
-railway variables set VITE_ETH_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a" --service frontend
-railway variables set VITE_POLYGON_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a" --service frontend
-railway variables set VITE_ARBITRUM_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a" --service frontend
-railway variables set VITE_OPTIMISM_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a" --service frontend
-railway variables set VITE_BASE_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a" --service frontend
-railway variables set VITE_SOLANA_PAYMENT_WALLET="BZ9LR3nnVP4oh477rZAKdhGFAbYqvazv3Ru1MDk9rk99" --service frontend
+4. **Deploy**
+   - Railway will automatically build and deploy
+   - Wait for deployment to complete
+   - Note the backend URL (e.g., `https://seiso-ai-backend-production.up.railway.app`)
 
-# Get your frontend URL
-railway domain --service frontend
-```
+### 4. Deploy Frontend to Railway
 
-### **Option 2: Docker (Complete Stack)**
+1. **Create New Service**
+   - In same Railway project, click "New Service"
+   - Choose "Deploy from GitHub repo"
+   - Select same repository
 
-```bash
-# Update docker.env with your values
-nano docker.env
+2. **Configure Frontend Service**
+   - Set service name to "seiso-ai-frontend"
+   - Railway will detect it's a Vite project
 
-# Start the complete stack
-./start-docker.sh
+3. **Set Frontend Environment Variables**
+   ```bash
+   # API Configuration
+   VITE_API_URL=https://your-backend-url.railway.app
+   
+   # FAL.ai API Key
+   VITE_FAL_API_KEY=a04e2397-ea04-41e8-9369-764c5bb18bb5:daf42f52c61eb5f089e094eee3bd4547
+   
+   # Payment Wallets
+   VITE_ETH_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+   VITE_POLYGON_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+   VITE_ARBITRUM_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+   VITE_OPTIMISM_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+   VITE_BASE_PAYMENT_WALLET=0xa0aE05e2766A069923B2a51011F270aCadFf023a
+   VITE_SOLANA_PAYMENT_WALLET=BZ9LR3nnVP4oh477rZAKdhGFAbYqvazv3Ru1MDk9rk99
+   
+   # Stripe (Optional)
+   VITE_STRIPE_PUBLISHABLE_KEY=pk_live_your_stripe_publishable_key_here
+   ```
 
-# Your app will be available at:
-# Frontend: http://localhost:3001
-# Backend: http://localhost:3001/api
-# Grafana: http://localhost:3000
-```
+4. **Deploy Frontend**
+   - Railway will build and deploy the frontend
+   - Note the frontend URL (e.g., `https://seiso-ai-frontend-production.up.railway.app`)
 
-### **Option 3: Vercel + Railway**
+### 5. Update CORS Configuration
 
-#### **Deploy Backend to Railway** (same as Option 1, Step 2)
+1. **Update Backend CORS**
+   - Go to backend service in Railway
+   - Update `ALLOWED_ORIGINS` environment variable:
+   ```
+   ALLOWED_ORIGINS=https://your-frontend-url.railway.app
+   ```
+   - Redeploy the backend service
 
-#### **Deploy Frontend to Vercel**
-```bash
-# Install Vercel CLI
-npm install -g vercel
+### 6. Test Deployment
 
-# Login to Vercel
-vercel login
+1. **Health Check**
+   - Visit: `https://your-backend-url.railway.app/api/health`
+   - Should return: `{"status":"healthy","database":"connected"}`
 
-# Deploy frontend
-vercel
+2. **Frontend Test**
+   - Visit your frontend URL
+   - Try connecting a wallet
+   - Test image generation
 
-# Set environment variables in Vercel dashboard:
-# VITE_API_URL=https://your-backend-url.railway.app
-# VITE_FAL_API_KEY=a04e2397-ea04-41e8-9369-764c5bb18bb5:daf42f52c61eb5f089e094eee3bd4547
-# (and all other VITE_ variables from seiso.env)
-```
+### 7. Custom Domain (Optional)
 
-## 🔧 **Quick Setup Scripts**
+1. **Add Custom Domain**
+   - In Railway dashboard, go to your frontend service
+   - Click "Settings" → "Domains"
+   - Add your custom domain
+   - Update DNS records as instructed
 
-I've created these files for you:
-- `backend.env` - Backend environment variables
-- `production.env` - Frontend environment variables
-- `docker.env` - Docker environment variables
-- `start-docker.sh` - Docker startup script
+2. **Update Environment Variables**
+   - Update `ALLOWED_ORIGINS` in backend
+   - Update `VITE_API_URL` in frontend if needed
 
-## ⚡ **Fastest Deploy (Docker)**
+## 🔧 Troubleshooting
 
-If you want to deploy immediately:
+### Common Issues:
 
-```bash
-# 1. Update docker.env with your MongoDB connection string
-nano docker.env
+1. **MongoDB Connection Failed**
+   - Check MongoDB Atlas IP whitelist (add 0.0.0.0/0 for Railway)
+   - Verify connection string format
+   - Check username/password
 
-# 2. Start everything
-./start-docker.sh
+2. **CORS Errors**
+   - Ensure `ALLOWED_ORIGINS` includes your frontend URL
+   - Check for trailing slashes in URLs
 
-# 3. Your app is running!
-```
+3. **Build Failures**
+   - Check Railway build logs
+   - Ensure all dependencies are in package.json
+   - Verify Dockerfile syntax
 
-## 🚨 **CRITICAL: Before Deploying**
+4. **Environment Variables**
+   - Double-check all required variables are set
+   - Ensure no typos in variable names
+   - Verify values don't have extra spaces
 
-1. **Set up MongoDB Atlas** - Get your connection string
-2. **Replace placeholder URLs** with your actual domains
-3. **Generate secure keys** for JWT_SECRET, SESSION_SECRET, ENCRYPTION_KEY
-4. **Get Alchemy API keys** for RPC endpoints
+## 📊 Monitoring
 
-## 📋 **Deployment Checklist**
+- **Railway Dashboard**: Monitor logs, metrics, and deployments
+- **MongoDB Atlas**: Monitor database performance
+- **Health Endpoint**: `https://your-backend-url.railway.app/api/health`
 
-- [ ] MongoDB Atlas set up
-- [ ] Environment variables configured
-- [ ] Backend deployed
-- [ ] Frontend deployed
-- [ ] URLs updated
-- [ ] Health checks passing
-- [ ] Test the application
+## 🎉 Success!
 
-## 🆘 **Need Help?**
+Your Seiso AI application should now be live and accessible at your Railway URLs!
 
-Run any of these commands for assistance:
-- `./copy-env.sh` - Show all environment variables
-- `./start-docker.sh` - Start Docker deployment
-- `railway status` - Check Railway deployment status
+- **Frontend**: `https://your-frontend-url.railway.app`
+- **Backend API**: `https://your-backend-url.railway.app`
+- **Health Check**: `https://your-backend-url.railway.app/api/health`
