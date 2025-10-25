@@ -159,36 +159,22 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       setError('');
       
       if (walletType === 'solana') {
-        // For Solana, trigger transaction popup in connected wallet
+        // For Solana, create a deep link to open Phantom with USDC transfer
         try {
           if (window.solana && window.solana.isPhantom) {
-            // Get the connected wallet
-            const wallet = window.solana;
-            
-            // USDC mint address on Solana mainnet
-            const usdcMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
-            
-            // Convert amount to USDC units (6 decimals)
+            // Create a deep link for Phantom wallet with USDC transfer
             const amountMicroUSDC = Math.floor(parseFloat(amount) * 1000000);
             
-            // Create transfer instruction using Phantom's API
-            const transferParams = {
-              to: solanaPaymentAddress,
-              amount: amountMicroUSDC,
-              token: usdcMint
-            };
+            // Phantom deep link format for USDC transfer
+            const phantomDeepLink = `https://phantom.app/ul/browse/${solanaPaymentAddress}?amount=${amountMicroUSDC}&token=USDC`;
             
-            // Trigger the transfer - this will show the transaction popup
-            const result = await wallet.request({
-              method: 'sol_request',
-              params: {
-                method: 'transfer',
-                params: transferParams
-              }
-            });
+            // Open Phantom with the transfer
+            window.open(phantomDeepLink, '_blank');
             
-            console.log('Solana USDC transaction sent:', result);
-            alert(`Solana transaction sent! Please wait for confirmation, then click "Start Monitoring" to track your payment.`);
+            // Also copy the address as backup
+            await navigator.clipboard.writeText(solanaPaymentAddress);
+            
+            alert(`Opening Phantom wallet for USDC transfer...\n\nIf Phantom doesn't open, please send ${amount} USDC to:\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
             
           } else {
             // Fallback: copy address and show instructions
@@ -198,14 +184,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         } catch (error) {
           console.error('Error with Solana transaction:', error);
           
-          // Check if user rejected the transaction
-          if (error.code === 4001 || error.message.includes('User rejected')) {
-            setError('Transaction cancelled by user.');
-          } else {
-            // Fallback: copy address and show instructions
-            await navigator.clipboard.writeText(solanaPaymentAddress);
-            alert(`Please send ${amount} USDC to this address in your Phantom wallet:\n\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
-          }
+          // Fallback: copy address and show instructions
+          await navigator.clipboard.writeText(solanaPaymentAddress);
+          alert(`Please send ${amount} USDC to this address in your Phantom wallet:\n\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
         }
       } else {
         // For EVM chains, trigger actual USDC transfer
