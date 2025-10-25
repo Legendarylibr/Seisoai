@@ -7,11 +7,14 @@ console.log('🚀 Starting AI Image Generator...');
 process.env.MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/ai-image-generator';
 
 // Override if localhost detected
-if (process.env.MONGODB_URI.includes('localhost')) {
+if (process.env.MONGODB_URI && process.env.MONGODB_URI.includes('localhost')) {
   console.log('⚠️ Localhost MongoDB detected - running without database');
   // Don't set MONGODB_URI to prevent connection attempts
   delete process.env.MONGODB_URI;
 }
+
+// Set production environment
+process.env.NODE_ENV = process.env.NODE_ENV || 'production';
 
 // Start the main application
 require('./backend/server.js');
