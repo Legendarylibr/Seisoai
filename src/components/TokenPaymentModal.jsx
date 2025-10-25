@@ -159,22 +159,105 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       setError('');
       
       if (walletType === 'solana') {
-        // For Solana, create a deep link to open Phantom with USDC transfer
+        // For Solana, use Phantom wallet API to create transaction
         try {
           if (window.solana && window.solana.isPhantom) {
-            // Create a deep link for Phantom wallet with USDC transfer
+            // Check if wallet is connected
+            if (!window.solana.isConnected) {
+              throw new Error('Phantom wallet is not connected. Please connect your wallet first.');
+            }
+
+            // Get the current connected account
+            const response = await window.solana.connect();
+            if (!response.publicKey) {
+              throw new Error('No account connected to Phantom wallet.');
+            }
+
+            // Create a proper USDC transfer transaction using Phantom's injected provider
             const amountMicroUSDC = Math.floor(parseFloat(amount) * 1000000);
             
-            // Phantom deep link format for USDC transfer
-            const phantomDeepLink = `https://phantom.app/ul/browse/${solanaPaymentAddress}?amount=${amountMicroUSDC}&token=USDC`;
-            
-            // Open Phantom with the transfer
-            window.open(phantomDeepLink, '_blank');
-            
-            // Also copy the address as backup
-            await navigator.clipboard.writeText(solanaPaymentAddress);
-            
-            alert(`Opening Phantom wallet for USDC transfer...\n\nIf Phantom doesn't open, please send ${amount} USDC to:\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
+            try {
+              // Import Solana web3 library if not already available
+              const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
+              
+              // Create connection to Solana mainnet
+              const connection = new Connection('https://api.mainnet-beta.solana.com');
+              
+              // Get the current public key from Phantom
+              const fromPublicKey = window.solana.publicKey;
+              const toPublicKey = new PublicKey(solanaPaymentAddress);
+              
+              // For USDC transfer, we need to create a token transfer instruction
+              // This requires the SPL Token program
+              const { createTransferInstruction, getAssociatedTokenAddress } = await import('@solana/spl-token');
+              
+              // USDC mint address on Solana mainnet
+              const usdcMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+              
+              // Get associated token accounts
+              const fromTokenAccount = await getAssociatedTokenAddress(usdcMint, fromPublicKey);
+              const toTokenAccount = await getAssociatedTokenAddress(usdcMint, toPublicKey);
+              
+              // Check if the user has a USDC token account and balance
+              try {
+                const { getAccount } = await import('@solana/spl-token');
+                const tokenAccountInfo = await getAccount(connection, fromTokenAccount);
+                
+                if (!tokenAccountInfo) {
+                  throw new Error('USDC token account not found. Please get some USDC first.');
+                }
+                
+                // Check if user has enough USDC
+                if (tokenAccountInfo.amount < BigInt(amountMicroUSDC)) {
+                  throw new Error(`Insufficient USDC balance. You have ${tokenAccountInfo.amount / BigInt(1000000)} USDC, but need ${amount} USDC.`);
+                }
+              } catch (accountError) {
+                console.warn('Token account check failed:', accountError);
+                // Continue with transaction attempt - the error will be caught later
+              }
+              
+              // Create the transfer instruction
+              const transferInstruction = createTransferInstruction(
+                fromTokenAccount,
+                toTokenAccount,
+                fromPublicKey,
+                amountMicroUSDC
+              );
+              
+              // Create and build the transaction
+              const transaction = new Transaction().add(transferInstruction);
+              
+              // Set recent blockhash and fee payer
+              const { blockhash } = await connection.getLatestBlockhash();
+              transaction.recentBlockhash = blockhash;
+              transaction.feePayer = fromPublicKey;
+              
+              // Sign and send the transaction through Phantom
+              const signedTransaction = await window.solana.signTransaction(transaction);
+              const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+              
+              console.log('USDC transfer transaction sent:', signature);
+              
+              // Wait for confirmation
+              await connection.confirmTransaction(signature);
+              
+              alert(`✅ USDC transfer successful!\n\nTransaction signature: ${signature}\n\nAmount: ${amount} USDC\nTo: ${solanaPaymentAddress}`);
+              
+            } catch (transactionError) {
+              console.error('Transaction failed:', transactionError);
+              
+              // If transaction fails, fall back to manual instructions
+              await navigator.clipboard.writeText(solanaPaymentAddress);
+              
+              // Check if it's a token account issue
+              if (transactionError.message.includes('TokenAccountNotFoundError') || 
+                  transactionError.message.includes('token account') ||
+                  transactionError.message.includes('associated token account')) {
+                alert(`❌ USDC token account not found!\n\nYou need to have USDC in your Phantom wallet first.\n\nPlease:\n1. Get some USDC tokens\n2. Send ${amount} USDC manually to:\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
+              } else {
+                alert(`❌ Transaction failed: ${transactionError.message}\n\nPlease send ${amount} USDC manually to:\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
+              }
+            }
             
           } else {
             // Fallback: copy address and show instructions
@@ -186,7 +269,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           
           // Fallback: copy address and show instructions
           await navigator.clipboard.writeText(solanaPaymentAddress);
-          alert(`Please send ${amount} USDC to this address in your Phantom wallet:\n\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
+          alert(`Error: ${error.message}\n\nPlease send ${amount} USDC to this address in your Phantom wallet:\n\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
         }
       } else {
         // For EVM chains, trigger actual USDC transfer
