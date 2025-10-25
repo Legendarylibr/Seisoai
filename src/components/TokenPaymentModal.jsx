@@ -159,10 +159,35 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       setError('');
       
       if (walletType === 'solana') {
-        // For Solana, we can't directly trigger a transaction from the browser
-        // So we'll copy the address and show instructions
-        await navigator.clipboard.writeText(solanaPaymentAddress);
-        alert(`Solana address copied! Please send ${amount} USDC to this address in your Phantom/Solflare wallet.`);
+        // For Solana, create a deep link to open Phantom with USDC transfer
+        try {
+          if (window.solana && window.solana.isPhantom) {
+            // Create a deep link for Phantom wallet
+            const amountMicroUSDC = Math.floor(parseFloat(amount) * 1000000);
+            
+            // Phantom deep link format for USDC transfer
+            const phantomDeepLink = `https://phantom.app/ul/browse/${solanaPaymentAddress}?amount=${amountMicroUSDC}&token=USDC`;
+            
+            // Open Phantom with the transfer
+            window.open(phantomDeepLink, '_blank');
+            
+            // Also copy the address as backup
+            await navigator.clipboard.writeText(solanaPaymentAddress);
+            
+            alert(`Opening Phantom wallet for USDC transfer...\n\nIf Phantom doesn't open, please send ${amount} USDC to:\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
+            
+          } else {
+            // Fallback: copy address and show instructions
+            await navigator.clipboard.writeText(solanaPaymentAddress);
+            alert(`Phantom wallet not found. Please send ${amount} USDC to this address in your Phantom wallet:\n\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
+          }
+        } catch (error) {
+          console.error('Error with Solana transaction:', error);
+          
+          // Fallback: copy address and show instructions
+          await navigator.clipboard.writeText(solanaPaymentAddress);
+          alert(`Please send ${amount} USDC to this address in your Phantom wallet:\n\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
+        }
       } else {
         // For EVM chains, trigger actual USDC transfer
         if (window.ethereum) {
