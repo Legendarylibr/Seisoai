@@ -33,6 +33,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   const [copied, setCopied] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(''); // 'pending', 'detected', 'confirmed'
+  const [networksWithUSDC, setNetworksWithUSDC] = useState([]);
+  const [currentNetworkBalance, setCurrentNetworkBalance] = useState(0);
 
   // Network detection and chain ID mapping
   const CHAIN_IDS = {
@@ -186,14 +188,193 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
 
   const loadTokenBalance = async (token) => {
     try {
-      // Simplified - just set a placeholder balance
-      setTokenBalances(prev => ({
-        ...prev,
-        [token.symbol]: '0.0'
-      }));
+      if (walletType === 'evm' && window.ethereum) {
+        // Check USDC balance across all supported EVM networks
+        await checkUSDCBalanceAcrossNetworks();
+      } else {
+        // Simplified - just set a placeholder balance for Solana
+        setTokenBalances(prev => ({
+          ...prev,
+          [token.symbol]: '0.0'
+        }));
+      }
     } catch (error) {
       console.error('Error loading token balance:', error);
     }
+  };
+
+  // Check USDC balance across all supported EVM networks
+  const checkUSDCBalanceAcrossNetworks = async () => {
+    try {
+      const networks = [
+        { chainId: 1, name: 'Ethereum', usdcAddress: '0xA0b86a33E6441b8C4C8C0C4C0C4C0C4C0C4C0C4C' },
+        { chainId: 137, name: 'Polygon', usdcAddress: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' },
+        { chainId: 42161, name: 'Arbitrum', usdcAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' },
+        { chainId: 10, name: 'Optimism', usdcAddress: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85' },
+        { chainId: 8453, name: 'Base', usdcAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }
+      ];
+
+      const usdcABI = [
+        "function balanceOf(address owner) view returns (uint256)",
+        "function decimals() view returns (uint8)"
+      ];
+
+      const balances = {};
+      let currentNetworkBalance = 0;
+      let networksWithUSDC = [];
+
+      // Check current network first
+      const { chainId: currentChainId } = await getCurrentNetwork();
+      
+      for (const network of networks) {
+        try {
+          // Create provider for this network
+          const provider = new ethers.JsonRpcProvider(getRPCUrl(network.chainId));
+          const contract = new ethers.Contract(network.usdcAddress, usdcABI, provider);
+          
+          const [balance, decimals] = await Promise.all([
+            contract.balanceOf(address),
+            contract.decimals()
+          ]);
+          
+          const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
+          balances[network.chainId] = {
+            balance: formattedBalance,
+            network: network.name,
+            chainId: network.chainId
+          };
+
+          if (formattedBalance > 0) {
+            networksWithUSDC.push({
+              ...network,
+              balance: formattedBalance
+            });
+          }
+
+          if (network.chainId === currentChainId) {
+            currentNetworkBalance = formattedBalance;
+          }
+        } catch (error) {
+          console.log(`Could not check balance on ${network.name}:`, error.message);
+        }
+      }
+
+      setTokenBalances(balances);
+      setCurrentNetworkBalance(currentNetworkBalance);
+      setNetworksWithUSDC(networksWithUSDC);
+
+      // If user has USDC on other networks but not current one, show prompt
+      if (networksWithUSDC.length > 0 && currentNetworkBalance === 0) {
+        const currentNetwork = networks.find(n => n.chainId === currentChainId);
+        const otherNetworks = networksWithUSDC.filter(n => n.chainId !== currentChainId);
+        
+        if (otherNetworks.length > 0) {
+          const networkList = otherNetworks.map(n => `${n.name} (${n.balance.toFixed(2)} USDC)`).join(', ');
+          setError(`💡 You have USDC on other networks: ${networkList}\n\nSwitch to one of these networks to use your USDC balance, or send USDC to ${currentNetwork?.name || 'current network'}.`);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking USDC balance across networks:', error);
+    }
+  };
+
+  // Get RPC URL for different networks
+  const getRPCUrl = (chainId) => {
+    const rpcUrls = {
+      1: 'https://eth.llamarpc.com',
+      137: 'https://polygon.llamarpc.com',
+      42161: 'https://arbitrum.llamarpc.com',
+      10: 'https://optimism.llamarpc.com',
+      8453: 'https://base.llamarpc.com'
+    };
+    return rpcUrls[chainId] || 'https://eth.llamarpc.com';
+  };
+
+  // Switch to a specific network
+  const switchToNetwork = async (chainId) => {
+    try {
+      if (!window.ethereum) {
+        throw new Error('Ethereum wallet not found');
+      }
+
+      const hexChainId = '0x' + chainId.toString(16);
+      
+      // Try to switch network
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: hexChainId }],
+      });
+
+      // Refresh balances after switching
+      setTimeout(() => {
+        checkUSDCBalanceAcrossNetworks();
+      }, 1000);
+
+    } catch (switchError) {
+      // If network doesn't exist, try to add it
+      if (switchError.code === 4902) {
+        try {
+          await addNetwork(chainId);
+        } catch (addError) {
+          console.error('Failed to add network:', addError);
+          setError(`Failed to add network. Please add it manually in your wallet.`);
+        }
+      } else {
+        console.error('Failed to switch network:', switchError);
+        setError(`Failed to switch network: ${switchError.message}`);
+      }
+    }
+  };
+
+  // Add network if it doesn't exist
+  const addNetwork = async (chainId) => {
+    const networkConfigs = {
+      1: {
+        chainId: '0x1',
+        chainName: 'Ethereum Mainnet',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://eth.llamarpc.com'],
+        blockExplorerUrls: ['https://etherscan.io']
+      },
+      137: {
+        chainId: '0x89',
+        chainName: 'Polygon Mainnet',
+        nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+        rpcUrls: ['https://polygon.llamarpc.com'],
+        blockExplorerUrls: ['https://polygonscan.com']
+      },
+      42161: {
+        chainId: '0xa4b1',
+        chainName: 'Arbitrum One',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://arbitrum.llamarpc.com'],
+        blockExplorerUrls: ['https://arbiscan.io']
+      },
+      10: {
+        chainId: '0xa',
+        chainName: 'Optimism',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://optimism.llamarpc.com'],
+        blockExplorerUrls: ['https://optimistic.etherscan.io']
+      },
+      8453: {
+        chainId: '0x2105',
+        chainName: 'Base',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://base.llamarpc.com'],
+        blockExplorerUrls: ['https://basescan.org']
+      }
+    };
+
+    const config = networkConfigs[chainId];
+    if (!config) {
+      throw new Error(`Network configuration not found for chain ID ${chainId}`);
+    }
+
+    await window.ethereum.request({
+      method: 'wallet_addEthereumChain',
+      params: [config],
+    });
   };
 
   const handleTokenSelect = (token) => {
@@ -758,6 +939,76 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               </div>
             )}
           </div>
+
+          {/* Network Switching Options */}
+          {networksWithUSDC.length > 0 && currentNetworkBalance === 0 && (
+            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm">💡</span>
+                </div>
+                <h3 className="text-blue-400 font-semibold">Switch Network to Use Your USDC</h3>
+              </div>
+              
+              <div className="space-y-2">
+                <p className="text-sm text-gray-300 mb-3">
+                  You have USDC on other networks. Switch to use your existing balance:
+                </p>
+                
+                <div className="grid grid-cols-1 gap-2">
+                  {networksWithUSDC.map((network) => (
+                    <button
+                      key={network.chainId}
+                      onClick={() => switchToNetwork(network.chainId)}
+                      className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 border border-white/20 rounded-lg transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                          <span className="text-white text-xs font-bold">
+                            {network.chainId === 1 ? '⟠' : 
+                             network.chainId === 137 ? '⬟' :
+                             network.chainId === 42161 ? '🔷' :
+                             network.chainId === 10 ? '🔴' : '🔵'}
+                          </span>
+                        </div>
+                        <div className="text-left">
+                          <div className="text-white font-semibold">{network.name}</div>
+                          <div className="text-xs text-gray-400">Chain ID: {network.chainId}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-green-400 font-semibold">{network.balance.toFixed(2)} USDC</div>
+                        <div className="text-xs text-gray-400">Click to switch</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                
+                <div className="text-xs text-gray-400 mt-2">
+                  💡 Switching networks will automatically refresh your USDC balance
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Current Network Balance */}
+          {currentNetworkBalance > 0 && (
+            <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-green-400 font-semibold">Current Network USDC Balance:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-green-400">{currentNetworkBalance.toFixed(2)} USDC</span>
+                  <button
+                    onClick={() => checkUSDCBalanceAcrossNetworks()}
+                    className="p-1 hover:bg-white/10 rounded transition-colors"
+                    title="Refresh balance"
+                  >
+                    <RefreshCw className="w-4 h-4 text-green-400" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (
