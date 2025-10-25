@@ -33,70 +33,21 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   const [copied, setCopied] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(''); // 'pending', 'detected', 'confirmed'
-  const [currentChainId, setCurrentChainId] = useState(null);
-  const [currentNetwork, setCurrentNetwork] = useState(null);
-
-  // Network detection and chain ID mapping
-  const CHAIN_IDS = {
-    1: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
-    137: { name: 'Polygon', symbol: 'MATIC', decimals: 18 },
-    42161: { name: 'Arbitrum', symbol: 'ETH', decimals: 18 },
-    10: { name: 'Optimism', symbol: 'ETH', decimals: 18 },
-    8453: { name: 'Base', symbol: 'ETH', decimals: 18 }
-  };
-
-  // Get current network info
-  const getCurrentNetwork = async () => {
-    try {
-      if (walletType === 'evm' && window.ethereum) {
-        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        const chainIdNumber = parseInt(chainId, 16);
-        const network = CHAIN_IDS[chainIdNumber];
-        
-        setCurrentChainId(chainIdNumber);
-        setCurrentNetwork(network);
-        
-        console.log(`🌐 Current network: ${network?.name || 'Unknown'} (Chain ID: ${chainIdNumber})`);
-        return { chainId: chainIdNumber, network };
-      }
-      return null;
-    } catch (error) {
-      console.error('Error getting current network:', error);
-      return null;
-    }
-  };
 
   // Load available tokens and payment address when modal opens
   useEffect(() => {
     if (isOpen) {
-      getCurrentNetwork().then(({ chainId, network } = {}) => {
-        if (chainId && network) {
-          // Show native token for the current network
-          const nativeToken = {
-            symbol: network.symbol,
-            name: network.name,
-            creditRate: network.symbol === 'ETH' ? 2000 : 1, // ETH = 2000 credits, others = 1 credit
-            minAmount: 0.001,
-            decimals: network.decimals,
-            isNative: true
-          };
-          
-          setAvailableTokens([nativeToken]);
-          setSelectedToken(nativeToken);
-        } else {
-          // Fallback to USDC
-          const usdcToken = {
-            symbol: 'USDC',
-            name: 'USD Coin',
-            creditRate: 10, // 1 USDC = 10 credits
-            minAmount: 1,
-            decimals: 6
-          };
-          
-          setAvailableTokens([usdcToken]);
-          setSelectedToken(usdcToken);
-        }
-      });
+      // Only show USDC token - no native tokens
+      const usdcToken = {
+        symbol: 'USDC',
+        name: 'USD Coin',
+        creditRate: 10, // 1 USDC = 10 credits
+        minAmount: 1,
+        decimals: 6
+      };
+      
+      setAvailableTokens([usdcToken]);
+      setSelectedToken(usdcToken);
       
       // Set fallback addresses immediately
       setPaymentAddress('0xa0aE05e2766A069923B2a51011F270aCadFf023a');
@@ -261,148 +212,19 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       }
       
       if (walletType === 'solana') {
-        console.log('🔍 Processing Solana transaction...');
+        console.log('🔍 Processing Solana USDC payment...');
         
-        try {
-          // Import Solana web3 library
-          const { Connection, PublicKey, Transaction, SystemProgram } = await import('@solana/web3.js');
-          
-          // Use multiple RPC endpoints for better reliability
-          const rpcUrls = [
-            'https://api.mainnet-beta.solana.com',
-            'https://api.devnet.solana.com', // Devnet as fallback
-            'https://solana-mainnet.g.alchemy.com/v2/demo' // Alchemy demo endpoint
-          ];
-          
-          let connection;
-          let lastError;
-          
-          // Try each RPC endpoint until one works
-          for (const rpcUrl of rpcUrls) {
-            try {
-              connection = new Connection(rpcUrl, 'confirmed');
-              // Test the connection
-              await connection.getLatestBlockhash();
-              console.log(`Using Solana RPC: ${rpcUrl}`);
-              break;
-            } catch (error) {
-              console.log(`Failed to connect to ${rpcUrl}: ${error.message}`);
-              lastError = error;
-              continue;
-            }
-          }
-          
-          if (!connection) {
-            throw new Error(`All Solana RPC endpoints failed. Last error: ${lastError?.message}`);
-          }
-          const fromPublicKey = window.solana.publicKey;
-          const toPublicKey = new PublicKey(solanaPaymentAddress);
-          
-          console.log('🔨 Creating SOL transfer transaction...');
-          
-          // Create a simple SOL transfer transaction
-          const transaction = new Transaction().add(
-            SystemProgram.transfer({
-              fromPubkey: fromPublicKey,
-              toPubkey: toPublicKey,
-              lamports: 1000000 // 0.001 SOL for testing
-            })
-          );
-          
-          // Set recent blockhash and fee payer with retry logic
-          let blockhash;
-          let retries = 3;
-          
-          while (retries > 0) {
-            try {
-              const result = await connection.getLatestBlockhash();
-              blockhash = result.blockhash;
-              break;
-            } catch (error) {
-              retries--;
-              if (retries === 0) {
-                throw new Error(`Failed to get recent blockhash after 3 attempts: ${error.message}`);
-              }
-              console.log(`Retrying getLatestBlockhash... (${retries} attempts left)`);
-              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-            }
-          }
-          
-          transaction.recentBlockhash = blockhash;
-          transaction.feePayer = fromPublicKey;
-          
-          console.log('✍️ Requesting Phantom to sign transaction...');
-          
-          // This will prompt Phantom to sign the transaction
-          const signedTransaction = await window.solana.signTransaction(transaction);
-          console.log('✅ Transaction signed by Phantom');
-          
-          const signature = await connection.sendRawTransaction(signedTransaction.serialize());
-          console.log('🎉 Transaction sent successfully:', signature);
-          
-          setError(`✅ Test transaction sent! Signature: ${signature}. Note: This is a test SOL transfer. For USDC, please send manually to: ${solanaPaymentAddress}`);
-          
-        } catch (transactionError) {
-          console.error('❌ Solana transaction failed:', transactionError);
-          
-          if (transactionError.message.includes('User rejected') || transactionError.message.includes('user rejected')) {
-            setError('Transaction cancelled by user.');
-          } else if (transactionError.message.includes('insufficient funds') || transactionError.message.includes('insufficient balance')) {
-            setError('Insufficient SOL balance. Please add SOL to your wallet and try again.');
-          } else {
-            setError(`Transaction failed: ${transactionError.message}`);
-          }
-          
-          await navigator.clipboard.writeText(solanaPaymentAddress);
-        }
+        // For Solana, just copy the USDC payment address
+        // Users need to send USDC manually to the payment address
+        await navigator.clipboard.writeText(solanaPaymentAddress);
+        setError(`✅ Solana USDC payment address copied to clipboard: ${solanaPaymentAddress}\n\nPlease send ${amount} USDC to this address and click "Check Payment" to verify.`);
       } else {
-        console.log('🔍 Processing EVM transaction...');
+        console.log('🔍 Processing USDC payment...');
         
-        try {
-          // Get current network info
-          const { chainId, network } = await getCurrentNetwork();
-          
-          if (!chainId || !network) {
-            throw new Error('Unable to detect current network. Please switch to a supported network.');
-          }
-          
-          // Get the current provider
-          let provider = window.ethereum;
-          if (window.ethereum.providers?.length > 0) {
-            // Multiple wallets, find the one that's connected
-            provider = window.ethereum.providers.find(p => p.isMetaMask || p.isRabby || p.isCoinbaseWallet) || window.ethereum;
-          }
-          
-          const ethersProvider = new ethers.BrowserProvider(provider);
-          const signer = await ethersProvider.getSigner();
-          
-          console.log(`🔨 Creating ${network.symbol} transaction on ${network.name}...`);
-          
-          // Send a small amount of the native token for testing
-          const amount = ethers.parseEther("0.001"); // 0.001 native token
-          const tx = await signer.sendTransaction({
-            to: paymentAddress,
-            value: amount
-          });
-          
-          console.log('🎉 Transaction sent successfully:', tx.hash);
-          setError(`✅ Test transaction sent! Hash: ${tx.hash}. Note: This is a test ${network.symbol} transfer on ${network.name}. For USDC, please send manually to: ${paymentAddress}`);
-          
-        } catch (ethError) {
-          console.error('❌ EVM transaction failed:', ethError);
-          
-          if (ethError.code === 4001 || ethError.message.includes('User rejected') || ethError.message.includes('user rejected')) {
-            setError('Transaction cancelled by user.');
-          } else if (ethError.code === 'INSUFFICIENT_FUNDS' || ethError.message.includes('insufficient funds') || ethError.message.includes('insufficient balance')) {
-            const network = await getCurrentNetwork();
-            const tokenSymbol = network?.network?.symbol || 'ETH';
-            setError(`Insufficient ${tokenSymbol} balance. You need at least 0.001 ${tokenSymbol} for this test transaction. Please add ${tokenSymbol} to your wallet and try again.`);
-          } else {
-            setError(`Transaction failed: ${ethError.message}`);
-          }
-          
-          await navigator.clipboard.writeText(paymentAddress);
-        }
+        // For EVM chains, just copy the USDC payment address
+        // Users need to send USDC manually to the payment address
+        await navigator.clipboard.writeText(paymentAddress);
+        setError(`✅ USDC payment address copied to clipboard: ${paymentAddress}\n\nPlease send ${amount} USDC to this address and click "Check Payment" to verify.`);
       }
     } catch (error) {
       console.error('Error sending transaction:', error);
@@ -535,23 +357,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             </div>
           </div>
 
-          {/* Network Indicator */}
-          {currentNetwork && (
-            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-300">Current Network:</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  <span className="text-sm font-medium text-blue-400">
-                    {currentNetwork.name} ({currentNetwork.symbol})
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
 
 
-          {/* Payment Method - Native Token */}
+          {/* Payment Method - USDC Only */}
           <div className="space-y-3">
             <label className="block text-sm font-medium text-gray-300">
               Payment Method
@@ -560,13 +368,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             <div className="w-full flex items-center justify-between p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                  {currentNetwork?.symbol?.charAt(0) || '$'}
+                  $
                 </div>
                 <div className="text-left">
-                  <div className="font-semibold text-white">Pay with {currentNetwork?.symbol || 'USDC'}</div>
-                  <div className="text-xs text-blue-300">
-                    {currentNetwork?.name || 'USD Coin'} on {walletType === 'solana' ? 'Solana' : 'EVM Chains'}
-                  </div>
+                  <div className="font-semibold text-white">Pay with USDC</div>
+                  <div className="text-xs text-blue-300">USD Coin on {walletType === 'solana' ? 'Solana' : 'EVM Chains'}</div>
                 </div>
               </div>
               <div className="px-3 py-1 bg-green-500/20 text-green-400 text-xs font-semibold rounded-full">
@@ -578,7 +384,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           {/* Amount Input */}
           <div className="space-y-3">
             <label className="block text-sm font-medium text-gray-300">
-              Amount ({currentNetwork?.symbol || 'USDC'})
+              Amount (USDC)
             </label>
             <div className="relative">
               <input
