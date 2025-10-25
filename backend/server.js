@@ -1,14 +1,23 @@
 // Simplified AI Image Generator Backend
-const express = require('express');
-const cors = require('cors');
-const mongoose = require('mongoose');
-const { ethers } = require('ethers');
-const { Connection, PublicKey } = require('@solana/web3.js');
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const compression = require('compression');
-const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import mongoose from 'mongoose';
+import { ethers } from 'ethers';
+import { Connection, PublicKey } from '@solana/web3.js';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import compression from 'compression';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// ES module setup
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config();
+
+const stripe = process.env.STRIPE_SECRET_KEY ? (await import('stripe')).default(process.env.STRIPE_SECRET_KEY) : null;
 
 const app = express();
 
@@ -159,7 +168,6 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static files from parent dist directory (frontend build)
-const path = require('path');
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath));
 
@@ -487,7 +495,7 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
 // API Routes
 
 /**
- * Health check
+ * Health check - Railway compatible
  */
 app.get('/api/health', async (req, res) => {
   try {
@@ -496,9 +504,14 @@ app.get('/api/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development',
-      database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+      database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      port: process.env.PORT || 3001,
+      version: '1.0.0'
     };
-    res.json(health);
+    
+    // Return 200 for healthy, 503 for unhealthy
+    const statusCode = health.database === 'connected' || process.env.NODE_ENV !== 'production' ? 200 : 503;
+    res.status(statusCode).json(health);
   } catch (error) {
     logger.error('Health check error:', error);
     res.status(500).json({
@@ -509,14 +522,15 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// Root health check for Railway
+// Root health check for Railway - simple and fast
 app.get('/', (req, res) => {
-  res.json({
+  res.status(200).json({
     status: 'healthy',
     service: 'Seiso AI Backend',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    port: process.env.PORT || 3001
   });
 });
 
@@ -1546,27 +1560,45 @@ const startServer = async (port = process.env.PORT || 3001) => {
   console.log('NODE_ENV:', process.env.NODE_ENV);
   console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Set' : 'Not set');
   
-  const server = app.listen(port, '0.0.0.0', () => {
-    logger.info(`AI Image Generator API running on port ${port}`);
+  // Ensure port is a number
+  const serverPort = parseInt(port, 10);
+  
+  const server = app.listen(serverPort, '0.0.0.0', () => {
+    logger.info(`AI Image Generator API running on port ${serverPort}`);
     logger.info(`MongoDB connected: ${mongoose.connection.readyState === 1 ? 'Yes' : 'No'}`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`✅ Server started successfully on port ${port}`);
+    console.log(`✅ Server started successfully on port ${serverPort}`);
+    console.log(`🌐 Health check: http://localhost:${serverPort}/api/health`);
   });
 
   server.on('error', (err) => {
     console.error('❌ Server error:', err);
     if (err.code === 'EADDRINUSE') {
-      logger.warn(`Port ${port} is in use, trying port ${port + 1}`);
-      startServer(port + 1);
+      logger.warn(`Port ${serverPort} is in use, trying port ${serverPort + 1}`);
+      startServer(serverPort + 1);
     } else {
       logger.error('Server error:', err);
       process.exit(1);
     }
   });
 
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+      console.log('Process terminated');
+      process.exit(0);
+    });
+  });
+
   return server;
 };
 
-startServer();
+// Export the app and start function
+export { startServer };
+export default app;
 
-module.exports = app;
+// Start server if this file is run directly
+if (process.argv[1] && process.argv[1].includes('server.js')) {
+  startServer();
+}
