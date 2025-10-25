@@ -152,10 +152,29 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   };
 
   const handleSendTransaction = async () => {
-    console.log('🚀 handleSendTransaction called', { amount, paymentAddress, walletType });
+    console.log('🚀 handleSendTransaction called', { 
+      amount, 
+      paymentAddress, 
+      walletType, 
+      address,
+      isConnected: !!address 
+    });
     
     if (!amount || !paymentAddress) {
       console.log('❌ Missing amount or payment address');
+      setError('Please enter an amount and ensure payment address is loaded');
+      return;
+    }
+    
+    if (!address) {
+      console.log('❌ No wallet connected');
+      setError('Please connect your wallet first');
+      return;
+    }
+    
+    if (!walletType) {
+      console.log('❌ No wallet type detected');
+      setError('Wallet type not detected. Please reconnect your wallet');
       return;
     }
     
@@ -172,6 +191,14 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           console.log('window.solana:', window.solana);
           console.log('window.solana.isPhantom:', window.solana?.isPhantom);
           console.log('window.solana.isConnected:', window.solana?.isConnected);
+          
+          // Test if we can get the public key
+          try {
+            const publicKey = window.solana.publicKey;
+            console.log('✅ Phantom public key:', publicKey?.toString());
+          } catch (e) {
+            console.log('❌ Error getting Phantom public key:', e);
+          }
           
           if (window.solana && window.solana.isPhantom) {
             console.log('✅ Phantom wallet detected');
@@ -265,6 +292,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       } else {
         // For EVM chains, trigger actual USDC transfer
         console.log('🔍 Processing EVM transaction');
+        console.log('window.ethereum:', window.ethereum);
+        console.log('window.ethereum.isMetaMask:', window.ethereum?.isMetaMask);
+        console.log('window.ethereum.isRabby:', window.ethereum?.isRabby);
+        console.log('window.ethereum.isCoinbaseWallet:', window.ethereum?.isCoinbaseWallet);
+        
         if (window.ethereum) {
           try {
             // Get the current provider
