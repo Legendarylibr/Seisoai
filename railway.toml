@@ -2,11 +2,11 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npm run build && node serve-fullstack.js"
+startCommand = "npm run build && node serve-real-backend.js"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 60
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
 
 [project]
 id = "ee55e7fa-b010-4946-a87b-013e15e329a8"

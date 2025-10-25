@@ -1594,6 +1594,11 @@ const startServer = async (port = process.env.PORT || 3001) => {
   return server;
 };
 
-startServer();
-
+// Export the app and start function
+export { startServer };
 export default app;
+
+// Start server if this file is run directly
+if (process.argv[1] && process.argv[1].includes('server.js')) {
+  startServer();
+}
