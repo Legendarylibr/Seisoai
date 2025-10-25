@@ -364,10 +364,10 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-md">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+      <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-sm max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/10">
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
               <Coins className="w-5 h-5 text-white" />
@@ -385,9 +385,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-4 space-y-4">
           {/* Current Credits */}
-          <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+          <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-300">Current Credits:</span>
               <span className="text-lg font-semibold text-purple-400">
@@ -460,7 +460,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           </div>
 
           {/* Payment Address */}
-          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-3">
+          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-2">
             <div className="flex items-center gap-2">
               <Wallet className="w-4 h-4 text-blue-400" />
               <span className="text-sm font-semibold text-blue-400">
@@ -524,11 +524,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             )}
 
             {/* Send Transaction Buttons */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <button
                 onClick={handleSendTransaction}
                 disabled={!amount || !paymentAddress || isProcessing}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors text-sm"
               >
                 <ExternalLink className="w-4 h-4" />
                 {isProcessing ? 'Opening Wallet...' : `Send ${amount || '0'} USDC to Payment Address`}
@@ -542,7 +542,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                     window.open(deepLink, '_blank');
                   }}
                   disabled={!amount || !paymentAddress}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-xs rounded-lg transition-colors"
                 >
                   <Wallet className="w-4 h-4" />
                   Open in Mobile Wallet
@@ -555,7 +555,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             </div>
 
             {/* Clear Instructions */}
-            <div className="bg-black/20 p-3 rounded border border-white/10">
+            <div className="bg-black/20 p-2 rounded border border-white/10">
               <div className="text-xs text-white font-semibold mb-2">📋 How to Pay:</div>
               <div className="text-xs text-gray-300 space-y-1">
                 <p><strong>Option 1:</strong> Click "Send Transaction" above (opens wallet)</p>
