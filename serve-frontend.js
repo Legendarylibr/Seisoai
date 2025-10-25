@@ -24,7 +24,23 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Handle client-side routing - return index.html for all routes
+// Root health check for Railway - must be before catch-all
+app.get('/', (req, res) => {
+  // Check if this is a health check request (no Accept header or JSON expected)
+  if (req.headers.accept && req.headers.accept.includes('application/json')) {
+    res.json({
+      status: 'healthy',
+      service: 'Seiso AI Frontend',
+      timestamp: new Date().toISOString(),
+      port: PORT
+    });
+  } else {
+    // Serve the frontend for browser requests
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  }
+});
+
+// Handle client-side routing - return index.html for all other routes
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
