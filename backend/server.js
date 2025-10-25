@@ -229,6 +229,16 @@ if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost:2701
   console.warn('⚠️ MONGODB_URI not provided, running without database');
 }
 
+// Override with production MongoDB URI if in production or if localhost detected
+if (process.env.NODE_ENV === 'production' || process.env.MONGODB_URI?.includes('localhost')) {
+  // Use a placeholder MongoDB Atlas URI for production
+  const productionMongoURI = 'mongodb+srv://placeholder:placeholder@placeholder-cluster.mongodb.net/ai-image-generator?retryWrites=true&w=majority';
+  console.log('📡 Using production MongoDB placeholder...');
+  // Override the environment variable
+  process.env.MONGODB_URI = productionMongoURI;
+  mongoose.connect(productionMongoURI, mongoOptions);
+}
+
 mongoose.connection.on('connected', () => {
   logger.info('MongoDB connected successfully');
 });
