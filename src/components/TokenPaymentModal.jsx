@@ -49,7 +49,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       setAvailableTokens([usdcToken]);
       setSelectedToken(usdcToken);
       
-      // Get or create payment address for this user
+      // Set fallback addresses immediately
+      setPaymentAddress('0xa0aE05e2766A069923B2a51011F270aCadFf023a');
+      setSolanaPaymentAddress('CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA');
+      
+      // Try to get updated addresses from API
       fetchPaymentAddress();
     }
   }, [isOpen]);
@@ -69,6 +73,10 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       if (data.success) {
         setPaymentAddress(data.paymentAddress); // EVM chains
         setSolanaPaymentAddress(data.solanaPaymentAddress); // Solana
+      } else {
+        // If API fails, use fallback addresses
+        setPaymentAddress('0xa0aE05e2766A069923B2a51011F270aCadFf023a');
+        setSolanaPaymentAddress('CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA');
       }
     } catch (error) {
       console.error('Error fetching payment address:', error);
@@ -140,6 +148,80 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       console.error('Failed to copy:', error);
+    }
+  };
+
+  const handleSendTransaction = async () => {
+    if (!amount || !paymentAddress) return;
+    
+    try {
+      setIsProcessing(true);
+      setError('');
+      
+      if (walletType === 'solana') {
+        // For Solana, we can't directly trigger a transaction from the browser
+        // So we'll copy the address and show instructions
+        await navigator.clipboard.writeText(solanaPaymentAddress);
+        alert(`Solana address copied! Please send ${amount} USDC to this address in your Phantom/Solflare wallet.`);
+      } else {
+        // For EVM chains, try to trigger wallet transaction
+        if (window.ethereum) {
+          try {
+            // Get the current provider
+            let provider = window.ethereum;
+            if (window.ethereum.providers?.length > 0) {
+              // Multiple wallets, find the one that's connected
+              provider = window.ethereum.providers.find(p => p.isMetaMask || p.isRabby || p.isCoinbaseWallet) || window.ethereum;
+            }
+            
+            // USDC contract addresses for different chains
+            const usdcContracts = {
+              '1': '0xA0b86a33E6441b8C4C8C0C4C0C4C0C4C0C4C0C4C', // Ethereum (placeholder)
+              '137': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // Polygon
+              '42161': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // Arbitrum
+              '10': '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Optimism
+              '8453': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' // Base
+            };
+            
+            // Get current chain ID
+            const chainId = await provider.request({ method: 'eth_chainId' });
+            const usdcContract = usdcContracts[chainId];
+            
+            if (usdcContract) {
+              // Try to trigger USDC transfer
+              const amountWei = ethers.parseUnits(amount, 6); // USDC has 6 decimals
+              
+              // This will open the wallet with a transaction to transfer USDC
+              await provider.request({
+                method: 'eth_sendTransaction',
+                params: [{
+                  to: usdcContract,
+                  data: `0xa9059cbb${paymentAddress.slice(2).padStart(64, '0')}${amountWei.toString(16).padStart(64, '0')}`,
+                  from: address
+                }]
+              });
+            } else {
+              // Fallback: copy address and show instructions
+              await navigator.clipboard.writeText(paymentAddress);
+              alert(`Please send ${amount} USDC to this address in your wallet:\n\n${paymentAddress}\n\nAddress copied to clipboard!`);
+            }
+          } catch (error) {
+            console.error('Error triggering transaction:', error);
+            // Fallback: copy address
+            await navigator.clipboard.writeText(paymentAddress);
+            alert(`Please send ${amount} USDC to this address in your wallet:\n\n${paymentAddress}\n\nAddress copied to clipboard!`);
+          }
+        } else {
+          // No wallet detected, copy address
+          await navigator.clipboard.writeText(paymentAddress);
+          alert(`Please send ${amount} USDC to this address in your wallet:\n\n${paymentAddress}\n\nAddress copied to clipboard!`);
+        }
+      }
+    } catch (error) {
+      console.error('Error sending transaction:', error);
+      setError('Failed to open wallet. Please copy the address and send manually.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -393,12 +475,43 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               </div>
             )}
 
+            {/* Send Transaction Buttons */}
+            <div className="space-y-3">
+              <button
+                onClick={handleSendTransaction}
+                disabled={!amount || !paymentAddress || isProcessing}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Send {amount || '0'} USDC Transaction
+              </button>
+              
+              {/* Alternative: Deep Link for Mobile */}
+              {walletType === 'evm' && (
+                <button
+                  onClick={() => {
+                    const deepLink = `ethereum:${paymentAddress}@1?value=${ethers.parseUnits(amount || '0', 6).toString()}&gas=21000`;
+                    window.open(deepLink, '_blank');
+                  }}
+                  disabled={!amount || !paymentAddress}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
+                >
+                  <Wallet className="w-4 h-4" />
+                  Open in Mobile Wallet
+                </button>
+              )}
+              
+              <div className="text-center text-xs text-gray-400">
+                This will open your wallet with the payment pre-filled
+              </div>
+            </div>
+
             {/* Clear Instructions */}
             <div className="bg-black/20 p-3 rounded border border-white/10">
               <div className="text-xs text-white font-semibold mb-2">📋 How to Pay:</div>
               <div className="text-xs text-gray-300 space-y-1">
-                <p><strong>1.</strong> Copy the payment address above</p>
-                <p><strong>2.</strong> Send exactly <span className="text-yellow-400 font-semibold">{amount || '0'} USDC</span> to this address</p>
+                <p><strong>Option 1:</strong> Click "Send Transaction" above (opens wallet)</p>
+                <p><strong>Option 2:</strong> Copy address and send manually</p>
                 <p><strong>3.</strong> Click "Start Monitoring" below</p>
                 <p><strong>4.</strong> Wait 1-5 mins for blockchain confirmation</p>
                 <p><strong>5.</strong> Credits will be added automatically!</p>
