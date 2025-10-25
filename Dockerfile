@@ -1,67 +1,26 @@
-# Multi-stage Docker build for AI Image Generator
+# Simple Dockerfile for Railway frontend deployment
+FROM node:18-alpine
 
-# Stage 1: Build frontend
-FROM node:18-alpine AS frontend-builder
-
+# Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy package files first for better caching
 COPY package*.json ./
-RUN npm ci
 
-# Copy source code
+# Install dependencies
+RUN npm install
+
+# Copy all source files
 COPY . .
 
-# Build the application
+# Build the frontend
 RUN npm run build
 
-# Stage 2: Backend build
-FROM node:18-alpine AS backend-builder
-
-WORKDIR /app/backend
-
-# Copy backend package files
-COPY backend/package*.json ./
-RUN npm ci
-
-# Copy backend source
-COPY backend/ .
-
-# Stage 3: Production image
-FROM node:18-alpine AS production
-
-# Install system dependencies
-RUN apk add --no-cache \
-    dumb-init \
-    curl \
-    && addgroup -g 1001 -S nodejs \
-    && adduser -S nodejs -u 1001
-
-# Create app directory
-WORKDIR /app
-
-# Copy backend dependencies and source
-COPY --from=backend-builder --chown=nodejs:nodejs /app/backend ./backend
-
-# Copy frontend build
-COPY --from=frontend-builder --chown=nodejs:nodejs /app/dist ./dist
-
-# Create logs directory
-RUN mkdir -p logs && chown nodejs:nodejs logs
-
-# Switch to non-root user
-USER nodejs
+# Create a simple static server
+RUN echo 'const http = require("http"); const fs = require("fs"); const path = require("path"); const PORT = process.env.PORT || 3000; const mimeTypes = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpg", ".gif": "image/gif", ".svg": "image/svg+xml", ".ico": "image/x-icon" }; const server = http.createServer((req, res) => { let filePath = path.join(__dirname, "dist", req.url === "/" ? "index.html" : req.url); fs.access(filePath, fs.constants.F_OK, (err) => { if (err) { filePath = path.join(__dirname, "dist", "index.html"); } const ext = path.extname(filePath).toLowerCase(); const contentType = mimeTypes[ext] || "application/octet-stream"; fs.readFile(filePath, (err, data) => { if (err) { res.writeHead(404, { "Content-Type": "text/html" }); res.end("<h1>404 - File Not Found</h1>"); return; } res.writeHead(200, { "Content-Type": contentType }); res.end(data); }); }); }); server.listen(PORT, "0.0.0.0", () => { console.log(`Server running on port ${PORT}`); });' > server.js
 
 # Expose port
-EXPOSE 3001
+EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3001/api/health || exit 1
-
-# Use dumb-init to handle signals properly
-ENTRYPOINT ["dumb-init", "--"]
-
-# Start the application
-WORKDIR /app
-CMD ["node", "backend/server.js"]
+# Start the server
+CMD ["node", "server.js"]
