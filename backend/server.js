@@ -217,11 +217,11 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Connect to MongoDB
-if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost')) {
+if (process.env.MONGODB_URI) {
   console.log('📡 Connecting to MongoDB...');
   mongoose.connect(process.env.MONGODB_URI, mongoOptions);
 } else {
-  console.warn('⚠️ MONGODB_URI not provided or localhost detected, running without database');
+  console.warn('⚠️ MONGODB_URI not provided, running without database');
 }
 
 mongoose.connection.on('connected', () => {
@@ -354,13 +354,13 @@ const TOKEN_CONFIGS = {
   }
 };
 
-// RPC endpoints (validated above)
+// RPC endpoints with reliable public endpoints
 const RPC_ENDPOINTS = {
-  '1': process.env.ETH_RPC_URL,
-  '137': process.env.POLYGON_RPC_URL,
-  '42161': process.env.ARBITRUM_RPC_URL,
-  '10': process.env.OPTIMISM_RPC_URL,
-  '8453': process.env.BASE_RPC_URL
+  '1': process.env.ETH_RPC_URL || 'https://ethereum.publicnode.com',
+  '137': process.env.POLYGON_RPC_URL || 'https://polygon.publicnode.com',
+  '42161': process.env.ARBITRUM_RPC_URL || 'https://arbitrum.publicnode.com',
+  '10': process.env.OPTIMISM_RPC_URL || 'https://optimism.publicnode.com',
+  '8453': process.env.BASE_RPC_URL || 'https://base.publicnode.com'
 };
 
 // ERC-20 ABI
@@ -749,9 +749,9 @@ async function checkForTokenTransfer(paymentAddress, expectedAmount, token = 'US
     const decimals = await contract.decimals();
     console.log(`[${chain.toUpperCase()}] Token decimals: ${decimals}`);
     
-    // Get current block and check last 10000 blocks for Base (more coverage)
+    // Get current block and check last 10 blocks to avoid free tier limitations
     const currentBlock = await provider.getBlockNumber();
-    const blocksToCheck = chain === 'base' ? 10000 : 1000;
+    const blocksToCheck = 10; // Reduced to avoid free tier limitations
     const fromBlock = currentBlock - blocksToCheck;
     
     console.log(`[${chain.toUpperCase()}] Scanning blocks ${fromBlock} to ${currentBlock} (${blocksToCheck} blocks)`);
@@ -986,11 +986,23 @@ app.post('/api/payment/check-payment', async (req, res) => {
     console.log(`[PAYMENT CHECK] Checking ${evmChains.length} EVM chains + Solana...`);
     
     const evmPromises = evmChains.map(chain => 
-      checkForTokenTransfer(evmPaymentAddress, expectedAmount, token, chain)
+      Promise.race([
+        checkForTokenTransfer(evmPaymentAddress, expectedAmount, token, chain),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+      ]).catch(err => {
+        console.log(`[WARN] ${chain} check failed:`, err.message);
+        return null;
+      })
     );
     
     // Also check Solana with its own payment address
-    const solanaPromise = checkForSolanaUSDC(solanaPaymentAddress, expectedAmount);
+    const solanaPromise = Promise.race([
+      checkForSolanaUSDC(solanaPaymentAddress, expectedAmount),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+    ]).catch(err => {
+      console.log(`[WARN] Solana check failed:`, err.message);
+      return null;
+    });
     
     const allPromises = [...evmPromises, solanaPromise];
     const results = await Promise.all(allPromises);
@@ -1026,8 +1038,10 @@ app.post('/api/payment/check-payment', async (req, res) => {
         });
       }
       
-      // Calculate credits (1 USDC = 10 credits, adjust as needed)
-      const creditsToAdd = Math.floor(parseFloat(payment.amount) * 10);
+      // Calculate credits based on NFT holder status
+      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      const creditsPerUSDC = isNFTHolder ? 10 : 6.67; // NFT holders get better rate
+      const creditsToAdd = Math.floor(parseFloat(payment.amount) * creditsPerUSDC);
       
       console.log(`[CREDIT] Adding ${creditsToAdd} credits to user ${walletAddress}`);
       console.log(`[CREDIT] Previous balance: ${user.credits} credits`);
@@ -1340,6 +1354,102 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+});
+
+/**
+ * Instant payment detection - checks for payments immediately after wallet connection
+ */
+app.post('/api/payment/instant-check', async (req, res) => {
+  try {
+    const { walletAddress, expectedAmount, token = 'USDC' } = req.body;
+    
+    console.log(`[INSTANT CHECK] Starting instant payment check for ${walletAddress}`);
+    
+    if (!walletAddress || !expectedAmount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
+      });
+    }
+    
+    const evmPaymentAddress = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
+    
+    // Quick check on most common chains first (Polygon and Ethereum)
+    const quickChains = ['polygon', 'ethereum'];
+    const quickPromises = quickChains.map(chain => 
+      Promise.race([
+        checkForTokenTransfer(evmPaymentAddress, expectedAmount, token, chain),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+      ]).catch(err => {
+        console.log(`[QUICK] ${chain} check failed:`, err.message);
+        return null;
+      })
+    );
+    
+    const quickResults = await Promise.all(quickPromises);
+    const quickPayment = quickResults.find(r => r && r.found);
+    
+    if (quickPayment) {
+      console.log(`[INSTANT] Payment found on ${quickPayment.chain}!`);
+      
+      // Process payment immediately
+      const user = await getOrCreateUser(walletAddress);
+      const alreadyProcessed = user.paymentHistory.some(p => p.txHash === quickPayment.txHash);
+      
+      if (alreadyProcessed) {
+        return res.json({
+          success: true,
+          paymentDetected: true,
+          alreadyProcessed: true,
+          message: 'Payment already credited'
+        });
+      }
+      
+      // Calculate credits based on NFT holder status
+      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      const creditsPerUSDC = isNFTHolder ? 10 : 6.67;
+      const creditsToAdd = Math.floor(parseFloat(quickPayment.amount) * creditsPerUSDC);
+      
+      // Add credits instantly
+      user.credits += creditsToAdd;
+      user.totalCreditsEarned += creditsToAdd;
+      user.paymentHistory.push({
+        amount: parseFloat(quickPayment.amount),
+        token: quickPayment.token,
+        txHash: quickPayment.txHash,
+        credits: creditsToAdd,
+        timestamp: new Date(quickPayment.timestamp * 1000),
+        chain: quickPayment.chain
+      });
+      
+      await user.save();
+      
+      console.log(`[INSTANT] Added ${creditsToAdd} credits instantly!`);
+      
+      return res.json({
+        success: true,
+        paymentDetected: true,
+        payment: quickPayment,
+        credits: creditsToAdd,
+        newBalance: user.credits,
+        message: 'Payment detected and credits added instantly!'
+      });
+    }
+    
+    // If no quick payment found, return not detected
+    return res.json({
+      success: true,
+      paymentDetected: false,
+      message: 'No payment detected yet'
+    });
+    
+  } catch (error) {
+    console.error('[INSTANT CHECK] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Instant payment check failed'
     });
   }
 });

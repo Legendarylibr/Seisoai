@@ -20,19 +20,33 @@ export const SimpleWalletProvider = ({ children }) => {
   const fetchCredits = async (walletAddress) => {
     try {
       console.log(`🔍 Fetching credits for ${walletAddress}`);
-      const response = await fetch(`${API_URL}/api/users/${walletAddress}`);
+      const response = await fetch(`${API_URL}/api/users/${walletAddress}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // Add timeout to prevent hanging
+        signal: AbortSignal.timeout(5000)
+      });
       
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.user) {
           setCredits(data.user.credits || 0);
           console.log(`✅ Credits loaded: ${data.user.credits}`);
+        } else {
+          console.warn('User not found, setting credits to 0');
+          setCredits(0);
         }
       } else {
         console.warn('Failed to fetch credits:', response.status);
+        // Set a default value when backend is unavailable
+        setCredits(0);
       }
     } catch (error) {
       console.error('Error fetching credits:', error);
+      // Set a default value when there's an error
+      setCredits(0);
     }
   };
 
@@ -273,6 +287,11 @@ export const SimpleWalletProvider = ({ children }) => {
     }
   };
 
+  // Function to manually set credits for testing
+  const setCreditsManually = (newCredits) => {
+    setCredits(newCredits);
+  };
+
   const value = {
     isConnected,
     address,
@@ -286,7 +305,8 @@ export const SimpleWalletProvider = ({ children }) => {
     fetchCredits,
     refreshCredits,
     checkNFTStatus,
-    walletType
+    walletType,
+    setCreditsManually
   };
 
   return (

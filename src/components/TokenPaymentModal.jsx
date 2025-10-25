@@ -503,7 +503,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             // Also trigger regular payment check
             setTimeout(() => {
               checkForPayment();
-            }, 500); // Check after 500ms for ultra-fast detection
+            }, 100); // Check after 100ms for instant detection
           } else {
             // Fallback to copying address if transaction fails
             await navigator.clipboard.writeText(solanaPaymentAddress);
@@ -621,7 +621,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             // Trigger instant payment check
             setTimeout(() => {
               checkForPayment();
-            }, 500); // Check after 500ms for ultra-fast detection
+            }, 100); // Check after 100ms for instant detection
           } else {
             throw new Error('Transaction failed');
           }
@@ -662,17 +662,18 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     setPaymentStatus('pending');
     setError('');
     
-    // Start ultra-aggressive checking - check every 500ms for instant detection
+    // Start instant payment detection - check every 200ms for near-instant detection
     const checkInterval = setInterval(async () => {
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        console.log('[Payment] Checking for payment:', {
+        console.log('[Payment] Instant checking for payment:', {
           walletAddress: address,
           expectedAmount: numAmount,
           token: 'USDC'
         });
         
-        const response = await fetch(`${apiUrl}/api/payment/check-payment`, {
+        // Use instant-check endpoint for faster detection
+        const response = await fetch(`${apiUrl}/api/payment/instant-check`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -685,37 +686,37 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         });
         
         const data = await response.json();
-        console.log('[Payment] Check result:', data);
+        console.log('[Payment] Instant check result:', data);
         
         if (data.success && data.paymentDetected) {
-          console.log('[Payment] Payment detected!', data.payment);
+          console.log('[Payment] Payment detected instantly!', data.payment);
           clearInterval(checkInterval);
           setPaymentStatus('confirmed');
           setCheckingPayment(false);
           
           // Immediately fetch credits and close modal
           await fetchCredits(address);
-          setError(`✅ Payment confirmed! ${numAmount} USDC received. Credits added instantly!`);
+          setError(`✅ Payment confirmed instantly! ${numAmount} USDC received. Credits added instantly!`);
           
           setTimeout(() => {
             onClose();
-          }, 1500); // Reduced from 2000ms
+          }, 1000); // Even faster close
         }
       } catch (error) {
         console.error('[Payment] Error checking payment:', error);
         // Don't stop checking on individual errors, keep trying
       }
-    }, 500); // Check every 500ms for ultra-fast detection
+    }, 200); // Check every 200ms for near-instant detection
     
-    // Stop checking after 5 minutes to prevent infinite checking
+    // Stop checking after 2 minutes to prevent infinite checking
     setTimeout(() => {
       clearInterval(checkInterval);
       if (paymentStatus === 'pending') {
         setCheckingPayment(false);
         setPaymentStatus('');
-        setError('Payment not detected after 5 minutes. Please try again or contact support.');
+        setError('Payment not detected after 2 minutes. Please try again or contact support.');
       }
-    }, 300000); // 5 minutes timeout
+    }, 120000); // 2 minutes timeout
   };
 
   const handlePayment = () => {
