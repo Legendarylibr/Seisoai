@@ -6,10 +6,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
+
+console.log('Environment variables:');
+console.log('PORT:', process.env.PORT);
+console.log('NODE_ENV:', process.env.NODE_ENV);
 
 // Serve static files from the dist directory
 app.use(express.static(path.join(__dirname, 'dist')));
+
+// Add health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    port: PORT 
+  });
+});
 
 // Handle client-side routing - return index.html for all routes
 app.use((req, res) => {
@@ -19,4 +32,5 @@ app.use((req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Frontend server running on port ${PORT}`);
   console.log(`Serving static files from: ${path.join(__dirname, 'dist')}`);
+  console.log(`Health check available at: http://localhost:${PORT}/health`);
 });
