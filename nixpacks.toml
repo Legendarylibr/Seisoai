@@ -9,3 +9,6 @@ cmds = ['npm run build']
 
 [start]
 cmd = 'npm run start:frontend'
+
+[providers]
+node = { version = "18" }
