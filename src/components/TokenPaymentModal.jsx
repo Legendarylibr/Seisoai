@@ -495,10 +495,15 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             console.log('✅ Solana transaction sent:', solanaTx);
             setError(`✅ Solana USDC transaction sent! Hash: ${solanaTx}\n\n${amount} USDC sent to ${solanaPaymentAddress}. Checking for instant credit addition...`);
             
-            // Trigger instant payment check
+            // Start checking immediately for Solana
+            const immediateCheck = setTimeout(() => {
+              checkForPayment();
+            }, 200); // Check after 200ms for immediate detection
+            
+            // Also trigger regular payment check
             setTimeout(() => {
               checkForPayment();
-            }, 1000); // Check after 1 second for faster detection
+            }, 500); // Check after 500ms for ultra-fast detection
           } else {
             // Fallback to copying address if transaction fails
             await navigator.clipboard.writeText(solanaPaymentAddress);
@@ -598,8 +603,16 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           console.log('⏳ Transaction submitted:', tx.hash);
           setError(`⏳ USDC transaction submitted! Hash: ${tx.hash}\n\nWaiting for confirmation...`);
           
+          // Start checking immediately while waiting for confirmation
+          const immediateCheck = setTimeout(() => {
+            checkForPayment();
+          }, 200); // Check after 200ms for immediate detection
+          
           // Wait for transaction confirmation
           const receipt = await tx.wait();
+          
+          // Clear the immediate check since we got confirmation
+          clearTimeout(immediateCheck);
           
           if (receipt.status === 1) {
             console.log('✅ USDC transaction confirmed!');
@@ -608,7 +621,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             // Trigger instant payment check
             setTimeout(() => {
               checkForPayment();
-            }, 1000); // Check after 1 second for faster detection
+            }, 500); // Check after 500ms for ultra-fast detection
           } else {
             throw new Error('Transaction failed');
           }
@@ -649,7 +662,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     setPaymentStatus('pending');
     setError('');
     
-    // Start aggressive checking - check every 2 seconds for faster detection
+    // Start ultra-aggressive checking - check every 500ms for instant detection
     const checkInterval = setInterval(async () => {
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -686,13 +699,13 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           
           setTimeout(() => {
             onClose();
-          }, 2000);
+          }, 1500); // Reduced from 2000ms
         }
       } catch (error) {
         console.error('[Payment] Error checking payment:', error);
         // Don't stop checking on individual errors, keep trying
       }
-    }, 2000); // Check every 2 seconds for faster detection
+    }, 500); // Check every 500ms for ultra-fast detection
     
     // Stop checking after 5 minutes to prevent infinite checking
     setTimeout(() => {
@@ -937,7 +950,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 <p><strong>1.</strong> Click "Open Wallet & Send USDC" above</p>
                 <p><strong>2.</strong> Confirm the transaction in your wallet</p>
                 <p><strong>3.</strong> Credits added instantly after confirmation!</p>
-                <p className="text-green-300"><strong>⚡ Instant:</strong> Payment detection every 2 seconds</p>
+                <p className="text-green-300"><strong>⚡ Ultra-Fast:</strong> Payment detection every 0.5 seconds</p>
                 <p className="text-blue-300"><strong>Note:</strong> Transaction is pre-built and ready to send</p>
               </div>
             </div>
