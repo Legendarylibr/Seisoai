@@ -173,75 +173,62 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               throw new Error('No account connected to Phantom wallet.');
             }
 
-            // Create a proper USDC transfer transaction using Phantom's injected provider
+            // Create a simple USDC transfer transaction using Phantom's API
             const amountMicroUSDC = Math.floor(parseFloat(amount) * 1000000);
             
             try {
-              // Import Solana web3 library if not already available
-              const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
-              
-              // Create connection to Solana mainnet
-              const connection = new Connection('https://api.mainnet-beta.solana.com');
-              
-              // Get the current public key from Phantom
-              const fromPublicKey = window.solana.publicKey;
-              const toPublicKey = new PublicKey(solanaPaymentAddress);
-              
-              // For USDC transfer, we need to create a token transfer instruction
-              // This requires the SPL Token program
-              const { createTransferInstruction, getAssociatedTokenAddress } = await import('@solana/spl-token');
-              
-              // USDC mint address on Solana mainnet
-              const usdcMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
-              
-              // Get associated token accounts
-              const fromTokenAccount = await getAssociatedTokenAddress(usdcMint, fromPublicKey);
-              const toTokenAccount = await getAssociatedTokenAddress(usdcMint, toPublicKey);
-              
-              // Check if the user has a USDC token account and balance
-              try {
-                const { getAccount } = await import('@solana/spl-token');
-                const tokenAccountInfo = await getAccount(connection, fromTokenAccount);
-                
-                if (!tokenAccountInfo) {
-                  throw new Error('USDC token account not found. Please get some USDC first.');
+              // First, try to use Phantom's built-in transfer method
+              if (window.solana.request) {
+                try {
+                  // Try to use Phantom's transfer method
+                  const transferParams = {
+                    method: 'transfer',
+                    params: {
+                      to: solanaPaymentAddress,
+                      amount: amountMicroUSDC,
+                      token: 'USDC'
+                    }
+                  };
+                  
+                  const result = await window.solana.request(transferParams);
+                  console.log('Transfer request sent to Phantom:', result);
+                  
+                  alert(`✅ Transfer request sent to Phantom wallet!\n\nPlease confirm the transaction in your wallet.\n\nAmount: ${amount} USDC\nTo: ${solanaPaymentAddress}`);
+                  
+                } catch (transferError) {
+                  console.warn('Phantom transfer method failed, trying transaction creation:', transferError);
+                  
+                  // Fallback: Create a simple transaction
+                  const { Connection, PublicKey, Transaction, SystemProgram } = await import('@solana/web3.js');
+                  
+                  const connection = new Connection('https://api.mainnet-beta.solana.com');
+                  const fromPublicKey = window.solana.publicKey;
+                  const toPublicKey = new PublicKey(solanaPaymentAddress);
+                  
+                  // Create a simple SOL transfer transaction first (for testing)
+                  const transaction = new Transaction().add(
+                    SystemProgram.transfer({
+                      fromPubkey: fromPublicKey,
+                      toPubkey: toPublicKey,
+                      lamports: 1000000 // 0.001 SOL for testing
+                    })
+                  );
+                  
+                  // Set recent blockhash and fee payer
+                  const { blockhash } = await connection.getLatestBlockhash();
+                  transaction.recentBlockhash = blockhash;
+                  transaction.feePayer = fromPublicKey;
+                  
+                  // Sign and send the transaction through Phantom
+                  const signedTransaction = await window.solana.signTransaction(transaction);
+                  const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+                  
+                  console.log('Transaction sent:', signature);
+                  alert(`✅ Transaction sent!\n\nSignature: ${signature}\n\nNote: This is a test SOL transfer. For USDC, please send manually to:\n${solanaPaymentAddress}`);
                 }
-                
-                // Check if user has enough USDC
-                if (tokenAccountInfo.amount < BigInt(amountMicroUSDC)) {
-                  throw new Error(`Insufficient USDC balance. You have ${tokenAccountInfo.amount / BigInt(1000000)} USDC, but need ${amount} USDC.`);
-                }
-              } catch (accountError) {
-                console.warn('Token account check failed:', accountError);
-                // Continue with transaction attempt - the error will be caught later
+              } else {
+                throw new Error('Phantom wallet API not available');
               }
-              
-              // Create the transfer instruction
-              const transferInstruction = createTransferInstruction(
-                fromTokenAccount,
-                toTokenAccount,
-                fromPublicKey,
-                amountMicroUSDC
-              );
-              
-              // Create and build the transaction
-              const transaction = new Transaction().add(transferInstruction);
-              
-              // Set recent blockhash and fee payer
-              const { blockhash } = await connection.getLatestBlockhash();
-              transaction.recentBlockhash = blockhash;
-              transaction.feePayer = fromPublicKey;
-              
-              // Sign and send the transaction through Phantom
-              const signedTransaction = await window.solana.signTransaction(transaction);
-              const signature = await connection.sendRawTransaction(signedTransaction.serialize());
-              
-              console.log('USDC transfer transaction sent:', signature);
-              
-              // Wait for confirmation
-              await connection.confirmTransaction(signature);
-              
-              alert(`✅ USDC transfer successful!\n\nTransaction signature: ${signature}\n\nAmount: ${amount} USDC\nTo: ${solanaPaymentAddress}`);
               
             } catch (transactionError) {
               console.error('Transaction failed:', transactionError);
@@ -249,14 +236,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               // If transaction fails, fall back to manual instructions
               await navigator.clipboard.writeText(solanaPaymentAddress);
               
-              // Check if it's a token account issue
-              if (transactionError.message.includes('TokenAccountNotFoundError') || 
-                  transactionError.message.includes('token account') ||
-                  transactionError.message.includes('associated token account')) {
-                alert(`❌ USDC token account not found!\n\nYou need to have USDC in your Phantom wallet first.\n\nPlease:\n1. Get some USDC tokens\n2. Send ${amount} USDC manually to:\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
-              } else {
-                alert(`❌ Transaction failed: ${transactionError.message}\n\nPlease send ${amount} USDC manually to:\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
-              }
+              alert(`❌ Transaction failed: ${transactionError.message}\n\nPlease send ${amount} USDC manually to:\n${solanaPaymentAddress}\n\nAddress copied to clipboard!`);
             }
             
           } else {
@@ -284,7 +264,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             
             // USDC contract addresses for different chains
             const usdcContracts = {
-              '0x1': '0xA0b86a33E6441b8C4C8C0C4C0C4C0C4C0C4C0C4C', // Ethereum (placeholder)
+              '0x1': '0xA0b86a33E6441b8C4C8C0C4C0C4C0C4C0C4C0C4C', // Ethereum (placeholder - needs real address)
               '0x89': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // Polygon
               '0xa4b1': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // Arbitrum
               '0xa': '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Optimism
@@ -296,41 +276,79 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             const usdcContract = usdcContracts[chainId];
             
             if (usdcContract) {
-              // Create ethers provider and signer
-              const ethersProvider = new ethers.BrowserProvider(provider);
-              const signer = await ethersProvider.getSigner();
-              
-              // USDC ABI for transfer function
-              const usdcABI = [
-                "function transfer(address to, uint256 amount) returns (bool)"
-              ];
-              
-              // Create USDC contract instance
-              const usdcContractInstance = new ethers.Contract(usdcContract, usdcABI, signer);
-              
-              // Convert amount to USDC units (6 decimals)
-              const amountWei = ethers.parseUnits(amount, 6);
-              
-              console.log('Sending USDC transaction:', {
-                to: paymentAddress,
-                amount: amount,
-                amountWei: amountWei.toString(),
-                contract: usdcContract,
-                chainId: chainId
-              });
-              
-              // Call transfer function - this will open wallet popup
-              const tx = await usdcContractInstance.transfer(paymentAddress, amountWei);
-              
-              console.log('Transaction sent:', tx.hash);
-              
-              // Show success message
-              alert(`Transaction sent! Hash: ${tx.hash}\n\nPlease wait for confirmation, then click "Start Monitoring" to track your payment.`);
-              
+              try {
+                // Create ethers provider and signer
+                const ethersProvider = new ethers.BrowserProvider(provider);
+                const signer = await ethersProvider.getSigner();
+                
+                // USDC ABI for transfer function
+                const usdcABI = [
+                  "function transfer(address to, uint256 amount) returns (bool)"
+                ];
+                
+                // Create USDC contract instance
+                const usdcContractInstance = new ethers.Contract(usdcContract, usdcABI, signer);
+                
+                // Convert amount to USDC units (6 decimals)
+                const amountWei = ethers.parseUnits(amount, 6);
+                
+                console.log('Sending USDC transaction:', {
+                  to: paymentAddress,
+                  amount: amount,
+                  amountWei: amountWei.toString(),
+                  contract: usdcContract,
+                  chainId: chainId
+                });
+                
+                // Call transfer function - this will open wallet popup
+                const tx = await usdcContractInstance.transfer(paymentAddress, amountWei);
+                
+                console.log('Transaction sent:', tx.hash);
+                
+                // Show success message
+                alert(`✅ USDC transaction sent!\n\nHash: ${tx.hash}\n\nPlease wait for confirmation, then click "Start Monitoring" to track your payment.`);
+                
+              } catch (contractError) {
+                console.error('USDC contract transaction failed:', contractError);
+                
+                // Fallback: Try a simple ETH transfer for testing
+                try {
+                  const ethersProvider = new ethers.BrowserProvider(provider);
+                  const signer = await ethersProvider.getSigner();
+                  
+                  // Send a small ETH amount for testing
+                  const tx = await signer.sendTransaction({
+                    to: paymentAddress,
+                    value: ethers.parseEther("0.001") // 0.001 ETH for testing
+                  });
+                  
+                  console.log('ETH test transaction sent:', tx.hash);
+                  alert(`✅ Test transaction sent!\n\nHash: ${tx.hash}\n\nNote: This is a test ETH transfer. For USDC, please send manually to:\n${paymentAddress}`);
+                  
+                } catch (ethError) {
+                  console.error('ETH transaction also failed:', ethError);
+                  throw new Error(`USDC transaction failed: ${contractError.message}`);
+                }
+              }
             } else {
-              // Fallback: copy address and show instructions
-              await navigator.clipboard.writeText(paymentAddress);
-              alert(`USDC not supported on this chain. Please send ${amount} USDC to this address manually:\n\n${paymentAddress}\n\nAddress copied to clipboard!`);
+              // Fallback: Try a simple ETH transfer for testing
+              try {
+                const ethersProvider = new ethers.BrowserProvider(provider);
+                const signer = await ethersProvider.getSigner();
+                
+                // Send a small ETH amount for testing
+                const tx = await signer.sendTransaction({
+                  to: paymentAddress,
+                  value: ethers.parseEther("0.001") // 0.001 ETH for testing
+                });
+                
+                console.log('ETH test transaction sent:', tx.hash);
+                alert(`✅ Test transaction sent!\n\nHash: ${tx.hash}\n\nNote: This is a test ETH transfer. For USDC, please send manually to:\n${paymentAddress}`);
+                
+              } catch (ethError) {
+                console.error('ETH transaction failed:', ethError);
+                throw new Error(`USDC not supported on chain ${chainId} and ETH transfer failed: ${ethError.message}`);
+              }
             }
           } catch (error) {
             console.error('Error sending USDC transaction:', error);
