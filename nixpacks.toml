@@ -8,10 +8,9 @@ cmds = ['npm install']
 cmds = ['npm run build']
 
 [start]
-cmd = 'npm run start:frontend'
+cmd = 'node start-app.js'
 
-[providers]
-node = { version = "18" }
+providers = ["node"]
 
 [variables]
 NODE_ENV = "production"
