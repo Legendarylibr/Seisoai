@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "start": "node server.js",
+    "start": "node start-app.js",
+    "start:backend": "cd backend && node server.js",
     "build:start": "npm run build && npm start",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"

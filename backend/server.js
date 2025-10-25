@@ -217,23 +217,16 @@ console.log('MONGODB_URI actual value:', process.env.MONGODB_URI);
 console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('All env vars starting with MONGO:', Object.keys(process.env).filter(key => key.startsWith('MONGO')));
 
-// Connect to MongoDB if URI is provided and not localhost
-if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost:27017')) {
-  console.log('📡 Connecting to MongoDB...');
-  mongoose.connect(process.env.MONGODB_URI, mongoOptions);
-} else if (process.env.MONGODB_URI && process.env.MONGODB_URI.includes('localhost:27017')) {
-  console.warn('⚠️ MONGODB_URI points to localhost - this will not work in production');
-  console.warn('⚠️ Please set MONGODB_URI to a MongoDB Atlas connection string');
-  console.warn('⚠️ Running without database connection');
-} else {
-  console.warn('⚠️ MONGODB_URI not provided, running without database');
-}
-
-// Handle localhost MongoDB URI in production - skip connection
+// Skip MongoDB connection if localhost URI detected
 if (process.env.MONGODB_URI?.includes('localhost')) {
-  console.log('⚠️ Skipping MongoDB connection - localhost URI detected in production');
+  console.log('⚠️ Skipping MongoDB connection - localhost URI detected');
   console.log('⚠️ App will run without database (some features will be limited)');
   // Don't attempt to connect to MongoDB
+} else if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost')) {
+  console.log('📡 Connecting to MongoDB...');
+  mongoose.connect(process.env.MONGODB_URI, mongoOptions);
+} else {
+  console.warn('⚠️ MONGODB_URI not provided, running without database');
 }
 
 mongoose.connection.on('connected', () => {
@@ -269,6 +262,17 @@ process.on('unhandledRejection', (reason, promise) => {
     return;
   }
   logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+  console.log('📡 SIGTERM received, shutting down gracefully...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('📡 SIGINT received, shutting down gracefully...');
+  process.exit(0);
 });
 
 
