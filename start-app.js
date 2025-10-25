@@ -17,4 +17,4 @@ if (process.env.MONGODB_URI && process.env.MONGODB_URI.includes('localhost')) {
 process.env.NODE_ENV = process.env.NODE_ENV || 'production';
 
 // Start the main application
-require('./backend/server.js');
+import('./backend/server.js');
