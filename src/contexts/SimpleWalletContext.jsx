@@ -14,6 +14,7 @@ export const SimpleWalletProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [isNFTHolder, setIsNFTHolder] = useState(false);
   const [nftCollections, setNftCollections] = useState([]);
+  const [walletType, setWalletType] = useState(null); // 'evm' or 'solana'
 
   // Fetch credits from backend
   const fetchCredits = async (walletAddress) => {
@@ -78,6 +79,17 @@ export const SimpleWalletProvider = ({ children }) => {
           } else {
             throw new Error('MetaMask not found. Please install MetaMask extension.');
           }
+          
+          // Request fresh permissions - this will show the wallet popup
+          try {
+            await provider.request({
+              method: 'wallet_requestPermissions',
+              params: [{ eth_accounts: {} }]
+            });
+          } catch (e) {
+            console.log('⚠️ wallet_requestPermissions not supported, using eth_requestAccounts');
+          }
+          
           // This will prompt user to unlock MetaMask if locked
           const accounts = await provider.request({ 
             method: 'eth_requestAccounts' 
@@ -85,37 +97,66 @@ export const SimpleWalletProvider = ({ children }) => {
           if (!accounts || accounts.length === 0) {
             throw new Error('No accounts found. Please unlock MetaMask and try again.');
           }
-          address = accounts[0];
-          break;
+        address = accounts[0];
+        setWalletType('evm');
+        break;
 
-        case 'rabby':
+      case 'rabby':
+          // Check if Rabby is available
           if (!window.ethereum) {
-            throw new Error('Rabby Wallet not found. Please install Rabby Wallet extension.');
+            throw new Error('No wallet found. Please install Rabby Wallet extension.');
           }
-          // Find Rabby provider specifically (it might be in the providers array)
-          if (window.ethereum.providers?.length > 0) {
-            // Multiple wallets installed, find Rabby
+          
+          console.log('🔍 Detecting Rabby Wallet...', {
+            hasEthereum: !!window.ethereum,
+            isRabby: window.ethereum.isRabby,
+            hasProviders: !!window.ethereum.providers,
+            providersCount: window.ethereum.providers?.length
+          });
+          
+          // Try multiple detection methods for Rabby
+          if (window.ethereum.providers && window.ethereum.providers.length > 0) {
+            // Multiple wallets installed - find Rabby in providers array
             provider = window.ethereum.providers.find(p => p.isRabby);
-            if (!provider) {
-              throw new Error('Rabby Wallet not found. Please make sure Rabby is installed and enabled.');
-            }
-          } else if (window.ethereum.isRabby) {
-            // Only Rabby is installed
-            provider = window.ethereum;
-          } else {
-            throw new Error('Rabby Wallet not found. Please install Rabby Wallet extension.');
+            console.log('🔍 Found in providers array:', !!provider);
           }
-          // This will prompt user to unlock Rabby if locked
+          
+          if (!provider && window.ethereum.isRabby) {
+            // Rabby is the primary wallet
+            provider = window.ethereum;
+            console.log('🔍 Using primary ethereum provider (isRabby=true)');
+          }
+          
+          if (!provider) {
+            // Last resort: just use window.ethereum and let it prompt whatever is available
+            // This handles cases where Rabby doesn't properly identify itself
+            provider = window.ethereum;
+            console.log('⚠️ Rabby flag not detected, using default ethereum provider');
+          }
+          
+          // Request fresh permissions - this will show the wallet popup
+          try {
+            await provider.request({
+              method: 'wallet_requestPermissions',
+              params: [{ eth_accounts: {} }]
+            });
+          } catch (e) {
+            console.log('⚠️ wallet_requestPermissions not supported, using eth_requestAccounts');
+          }
+          
+          // This will prompt user to unlock and connect
           const rabbyAccounts = await provider.request({ 
             method: 'eth_requestAccounts' 
           });
           if (!rabbyAccounts || rabbyAccounts.length === 0) {
-            throw new Error('No accounts found. Please unlock Rabby Wallet and try again.');
+            throw new Error('No accounts found. Please unlock your wallet and try again.');
           }
-          address = rabbyAccounts[0];
-          break;
+        address = rabbyAccounts[0];
+        setWalletType('evm');
+        console.log('✅ Rabby connected:', address);
+        break;
 
-        case 'coinbase':
+      case 'coinbase':
           if (!window.ethereum) {
             throw new Error('Coinbase Wallet not found. Please install Coinbase Wallet extension.');
           }
@@ -132,6 +173,17 @@ export const SimpleWalletProvider = ({ children }) => {
           } else {
             throw new Error('Coinbase Wallet not found. Please install Coinbase Wallet extension.');
           }
+          
+          // Request fresh permissions - this will show the wallet popup
+          try {
+            await provider.request({
+              method: 'wallet_requestPermissions',
+              params: [{ eth_accounts: {} }]
+            });
+          } catch (e) {
+            console.log('⚠️ wallet_requestPermissions not supported, using eth_requestAccounts');
+          }
+          
           // This will prompt user to unlock Coinbase Wallet if locked
           const coinbaseAccounts = await provider.request({ 
             method: 'eth_requestAccounts' 
@@ -139,10 +191,11 @@ export const SimpleWalletProvider = ({ children }) => {
           if (!coinbaseAccounts || coinbaseAccounts.length === 0) {
             throw new Error('No accounts found. Please unlock Coinbase Wallet and try again.');
           }
-          address = coinbaseAccounts[0];
-          break;
+        address = coinbaseAccounts[0];
+        setWalletType('evm');
+        break;
 
-        case 'phantom':
+      case 'phantom':
           if (!window.solana || !window.solana.isPhantom) {
             throw new Error('Phantom Wallet not found. Please install Phantom extension.');
           }
@@ -152,10 +205,11 @@ export const SimpleWalletProvider = ({ children }) => {
           if (!resp || !resp.publicKey) {
             throw new Error('Failed to connect. Please unlock Phantom and try again.');
           }
-          address = resp.publicKey.toString();
-          break;
+        address = resp.publicKey.toString();
+        setWalletType('solana');
+        break;
 
-        case 'solflare':
+      case 'solflare':
           if (!window.solflare) {
             throw new Error('Solflare Wallet not found. Please install Solflare extension.');
           }
@@ -165,10 +219,11 @@ export const SimpleWalletProvider = ({ children }) => {
           if (!provider.publicKey) {
             throw new Error('Failed to connect. Please unlock Solflare and try again.');
           }
-          address = provider.publicKey.toString();
-          break;
+        address = provider.publicKey.toString();
+        setWalletType('solana');
+        break;
 
-        default:
+      default:
           throw new Error(`Unsupported wallet type: ${walletType}`);
       }
 
@@ -202,6 +257,7 @@ export const SimpleWalletProvider = ({ children }) => {
     setError(null);
     setIsNFTHolder(false);
     setNftCollections([]);
+    setWalletType(null);
   };
 
   // Auto-reconnect disabled - user must manually select wallet each time
@@ -229,7 +285,8 @@ export const SimpleWalletProvider = ({ children }) => {
     disconnectWallet,
     fetchCredits,
     refreshCredits,
-    checkNFTStatus
+    checkNFTStatus,
+    walletType
   };
 
   return (

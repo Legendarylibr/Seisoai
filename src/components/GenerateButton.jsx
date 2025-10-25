@@ -3,10 +3,9 @@ import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
-import PaymentModal from './PaymentModal';
 import { generationLogger as logger } from '../utils/logger.js';
 
-const GenerateButton = ({ customPrompt = '' }) => {
+const GenerateButton = ({ customPrompt = '', onShowTokenPayment, onShowStripePayment }) => {
   const {
     selectedStyle,
     isGenerating,
@@ -31,7 +30,6 @@ const GenerateButton = ({ customPrompt = '' }) => {
     refreshCredits
   } = useSimpleWallet();
 
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [progress, setProgress] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [generationStartTime, setGenerationStartTime] = useState(null);
@@ -101,7 +99,9 @@ const GenerateButton = ({ customPrompt = '' }) => {
 
     // Check if user has credits
     if (credits <= 0) {
-      setShowPaymentModal(true);
+      if (onShowTokenPayment) {
+        onShowTokenPayment();
+      }
       return;
     }
 
@@ -297,10 +297,6 @@ const GenerateButton = ({ customPrompt = '' }) => {
       )}
 
       {/* Payment Modal */}
-      <PaymentModal 
-        isOpen={showPaymentModal} 
-        onClose={() => setShowPaymentModal(false)} 
-      />
     </>
   );
 };

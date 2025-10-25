@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const { ethers } = require('ethers');
+const { Connection, PublicKey } = require('@solana/web3.js');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -617,6 +618,412 @@ app.post('/api/nft/check-holdings', async (req, res) => {
       error: error.message,
       isHolder: false,
       collections: []
+    });
+  }
+});
+
+/**
+ * Get payment address for user
+ */
+app.post('/api/payment/get-address', async (req, res) => {
+  try {
+    const { walletAddress } = req.body;
+    
+    if (!walletAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Wallet address required'
+      });
+    }
+    
+    // Return dedicated payment addresses for different chains
+    const evmPaymentAddress = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
+    const solanaPaymentAddress = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA';
+    
+  res.json({
+    success: true,
+    paymentAddress: evmPaymentAddress, // EVM chains
+    solanaPaymentAddress: solanaPaymentAddress, // Solana
+    supportedTokens: ['USDC', 'USDT'],
+    networks: ['Ethereum', 'Polygon', 'Arbitrum', 'Optimism', 'Base', 'Solana']
+  });
+  } catch (error) {
+    console.error('[ERROR] Get payment address error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get payment address'
+    });
+  }
+});
+
+// USDC Token Contract ABI (ERC-20 Transfer event)
+const USDC_ABI = [
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+  "function decimals() view returns (uint8)"
+];
+
+// Token addresses for different chains
+const TOKEN_ADDRESSES = {
+  ethereum: {
+    USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    USDT: '0xdAC17F958D2ee523a2206206994597C13D831ec7'
+  },
+  polygon: {
+    USDC: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+    USDT: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F'
+  },
+  arbitrum: {
+    USDC: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8',
+    USDT: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9'
+  },
+  optimism: {
+    USDC: '0x7F5c764cBc14f9669B88837ca1490cCa17c31607',
+    USDT: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58'
+  },
+  base: {
+    USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    USDT: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb'
+  }
+};
+
+// Get provider for chain using Alchemy
+function getProvider(chain = 'ethereum') {
+  const alchemyKey = process.env.ALCHEMY_API_KEY || 'REDACTED_ALCHEMY_KEY';
+  
+  const rpcUrls = {
+    ethereum: process.env.ETHEREUM_RPC_URL || `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    polygon: process.env.POLYGON_RPC_URL || `https://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    arbitrum: process.env.ARBITRUM_RPC_URL || `https://arb-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    optimism: process.env.OPTIMISM_RPC_URL || `https://opt-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    base: process.env.BASE_RPC_URL || `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
+  };
+  
+  return new ethers.JsonRpcProvider(rpcUrls[chain] || rpcUrls.ethereum);
+}
+
+/**
+ * Check for recent USDC/USDT transfers to payment address
+ */
+async function checkForTokenTransfer(paymentAddress, expectedAmount, token = 'USDC', chain = 'ethereum') {
+  try {
+    console.log(`\n[${chain.toUpperCase()}] Starting check for ${token} transfers...`);
+    console.log(`[${chain.toUpperCase()}] Looking for transfers TO: ${paymentAddress}`);
+    console.log(`[${chain.toUpperCase()}] Expected amount: ${expectedAmount} ${token}`);
+    
+    const provider = getProvider(chain);
+    const tokenAddress = TOKEN_ADDRESSES[chain]?.[token];
+    
+    if (!tokenAddress) {
+      console.log(`[${chain.toUpperCase()}] ⚠️  Token ${token} not supported on this chain`);
+      return null;
+    }
+    
+    console.log(`[${chain.toUpperCase()}] Token contract: ${tokenAddress}`);
+    
+    const contract = new ethers.Contract(tokenAddress, USDC_ABI, provider);
+    const decimals = await contract.decimals();
+    console.log(`[${chain.toUpperCase()}] Token decimals: ${decimals}`);
+    
+    // Get current block and check last 10000 blocks for Base (more coverage)
+    const currentBlock = await provider.getBlockNumber();
+    const blocksToCheck = chain === 'base' ? 10000 : 1000;
+    const fromBlock = currentBlock - blocksToCheck;
+    
+    console.log(`[${chain.toUpperCase()}] Scanning blocks ${fromBlock} to ${currentBlock} (${blocksToCheck} blocks)`);
+    
+    // Query Transfer events TO our payment address (second parameter is recipient)
+    const filter = contract.filters.Transfer(null, paymentAddress);
+    console.log(`[${chain.toUpperCase()}] Filter: Transfer(from: ANY, to: ${paymentAddress})`);
+    
+    const events = await contract.queryFilter(filter, fromBlock, currentBlock);
+    
+    console.log(`[${chain.toUpperCase()}] Found ${events.length} incoming transfer(s) to payment wallet`);
+    
+    if (events.length === 0) {
+      console.log(`[${chain.toUpperCase()}] ✗ No transfers found to payment wallet in last ${blocksToCheck} blocks`);
+      return null;
+    }
+    
+    // Check if any transfer matches our expected amount (within 1% tolerance)
+    const expectedAmountWei = ethers.parseUnits(expectedAmount.toString(), decimals);
+    const tolerance = expectedAmountWei / 100n; // 1% tolerance
+    
+    console.log(`[${chain.toUpperCase()}] Expected amount (wei): ${expectedAmountWei.toString()}`);
+    console.log(`[${chain.toUpperCase()}] Tolerance range: ${(expectedAmountWei - tolerance).toString()} - ${(expectedAmountWei + tolerance).toString()}`);
+    
+    for (const event of events.reverse()) { // Check most recent first
+      const amount = event.args.value;
+      const from = event.args.from;
+      const to = event.args.to;
+      const amountFormatted = ethers.formatUnits(amount, decimals);
+      
+      console.log(`[${chain.toUpperCase()}]   Checking tx ${event.transactionHash}:`);
+      console.log(`[${chain.toUpperCase()}]     From: ${from}`);
+      console.log(`[${chain.toUpperCase()}]     To: ${to}`);
+      console.log(`[${chain.toUpperCase()}]     Amount: ${amountFormatted} ${token} (${amount.toString()} wei)`);
+      
+      // Check if amount matches (within tolerance)
+      if (amount >= expectedAmountWei - tolerance && amount <= expectedAmountWei + tolerance) {
+        const block = await event.getBlock();
+        
+        console.log(`[${chain.toUpperCase()}]   ✓ MATCH FOUND!`);
+        console.log(`[${chain.toUpperCase()}]     TxHash: ${event.transactionHash}`);
+        console.log(`[${chain.toUpperCase()}]     Block: ${event.blockNumber}`);
+        console.log(`[${chain.toUpperCase()}]     Timestamp: ${new Date(block.timestamp * 1000).toISOString()}`);
+        
+        return {
+          found: true,
+          txHash: event.transactionHash,
+          from: from,
+          amount: amountFormatted,
+          timestamp: block.timestamp,
+          blockNumber: event.blockNumber,
+          chain: chain,
+          token: token
+        };
+      } else {
+        console.log(`[${chain.toUpperCase()}]     ✗ Amount doesn't match (expected ${expectedAmount})`);
+      }
+    }
+    
+    console.log(`[${chain.toUpperCase()}] ✗ No matching amounts found`);
+    return null;
+  } catch (error) {
+    console.error(`[${chain.toUpperCase()}] ❌ Error:`, error.message);
+    if (error.stack) {
+      console.error(`[${chain.toUpperCase()}] Stack:`, error.stack);
+    }
+    return null;
+  }
+}
+
+/**
+ * Check for Solana USDC transfers
+ */
+async function checkForSolanaUSDC(paymentAddress, expectedAmount) {
+  try {
+    console.log(`\n[SOLANA] Starting check for USDC transfers...`);
+    console.log(`[SOLANA] Looking for transfers TO: ${paymentAddress}`);
+    console.log(`[SOLANA] Expected amount: ${expectedAmount} USDC`);
+    
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const connection = new Connection(rpcUrl, 'confirmed');
+    
+    const paymentPubkey = new PublicKey(paymentAddress);
+    
+    // USDC Token Mint on Solana
+    const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+    
+    // Get recent signatures for the payment address
+    const signatures = await connection.getSignaturesForAddress(paymentPubkey, { limit: 50 });
+    
+    console.log(`[SOLANA] Found ${signatures.length} recent transaction(s)`);
+    
+    if (signatures.length === 0) {
+      console.log(`[SOLANA] ✗ No recent transactions found`);
+      return null;
+    }
+    
+    // Check each transaction for USDC transfers
+    for (const sig of signatures) {
+      try {
+        const tx = await connection.getParsedTransaction(sig.signature, {
+          maxSupportedTransactionVersion: 0
+        });
+        
+        if (!tx || !tx.meta) continue;
+        
+        console.log(`[SOLANA]   Checking tx ${sig.signature}...`);
+        
+        // Look for SPL Token transfers in the transaction
+        const instructions = tx.transaction.message.instructions;
+        
+        for (const instruction of instructions) {
+          // Check if it's a token transfer instruction
+          if (instruction.program === 'spl-token' && instruction.parsed?.type === 'transfer') {
+            const info = instruction.parsed.info;
+            
+            console.log(`[SOLANA]     Token transfer found:`);
+            console.log(`[SOLANA]       From: ${info.source}`);
+            console.log(`[SOLANA]       To: ${info.destination}`);
+            console.log(`[SOLANA]       Authority: ${info.authority}`);
+            
+            // Check if it's to our payment address and is USDC
+            if (info.destination === paymentAddress) {
+              // Get token account info to verify it's USDC
+              const amount = info.amount / 1e6; // USDC has 6 decimals
+              
+              console.log(`[SOLANA]       Amount: ${amount} USDC`);
+              
+              // Check if amount matches (within 1% tolerance)
+              const tolerance = expectedAmount * 0.01;
+              console.log(`[SOLANA]       Expected: ${expectedAmount} ± ${tolerance}`);
+              
+              if (amount >= expectedAmount - tolerance && amount <= expectedAmount + tolerance) {
+                console.log(`[SOLANA]     ✓ MATCH FOUND!`);
+                console.log(`[SOLANA]       TxHash: ${sig.signature}`);
+                console.log(`[SOLANA]       Timestamp: ${new Date(sig.blockTime * 1000).toISOString()}`);
+                
+                return {
+                  found: true,
+                  txHash: sig.signature,
+                  from: info.authority,
+                  amount: amount.toString(),
+                  timestamp: sig.blockTime,
+                  chain: 'solana',
+                  token: 'USDC'
+                };
+              } else {
+                console.log(`[SOLANA]       ✗ Amount doesn't match`);
+              }
+            } else {
+              console.log(`[SOLANA]       ✗ Not to our payment address`);
+            }
+          }
+        }
+      } catch (txError) {
+        console.error(`[SOLANA] ⚠️  Error parsing transaction ${sig.signature}:`, txError.message);
+        continue;
+      }
+    }
+    
+    console.log(`[SOLANA] ✗ No matching payments found`);
+    return null;
+  } catch (error) {
+    console.error('[SOLANA] ❌ Error:', error.message);
+    if (error.stack) {
+      console.error('[SOLANA] Stack:', error.stack);
+    }
+    return null;
+  }
+}
+
+/**
+ * Check for payment - monitors blockchain for incoming payments
+ */
+app.post('/api/payment/check-payment', async (req, res) => {
+  try {
+    const { walletAddress, expectedAmount, token = 'USDC' } = req.body;
+    
+    console.log('='.repeat(80));
+    console.log('[PAYMENT CHECK] Starting payment check...');
+    console.log('[PAYMENT CHECK] Request body:', JSON.stringify(req.body, null, 2));
+    
+    if (!walletAddress || !expectedAmount) {
+      console.log('[ERROR] Missing required fields - walletAddress or expectedAmount');
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
+      });
+    }
+    
+    const evmPaymentAddress = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
+    const solanaPaymentAddress = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA';
+    
+    console.log(`[PAYMENT CHECK] Configuration:`);
+    console.log(`  - User wallet: ${walletAddress}`);
+    console.log(`  - Expected amount: ${expectedAmount} ${token}`);
+    console.log(`  - EVM Payment wallet: ${evmPaymentAddress}`);
+    console.log(`  - Solana Payment wallet: ${solanaPaymentAddress}`);
+    console.log(`[PAYMENT CHECK] Searching for payments TO payment wallet (not FROM user wallet)`);
+    console.log('-'.repeat(80));
+    
+    // Check multiple chains in parallel (EVM + Solana)
+    const evmChains = ['ethereum', 'polygon', 'arbitrum', 'optimism', 'base'];
+    console.log(`[PAYMENT CHECK] Checking ${evmChains.length} EVM chains + Solana...`);
+    
+    const evmPromises = evmChains.map(chain => 
+      checkForTokenTransfer(evmPaymentAddress, expectedAmount, token, chain)
+    );
+    
+    // Also check Solana with its own payment address
+    const solanaPromise = checkForSolanaUSDC(solanaPaymentAddress, expectedAmount);
+    
+    const allPromises = [...evmPromises, solanaPromise];
+    const results = await Promise.all(allPromises);
+    
+    console.log(`[PAYMENT CHECK] Search completed. Results:`);
+    results.forEach((result, idx) => {
+      const chainName = idx < evmChains.length ? evmChains[idx] : 'solana';
+      if (result && result.found) {
+        console.log(`  ✓ ${chainName}: PAYMENT FOUND!`);
+      } else {
+        console.log(`  ✗ ${chainName}: No matching payment`);
+      }
+    });
+    
+    const payment = results.find(r => r && r.found);
+    
+    if (payment) {
+      console.log(`[SUCCESS] Payment detected on ${payment.chain}!`);
+      console.log(`[SUCCESS] Payment details:`, JSON.stringify(payment, null, 2));
+      
+      // Check if already processed
+      const user = await getOrCreateUser(walletAddress);
+      const alreadyProcessed = user.paymentHistory.some(p => p.txHash === payment.txHash);
+      
+      if (alreadyProcessed) {
+        console.log(`[INFO] Payment ${payment.txHash} already processed for ${walletAddress}`);
+        console.log('='.repeat(80));
+        return res.json({
+          success: true,
+          paymentDetected: true,
+          alreadyProcessed: true,
+          message: 'Payment already credited'
+        });
+      }
+      
+      // Calculate credits (1 USDC = 10 credits, adjust as needed)
+      const creditsToAdd = Math.floor(parseFloat(payment.amount) * 10);
+      
+      console.log(`[CREDIT] Adding ${creditsToAdd} credits to user ${walletAddress}`);
+      console.log(`[CREDIT] Previous balance: ${user.credits} credits`);
+      
+      // Add credits to user
+      user.credits += creditsToAdd;
+      user.totalCreditsEarned += creditsToAdd;
+      user.paymentHistory.push({
+        amount: parseFloat(payment.amount),
+        token: payment.token,
+        txHash: payment.txHash,
+        credits: creditsToAdd,
+        timestamp: new Date(payment.timestamp * 1000),
+        chain: payment.chain
+      });
+      
+      await user.save();
+      
+      console.log(`[SUCCESS] New balance: ${user.credits} credits`);
+      console.log('='.repeat(80));
+      
+      return res.json({
+        success: true,
+        paymentDetected: true,
+        payment: {
+          txHash: payment.txHash,
+          amount: payment.amount,
+          token: payment.token,
+          chain: payment.chain,
+          creditsAdded: creditsToAdd
+        },
+        newBalance: user.credits
+      });
+    }
+    
+    // No payment found
+    console.log(`[INFO] No matching payments found on any chain`);
+    console.log('='.repeat(80));
+    res.json({
+      success: true,
+      paymentDetected: false,
+      message: 'Payment not detected yet. Please wait for blockchain confirmation.'
+    });
+    
+  } catch (error) {
+    console.error('[ERROR] Check payment error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to check payment: ' + error.message
     });
   }
 });

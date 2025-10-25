@@ -11,13 +11,14 @@ import {
   verifyPayment,
   getPaymentWallet
 } from '../services/paymentService';
-import { X, CreditCard, Coins, RefreshCw, ChevronDown, ChevronUp, Wallet } from 'lucide-react';
+import { X, CreditCard, Coins, RefreshCw, ChevronDown, ChevronUp, Wallet, Copy, Check, ExternalLink } from 'lucide-react';
 
 const TokenPaymentModal = ({ isOpen, onClose }) => {
   const { 
     address, 
     credits, 
-    fetchCredits
+    fetchCredits,
+    walletType
   } = useSimpleWallet();
 
   const [selectedToken, setSelectedToken] = useState(null);
@@ -27,17 +28,55 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   const [tokenBalances, setTokenBalances] = useState({});
   const [showTokenSelector, setShowTokenSelector] = useState(false);
   const [error, setError] = useState('');
+  const [paymentAddress, setPaymentAddress] = useState('');
+  const [solanaPaymentAddress, setSolanaPaymentAddress] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [checkingPayment, setCheckingPayment] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState(''); // 'pending', 'detected', 'confirmed'
 
-  // Load available tokens when modal opens
+  // Load available tokens and payment address when modal opens
   useEffect(() => {
     if (isOpen) {
-      const tokens = getAvailableTokens('0x1', 'evm'); // Default to Ethereum
-      setAvailableTokens(tokens);
-      if (tokens.length > 0) {
-        setSelectedToken(tokens[0]);
-      }
+      // Only show USDC token
+      const usdcToken = {
+        symbol: 'USDC',
+        name: 'USD Coin',
+        creditRate: 10, // 1 USDC = 10 credits
+        minAmount: 1,
+        decimals: 6
+      };
+      
+      setAvailableTokens([usdcToken]);
+      setSelectedToken(usdcToken);
+      
+      // Get or create payment address for this user
+      fetchPaymentAddress();
     }
   }, [isOpen]);
+
+  const fetchPaymentAddress = async () => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/payment/get-address`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ walletAddress: address })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setPaymentAddress(data.paymentAddress); // EVM chains
+        setSolanaPaymentAddress(data.solanaPaymentAddress); // Solana
+      }
+    } catch (error) {
+      console.error('Error fetching payment address:', error);
+      // Fallback to default payment addresses
+      setPaymentAddress('0xa0aE05e2766A069923B2a51011F270aCadFf023a');
+      setSolanaPaymentAddress('CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA');
+    }
+  };
 
   // Load token balances when token is selected
   useEffect(() => {
@@ -91,45 +130,91 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     return true;
   };
 
-  const handlePayment = async () => {
-    if (!address) return;
-
-    if (!validateAmount()) return;
-
-    setIsProcessing(true);
-    setError('');
-
+  const copyAddress = async () => {
     try {
-      // Simplified payment - just add credits directly
-      const numAmount = parseFloat(amount);
-      const creditsToAdd = Math.floor(numAmount * 10); // 1 token = 10 credits
-      
-      // Call backend to add credits
+      // Determine which address to copy based on selected token/chain
+      // For now, use EVM address (could be enhanced to detect chain)
+      const addressToCopy = paymentAddress;
+      await navigator.clipboard.writeText(addressToCopy);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  };
+
+  const checkForPayment = async () => {
+    if (!address || !amount) {
+      setError('Please enter an amount');
+      return;
+    }
+    
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount < 1) {
+      setError('Minimum amount is 1 USDC');
+      return;
+    }
+    
+    setCheckingPayment(true);
+    setPaymentStatus('pending');
+    setError('');
+    
+    try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/admin/add-credits`, {
+      console.log('[Payment] Checking for payment:', {
+        walletAddress: address,
+        expectedAmount: numAmount,
+        token: 'USDC'
+      });
+      
+      const response = await fetch(`${apiUrl}/api/payment/check-payment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           walletAddress: address,
-          credits: creditsToAdd,
-          reason: 'Token payment'
+          expectedAmount: numAmount,
+          token: 'USDC'
         })
       });
-
-      if (response.ok) {
+      
+      const data = await response.json();
+      console.log('[Payment] Check result:', data);
+      
+      if (data.success && data.paymentDetected) {
+        console.log('[Payment] Payment detected!', data.payment);
+        setPaymentStatus('confirmed');
+        setCheckingPayment(false);
         await fetchCredits(address);
-        onClose();
+        setTimeout(() => {
+          onClose();
+        }, 2000);
       } else {
-        throw new Error('Payment failed');
+        // Continue checking - keep monitoring
+        console.log('[Payment] No payment yet, will check again in 5 seconds...');
+        if (paymentStatus === 'pending') {
+          setTimeout(() => checkForPayment(), 5000); // Check every 5 seconds
+        }
       }
     } catch (error) {
-      console.error('Payment error:', error);
-      setError(error.message || 'Payment failed');
-    } finally {
-      setIsProcessing(false);
+      console.error('[Payment] Error checking payment:', error);
+      setError('Failed to check payment. Please try again.');
+      setCheckingPayment(false);
+      setPaymentStatus('');
     }
+  };
+
+  const handlePayment = () => {
+    if (!validateAmount()) return;
+    
+    checkForPayment();
+  };
+  
+  const stopMonitoring = () => {
+    setPaymentStatus('');
+    setCheckingPayment(false);
+    setError('');
   };
 
   const getCreditsPreview = () => {
@@ -138,8 +223,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount)) return 0;
     
-    // For now, use base rate - this should be enhanced to check NFT ownership
-    return Math.floor(numAmount * 10); // 1 token = 10 credits
+    // 1 USDC = 10 credits
+    return Math.floor(numAmount * (selectedToken.creditRate || 10));
   };
 
   const getTokenBalance = (tokenSymbol) => {
@@ -182,121 +267,156 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           </div>
 
 
-          {/* Token Selection */}
+          {/* Payment Method - USDC Only */}
           <div className="space-y-3">
             <label className="block text-sm font-medium text-gray-300">
-              Select Token
+              Payment Method
             </label>
             
-            <div className="relative">
-              <button
-                onClick={() => setShowTokenSelector(!showTokenSelector)}
-                className="w-full flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/20 hover:bg-white/10 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  {selectedToken ? (
-                    <>
-                      <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                        {selectedToken.symbol.charAt(0)}
-                      </div>
-                      <div className="text-left">
-                        <div className="font-medium text-white">{selectedToken.symbol}</div>
-                        <div className="text-xs text-gray-400">{selectedToken.name}</div>
-                      </div>
-                    </>
-                  ) : (
-                    <span className="text-gray-400">Select a token</span>
-                  )}
+            <div className="w-full flex items-center justify-between p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                  $
                 </div>
-                {showTokenSelector ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-
-              {/* Token Options */}
-              {showTokenSelector && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-white/20 rounded-lg shadow-xl z-10 max-h-48 overflow-y-auto">
-                  {availableTokens.map((token) => (
-                    <button
-                      key={token.symbol}
-                      onClick={() => handleTokenSelect(token)}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-white/10 transition-colors"
-                    >
-                      <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                        {token.symbol.charAt(0)}
-                      </div>
-                      <div className="flex-1 text-left">
-                        <div className="font-medium text-white">{token.symbol}</div>
-                        <div className="text-xs text-gray-400">{token.name}</div>
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        Balance: {getTokenBalance(token.symbol)}
-                      </div>
-                    </button>
-                  ))}
+                <div className="text-left">
+                  <div className="font-semibold text-white">Pay with USDC</div>
+                  <div className="text-xs text-blue-300">USD Coin on {walletType === 'solana' ? 'Solana' : 'EVM Chains'}</div>
                 </div>
-              )}
+              </div>
+              <div className="px-3 py-1 bg-green-500/20 text-green-400 text-xs font-semibold rounded-full">
+                Active
+              </div>
             </div>
           </div>
 
           {/* Amount Input */}
           <div className="space-y-3">
             <label className="block text-sm font-medium text-gray-300">
-              Amount
+              Amount (USDC)
             </label>
             <div className="relative">
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => handleAmountChange(e.target.value)}
-                placeholder="Enter amount"
-                className="w-full p-3 rounded-lg bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                step="0.000001"
-                min="0"
+                placeholder="Enter USDC amount"
+                className="w-full p-3 pr-16 rounded-lg bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                step="0.1"
+                min="1"
                 id="token-amount-input"
                 name="token-amount"
               />
-              {selectedToken && (
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-400">
-                  {selectedToken.symbol}
-                </div>
-              )}
-            </div>
-            {selectedToken && (
-              <div className="text-xs text-gray-400">
-                Balance: {getTokenBalance(selectedToken.symbol)} {selectedToken.symbol}
-                {selectedToken.minAmount && (
-                  <span className="ml-2">• Min: {selectedToken.minAmount}</span>
-                )}
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm font-semibold text-blue-400">
+                USDC
               </div>
-            )}
+            </div>
+            <div className="text-xs text-gray-400">
+              Minimum: 1 USDC
+            </div>
           </div>
 
           {/* Credits Preview */}
-          <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-            <div className="flex items-center justify-between">
+          <div className="p-4 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-300">You'll receive:</span>
-              <span className="text-lg font-semibold text-purple-400">
+              <span className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                 {getCreditsPreview()} Credits
               </span>
             </div>
-            {selectedToken && (
-              <p className="text-xs text-gray-400 mt-1">
-                1 {selectedToken.symbol} = {selectedToken.creditRate} Credit{selectedToken.creditRate !== 1 ? 's' : ''}
-              </p>
-            )}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-400">Rate:</span>
+              <span className="text-purple-400 font-semibold">1 USDC = 10 Credits</span>
+            </div>
           </div>
 
-          {/* Payment Wallet Info */}
-          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <div className="flex items-center gap-2 mb-2">
+          {/* Payment Address */}
+          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-3">
+            <div className="flex items-center gap-2">
               <Wallet className="w-4 h-4 text-blue-400" />
-              <span className="text-sm font-semibold text-blue-400">Payment Details</span>
+              <span className="text-sm font-semibold text-blue-400">
+                {walletType === 'solana' ? 'Solana Payment Address' : 'EVM Payment Address'}
+              </span>
             </div>
-            <div className="text-xs text-gray-300">
-              <p className="mb-1">Payment will be processed automatically</p>
-              <p className="mt-2 text-gray-400">
-                Transaction will be verified automatically after confirmation
-              </p>
+            
+            {/* Show only relevant payment address based on connected wallet type */}
+            {walletType === 'solana' ? (
+              // Solana Payment Address
+              <div className="space-y-2">
+                <div className="text-xs text-purple-400 font-semibold">Solana Network:</div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 p-2 bg-black/30 rounded border border-white/10 text-xs font-mono text-white break-all">
+                    {solanaPaymentAddress || 'Loading...'}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(solanaPaymentAddress);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      } catch (error) {
+                        console.error('Failed to copy:', error);
+                      }
+                    }}
+                    className="p-2 hover:bg-white/10 rounded transition-colors"
+                    title="Copy Solana address"
+                  >
+                    {copied ? (
+                      <Check className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // EVM Payment Address
+              <div className="space-y-2">
+                <div className="text-xs text-purple-400 font-semibold">
+                  EVM Networks (Ethereum, Polygon, Arbitrum, Optimism, Base):
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 p-2 bg-black/30 rounded border border-white/10 text-xs font-mono text-white break-all">
+                    {paymentAddress || 'Loading...'}
+                  </div>
+                  <button
+                    onClick={copyAddress}
+                    className="p-2 hover:bg-white/10 rounded transition-colors"
+                    title="Copy EVM address"
+                  >
+                    {copied ? (
+                      <Check className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Clear Instructions */}
+            <div className="bg-black/20 p-3 rounded border border-white/10">
+              <div className="text-xs text-white font-semibold mb-2">📋 How to Pay:</div>
+              <div className="text-xs text-gray-300 space-y-1">
+                <p><strong>1.</strong> Copy the payment address above</p>
+                <p><strong>2.</strong> Send exactly <span className="text-yellow-400 font-semibold">{amount || '0'} USDC</span> to this address</p>
+                <p><strong>3.</strong> Click "Start Monitoring" below</p>
+                <p><strong>4.</strong> Wait 1-5 mins for blockchain confirmation</p>
+                <p><strong>5.</strong> Credits will be added automatically!</p>
+              </div>
             </div>
+            
+            {/* Payment Status */}
+            {paymentStatus && (
+              <div className={`p-2 rounded text-xs ${
+                paymentStatus === 'confirmed' 
+                  ? 'bg-green-500/20 text-green-400' 
+                  : 'bg-yellow-500/20 text-yellow-400'
+              }`}>
+                {paymentStatus === 'pending' && '⏳ Monitoring for payment...'}
+                {paymentStatus === 'detected' && '👀 Payment detected! Confirming...'}
+                {paymentStatus === 'confirmed' && '✅ Payment confirmed! Credits added.'}
+              </div>
+            )}
           </div>
 
           {/* Error Message */}
@@ -308,29 +428,50 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
 
           {/* Action Buttons */}
           <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="flex-1 btn-secondary py-3"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handlePayment}
-              disabled={isProcessing || (!selectedToken || !amount)}
-              className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
-            >
-              {isProcessing ? (
-                <>
+            {paymentStatus === 'pending' ? (
+              <>
+                <button
+                  onClick={stopMonitoring}
+                  className="flex-1 btn-secondary py-3"
+                >
+                  Stop Monitoring
+                </button>
+                <button
+                  disabled
+                  className="flex-1 btn-primary py-3 flex items-center justify-center gap-2 opacity-90"
+                >
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Processing...</span>
-                </>
-              ) : (
-                <>
-                  <CreditCard className="w-4 h-4" />
-                  <span>Buy Credits</span>
-                </>
-              )}
-            </button>
+                  <span>Checking...</span>
+                </button>
+              </>
+            ) : paymentStatus === 'confirmed' ? (
+              <>
+                <button
+                  onClick={onClose}
+                  className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Done</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={onClose}
+                  className="flex-1 btn-secondary py-3"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePayment}
+                  disabled={!amount || parseFloat(amount) < 1}
+                  className="flex-1 btn-primary py-3 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Coins className="w-4 h-4" />
+                  <span>Start Monitoring</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

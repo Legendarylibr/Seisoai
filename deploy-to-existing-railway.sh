@@ -1,108 +1,65 @@
 #!/bin/bash
 
-# Deploy to existing Railway project: helpful-serenity
-echo "🚀 Deploying Seiso AI to existing Railway project: helpful-serenity"
+# Deploy Frontend to Existing Railway Project
+echo "🚀 Deploying frontend to existing Railway project..."
 
-# Check if Railway CLI is installed
-if ! command -v railway &> /dev/null; then
-    echo "❌ Railway CLI not found. Installing..."
-    npm install -g @railway/cli
-fi
+# Build the frontend
+echo "📦 Building frontend..."
+npm run build
 
-# Check if logged in
-if ! railway whoami &> /dev/null; then
-    echo "❌ Not logged in to Railway. Please run 'railway login' first."
+if [ $? -ne 0 ]; then
+    echo "❌ Build failed"
     exit 1
 fi
 
-echo "✅ Logged in to Railway as $(railway whoami)"
+echo "✅ Build successful"
 
-# Set environment variables for your existing project
-echo "⚙️ Setting environment variables for helpful-serenity project..."
+# Create a simple static server for Railway
+cat > serve-frontend.js << 'EOF'
+const express = require('express');
+const path = require('path');
 
-# Required variables
-echo "Setting basic configuration..."
-railway variables set NODE_ENV=production
-railway variables set PORT=3001
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-# Database with your MongoDB connection string
-echo "📊 Setting up MongoDB database..."
-MONGODB_URI="mongodb+srv://legendarylibraries_db_user:<db_password>@cluster0.yqlccoa.mongodb.net/?appName=Cluster0"
-echo "Using MongoDB: cluster0.yqlccoa.mongodb.net"
-railway variables set MONGODB_URI="$MONGODB_URI"
+// Serve static files from the dist directory
+app.use(express.static(path.join(__dirname, 'dist')));
 
-# Security secrets
-echo "🔒 Generating security secrets..."
-JWT_SECRET=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
-SESSION_SECRET=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
-railway variables set JWT_SECRET="$JWT_SECRET"
-railway variables set SESSION_SECRET="$SESSION_SECRET"
+// Handle client-side routing - return index.html for all non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
 
-# CORS for seiso.ai domain
-echo "🌐 Setting CORS for seiso.ai domain..."
-railway variables set ALLOWED_ORIGINS="https://seiso.ai,https://www.seiso.ai,http://localhost:5173,http://localhost:3000"
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Frontend server running on port ${PORT}`);
+  console.log(`Serving static files from: ${path.join(__dirname, 'dist')}`);
+});
+EOF
 
-# Payment wallets
-echo "💰 Setting payment wallets..."
-railway variables set ETH_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set POLYGON_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set ARBITRUM_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set OPTIMISM_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set BASE_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set SOLANA_PAYMENT_WALLET="BZ9LR3nnVP4oh477rZAKdhGFAbYqvazv3Ru1MDk9rk99"
+echo "✅ Frontend server created"
 
-# RPC endpoints - you'll need to provide these
-echo "🔗 Setting RPC endpoints..."
-echo "You need RPC endpoints for blockchain networks."
-echo "Get them from: https://alchemy.com or https://infura.io"
-echo ""
-
-read -p "Enter your Ethereum RPC URL: " ETH_RPC
-railway variables set ETH_RPC_URL="$ETH_RPC"
-
-read -p "Enter your Polygon RPC URL: " POLYGON_RPC
-railway variables set POLYGON_RPC_URL="$POLYGON_RPC"
-
-read -p "Enter your Arbitrum RPC URL: " ARBITRUM_RPC
-railway variables set ARBITRUM_RPC_URL="$ARBITRUM_RPC"
-
-read -p "Enter your Optimism RPC URL: " OPTIMISM_RPC
-railway variables set OPTIMISM_RPC_URL="$OPTIMISM_RPC"
-
-read -p "Enter your Base RPC URL: " BASE_RPC
-railway variables set BASE_RPC_URL="$BASE_RPC"
-
-# Optional Stripe configuration
-echo "💳 Stripe configuration (optional)..."
-read -p "Do you want to configure Stripe for card payments? (y/n): " CONFIGURE_STRIPE
-if [ "$CONFIGURE_STRIPE" = "y" ]; then
-    read -p "Enter your Stripe Secret Key: " STRIPE_SECRET
-    railway variables set STRIPE_SECRET_KEY="$STRIPE_SECRET"
-    
-    read -p "Enter your Stripe Webhook Secret: " STRIPE_WEBHOOK
-    railway variables set STRIPE_WEBHOOK_SECRET="$STRIPE_WEBHOOK"
-fi
-
-# Deploy to Railway
-echo "🚀 Deploying to Railway..."
-railway up
-
-# Get deployment URL
-echo "✅ Deployment complete!"
-echo "🔗 Your API URL:"
-API_URL=$(railway domain)
-echo "$API_URL"
+# Update package.json to use the frontend server
+echo "📝 Updating package.json..."
+node -e "
+const fs = require('fs');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+pkg.scripts['start:frontend'] = 'node serve-frontend.js';
+pkg.scripts['build:frontend'] = 'npm run build && npm run start:frontend';
+fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+console.log('✅ Package.json updated');
+"
 
 echo ""
-echo "🎉 Seiso AI deployed successfully to helpful-serenity project!"
+echo "🎯 Next steps:"
+echo "1. Go to https://railway.com/project/ee55e7fa-b010-4946-a87b-013e15e329a8"
+echo "2. Add a new service for the frontend"
+echo "3. Set the start command to: npm run build:frontend"
+echo "4. Set environment variables:"
+echo "   - NODE_ENV=production"
+echo "   - VITE_API_URL=https://seisoai-prod.up.railway.app"
+echo "5. Deploy the service"
 echo ""
-echo "📋 Next steps for seiso.ai:"
-echo "1. Test your API at: $API_URL/api/health"
-echo "2. Update your frontend VITE_API_URL to: $API_URL"
-echo "3. Test wallet connection and payment flows"
-echo ""
-echo "🌐 Your MongoDB database: cluster0.yqlccoa.mongodb.net"
-echo "🔗 Railway API URL: $API_URL"
-echo "📊 Railway Project: https://railway.com/project/ee55e7fa-b010-4946-a87b-013e15e329a8"
-echo ""
-echo "📖 For more details, see: SEISO_AI_DEPLOYMENT.md"
+echo "📁 Files ready for deployment:"
+echo "   - dist/ (built frontend files)"
+echo "   - serve-frontend.js (static server)"
+echo "   - package.json (updated with frontend scripts)"

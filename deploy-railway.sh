@@ -39,14 +39,10 @@ echo "🌐 Setting CORS origins..."
 read -p "Enter your frontend domain (e.g., https://your-app.vercel.app): " FRONTEND_DOMAIN
 railway variables set ALLOWED_ORIGINS="$FRONTEND_DOMAIN"
 
-# Payment wallets (using default addresses - replace with your own)
+# Payment wallets (USDC payments only)
 echo "💰 Setting payment wallets..."
-railway variables set ETH_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set POLYGON_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set ARBITRUM_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set OPTIMISM_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set BASE_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
-railway variables set SOLANA_PAYMENT_WALLET="BZ9LR3nnVP4oh477rZAKdhGFAbYqvazv3Ru1MDk9rk99"
+railway variables set EVM_PAYMENT_WALLET_ADDRESS="0xa0aE05e2766A069923B2a51011F270aCadFf023a"
+railway variables set SOLANA_PAYMENT_WALLET_ADDRESS="CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA"
 
 # RPC endpoints (you need to replace with your actual RPC URLs)
 echo "🔗 Setting RPC endpoints..."
