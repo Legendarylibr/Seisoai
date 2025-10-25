@@ -15,12 +15,24 @@ console.log('NODE_ENV:', process.env.NODE_ENV);
 // Serve static files from the dist directory
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Add health check endpoint
+// Add health check endpoints
 app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
     port: PORT 
+  });
+});
+
+// API health check endpoint for Railway
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    port: PORT,
+    service: 'Seiso AI Frontend'
   });
 });
 
