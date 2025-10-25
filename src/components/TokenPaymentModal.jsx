@@ -218,7 +218,34 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           // Import Solana web3 library
           const { Connection, PublicKey, Transaction, SystemProgram } = await import('@solana/web3.js');
           
-          const connection = new Connection('https://api.mainnet-beta.solana.com');
+          // Use multiple RPC endpoints for better reliability
+          const rpcUrls = [
+            'https://api.mainnet-beta.solana.com',
+            'https://api.devnet.solana.com', // Devnet as fallback
+            'https://solana-mainnet.g.alchemy.com/v2/demo' // Alchemy demo endpoint
+          ];
+          
+          let connection;
+          let lastError;
+          
+          // Try each RPC endpoint until one works
+          for (const rpcUrl of rpcUrls) {
+            try {
+              connection = new Connection(rpcUrl, 'confirmed');
+              // Test the connection
+              await connection.getLatestBlockhash();
+              console.log(`Using Solana RPC: ${rpcUrl}`);
+              break;
+            } catch (error) {
+              console.log(`Failed to connect to ${rpcUrl}: ${error.message}`);
+              lastError = error;
+              continue;
+            }
+          }
+          
+          if (!connection) {
+            throw new Error(`All Solana RPC endpoints failed. Last error: ${lastError?.message}`);
+          }
           const fromPublicKey = window.solana.publicKey;
           const toPublicKey = new PublicKey(solanaPaymentAddress);
           
@@ -233,8 +260,25 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             })
           );
           
-          // Set recent blockhash and fee payer
-          const { blockhash } = await connection.getLatestBlockhash();
+          // Set recent blockhash and fee payer with retry logic
+          let blockhash;
+          let retries = 3;
+          
+          while (retries > 0) {
+            try {
+              const result = await connection.getLatestBlockhash();
+              blockhash = result.blockhash;
+              break;
+            } catch (error) {
+              retries--;
+              if (retries === 0) {
+                throw new Error(`Failed to get recent blockhash after 3 attempts: ${error.message}`);
+              }
+              console.log(`Retrying getLatestBlockhash... (${retries} attempts left)`);
+              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+            }
+          }
+          
           transaction.recentBlockhash = blockhash;
           transaction.feePayer = fromPublicKey;
           

@@ -831,8 +831,36 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount) {
     console.log(`[SOLANA] Looking for transfers TO: ${paymentAddress}`);
     console.log(`[SOLANA] Expected amount: ${expectedAmount} USDC`);
     
-    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-    const connection = new Connection(rpcUrl, 'confirmed');
+    // Use multiple RPC endpoints for better reliability
+    const rpcUrls = [
+      process.env.SOLANA_RPC_URL,
+      'https://api.mainnet-beta.solana.com',
+      'https://api.devnet.solana.com', // Devnet as fallback
+      'https://solana-mainnet.g.alchemy.com/v2/demo', // Alchemy demo endpoint
+      'https://rpc.ankr.com/solana' // Ankr (may require API key)
+    ].filter(Boolean);
+    
+    let connection;
+    let lastError;
+    
+    // Try each RPC endpoint until one works
+    for (const rpcUrl of rpcUrls) {
+      try {
+        connection = new Connection(rpcUrl, 'confirmed');
+        // Test the connection
+        await connection.getLatestBlockhash();
+        console.log(`[SOLANA] Using RPC endpoint: ${rpcUrl}`);
+        break;
+      } catch (error) {
+        console.log(`[SOLANA] Failed to connect to ${rpcUrl}: ${error.message}`);
+        lastError = error;
+        continue;
+      }
+    }
+    
+    if (!connection) {
+      throw new Error(`[SOLANA] All RPC endpoints failed. Last error: ${lastError?.message}`);
+    }
     
     const paymentPubkey = new PublicKey(paymentAddress);
     
