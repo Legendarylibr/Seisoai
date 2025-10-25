@@ -509,6 +509,17 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// Root health check for Railway
+app.get('/', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'Seiso AI Backend',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 /**
  * Get user data
  */
@@ -1529,13 +1540,21 @@ app.get('*', (req, res) => {
 
 // Dynamic port handling with fallback
 const startServer = async (port = process.env.PORT || 3001) => {
+  console.log('🚀 Starting server...');
+  console.log('Environment variables:');
+  console.log('PORT:', process.env.PORT);
+  console.log('NODE_ENV:', process.env.NODE_ENV);
+  console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Set' : 'Not set');
+  
   const server = app.listen(port, '0.0.0.0', () => {
     logger.info(`AI Image Generator API running on port ${port}`);
     logger.info(`MongoDB connected: ${mongoose.connection.readyState === 1 ? 'Yes' : 'No'}`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`✅ Server started successfully on port ${port}`);
   });
 
   server.on('error', (err) => {
+    console.error('❌ Server error:', err);
     if (err.code === 'EADDRINUSE') {
       logger.warn(`Port ${port} is in use, trying port ${port + 1}`);
       startServer(port + 1);
