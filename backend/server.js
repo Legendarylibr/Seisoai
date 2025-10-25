@@ -13,6 +13,7 @@ const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STR
 const FastAPIService = require('./services/fastapiService');
 require('dotenv').config();
 require('dotenv').config({ path: '.env.local' });
+require('dotenv').config({ path: '.env.production' });
 // Initialize Sentry for error monitoring (optional)
 const Sentry = require('@sentry/node');
 // const { nodeProfilingIntegration } = require('@sentry/profiling-node'); // Commented out for now
@@ -77,8 +78,8 @@ const logger = winston.createLogger({
   ]
 });
 
-// Add MongoDB logging in production
-if (process.env.NODE_ENV === 'production' && process.env.MONGODB_URI) {
+// Add MongoDB logging in production (only if not localhost)
+if (process.env.NODE_ENV === 'production' && process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost')) {
   logger.add(new winston.transports.MongoDB({
     db: process.env.MONGODB_URI,
     collection: 'logs',
@@ -217,10 +218,10 @@ console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('All env vars starting with MONGO:', Object.keys(process.env).filter(key => key.startsWith('MONGO')));
 
 // Connect to MongoDB if URI is provided and not localhost
-if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost')) {
+if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost:27017')) {
   console.log('📡 Connecting to MongoDB...');
   mongoose.connect(process.env.MONGODB_URI, mongoOptions);
-} else if (process.env.MONGODB_URI && process.env.MONGODB_URI.includes('localhost')) {
+} else if (process.env.MONGODB_URI && process.env.MONGODB_URI.includes('localhost:27017')) {
   console.warn('⚠️ MONGODB_URI points to localhost - this will not work in production');
   console.warn('⚠️ Please set MONGODB_URI to a MongoDB Atlas connection string');
   console.warn('⚠️ Running without database connection');
@@ -406,9 +407,12 @@ const metricsMiddleware = (req, res, next) => {
       ip: req.ip
     });
     
-    metrics.save().catch(err => {
-      logger.error('Failed to save metrics:', err);
-    });
+    // Only save metrics if MongoDB is connected
+    if (mongoose.connection.readyState === 1) {
+      metrics.save().catch(err => {
+        logger.error('Failed to save metrics:', err);
+      });
+    }
   });
   
   next();
