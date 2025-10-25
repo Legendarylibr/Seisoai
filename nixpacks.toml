@@ -2,7 +2,7 @@
 nixPkgs = ['nodejs', 'npm']
 
 [phases.install]
-cmds = ['npm ci']
+cmds = ['npm install']
 
 [phases.build]
 cmds = ['npm run build']
@@ -12,3 +12,6 @@ cmd = 'npm run start:frontend'
 
 [providers]
 node = { version = "18" }
+
+[variables]
+NODE_ENV = "production"

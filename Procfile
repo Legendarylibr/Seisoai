@@ -1,1 +1,1 @@
-web: cd backend && npm install && cd .. && node backend/server.js
+web: npm run start:frontend
