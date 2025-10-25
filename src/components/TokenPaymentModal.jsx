@@ -33,21 +33,70 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   const [copied, setCopied] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(''); // 'pending', 'detected', 'confirmed'
+  const [currentChainId, setCurrentChainId] = useState(null);
+  const [currentNetwork, setCurrentNetwork] = useState(null);
+
+  // Network detection and chain ID mapping
+  const CHAIN_IDS = {
+    1: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
+    137: { name: 'Polygon', symbol: 'MATIC', decimals: 18 },
+    42161: { name: 'Arbitrum', symbol: 'ETH', decimals: 18 },
+    10: { name: 'Optimism', symbol: 'ETH', decimals: 18 },
+    8453: { name: 'Base', symbol: 'ETH', decimals: 18 }
+  };
+
+  // Get current network info
+  const getCurrentNetwork = async () => {
+    try {
+      if (walletType === 'evm' && window.ethereum) {
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        const chainIdNumber = parseInt(chainId, 16);
+        const network = CHAIN_IDS[chainIdNumber];
+        
+        setCurrentChainId(chainIdNumber);
+        setCurrentNetwork(network);
+        
+        console.log(`🌐 Current network: ${network?.name || 'Unknown'} (Chain ID: ${chainIdNumber})`);
+        return { chainId: chainIdNumber, network };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting current network:', error);
+      return null;
+    }
+  };
 
   // Load available tokens and payment address when modal opens
   useEffect(() => {
     if (isOpen) {
-      // Only show USDC token
-      const usdcToken = {
-        symbol: 'USDC',
-        name: 'USD Coin',
-        creditRate: 10, // 1 USDC = 10 credits
-        minAmount: 1,
-        decimals: 6
-      };
-      
-      setAvailableTokens([usdcToken]);
-      setSelectedToken(usdcToken);
+      getCurrentNetwork().then(({ chainId, network } = {}) => {
+        if (chainId && network) {
+          // Show native token for the current network
+          const nativeToken = {
+            symbol: network.symbol,
+            name: network.name,
+            creditRate: network.symbol === 'ETH' ? 2000 : 1, // ETH = 2000 credits, others = 1 credit
+            minAmount: 0.001,
+            decimals: network.decimals,
+            isNative: true
+          };
+          
+          setAvailableTokens([nativeToken]);
+          setSelectedToken(nativeToken);
+        } else {
+          // Fallback to USDC
+          const usdcToken = {
+            symbol: 'USDC',
+            name: 'USD Coin',
+            creditRate: 10, // 1 USDC = 10 credits
+            minAmount: 1,
+            decimals: 6
+          };
+          
+          setAvailableTokens([usdcToken]);
+          setSelectedToken(usdcToken);
+        }
+      });
       
       // Set fallback addresses immediately
       setPaymentAddress('0xa0aE05e2766A069923B2a51011F270aCadFf023a');
@@ -310,6 +359,13 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         console.log('🔍 Processing EVM transaction...');
         
         try {
+          // Get current network info
+          const { chainId, network } = await getCurrentNetwork();
+          
+          if (!chainId || !network) {
+            throw new Error('Unable to detect current network. Please switch to a supported network.');
+          }
+          
           // Get the current provider
           let provider = window.ethereum;
           if (window.ethereum.providers?.length > 0) {
@@ -320,16 +376,17 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           const ethersProvider = new ethers.BrowserProvider(provider);
           const signer = await ethersProvider.getSigner();
           
-          console.log('🔨 Creating ETH transaction...');
+          console.log(`🔨 Creating ${network.symbol} transaction on ${network.name}...`);
           
-          // Send a small ETH amount for testing (this will definitely prompt the wallet)
+          // Send a small amount of the native token for testing
+          const amount = ethers.parseEther("0.001"); // 0.001 native token
           const tx = await signer.sendTransaction({
             to: paymentAddress,
-            value: ethers.parseEther("0.001") // 0.001 ETH for testing
+            value: amount
           });
           
           console.log('🎉 Transaction sent successfully:', tx.hash);
-          setError(`✅ Test transaction sent! Hash: ${tx.hash}. Note: This is a test ETH transfer. For USDC, please send manually to: ${paymentAddress}`);
+          setError(`✅ Test transaction sent! Hash: ${tx.hash}. Note: This is a test ${network.symbol} transfer on ${network.name}. For USDC, please send manually to: ${paymentAddress}`);
           
         } catch (ethError) {
           console.error('❌ EVM transaction failed:', ethError);
@@ -337,7 +394,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           if (ethError.code === 4001 || ethError.message.includes('User rejected') || ethError.message.includes('user rejected')) {
             setError('Transaction cancelled by user.');
           } else if (ethError.code === 'INSUFFICIENT_FUNDS' || ethError.message.includes('insufficient funds') || ethError.message.includes('insufficient balance')) {
-            setError('Insufficient ETH balance. You need at least 0.001 ETH for this test transaction. Please add ETH to your wallet and try again.');
+            const network = await getCurrentNetwork();
+            const tokenSymbol = network?.network?.symbol || 'ETH';
+            setError(`Insufficient ${tokenSymbol} balance. You need at least 0.001 ${tokenSymbol} for this test transaction. Please add ${tokenSymbol} to your wallet and try again.`);
           } else {
             setError(`Transaction failed: ${ethError.message}`);
           }
@@ -476,8 +535,23 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             </div>
           </div>
 
+          {/* Network Indicator */}
+          {currentNetwork && (
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-300">Current Network:</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span className="text-sm font-medium text-blue-400">
+                    {currentNetwork.name} ({currentNetwork.symbol})
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
-          {/* Payment Method - USDC Only */}
+
+          {/* Payment Method - Native Token */}
           <div className="space-y-3">
             <label className="block text-sm font-medium text-gray-300">
               Payment Method
@@ -486,11 +560,13 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             <div className="w-full flex items-center justify-between p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                  $
+                  {currentNetwork?.symbol?.charAt(0) || '$'}
                 </div>
                 <div className="text-left">
-                  <div className="font-semibold text-white">Pay with USDC</div>
-                  <div className="text-xs text-blue-300">USD Coin on {walletType === 'solana' ? 'Solana' : 'EVM Chains'}</div>
+                  <div className="font-semibold text-white">Pay with {currentNetwork?.symbol || 'USDC'}</div>
+                  <div className="text-xs text-blue-300">
+                    {currentNetwork?.name || 'USD Coin'} on {walletType === 'solana' ? 'Solana' : 'EVM Chains'}
+                  </div>
                 </div>
               </div>
               <div className="px-3 py-1 bg-green-500/20 text-green-400 text-xs font-semibold rounded-full">
@@ -502,7 +578,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           {/* Amount Input */}
           <div className="space-y-3">
             <label className="block text-sm font-medium text-gray-300">
-              Amount (USDC)
+              Amount ({currentNetwork?.symbol || 'USDC'})
             </label>
             <div className="relative">
               <input
