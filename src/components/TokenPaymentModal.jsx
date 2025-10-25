@@ -184,188 +184,121 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       
       console.log('🔍 Processing transaction for wallet type:', walletType);
       
+      // Ensure wallet is still connected and working
       if (walletType === 'solana') {
-        // For Solana, use Phantom wallet API to create transaction
-        try {
-          console.log('🔍 Checking Phantom wallet availability...');
-          console.log('window.solana:', window.solana);
-          console.log('window.solana.isPhantom:', window.solana?.isPhantom);
-          console.log('window.solana.isConnected:', window.solana?.isConnected);
-          
-          // Test if we can get the public key
-          try {
-            const publicKey = window.solana.publicKey;
-            console.log('✅ Phantom public key:', publicKey?.toString());
-          } catch (e) {
-            console.log('❌ Error getting Phantom public key:', e);
-          }
-          
-          if (window.solana && window.solana.isPhantom) {
-            console.log('✅ Phantom wallet detected');
-            
-            // Check if wallet is connected
-            if (!window.solana.isConnected) {
-              console.log('⚠️ Phantom wallet not connected, attempting to connect...');
-              const response = await window.solana.connect();
-              if (!response.publicKey) {
-                throw new Error('Failed to connect to Phantom wallet.');
-              }
-              console.log('✅ Phantom wallet connected:', response.publicKey.toString());
-            }
-
-            // Get the current connected account
-            const publicKey = window.solana.publicKey;
-            if (!publicKey) {
-              throw new Error('No account connected to Phantom wallet.');
-            }
-            
-            console.log('✅ Using Phantom account:', publicKey.toString());
-
-            // Create a simple transaction that will definitely prompt the wallet
-            try {
-              console.log('📦 Importing Solana web3 library...');
-              // Import Solana web3 library
-              const { Connection, PublicKey, Transaction, SystemProgram } = await import('@solana/web3.js');
-              
-              console.log('🌐 Creating connection to Solana mainnet...');
-              const connection = new Connection('https://api.mainnet-beta.solana.com');
-              const fromPublicKey = publicKey;
-              const toPublicKey = new PublicKey(solanaPaymentAddress);
-              
-              console.log('🔨 Creating SOL transfer transaction...');
-              // Create a simple SOL transfer transaction (this will definitely prompt the wallet)
-              const transaction = new Transaction().add(
-                SystemProgram.transfer({
-                  fromPubkey: fromPublicKey,
-                  toPubkey: toPublicKey,
-                  lamports: 1000000 // 0.001 SOL for testing
-                })
-              );
-              
-              console.log('⏰ Getting recent blockhash...');
-              // Set recent blockhash and fee payer
-              const { blockhash } = await connection.getLatestBlockhash();
-              transaction.recentBlockhash = blockhash;
-              transaction.feePayer = fromPublicKey;
-              
-              console.log('✍️ Requesting Phantom to sign transaction...');
-              
-              // This will definitely prompt Phantom to sign the transaction
-              const signedTransaction = await window.solana.signTransaction(transaction);
-              console.log('✅ Transaction signed by Phantom');
-              
-              console.log('📤 Sending transaction to network...');
-              const signature = await connection.sendRawTransaction(signedTransaction.serialize());
-              
-              console.log('🎉 Transaction sent successfully:', signature);
-              setError(`✅ Test transaction sent! Signature: ${signature}. Note: This is a test SOL transfer. For USDC, please send manually to: ${solanaPaymentAddress}`);
-              
-            } catch (transactionError) {
-              console.error('❌ Transaction failed:', transactionError);
-              
-              // Check if user rejected the transaction
-              if (transactionError.message.includes('User rejected') || transactionError.message.includes('user rejected')) {
-                setError('Transaction cancelled by user.');
-              } else if (transactionError.message.includes('insufficient funds') || transactionError.message.includes('insufficient balance')) {
-                setError('Insufficient SOL balance. Please add SOL to your wallet and try again.');
-              } else {
-                setError(`Transaction failed: ${transactionError.message}`);
-              }
-              
-              // Copy address as fallback
-              await navigator.clipboard.writeText(solanaPaymentAddress);
-            }
-            
-          } else {
-            console.log('❌ Phantom wallet not found');
-            // Fallback: copy address and show instructions
-            await navigator.clipboard.writeText(solanaPaymentAddress);
-            setError(`Phantom wallet not found. Please send ${amount} USDC to this address in your Phantom wallet: ${solanaPaymentAddress}. Address copied to clipboard!`);
-          }
-        } catch (error) {
-          console.error('❌ Error with Solana transaction:', error);
-          
-          // Fallback: copy address and show instructions
-          await navigator.clipboard.writeText(solanaPaymentAddress);
-          setError(`Error: ${error.message}. Please send ${amount} USDC to this address in your Phantom wallet: ${solanaPaymentAddress}. Address copied to clipboard!`);
+        if (!window.solana || !window.solana.isPhantom) {
+          throw new Error('Phantom wallet not found. Please refresh and reconnect.');
+        }
+        
+        // Reconnect if needed
+        if (!window.solana.isConnected) {
+          console.log('🔄 Reconnecting to Phantom...');
+          await window.solana.connect();
         }
       } else {
-        // For EVM chains, trigger actual USDC transfer
-        console.log('🔍 Processing EVM transaction');
-        console.log('window.ethereum:', window.ethereum);
-        console.log('window.ethereum.isMetaMask:', window.ethereum?.isMetaMask);
-        console.log('window.ethereum.isRabby:', window.ethereum?.isRabby);
-        console.log('window.ethereum.isCoinbaseWallet:', window.ethereum?.isCoinbaseWallet);
+        if (!window.ethereum) {
+          throw new Error('EVM wallet not found. Please refresh and reconnect.');
+        }
         
-        if (window.ethereum) {
-          try {
-            // Get the current provider
-            let provider = window.ethereum;
-            if (window.ethereum.providers?.length > 0) {
-              // Multiple wallets, find the one that's connected
-              provider = window.ethereum.providers.find(p => p.isMetaMask || p.isRabby || p.isCoinbaseWallet) || window.ethereum;
-            }
-            
-            // USDC contract addresses for different chains
-            const usdcContracts = {
-              '0x1': '0xA0b86a33E6441b8C4C8C0C4C0C4C0C4C0C4C0C4C', // Ethereum (placeholder - needs real address)
-              '0x89': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // Polygon
-              '0xa4b1': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // Arbitrum
-              '0xa': '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Optimism
-              '0x2105': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' // Base
-            };
-            
-            // Get current chain ID
-            const chainId = await provider.request({ method: 'eth_chainId' });
-            const usdcContract = usdcContracts[chainId];
-            
-            // Create a simple ETH transfer that will definitely prompt the wallet
-            try {
-              const ethersProvider = new ethers.BrowserProvider(provider);
-              const signer = await ethersProvider.getSigner();
-              
-              console.log('Creating ETH transaction for wallet to sign...');
-              
-              // Send a small ETH amount for testing (this will definitely prompt the wallet)
-              const tx = await signer.sendTransaction({
-                to: paymentAddress,
-                value: ethers.parseEther("0.001") // 0.001 ETH for testing
-              });
-              
-              console.log('Transaction sent:', tx.hash);
-              
-              // Show success message in a better way
-              setError(`✅ Test transaction sent! Hash: ${tx.hash}. Note: This is a test ETH transfer. For USDC, please send manually to: ${paymentAddress}`);
-              
-            } catch (ethError) {
-              console.error('ETH transaction failed:', ethError);
-              
-              // Check if user rejected the transaction
-              if (ethError.code === 4001 || ethError.message.includes('User rejected') || ethError.message.includes('user rejected')) {
-                setError('Transaction cancelled by user.');
-              } else if (ethError.message.includes('insufficient funds') || ethError.message.includes('insufficient balance')) {
-                setError('Insufficient ETH balance. Please add ETH to your wallet and try again.');
-              } else {
-                setError(`Transaction failed: ${ethError.message}`);
-              }
-              
-              // Copy address as fallback
-              await navigator.clipboard.writeText(paymentAddress);
-            }
-          } catch (error) {
-            console.error('Error sending USDC transaction:', error);
-            
-            // Check if user rejected the transaction
-            if (error.code === 4001 || error.message.includes('User rejected')) {
-              setError('Transaction cancelled by user.');
-            } else {
-              setError(`Transaction failed: ${error.message}`);
-            }
+        // Test if we can get accounts
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (!accounts || accounts.length === 0) {
+            throw new Error('No accounts found. Please reconnect your wallet.');
           }
-        } else {
-          // No wallet detected, copy address
+        } catch (e) {
+          throw new Error('Wallet connection lost. Please reconnect your wallet.');
+        }
+      }
+      
+      if (walletType === 'solana') {
+        console.log('🔍 Processing Solana transaction...');
+        
+        try {
+          // Import Solana web3 library
+          const { Connection, PublicKey, Transaction, SystemProgram } = await import('@solana/web3.js');
+          
+          const connection = new Connection('https://api.mainnet-beta.solana.com');
+          const fromPublicKey = window.solana.publicKey;
+          const toPublicKey = new PublicKey(solanaPaymentAddress);
+          
+          console.log('🔨 Creating SOL transfer transaction...');
+          
+          // Create a simple SOL transfer transaction
+          const transaction = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey: fromPublicKey,
+              toPubkey: toPublicKey,
+              lamports: 1000000 // 0.001 SOL for testing
+            })
+          );
+          
+          // Set recent blockhash and fee payer
+          const { blockhash } = await connection.getLatestBlockhash();
+          transaction.recentBlockhash = blockhash;
+          transaction.feePayer = fromPublicKey;
+          
+          console.log('✍️ Requesting Phantom to sign transaction...');
+          
+          // This will prompt Phantom to sign the transaction
+          const signedTransaction = await window.solana.signTransaction(transaction);
+          console.log('✅ Transaction signed by Phantom');
+          
+          const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+          console.log('🎉 Transaction sent successfully:', signature);
+          
+          setError(`✅ Test transaction sent! Signature: ${signature}. Note: This is a test SOL transfer. For USDC, please send manually to: ${solanaPaymentAddress}`);
+          
+        } catch (transactionError) {
+          console.error('❌ Solana transaction failed:', transactionError);
+          
+          if (transactionError.message.includes('User rejected') || transactionError.message.includes('user rejected')) {
+            setError('Transaction cancelled by user.');
+          } else if (transactionError.message.includes('insufficient funds') || transactionError.message.includes('insufficient balance')) {
+            setError('Insufficient SOL balance. Please add SOL to your wallet and try again.');
+          } else {
+            setError(`Transaction failed: ${transactionError.message}`);
+          }
+          
+          await navigator.clipboard.writeText(solanaPaymentAddress);
+        }
+      } else {
+        console.log('🔍 Processing EVM transaction...');
+        
+        try {
+          // Get the current provider
+          let provider = window.ethereum;
+          if (window.ethereum.providers?.length > 0) {
+            // Multiple wallets, find the one that's connected
+            provider = window.ethereum.providers.find(p => p.isMetaMask || p.isRabby || p.isCoinbaseWallet) || window.ethereum;
+          }
+          
+          const ethersProvider = new ethers.BrowserProvider(provider);
+          const signer = await ethersProvider.getSigner();
+          
+          console.log('🔨 Creating ETH transaction...');
+          
+          // Send a small ETH amount for testing (this will definitely prompt the wallet)
+          const tx = await signer.sendTransaction({
+            to: paymentAddress,
+            value: ethers.parseEther("0.001") // 0.001 ETH for testing
+          });
+          
+          console.log('🎉 Transaction sent successfully:', tx.hash);
+          setError(`✅ Test transaction sent! Hash: ${tx.hash}. Note: This is a test ETH transfer. For USDC, please send manually to: ${paymentAddress}`);
+          
+        } catch (ethError) {
+          console.error('❌ EVM transaction failed:', ethError);
+          
+          if (ethError.code === 4001 || ethError.message.includes('User rejected') || ethError.message.includes('user rejected')) {
+            setError('Transaction cancelled by user.');
+          } else if (ethError.message.includes('insufficient funds') || ethError.message.includes('insufficient balance')) {
+            setError('Insufficient ETH balance. Please add ETH to your wallet and try again.');
+          } else {
+            setError(`Transaction failed: ${ethError.message}`);
+          }
+          
           await navigator.clipboard.writeText(paymentAddress);
-          alert(`Please send ${amount} USDC to this address in your wallet:\n\n${paymentAddress}\n\nAddress copied to clipboard!`);
         }
       }
     } catch (error) {
