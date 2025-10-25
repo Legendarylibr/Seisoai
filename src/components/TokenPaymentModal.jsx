@@ -18,7 +18,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     address, 
     credits, 
     fetchCredits,
-    walletType
+    walletType,
+    isNFTHolder
   } = useSimpleWallet();
 
   const [selectedToken, setSelectedToken] = useState(null);
@@ -492,12 +493,12 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           
           if (solanaTx) {
             console.log('✅ Solana transaction sent:', solanaTx);
-            setError(`✅ Solana USDC transaction sent! Hash: ${solanaTx}\n\n${amount} USDC sent to ${solanaPaymentAddress}. Credits will be added automatically.`);
+            setError(`✅ Solana USDC transaction sent! Hash: ${solanaTx}\n\n${amount} USDC sent to ${solanaPaymentAddress}. Checking for instant credit addition...`);
             
-            // Trigger payment check
+            // Trigger instant payment check
             setTimeout(() => {
               checkForPayment();
-            }, 2000);
+            }, 1000); // Check after 1 second for faster detection
           } else {
             // Fallback to copying address if transaction fails
             await navigator.clipboard.writeText(solanaPaymentAddress);
@@ -602,12 +603,12 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           
           if (receipt.status === 1) {
             console.log('✅ USDC transaction confirmed!');
-            setError(`✅ USDC transaction confirmed! Hash: ${tx.hash}\n\n${amount} USDC sent to ${paymentAddress}. Credits will be added automatically.`);
+            setError(`✅ USDC transaction confirmed! Hash: ${tx.hash}\n\n${amount} USDC sent to ${paymentAddress}. Checking for instant credit addition...`);
             
-            // Trigger payment check
+            // Trigger instant payment check
             setTimeout(() => {
               checkForPayment();
-            }, 2000);
+            }, 1000); // Check after 1 second for faster detection
           } else {
             throw new Error('Transaction failed');
           }
@@ -648,50 +649,60 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     setPaymentStatus('pending');
     setError('');
     
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      console.log('[Payment] Checking for payment:', {
-        walletAddress: address,
-        expectedAmount: numAmount,
-        token: 'USDC'
-      });
-      
-      const response = await fetch(`${apiUrl}/api/payment/check-payment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+    // Start aggressive checking - check every 2 seconds for faster detection
+    const checkInterval = setInterval(async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        console.log('[Payment] Checking for payment:', {
           walletAddress: address,
           expectedAmount: numAmount,
           token: 'USDC'
-        })
-      });
-      
-      const data = await response.json();
-      console.log('[Payment] Check result:', data);
-      
-      if (data.success && data.paymentDetected) {
-        console.log('[Payment] Payment detected!', data.payment);
-        setPaymentStatus('confirmed');
-        setCheckingPayment(false);
-        await fetchCredits(address);
-        setTimeout(() => {
-          onClose();
-        }, 2000);
-      } else {
-        // Continue checking - keep monitoring
-        console.log('[Payment] No payment yet, will check again in 5 seconds...');
-        if (paymentStatus === 'pending') {
-          setTimeout(() => checkForPayment(), 5000); // Check every 5 seconds
+        });
+        
+        const response = await fetch(`${apiUrl}/api/payment/check-payment`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            walletAddress: address,
+            expectedAmount: numAmount,
+            token: 'USDC'
+          })
+        });
+        
+        const data = await response.json();
+        console.log('[Payment] Check result:', data);
+        
+        if (data.success && data.paymentDetected) {
+          console.log('[Payment] Payment detected!', data.payment);
+          clearInterval(checkInterval);
+          setPaymentStatus('confirmed');
+          setCheckingPayment(false);
+          
+          // Immediately fetch credits and close modal
+          await fetchCredits(address);
+          setError(`✅ Payment confirmed! ${numAmount} USDC received. Credits added instantly!`);
+          
+          setTimeout(() => {
+            onClose();
+          }, 2000);
         }
+      } catch (error) {
+        console.error('[Payment] Error checking payment:', error);
+        // Don't stop checking on individual errors, keep trying
       }
-    } catch (error) {
-      console.error('[Payment] Error checking payment:', error);
-      setError('Failed to check payment. Please try again.');
-      setCheckingPayment(false);
-      setPaymentStatus('');
-    }
+    }, 2000); // Check every 2 seconds for faster detection
+    
+    // Stop checking after 5 minutes to prevent infinite checking
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      if (paymentStatus === 'pending') {
+        setCheckingPayment(false);
+        setPaymentStatus('');
+        setError('Payment not detected after 5 minutes. Please try again or contact support.');
+      }
+    }, 300000); // 5 minutes timeout
   };
 
   const handlePayment = () => {
@@ -712,8 +723,10 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount)) return 0;
     
-    // 1 USDC = 10 credits
-    return Math.floor(numAmount * (selectedToken.creditRate || 10));
+    // NFT holders: $0.10 per generation (10 credits per USDC)
+    // Non-holders: $0.15 per generation (6.67 credits per USDC)
+    const creditsPerUSDC = isNFTHolder ? 10 : 6.67;
+    return Math.floor(numAmount * creditsPerUSDC);
   };
 
   const getTokenBalance = (tokenSymbol) => {
@@ -815,7 +828,10 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-gray-400">Rate:</span>
-              <span className="text-purple-400 font-semibold">1 USDC = 10 Credits</span>
+              <span className="text-purple-400 font-semibold">
+                1 USDC = {isNFTHolder ? '10' : '6.67'} Credits
+                {isNFTHolder && <span className="text-green-400 ml-1">(NFT Holder)</span>}
+              </span>
             </div>
           </div>
 
@@ -920,8 +936,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               <div className="text-xs text-gray-300 space-y-1">
                 <p><strong>1.</strong> Click "Open Wallet & Send USDC" above</p>
                 <p><strong>2.</strong> Confirm the transaction in your wallet</p>
-                <p><strong>3.</strong> Wait 1-5 mins for blockchain confirmation</p>
-                <p><strong>4.</strong> Credits will be added automatically!</p>
+                <p><strong>3.</strong> Credits added instantly after confirmation!</p>
+                <p className="text-green-300"><strong>⚡ Instant:</strong> Payment detection every 2 seconds</p>
                 <p className="text-blue-300"><strong>Note:</strong> Transaction is pre-built and ready to send</p>
               </div>
             </div>
