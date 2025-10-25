@@ -164,7 +164,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         await navigator.clipboard.writeText(solanaPaymentAddress);
         alert(`Solana address copied! Please send ${amount} USDC to this address in your Phantom/Solflare wallet.`);
       } else {
-        // For EVM chains, try to trigger wallet transaction
+        // For EVM chains, trigger actual USDC transfer
         if (window.ethereum) {
           try {
             // Get the current provider
@@ -176,11 +176,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             
             // USDC contract addresses for different chains
             const usdcContracts = {
-              '1': '0xA0b86a33E6441b8C4C8C0C4C0C4C0C4C0C4C0C4C', // Ethereum (placeholder)
-              '137': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // Polygon
-              '42161': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // Arbitrum
-              '10': '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Optimism
-              '8453': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' // Base
+              '0x1': '0xA0b86a33E6441b8C4C8C0C4C0C4C0C4C0C4C0C4C', // Ethereum (placeholder)
+              '0x89': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // Polygon
+              '0xa4b1': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // Arbitrum
+              '0xa': '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Optimism
+              '0x2105': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' // Base
             };
             
             // Get current chain ID
@@ -188,28 +188,51 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             const usdcContract = usdcContracts[chainId];
             
             if (usdcContract) {
-              // Try to trigger USDC transfer
-              const amountWei = ethers.parseUnits(amount, 6); // USDC has 6 decimals
+              // Create ethers provider and signer
+              const ethersProvider = new ethers.BrowserProvider(provider);
+              const signer = await ethersProvider.getSigner();
               
-              // This will open the wallet with a transaction to transfer USDC
-              await provider.request({
-                method: 'eth_sendTransaction',
-                params: [{
-                  to: usdcContract,
-                  data: `0xa9059cbb${paymentAddress.slice(2).padStart(64, '0')}${amountWei.toString(16).padStart(64, '0')}`,
-                  from: address
-                }]
+              // USDC ABI for transfer function
+              const usdcABI = [
+                "function transfer(address to, uint256 amount) returns (bool)"
+              ];
+              
+              // Create USDC contract instance
+              const usdcContractInstance = new ethers.Contract(usdcContract, usdcABI, signer);
+              
+              // Convert amount to USDC units (6 decimals)
+              const amountWei = ethers.parseUnits(amount, 6);
+              
+              console.log('Sending USDC transaction:', {
+                to: paymentAddress,
+                amount: amount,
+                amountWei: amountWei.toString(),
+                contract: usdcContract,
+                chainId: chainId
               });
+              
+              // Call transfer function - this will open wallet popup
+              const tx = await usdcContractInstance.transfer(paymentAddress, amountWei);
+              
+              console.log('Transaction sent:', tx.hash);
+              
+              // Show success message
+              alert(`Transaction sent! Hash: ${tx.hash}\n\nPlease wait for confirmation, then click "Start Monitoring" to track your payment.`);
+              
             } else {
               // Fallback: copy address and show instructions
               await navigator.clipboard.writeText(paymentAddress);
-              alert(`Please send ${amount} USDC to this address in your wallet:\n\n${paymentAddress}\n\nAddress copied to clipboard!`);
+              alert(`USDC not supported on this chain. Please send ${amount} USDC to this address manually:\n\n${paymentAddress}\n\nAddress copied to clipboard!`);
             }
           } catch (error) {
-            console.error('Error triggering transaction:', error);
-            // Fallback: copy address
-            await navigator.clipboard.writeText(paymentAddress);
-            alert(`Please send ${amount} USDC to this address in your wallet:\n\n${paymentAddress}\n\nAddress copied to clipboard!`);
+            console.error('Error sending USDC transaction:', error);
+            
+            // Check if user rejected the transaction
+            if (error.code === 4001 || error.message.includes('User rejected')) {
+              setError('Transaction cancelled by user.');
+            } else {
+              setError(`Transaction failed: ${error.message}`);
+            }
           }
         } else {
           // No wallet detected, copy address
@@ -483,7 +506,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
               >
                 <ExternalLink className="w-4 h-4" />
-                Send {amount || '0'} USDC Transaction
+                {isProcessing ? 'Opening Wallet...' : `Send ${amount || '0'} USDC to Payment Address`}
               </button>
               
               {/* Alternative: Deep Link for Mobile */}
