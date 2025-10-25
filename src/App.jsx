@@ -82,7 +82,7 @@ function AppContent({ activeTab, onShowPayment, onShowTokenPayment, onShowStripe
 
   // Show wallet connection prompt if not connected
   if (!isConnected) {
-    return <SimpleWalletConnect />;
+    return <WalletPrompt />;
   }
 
   // Show main content if wallet is connected (AuthGuard will handle credit requirements)
@@ -100,7 +100,8 @@ function AppContent({ activeTab, onShowPayment, onShowTokenPayment, onShowStripe
 }
 
 function WalletPrompt({ onConnect }) {
-  const [showChainSelection, setShowChainSelection] = useState(false);
+  const { connectWallet } = useSimpleWallet();
+  const [showChainSelection, setShowChainSelection] = useState(true);
   const [selectedChain, setSelectedChain] = useState(null);
 
   const chainOptions = [
@@ -116,9 +117,21 @@ function WalletPrompt({ onConnect }) {
 
   const solanaWallets = [
     { id: 'phantom', name: 'Phantom', icon: '👻' },
-    { id: 'solflare', name: 'Solflare', icon: '☀️' }
+    { id: 'solflare', name: 'Solflare', icon: '🔥' }
   ];
 
+  const handleChainSelect = (chainId) => {
+    setSelectedChain(chainId);
+  };
+
+  const handleWalletSelect = async (walletId) => {
+    try {
+      // Pass the wallet type to connectWallet
+      await connectWallet(walletId);
+    } catch (error) {
+      console.error('Wallet connection failed:', error);
+    }
+  };
 
   const handleBack = () => {
     setSelectedChain(null);
@@ -261,7 +274,6 @@ function WalletPrompt({ onConnect }) {
 
 function GenerateTab({ onShowPayment, onShowTokenPayment, onShowStripePayment }) {
   const [customPrompt, setCustomPrompt] = useState('');
-  const [workflowStep, setWorkflowStep] = useState(1);
   const { credits } = useSimpleWallet();
 
   return (
@@ -338,7 +350,7 @@ function GenerateTab({ onShowPayment, onShowTokenPayment, onShowStripePayment })
 
             {/* Style Selection - Compact */}
             <div className="glass-effect rounded-lg p-3">
-              <StyleSelector onSelect={() => setWorkflowStep(2)} />
+              <StyleSelector />
             </div>
           </div>
         </div>

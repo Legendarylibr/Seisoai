@@ -7,13 +7,9 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const compression = require('compression');
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
-const FastAPIService = require('./services/fastapiService');
 require('dotenv').config();
 
 const app = express();
-
-// Initialize FastAPI service for NFT holders
-const fastAPIService = new FastAPIService();
 
 // Trust proxy for accurate IP addresses
 app.set('trust proxy', 1);
@@ -24,9 +20,13 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://api.fal.ai", "https://api.mainnet-beta.solana.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Allow inline scripts for Vite
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: ["'self'", "https://api.fal.ai", "https://api.mainnet-beta.solana.com", "https:", "wss:"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'self'"],
     },
   },
   crossOriginEmbedderPolicy: false
@@ -116,24 +116,81 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Body parsing middleware
+// Stripe webhook needs raw body - MUST be before express.json()
+app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
+  // Check if Stripe is configured
+  if (!stripe) {
+    return res.status(400).json({
+      success: false,
+      error: 'Stripe payment is not configured'
+    });
+  }
+
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    logger.error('Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the event
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      const paymentIntent = event.data.object;
+      logger.info('Payment succeeded via webhook', {
+        paymentIntentId: paymentIntent.id,
+        amount: paymentIntent.amount,
+        metadata: paymentIntent.metadata
+      });
+      break;
+    default:
+      logger.info(`Unhandled event type ${event.type}`);
+  }
+
+  res.json({received: true});
+});
+
+// Body parsing middleware - AFTER webhook route
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Sentry request handler (commented out for now)
-// app.use(Sentry.requestHandler());
+// Serve static files from parent dist directory (frontend build)
+const path = require('path');
+const distPath = path.join(__dirname, '..', 'dist');
+app.use(express.static(distPath));
 
 // Validate required environment variables
 const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'SESSION_SECRET'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+// Optional but recommended variables for full functionality
+const recommendedEnvVars = [
+  'ETH_PAYMENT_WALLET',
+  'POLYGON_PAYMENT_WALLET', 
+  'ETH_RPC_URL',
+  'POLYGON_RPC_URL',
+  'STRIPE_SECRET_KEY'
+];
+const missingRecommended = recommendedEnvVars.filter(varName => !process.env[varName]);
+
 if (missingVars.length > 0) {
   logger.error('Missing required environment variables:', { missingVars });
   // Don't exit in development, just warn
   if (process.env.NODE_ENV === 'production') {
     process.exit(1);
   } else {
-    logger.warn('Running in development mode with missing environment variables');
+    logger.warn('Running in development mode with missing required environment variables');
   }
+}
+
+if (missingRecommended.length > 0) {
+  logger.warn('Missing recommended environment variables (some features may not work):', { 
+    missingRecommended,
+    note: 'Payment features and blockchain verification may be limited'
+  });
 }
 
 // MongoDB connection
@@ -190,7 +247,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 
-// User Schema with field-level encryption for sensitive data
+// User Schema
 const userSchema = new mongoose.Schema({
   walletAddress: { 
     type: String, 
@@ -245,21 +302,6 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Encryption temporarily disabled to fix deployment issues
-// TODO: Re-enable encryption once MongoDB connection is stable
-// userSchema.plugin(mongooseEncryption, {
-//   secret: process.env.ENCRYPTION_KEY,
-//   authenticationCode: process.env.AUTHENTICATION_CODE,
-//   encryptedFields: [
-//     'paymentHistory',    // Encrypt payment data (amounts, transaction details)
-//     'generationHistory', // Encrypt prompts and image URLs
-//     'gallery',          // Encrypt saved images and prompts
-//     'settings'          // Encrypt user preferences
-//   ],
-//   // Don't encrypt walletAddress, credits, or timestamps (needed for queries)
-//   excludeFromEncryption: ['walletAddress', 'credits', 'totalCreditsEarned', 'totalCreditsSpent', 'lastActive', 'createdAt', 'expiresAt', 'nftCollections']
-// });
-
 // Add indexes for performance
 userSchema.index({ walletAddress: 1 });
 userSchema.index({ createdAt: 1 });
@@ -268,16 +310,7 @@ userSchema.index({ 'gallery.timestamp': 1 });
 
 const User = mongoose.model('User', userSchema);
 
-// Simple metrics tracking
-const Metrics = mongoose.model('Metrics', new mongoose.Schema({
-  endpoint: String,
-  method: String,
-  responseTime: Number,
-  statusCode: Number,
-  timestamp: { type: Date, default: Date.now }
-}));
-
-// Payment wallet addresses (validated above)
+// Payment wallet addresses
 const PAYMENT_WALLETS = {
   '1': process.env.ETH_PAYMENT_WALLET,
   '137': process.env.POLYGON_PAYMENT_WALLET,
@@ -328,25 +361,6 @@ const ERC20_ABI = [
   "function symbol() view returns (string)",
   "event Transfer(address indexed from, address indexed to, uint256 value)"
 ];
-
-// Simple metrics middleware
-const metricsMiddleware = (req, res, next) => {
-  const start = Date.now();
-  res.on('finish', () => {
-    const responseTime = Date.now() - start;
-    if (mongoose.connection.readyState === 1) {
-      new Metrics({
-        endpoint: req.path,
-        method: req.method,
-        responseTime,
-        statusCode: res.statusCode
-      }).save().catch(err => logger.error('Failed to save metrics:', err));
-    }
-  });
-  next();
-};
-
-app.use(metricsMiddleware);
 
 /**
  * Get or create user
@@ -495,34 +509,6 @@ app.get('/api/health', async (req, res) => {
 });
 
 /**
- * Simple metrics endpoint
- */
-app.get('/api/metrics', async (req, res) => {
-  try {
-    const now = new Date();
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-    const [dailyMetrics, totalUsers] = await Promise.all([
-      Metrics.find({ timestamp: { $gte: oneDayAgo } }),
-      User.countDocuments()
-    ]);
-
-    const metrics = {
-      users: { total: totalUsers },
-      requests: { last24h: dailyMetrics.length },
-      avgResponseTime: dailyMetrics.length > 0 
-        ? Math.round(dailyMetrics.reduce((sum, m) => sum + m.responseTime, 0) / dailyMetrics.length)
-        : 0
-    };
-
-    res.json(metrics);
-  } catch (error) {
-    logger.error('Metrics endpoint error:', error);
-    res.status(500).json({ error: 'Failed to fetch metrics' });
-  }
-});
-
-/**
  * Get user data
  */
 app.get('/api/users/:walletAddress', async (req, res) => {
@@ -568,6 +554,70 @@ app.post('/api/nft/check-credits', async (req, res) => {
   } catch (error) {
     logger.error('Error checking credits:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Check NFT holdings for wallet
+ */
+app.post('/api/nft/check-holdings', async (req, res) => {
+  try {
+    const { walletAddress, collections } = req.body;
+    
+    if (!walletAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Wallet address required'
+      });
+    }
+
+    // TODO: Implement actual blockchain NFT verification
+    // For now, return mock data. In production, you should:
+    // 1. Use ethers.js to query NFT contract balanceOf()
+    // 2. Check against a list of qualifying collections
+    // 3. Cache results to avoid repeated blockchain calls
+    
+    logger.info('Checking NFT holdings', { walletAddress });
+    
+    // Mock implementation - replace with real verification
+    const isHolder = false; // Set to true for testing
+    const ownedCollections = [];
+    
+    // Example of how to check (commented out):
+    // for (const collection of collections || []) {
+    //   const rpcUrl = RPC_ENDPOINTS[collection.chainId];
+    //   if (!rpcUrl) continue;
+    //   
+    //   const provider = new ethers.JsonRpcProvider(rpcUrl);
+    //   const nftContract = new ethers.Contract(
+    //     collection.address,
+    //     ['function balanceOf(address owner) view returns (uint256)'],
+    //     provider
+    //   );
+    //   
+    //   const balance = await nftContract.balanceOf(walletAddress);
+    //   if (balance > 0) {
+    //     ownedCollections.push(collection);
+    //   }
+    // }
+    
+    res.json({
+      success: true,
+      isHolder,
+      collections: ownedCollections,
+      message: isHolder 
+        ? 'Qualifying NFTs found! You have access to free generation.' 
+        : 'No qualifying NFTs found. Purchase credits to generate images.'
+    });
+    
+  } catch (error) {
+    logger.error('Error checking NFT holdings:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      isHolder: false,
+      collections: []
+    });
   }
 });
 
@@ -834,44 +884,7 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
   }
 });
 
-/**
- * Stripe webhook handler
- */
-app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
-  // Check if Stripe is configured
-  if (!stripe) {
-    return res.status(400).json({
-      success: false,
-      error: 'Stripe payment is not configured'
-    });
-  }
-
-  const sig = req.headers['stripe-signature'];
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    logger.error('Webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  // Handle the event
-  switch (event.type) {
-    case 'payment_intent.succeeded':
-      const paymentIntent = event.data.object;
-      logger.info('Payment succeeded via webhook', {
-        paymentIntentId: paymentIntent.id,
-        amount: paymentIntent.amount,
-        metadata: paymentIntent.metadata
-      });
-      break;
-    default:
-      logger.info(`Unhandled event type ${event.type}`);
-  }
-
-  res.json({received: true});
-});
+// Stripe webhook handler moved to before express.json() middleware
 
 /**
  * Add generation to history
@@ -941,17 +954,6 @@ app.post('/api/safety/violation', async (req, res) => {
   try {
     const { walletAddress, violation, userAgent, url } = req.body;
     
-    // Log the violation
-    logger.warn('Safety violation detected', {
-      timestamp: new Date().toISOString(),
-      walletAddress: walletAddress?.toLowerCase(),
-      violation: violation,
-      userAgent: userAgent,
-      url: url,
-      ip: req.ip || req.connection.remoteAddress
-    });
-    
-    // Log safety violation
     logger.warn('Safety violation detected', {
       walletAddress: walletAddress?.toLowerCase(),
       violation,
@@ -960,10 +962,7 @@ app.post('/api/safety/violation', async (req, res) => {
       ip: req.ip
     });
     
-    res.json({
-      success: true,
-      message: 'Violation logged'
-    });
+    res.json({ success: true, message: 'Violation logged' });
   } catch (error) {
     logger.error('Error logging safety violation:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -1045,67 +1044,6 @@ app.delete('/api/gallery/:walletAddress/:generationId', async (req, res) => {
 });
 
 /**
- * Get gallery statistics for a user
- */
-app.get('/api/gallery/:walletAddress/stats', async (req, res) => {
-  try {
-    const { walletAddress } = req.params;
-    const user = await getOrCreateUser(walletAddress);
-    
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-    
-    const totalItems = user.gallery.length;
-    const recentItems = user.gallery.filter(item => 
-      new Date(item.timestamp) >= thirtyDaysAgo
-    ).length;
-    const oldItems = totalItems - recentItems;
-    
-    res.json({
-      success: true,
-      stats: {
-        totalItems,
-        recentItems,
-        oldItems,
-        oldestItem: user.gallery.length > 0 ? 
-          Math.min(...user.gallery.map(item => new Date(item.timestamp).getTime())) : null,
-        newestItem: user.gallery.length > 0 ? 
-          Math.max(...user.gallery.map(item => new Date(item.timestamp).getTime())) : null
-      }
-    });
-  } catch (error) {
-    logger.error('Error fetching gallery stats:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Cleanup function (can be called manually or via cron)
-async function cleanupExpiredData() {
-  try {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-    
-    // Clean up expired users
-    const expiredUsers = await User.find({ expiresAt: { $lt: now } });
-    if (expiredUsers.length > 0) {
-      await User.deleteMany({ expiresAt: { $lt: now } });
-      logger.info(`Cleaned up ${expiredUsers.length} expired users`);
-    }
-    
-    // Clean up old metrics
-    const metricsDeleted = await Metrics.deleteMany({
-      timestamp: { $lt: thirtyDaysAgo }
-    });
-    
-    if (metricsDeleted.deletedCount > 0) {
-      logger.info(`Cleaned up ${metricsDeleted.deletedCount} old metrics records`);
-    }
-  } catch (error) {
-    logger.error('Error cleaning up expired data:', error);
-  }
-}
-
-/**
  * Admin endpoint to add credits to a user
  */
 app.post('/api/admin/add-credits', async (req, res) => {
@@ -1167,17 +1105,24 @@ app.use((error, req, res, next) => {
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
+// 404 handler for API routes only
+app.use('/api/*', (req, res) => {
   res.status(404).json({
     success: false,
-    error: 'Endpoint not found'
+    error: 'API endpoint not found'
   });
+});
+
+// Serve index.html for all non-API routes (SPA routing)
+// This MUST be last so static files are served first
+app.get('*', (req, res) => {
+  const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
+  res.sendFile(indexPath);
 });
 
 // Dynamic port handling with fallback
 const startServer = async (port = process.env.PORT || 3001) => {
-  const server = app.listen(port, () => {
+  const server = app.listen(port, '0.0.0.0', () => {
     logger.info(`AI Image Generator API running on port ${port}`);
     logger.info(`MongoDB connected: ${mongoose.connection.readyState === 1 ? 'Yes' : 'No'}`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);

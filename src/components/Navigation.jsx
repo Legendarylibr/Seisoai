@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Zap, Coins, ChevronDown, Wallet, RefreshCw, CreditCard } from 'lucide-react';
+import { Zap, Coins, ChevronDown, Wallet, RefreshCw, CreditCard, LogOut } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
 const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment, onShowStripePayment }) => {
-  const { isConnected, address, credits } = useSimpleWallet();
+  const { isConnected, address, credits, disconnectWallet } = useSimpleWallet();
   const [showCreditsDropdown, setShowCreditsDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -86,6 +86,14 @@ const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenP
           {/* Credits Dropdown */}
           {isConnected && (
             <div className="hidden md:flex items-center space-x-4">
+              {/* Wallet Address Display */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
+                <Wallet className="w-4 h-4 text-blue-400" />
+                <span className="text-xs font-mono text-gray-300">
+                  {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : ''}
+                </span>
+              </div>
+
               {/* Credits Display */}
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
@@ -170,6 +178,16 @@ const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenP
                   )}
                 </div>
               </div>
+
+              {/* Disconnect Button */}
+              <button
+                onClick={disconnectWallet}
+                className="flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg border border-red-500/30 transition-colors"
+                title="Disconnect Wallet"
+              >
+                <LogOut className="w-4 h-4 text-red-400" />
+                <span className="text-sm font-medium text-red-300">Disconnect</span>
+              </button>
             </div>
           )}
 
@@ -177,12 +195,21 @@ const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenP
           <div className="md:hidden flex items-center gap-2">
             {/* Mobile Credits Display */}
             {isConnected && (
-              <div className="flex items-center gap-1 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
-                <Coins className="w-4 h-4 text-purple-400" />
-                <span className="text-xs font-medium text-white">
-                  {credits}
-                </span>
-              </div>
+              <>
+                <div className="flex items-center gap-1 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
+                  <Coins className="w-4 h-4 text-purple-400" />
+                  <span className="text-xs font-medium text-white">
+                    {credits}
+                  </span>
+                </div>
+                <button
+                  onClick={disconnectWallet}
+                  className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg border border-red-500/30 transition-colors"
+                  title="Disconnect"
+                >
+                  <LogOut className="w-4 h-4 text-red-400" />
+                </button>
+              </>
             )}
           </div>
         </div>

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
+import { checkNFTHoldings } from '../services/nftVerificationService';
 
 const SimpleWalletContext = createContext();
 
@@ -11,6 +12,8 @@ export const SimpleWalletProvider = ({ children }) => {
   const [credits, setCredits] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isNFTHolder, setIsNFTHolder] = useState(false);
+  const [nftCollections, setNftCollections] = useState([]);
 
   // Fetch credits from backend
   const fetchCredits = async (walletAddress) => {
@@ -32,33 +35,121 @@ export const SimpleWalletProvider = ({ children }) => {
     }
   };
 
-  // Connect wallet
-  const connectWallet = async () => {
+  // Check NFT holdings
+  const checkNFTStatus = async (walletAddress) => {
+    try {
+      console.log(`🎨 Checking NFT holdings for ${walletAddress}`);
+      const result = await checkNFTHoldings(walletAddress);
+      setIsNFTHolder(result.isHolder);
+      setNftCollections(result.collections);
+      console.log(`✅ NFT status: ${result.isHolder ? 'Holder' : 'Non-holder'}`);
+    } catch (error) {
+      console.error('Error checking NFT status:', error);
+      setIsNFTHolder(false);
+      setNftCollections([]);
+    }
+  };
+
+  // Connect wallet with wallet type support
+  const connectWallet = async (walletType = 'metamask') => {
     try {
       setIsLoading(true);
       setError(null);
 
-      if (!window.ethereum) {
-        throw new Error('No wallet found. Please install MetaMask or another wallet.');
+      let provider = null;
+      let address = null;
+
+      // Handle different wallet types
+      switch (walletType) {
+        case 'metamask':
+          if (!window.ethereum) {
+            throw new Error('MetaMask not found. Please install MetaMask extension.');
+          }
+          provider = window.ethereum;
+          // This will prompt user to unlock MetaMask if locked
+          const accounts = await provider.request({ 
+            method: 'eth_requestAccounts' 
+          });
+          if (!accounts || accounts.length === 0) {
+            throw new Error('No accounts found. Please unlock MetaMask and try again.');
+          }
+          address = accounts[0];
+          break;
+
+        case 'rabby':
+          if (!window.ethereum) {
+            throw new Error('Rabby Wallet not found. Please install Rabby Wallet extension.');
+          }
+          provider = window.ethereum;
+          // This will prompt user to unlock Rabby if locked
+          const rabbyAccounts = await provider.request({ 
+            method: 'eth_requestAccounts' 
+          });
+          if (!rabbyAccounts || rabbyAccounts.length === 0) {
+            throw new Error('No accounts found. Please unlock Rabby Wallet and try again.');
+          }
+          address = rabbyAccounts[0];
+          break;
+
+        case 'coinbase':
+          if (!window.ethereum) {
+            throw new Error('Coinbase Wallet not found. Please install Coinbase Wallet extension.');
+          }
+          provider = window.ethereum;
+          // This will prompt user to unlock Coinbase Wallet if locked
+          const coinbaseAccounts = await provider.request({ 
+            method: 'eth_requestAccounts' 
+          });
+          if (!coinbaseAccounts || coinbaseAccounts.length === 0) {
+            throw new Error('No accounts found. Please unlock Coinbase Wallet and try again.');
+          }
+          address = coinbaseAccounts[0];
+          break;
+
+        case 'phantom':
+          if (!window.solana || !window.solana.isPhantom) {
+            throw new Error('Phantom Wallet not found. Please install Phantom extension.');
+          }
+          provider = window.solana;
+          // This will prompt user to unlock Phantom if locked and connect
+          const resp = await provider.connect();
+          if (!resp || !resp.publicKey) {
+            throw new Error('Failed to connect. Please unlock Phantom and try again.');
+          }
+          address = resp.publicKey.toString();
+          break;
+
+        case 'solflare':
+          if (!window.solflare) {
+            throw new Error('Solflare Wallet not found. Please install Solflare extension.');
+          }
+          provider = window.solflare;
+          // This will prompt user to unlock Solflare if locked
+          await provider.connect();
+          if (!provider.publicKey) {
+            throw new Error('Failed to connect. Please unlock Solflare and try again.');
+          }
+          address = provider.publicKey.toString();
+          break;
+
+        default:
+          throw new Error(`Unsupported wallet type: ${walletType}`);
       }
 
-      // Request account access
-      const accounts = await window.ethereum.request({
-        method: 'eth_requestAccounts'
-      });
-
-      if (accounts.length === 0) {
+      if (!address) {
         throw new Error('No accounts found');
       }
 
-      const address = accounts[0];
       setAddress(address);
       setIsConnected(true);
 
-      // Fetch credits
-      await fetchCredits(address);
+      // Fetch credits and check NFT status
+      await Promise.all([
+        fetchCredits(address),
+        checkNFTStatus(address)
+      ]);
 
-      console.log(`✅ Wallet connected: ${address}`);
+      console.log(`✅ Wallet connected: ${address} (${walletType})`);
     } catch (error) {
       console.error('Wallet connection error:', error);
       setError(error.message);
@@ -73,6 +164,8 @@ export const SimpleWalletProvider = ({ children }) => {
     setAddress(null);
     setCredits(0);
     setError(null);
+    setIsNFTHolder(false);
+    setNftCollections([]);
   };
 
   // Check for existing connection on load
@@ -85,7 +178,10 @@ export const SimpleWalletProvider = ({ children }) => {
             const address = accounts[0];
             setAddress(address);
             setIsConnected(true);
-            await fetchCredits(address);
+            await Promise.all([
+              fetchCredits(address),
+              checkNFTStatus(address)
+            ]);
           }
         } catch (error) {
           console.warn('Error checking existing connection:', error);
@@ -96,15 +192,26 @@ export const SimpleWalletProvider = ({ children }) => {
     checkConnection();
   }, []);
 
+  // Function to refresh credits without full reconnection
+  const refreshCredits = async () => {
+    if (address) {
+      await fetchCredits(address);
+    }
+  };
+
   const value = {
     isConnected,
     address,
     credits,
     isLoading,
     error,
+    isNFTHolder,
+    nftCollections,
     connectWallet,
     disconnectWallet,
-    fetchCredits
+    fetchCredits,
+    refreshCredits,
+    checkNFTStatus
   };
 
   return (

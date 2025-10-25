@@ -1,16 +1,18 @@
 [phases.setup]
-nixPkgs = ["nodejs_18", "npm"]
+nixPkgs = ["nodejs_18"]
 
 [phases.install]
 cmds = [
-  "cd backend && npm ci"
+  "npm install",
+  "cd backend && npm install --production"
 ]
 
 [phases.build]
 cmds = [
-  "echo 'Backend ready'"
+  "VITE_FAL_API_KEY=$FAL_API_KEY VITE_API_URL=https://$RAILWAY_PUBLIC_DOMAIN npm run build",
+  "echo 'Frontend and backend built with env vars'"
 ]
 
 [start]
-cmd = "cd backend && node server.js"
+cmd = "node backend/server.js"
 

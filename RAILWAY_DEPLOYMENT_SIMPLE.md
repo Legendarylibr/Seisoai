@@ -73,5 +73,5 @@ Update your frontend's `VITE_API_URL` to point to your Railway backend URL.
 - ❌ Complex metrics collection
 - ❌ Cron jobs (manual cleanup)
 - ❌ MongoDB logging
-- ❌ Encryption (can be added later)
+- ❌ Data encryption (mongoose-encryption removed)
 - ❌ Complex error tracking

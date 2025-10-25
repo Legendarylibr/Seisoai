@@ -1,44 +1,41 @@
 #!/bin/bash
 
-echo "🧪 Testing Seiso AI Deployment"
-echo "=============================="
+echo "🧪 Testing Railway Deployment..."
+echo "================================"
+echo ""
 
 # Test health endpoint
-echo "Testing health endpoint..."
-HEALTH_RESPONSE=$(curl -s -w "%{http_code}" https://seiso.ai/api/health)
-HTTP_CODE="${HEALTH_RESPONSE: -3}"
-HEALTH_BODY="${HEALTH_RESPONSE%???}"
+echo "Testing: https://seisoai-prod.up.railway.app/api/health"
+response=$(curl -s -w "\n%{http_code}" https://seisoai-prod.up.railway.app/api/health)
+http_code=$(echo "$response" | tail -n 1)
+body=$(echo "$response" | sed '$d')
 
-if [ "$HTTP_CODE" = "200" ]; then
-    echo "✅ Health endpoint working (HTTP $HTTP_CODE)"
-    echo "Response: $HEALTH_BODY"
+echo "HTTP Code: $http_code"
+echo "Response: $body"
+echo ""
+
+if [ "$http_code" = "200" ]; then
+    echo "✅ SUCCESS! API is responding"
+    echo ""
+    echo "$body" | jq . 2>/dev/null || echo "$body"
+    echo ""
+    echo "🎉 Deployment is working!"
+elif [ "$http_code" = "502" ]; then
+    echo "❌ FAILED: Getting 502 Bad Gateway"
+    echo ""
+    echo "This means the app is deployed but not accessible."
+    echo ""
+    echo "🔧 FIX NEEDED:"
+    echo "1. Go to: https://railway.app/project/ee55e7fa-b010-4946-a87b-013e15e329a8"
+    echo "2. Click 'Seisoai' service → 'Variables'"
+    echo "3. DELETE the 'PORT' variable"
+    echo "4. Wait 30 seconds and run this script again"
 else
-    echo "❌ Health endpoint failed (HTTP $HTTP_CODE)"
-    echo "Response: $HEALTH_BODY"
+    echo "⚠️  Unexpected response code: $http_code"
+    echo "Response: $body"
 fi
 
 echo ""
+echo "View logs: railway logs"
+echo "Open dashboard: https://railway.app/project/ee55e7fa-b010-4946-a87b-013e15e329a8"
 
-# Test if the app is running
-echo "Testing if app is running..."
-APP_RESPONSE=$(curl -s -w "%{http_code}" https://seiso.ai/)
-HTTP_CODE="${APP_RESPONSE: -3}"
-
-if [ "$HTTP_CODE" = "200" ]; then
-    echo "✅ App is running (HTTP $HTTP_CODE)"
-else
-    echo "❌ App not responding (HTTP $HTTP_CODE)"
-fi
-
-echo ""
-
-# Check Railway status
-echo "Checking Railway deployment status..."
-railway status
-
-echo ""
-echo "🔧 To fix MongoDB connection:"
-echo "1. Go to MongoDB Atlas dashboard"
-echo "2. Network Access → Add IP Address"
-echo "3. Allow Access from Anywhere (0.0.0.0/0)"
-echo "4. Redeploy: railway up"
