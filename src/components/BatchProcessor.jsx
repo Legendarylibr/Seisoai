@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { addGeneration } from '../services/galleryService';
+import { generateImage } from '../services/smartImageService';
 import { Upload, Play, Pause, Download, Trash2, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 
 const BatchProcessor = () => {
@@ -86,9 +87,6 @@ const BatchProcessor = () => {
       setBatchPrompts(updatedPrompts);
 
       try {
-        // Import the generateImage function
-        const { generateImage } = await import('../services/smartImageService');
-        
         const advancedSettings = {
           guidanceScale,
           numInferenceSteps,
