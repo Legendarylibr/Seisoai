@@ -1,3 +1,5 @@
+providers = ["node"]
+
 [phases.setup]
 nixPkgs = ['nodejs', 'npm']
 
@@ -9,8 +11,6 @@ cmds = ['npm run build']
 
 [start]
 cmd = 'node start-app.js'
-
-providers = ["node"]
 
 [variables]
 NODE_ENV = "production"
