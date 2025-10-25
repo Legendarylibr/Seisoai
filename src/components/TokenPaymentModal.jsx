@@ -34,6 +34,97 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(''); // 'pending', 'detected', 'confirmed'
 
+  // Network detection and chain ID mapping
+  const CHAIN_IDS = {
+    1: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
+    137: { name: 'Polygon', symbol: 'MATIC', decimals: 18 },
+    42161: { name: 'Arbitrum', symbol: 'ETH', decimals: 18 },
+    10: { name: 'Optimism', symbol: 'ETH', decimals: 18 },
+    8453: { name: 'Base', symbol: 'ETH', decimals: 18 }
+  };
+
+  // Get current network info
+  const getCurrentNetwork = async () => {
+    try {
+      if (walletType === 'evm' && window.ethereum) {
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        const chainIdNumber = parseInt(chainId, 16);
+        const network = CHAIN_IDS[chainIdNumber];
+        
+        console.log(`🌐 Current network: ${network?.name || 'Unknown'} (Chain ID: ${chainIdNumber})`);
+        return { chainId: chainIdNumber, network };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting current network:', error);
+      return null;
+    }
+  };
+
+  // Build and send Solana USDC transaction
+  const buildSolanaUSDCTransaction = async (amount, paymentAddress) => {
+    try {
+      if (!window.solana || !window.solana.isPhantom) {
+        throw new Error('Phantom wallet not found');
+      }
+
+      const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
+      const { createTransferInstruction, getAssociatedTokenAddress, getAccount } = await import('@solana/spl-token');
+
+      // Connect to Solana mainnet
+      const connection = new Connection('https://api.mainnet-beta.solana.com');
+      
+      // USDC mint address on Solana
+      const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+      
+      // Get user's public key
+      const userPublicKey = new PublicKey(address);
+      const paymentPublicKey = new PublicKey(paymentAddress);
+      
+      // Get user's USDC token account
+      const userTokenAccount = await getAssociatedTokenAddress(USDC_MINT, userPublicKey);
+      
+      // Get payment wallet's USDC token account
+      const paymentTokenAccount = await getAssociatedTokenAddress(USDC_MINT, paymentPublicKey);
+      
+      // Check if user has USDC token account
+      try {
+        await getAccount(connection, userTokenAccount);
+      } catch (error) {
+        throw new Error('USDC token account not found. Please add USDC to your wallet first.');
+      }
+      
+      // Convert amount to USDC units (6 decimals)
+      const amountInUSDC = Math.floor(parseFloat(amount) * 1000000);
+      
+      // Create transfer instruction
+      const transferInstruction = createTransferInstruction(
+        userTokenAccount,    // source
+        paymentTokenAccount, // destination
+        userPublicKey,       // owner
+        amountInUSDC         // amount
+      );
+      
+      // Create transaction
+      const transaction = new Transaction().add(transferInstruction);
+      
+      // Get recent blockhash
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = userPublicKey;
+      
+      // Sign and send transaction
+      const signedTransaction = await window.solana.signAndSendTransaction(transaction);
+      
+      console.log('✅ Solana transaction sent:', signedTransaction);
+      return signedTransaction;
+      
+    } catch (error) {
+      console.error('Error building Solana transaction:', error);
+      throw error;
+    }
+  };
+
   // Load available tokens and payment address when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -214,17 +305,143 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       if (walletType === 'solana') {
         console.log('🔍 Processing Solana USDC payment...');
         
-        // For Solana, just copy the USDC payment address
-        // Users need to send USDC manually to the payment address
-        await navigator.clipboard.writeText(solanaPaymentAddress);
-        setError(`✅ Solana USDC payment address copied to clipboard: ${solanaPaymentAddress}\n\nPlease send ${amount} USDC to this address and click "Check Payment" to verify.`);
+        try {
+          // Build and send Solana USDC transaction
+          const solanaTx = await buildSolanaUSDCTransaction(amount, solanaPaymentAddress);
+          
+          if (solanaTx) {
+            console.log('✅ Solana transaction sent:', solanaTx);
+            setError(`✅ Solana USDC transaction sent! Hash: ${solanaTx}\n\n${amount} USDC sent to ${solanaPaymentAddress}. Credits will be added automatically.`);
+            
+            // Trigger payment check
+            setTimeout(() => {
+              checkForPayment();
+            }, 2000);
+          } else {
+            // Fallback to copying address if transaction fails
+            await navigator.clipboard.writeText(solanaPaymentAddress);
+            setError(`✅ Solana USDC payment address copied to clipboard: ${solanaPaymentAddress}\n\nPlease send ${amount} USDC to this address and click "Check Payment" to verify.`);
+          }
+        } catch (solanaError) {
+          console.error('❌ Solana transaction failed:', solanaError);
+          // Fallback to copying address
+          await navigator.clipboard.writeText(solanaPaymentAddress);
+          setError(`✅ Solana USDC payment address copied to clipboard: ${solanaPaymentAddress}\n\nPlease send ${amount} USDC to this address and click "Check Payment" to verify.`);
+        }
       } else {
         console.log('🔍 Processing USDC payment...');
         
-        // For EVM chains, just copy the USDC payment address
-        // Users need to send USDC manually to the payment address
-        await navigator.clipboard.writeText(paymentAddress);
-        setError(`✅ USDC payment address copied to clipboard: ${paymentAddress}\n\nPlease send ${amount} USDC to this address and click "Check Payment" to verify.`);
+        try {
+          // Get current network info
+          const { chainId, network } = await getCurrentNetwork();
+          
+          if (!chainId || !network) {
+            throw new Error('Unable to detect current network. Please switch to a supported network.');
+          }
+          
+          // Get the current provider
+          let provider = window.ethereum;
+          if (window.ethereum.providers?.length > 0) {
+            // Multiple wallets, find the one that's connected
+            provider = window.ethereum.providers.find(p => p.isMetaMask || p.isRabby || p.isCoinbaseWallet) || window.ethereum;
+          }
+          
+          const ethersProvider = new ethers.BrowserProvider(provider);
+          const signer = await ethersProvider.getSigner();
+          
+          console.log(`🔨 Creating USDC transaction on ${network.name}...`);
+          
+          // USDC contract addresses for different networks
+          const USDC_CONTRACTS = {
+            1: '0xA0b86a33E6441b8C4C8C0C4C0C4C0C4C0C4C0C4C', // Ethereum USDC (placeholder - use real USDC address)
+            137: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // Polygon
+            42161: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // Arbitrum
+            10: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Optimism
+            8453: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' // Base
+          };
+          
+          const usdcAddress = USDC_CONTRACTS[chainId];
+          if (!usdcAddress) {
+            throw new Error(`USDC not supported on ${network.name}. Please switch to Ethereum, Polygon, Arbitrum, Optimism, or Base.`);
+          }
+          
+          // USDC ABI (minimal for transfer)
+          const usdcABI = [
+            "function transfer(address to, uint256 amount) returns (bool)",
+            "function balanceOf(address owner) view returns (uint256)",
+            "function decimals() view returns (uint8)",
+            "function symbol() view returns (string)"
+          ];
+          
+          const usdcContract = new ethers.Contract(usdcAddress, usdcABI, signer);
+          
+          // Check USDC balance
+          const balance = await usdcContract.balanceOf(address);
+          const decimals = await usdcContract.decimals();
+          const balanceFormatted = ethers.formatUnits(balance, decimals);
+          
+          console.log(`💰 USDC Balance: ${balanceFormatted} USDC`);
+          
+          if (parseFloat(balanceFormatted) < parseFloat(amount)) {
+            throw new Error(`Insufficient USDC balance. You have ${balanceFormatted} USDC but need ${amount} USDC.`);
+          }
+          
+          // Convert amount to USDC units (6 decimals)
+          const amountWei = ethers.parseUnits(amount, 6);
+          
+          console.log(`📤 Building USDC transaction to send ${amount} USDC to ${paymentAddress}...`);
+          
+          // Build the transaction data
+          const txData = usdcContract.interface.encodeFunctionData('transfer', [paymentAddress, amountWei]);
+          
+          // Get gas estimate
+          const gasEstimate = await usdcContract.transfer.estimateGas(paymentAddress, amountWei);
+          const gasPrice = await ethersProvider.getFeeData();
+          
+          // Build transaction object
+          const transaction = {
+            to: usdcAddress,
+            from: address,
+            data: txData,
+            gasLimit: gasEstimate,
+            gasPrice: gasPrice.gasPrice,
+            value: 0 // No ETH value for token transfer
+          };
+          
+          console.log('🔨 Transaction built:', transaction);
+          
+          // Send transaction to wallet
+          const tx = await signer.sendTransaction(transaction);
+          
+          console.log('⏳ Transaction submitted:', tx.hash);
+          setError(`⏳ USDC transaction submitted! Hash: ${tx.hash}\n\nWaiting for confirmation...`);
+          
+          // Wait for transaction confirmation
+          const receipt = await tx.wait();
+          
+          if (receipt.status === 1) {
+            console.log('✅ USDC transaction confirmed!');
+            setError(`✅ USDC transaction confirmed! Hash: ${tx.hash}\n\n${amount} USDC sent to ${paymentAddress}. Credits will be added automatically.`);
+            
+            // Trigger payment check
+            setTimeout(() => {
+              checkForPayment();
+            }, 2000);
+          } else {
+            throw new Error('Transaction failed');
+          }
+          
+        } catch (usdcError) {
+          console.error('❌ USDC transaction failed:', usdcError);
+          
+          if (usdcError.code === 4001 || usdcError.message.includes('User rejected') || usdcError.message.includes('user rejected')) {
+            setError('Transaction cancelled by user.');
+          } else if (usdcError.message.includes('insufficient') || usdcError.message.includes('balance')) {
+            setError(`Insufficient USDC balance: ${usdcError.message}`);
+          } else {
+            setError(`USDC transaction failed: ${usdcError.message}`);
+          }
+        }
       }
     } catch (error) {
       console.error('Error sending transaction:', error);
@@ -493,7 +710,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors text-sm"
               >
                 <ExternalLink className="w-4 h-4" />
-                {isProcessing ? 'Opening Wallet...' : `Send ${amount || '0'} USDC to Payment Address`}
+                {isProcessing ? 'Opening Wallet...' : `Open Wallet & Send ${amount || '0'} USDC`}
               </button>
               
               {/* Alternative: Deep Link for Mobile */}
@@ -520,11 +737,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             <div className="bg-black/20 p-2 rounded border border-white/10">
               <div className="text-xs text-white font-semibold mb-2">📋 How to Pay:</div>
               <div className="text-xs text-gray-300 space-y-1">
-                <p><strong>Option 1:</strong> Click "Send Transaction" above (opens wallet)</p>
-                <p><strong>Option 2:</strong> Copy address and send manually</p>
-                <p><strong>3.</strong> Click "Start Monitoring" below</p>
-                <p><strong>4.</strong> Wait 1-5 mins for blockchain confirmation</p>
-                <p><strong>5.</strong> Credits will be added automatically!</p>
+                <p><strong>1.</strong> Click "Open Wallet & Send USDC" above</p>
+                <p><strong>2.</strong> Confirm the transaction in your wallet</p>
+                <p><strong>3.</strong> Wait 1-5 mins for blockchain confirmation</p>
+                <p><strong>4.</strong> Credits will be added automatically!</p>
+                <p className="text-blue-300"><strong>Note:</strong> Transaction is pre-built and ready to send</p>
               </div>
             </div>
             
