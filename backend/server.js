@@ -229,14 +229,11 @@ if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost:2701
   console.warn('⚠️ MONGODB_URI not provided, running without database');
 }
 
-// Override with production MongoDB URI if in production or if localhost detected
-if (process.env.NODE_ENV === 'production' || process.env.MONGODB_URI?.includes('localhost')) {
-  // Use a placeholder MongoDB Atlas URI for production
-  const productionMongoURI = 'mongodb+srv://placeholder:placeholder@placeholder-cluster.mongodb.net/ai-image-generator?retryWrites=true&w=majority';
-  console.log('📡 Using production MongoDB placeholder...');
-  // Override the environment variable
-  process.env.MONGODB_URI = productionMongoURI;
-  mongoose.connect(productionMongoURI, mongoOptions);
+// Handle localhost MongoDB URI in production - skip connection
+if (process.env.MONGODB_URI?.includes('localhost')) {
+  console.log('⚠️ Skipping MongoDB connection - localhost URI detected in production');
+  console.log('⚠️ App will run without database (some features will be limited)');
+  // Don't attempt to connect to MongoDB
 }
 
 mongoose.connection.on('connected', () => {
@@ -245,11 +242,33 @@ mongoose.connection.on('connected', () => {
 
 mongoose.connection.on('error', (err) => {
   logger.error('MongoDB connection error:', err);
-  Sentry.captureException(err);
+  // Don't crash the app on MongoDB connection errors
+  console.log('⚠️ MongoDB connection failed - app will continue without database');
+  if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== 'your_sentry_dsn_here') {
+    Sentry.captureException(err);
+  }
 });
 
 mongoose.connection.on('disconnected', () => {
   logger.warn('MongoDB disconnected');
+});
+
+// Handle uncaught exceptions to prevent app crashes
+process.on('uncaughtException', (err) => {
+  if (err.message && err.message.includes('querySrv ENOTFOUND')) {
+    console.log('⚠️ MongoDB DNS error - continuing without database');
+    return;
+  }
+  logger.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  if (reason && reason.message && reason.message.includes('querySrv ENOTFOUND')) {
+    console.log('⚠️ MongoDB DNS error - continuing without database');
+    return;
+  }
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 
