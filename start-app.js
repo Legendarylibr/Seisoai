@@ -16,5 +16,8 @@ if (process.env.MONGODB_URI && process.env.MONGODB_URI.includes('localhost')) {
 // Set production environment
 process.env.NODE_ENV = process.env.NODE_ENV || 'production';
 
-// Start the main application
-import('./backend/server.js');
+// Start the main application - use dynamic import for ES modules
+import('./backend/server.js').catch(error => {
+  console.error('❌ Failed to start backend server:', error);
+  process.exit(1);
+});
