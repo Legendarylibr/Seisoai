@@ -65,7 +65,19 @@ export const SimpleWalletProvider = ({ children }) => {
           if (!window.ethereum) {
             throw new Error('MetaMask not found. Please install MetaMask extension.');
           }
-          provider = window.ethereum;
+          // Find MetaMask provider specifically
+          if (window.ethereum.providers?.length > 0) {
+            // Multiple wallets installed, find MetaMask
+            provider = window.ethereum.providers.find(p => p.isMetaMask && !p.isRabby);
+            if (!provider) {
+              throw new Error('MetaMask not found. Please make sure MetaMask is installed and enabled.');
+            }
+          } else if (window.ethereum.isMetaMask) {
+            // Only MetaMask is installed (or it's the default)
+            provider = window.ethereum;
+          } else {
+            throw new Error('MetaMask not found. Please install MetaMask extension.');
+          }
           // This will prompt user to unlock MetaMask if locked
           const accounts = await provider.request({ 
             method: 'eth_requestAccounts' 
@@ -80,7 +92,19 @@ export const SimpleWalletProvider = ({ children }) => {
           if (!window.ethereum) {
             throw new Error('Rabby Wallet not found. Please install Rabby Wallet extension.');
           }
-          provider = window.ethereum;
+          // Find Rabby provider specifically (it might be in the providers array)
+          if (window.ethereum.providers?.length > 0) {
+            // Multiple wallets installed, find Rabby
+            provider = window.ethereum.providers.find(p => p.isRabby);
+            if (!provider) {
+              throw new Error('Rabby Wallet not found. Please make sure Rabby is installed and enabled.');
+            }
+          } else if (window.ethereum.isRabby) {
+            // Only Rabby is installed
+            provider = window.ethereum;
+          } else {
+            throw new Error('Rabby Wallet not found. Please install Rabby Wallet extension.');
+          }
           // This will prompt user to unlock Rabby if locked
           const rabbyAccounts = await provider.request({ 
             method: 'eth_requestAccounts' 
@@ -95,7 +119,19 @@ export const SimpleWalletProvider = ({ children }) => {
           if (!window.ethereum) {
             throw new Error('Coinbase Wallet not found. Please install Coinbase Wallet extension.');
           }
-          provider = window.ethereum;
+          // Find Coinbase Wallet provider specifically
+          if (window.ethereum.providers?.length > 0) {
+            // Multiple wallets installed, find Coinbase Wallet
+            provider = window.ethereum.providers.find(p => p.isCoinbaseWallet);
+            if (!provider) {
+              throw new Error('Coinbase Wallet not found. Please make sure Coinbase Wallet is installed and enabled.');
+            }
+          } else if (window.ethereum.isCoinbaseWallet) {
+            // Only Coinbase Wallet is installed
+            provider = window.ethereum;
+          } else {
+            throw new Error('Coinbase Wallet not found. Please install Coinbase Wallet extension.');
+          }
           // This will prompt user to unlock Coinbase Wallet if locked
           const coinbaseAccounts = await provider.request({ 
             method: 'eth_requestAccounts' 
@@ -168,28 +204,10 @@ export const SimpleWalletProvider = ({ children }) => {
     setNftCollections([]);
   };
 
-  // Check for existing connection on load
+  // Auto-reconnect disabled - user must manually select wallet each time
+  // This ensures the correct wallet extension opens when selected
   useEffect(() => {
-    const checkConnection = async () => {
-      if (window.ethereum) {
-        try {
-          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-          if (accounts.length > 0) {
-            const address = accounts[0];
-            setAddress(address);
-            setIsConnected(true);
-            await Promise.all([
-              fetchCredits(address),
-              checkNFTStatus(address)
-            ]);
-          }
-        } catch (error) {
-          console.warn('Error checking existing connection:', error);
-        }
-      }
-    };
-
-    checkConnection();
+    // No auto-reconnect - user chooses wallet explicitly
   }, []);
 
   // Function to refresh credits without full reconnection
