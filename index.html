@@ -9,7 +9,7 @@
     <title>Seiso AI</title>
     
     <!-- Security Headers with proper CSP for development -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://checkout.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' http://localhost:3001 http://localhost:3000 http://localhost:5173 https://api.fal.ai https://api.mainnet-beta.solana.com https://solana-api.projectserum.com https://rpc.ankr.com https://solana-mainnet.g.alchemy.com https://api.devnet.solana.com https: wss:; frame-src 'self' https://js.stripe.com https://checkout.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self';" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://checkout.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' http://localhost:3001 http://localhost:3000 http://localhost:5173 https://api.fal.ai https://api.mainnet-beta.solana.com https://solana-api.projectserum.com https://rpc.ankr.com https://solana-mainnet.g.alchemy.com https://mainnet.helius-rpc.com https://api.devnet.solana.com https: wss:; frame-src 'self' https://js.stripe.com https://checkout.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self';" />
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
     <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
     
@@ -349,26 +349,39 @@
         };
         
         // Also intercept document.head.appendChild and document.body.appendChild
-        const originalHeadAppendChild = document.head.appendChild;
-        const originalBodyAppendChild = document.body.appendChild;
-        
-        document.head.appendChild = function(child) {
-          if (child.tagName === 'SCRIPT' && child.src && 
-              (child.src.includes('evmAsk') || child.src.includes('evmAsk.js'))) {
-            console.warn('🛡️ Blocked script injection via head.appendChild:', child.src);
-            return child;
+        // Wait for DOM to be ready before setting up these interceptors
+        function setupDOMInterceptors() {
+          if (document.head) {
+            const originalHeadAppendChild = document.head.appendChild;
+            document.head.appendChild = function(child) {
+              if (child.tagName === 'SCRIPT' && child.src && 
+                  (child.src.includes('evmAsk') || child.src.includes('evmAsk.js'))) {
+                console.warn('🛡️ Blocked script injection via head.appendChild:', child.src);
+                return child;
+              }
+              return originalHeadAppendChild.call(this, child);
+            };
           }
-          return originalHeadAppendChild.call(this, child);
-        };
-        
-        document.body.appendChild = function(child) {
-          if (child.tagName === 'SCRIPT' && child.src && 
-              (child.src.includes('evmAsk') || child.src.includes('evmAsk.js'))) {
-            console.warn('🛡️ Blocked script injection via body.appendChild:', child.src);
-            return child;
+          
+          if (document.body) {
+            const originalBodyAppendChild = document.body.appendChild;
+            document.body.appendChild = function(child) {
+              if (child.tagName === 'SCRIPT' && child.src && 
+                  (child.src.includes('evmAsk') || child.src.includes('evmAsk.js'))) {
+                console.warn('🛡️ Blocked script injection via body.appendChild:', child.src);
+                return child;
+              }
+              return originalBodyAppendChild.call(this, child);
+            };
           }
-          return originalBodyAppendChild.call(this, child);
-        };
+        }
+        
+        // Set up DOM interceptors when DOM is ready
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', setupDOMInterceptors);
+        } else {
+          setupDOMInterceptors();
+        }
         
         console.log('🛡️ Enhanced wallet conflict resolution initialized');
       })();
