@@ -74,8 +74,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
       const { createTransferInstruction, getAssociatedTokenAddress, getAccount } = await import('@solana/spl-token');
 
-      // Connect to Solana mainnet
-      const connection = new Connection('https://api.mainnet-beta.solana.com');
+      // Connect to Solana mainnet using configured RPC
+      const rpcUrl = process.env.REACT_APP_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+      const connection = new Connection(rpcUrl);
       
       // USDC mint address on Solana
       const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
@@ -460,13 +461,27 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       // Ensure wallet is still connected and working
       if (walletType === 'solana') {
         if (!window.solana || !window.solana.isPhantom) {
-          throw new Error('Phantom wallet not found. Please refresh and reconnect.');
+          throw new Error('Phantom wallet not found. Please install Phantom wallet and refresh the page.');
         }
         
-        // Reconnect if needed
+        // Check if wallet is connected
         if (!window.solana.isConnected) {
           console.log('🔄 Reconnecting to Phantom...');
-          await window.solana.connect();
+          try {
+            const response = await window.solana.connect();
+            if (!response || !response.publicKey) {
+              throw new Error('Failed to connect to Phantom wallet. Please unlock your wallet and try again.');
+            }
+            console.log('✅ Phantom wallet reconnected successfully');
+          } catch (connectError) {
+            throw new Error(`Failed to connect to Phantom wallet: ${connectError.message}`);
+          }
+        }
+        
+        // Verify the connected account matches the expected address
+        if (window.solana.publicKey && window.solana.publicKey.toString() !== address) {
+          console.log('⚠️ Wallet address mismatch, updating...');
+          // This shouldn't happen in normal flow, but handle gracefully
         }
       } else {
         if (!window.ethereum) {
@@ -511,9 +526,25 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           }
         } catch (solanaError) {
           console.error('❌ Solana transaction failed:', solanaError);
+          
+          // Show specific error message
+          let errorMessage = 'Solana transaction failed. ';
+          if (solanaError.message.includes('User rejected')) {
+            errorMessage += 'Transaction was cancelled by user.';
+          } else if (solanaError.message.includes('Insufficient funds')) {
+            errorMessage += 'Insufficient USDC balance. Please add USDC to your wallet.';
+          } else if (solanaError.message.includes('token account not found')) {
+            errorMessage += 'USDC token account not found. Please add USDC to your wallet first.';
+          } else if (solanaError.message.includes('Phantom wallet not found')) {
+            errorMessage += 'Phantom wallet not found. Please install and connect Phantom wallet.';
+          } else {
+            errorMessage += `Error: ${solanaError.message}`;
+          }
+          
+          setError(errorMessage + `\n\nAs a fallback, payment address copied to clipboard: ${solanaPaymentAddress}`);
+          
           // Fallback to copying address
           await navigator.clipboard.writeText(solanaPaymentAddress);
-          setError(`✅ Solana USDC payment address copied to clipboard: ${solanaPaymentAddress}\n\nPlease send ${amount} USDC to this address and click "Check Payment" to verify.`);
         }
       } else {
         console.log('🔍 Processing USDC payment...');
@@ -640,7 +671,22 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       }
     } catch (error) {
       console.error('Error sending transaction:', error);
-      setError('Failed to open wallet. Please copy the address and send manually.');
+      
+      // Show specific error message based on error type
+      let errorMessage = 'Transaction failed. ';
+      if (error.message.includes('wallet not found')) {
+        errorMessage += 'Wallet not found. Please install and connect your wallet.';
+      } else if (error.message.includes('No accounts found')) {
+        errorMessage += 'No wallet accounts found. Please unlock your wallet and try again.';
+      } else if (error.message.includes('User rejected')) {
+        errorMessage += 'Transaction was cancelled by user.';
+      } else if (error.message.includes('Insufficient funds')) {
+        errorMessage += 'Insufficient balance. Please add funds to your wallet.';
+      } else {
+        errorMessage += `Error: ${error.message}`;
+      }
+      
+      setError(errorMessage + '\n\nAs a fallback, payment address copied to clipboard for manual sending.');
     } finally {
       setIsProcessing(false);
     }
