@@ -245,27 +245,27 @@ function WalletPrompt({ onConnect }) {
                   <ArrowRight className="w-5 h-5" />
                 </button>
 
-              {/* Chain Options */}
-              {showChainSelection && (
-                <div className="mt-6 space-y-3 max-w-md mx-auto">
-                  {chainOptions.map((chain) => (
-                    <button
-                      key={chain.id}
-                      onClick={() => handleChainSelect(chain.id)}
-                      className="w-full flex items-center gap-4 p-4 rounded-lg bg-white/5 hover:bg-white/10 border border-white/20 transition-all duration-200 hover:scale-105"
-                    >
-                      <span className="text-2xl">{chain.icon}</span>
-                      <div className="flex-1 text-left">
-                        <div className="font-semibold text-white">{chain.name}</div>
-                        <div className="text-sm text-gray-400">{chain.description}</div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-gray-400" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
+                {/* Chain Options */}
+                {showChainSelection && (
+                  <div className="mt-6 space-y-3 max-w-md mx-auto">
+                    {chainOptions.map((chain) => (
+                      <button
+                        key={chain.id}
+                        onClick={() => handleChainSelect(chain.id)}
+                        className="w-full flex items-center gap-4 p-4 rounded-lg bg-white/5 hover:bg-white/10 border border-white/20 transition-all duration-200 hover:scale-105"
+                      >
+                        <span className="text-2xl">{chain.icon}</span>
+                        <div className="flex-1 text-left">
+                          <div className="font-semibold text-white">{chain.name}</div>
+                          <div className="text-sm text-gray-400">{chain.description}</div>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-gray-400" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
             /* Wallet Selection for Selected Chain */
             <div className="space-y-4">
               {/* Back Button */}
