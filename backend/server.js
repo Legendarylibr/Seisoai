@@ -260,10 +260,18 @@ process.on('unhandledRejection', (reason, promise) => {
 const userSchema = new mongoose.Schema({
   walletAddress: { 
     type: String, 
-    required: true, 
+    required: false,  // Allow for Stripe-only users
     unique: true, 
+    sparse: true,  // Allow multiple docs without walletAddress
     lowercase: true,
     index: true
+  },
+  userId: {  // NEW: For Stripe-only users
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true,
+    required: false  // Optional, only for Stripe users
   },
   credits: { type: Number, default: 0 },
   totalCreditsEarned: { type: Number, default: 0 },
@@ -1711,6 +1719,248 @@ app.use('/api/*', (req, res) => {
     success: false,
     error: 'API endpoint not found'
   });
+});
+
+// ============================================
+// STRIPE-ONLY USER SYSTEM (NEW - DOESN'T AFFECT EXISTING FUNCTIONALITY)
+// ============================================
+
+/**
+ * Create or get Stripe-only user (no wallet required)
+ */
+app.post('/api/users/stripe/create', async (req, res) => {
+  try {
+    const { userId, email } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'userId is required' });
+    }
+
+    // Create a dummy wallet address for Stripe users to maintain schema compatibility
+    const dummyWalletAddress = `stripe_${userId}`.toLowerCase();
+    
+    let user = await User.findOne({ 
+      $or: [
+        { userId: userId },
+        { walletAddress: dummyWalletAddress }
+      ]
+    });
+    
+    if (!user) {
+      user = new User({
+        walletAddress: dummyWalletAddress,
+        userId: userId,
+        credits: 0,
+        totalCreditsEarned: 0,
+        totalCreditsSpent: 0,
+        nftCollections: [],
+        paymentHistory: [],
+        generationHistory: [],
+        gallery: [],
+        settings: {
+          preferredStyle: null,
+          defaultImageSize: '1024x1024',
+          enableNotifications: true
+        }
+      });
+      await user.save();
+      logger.info('Stripe-only user created', { userId });
+    }
+    
+    res.json({
+      success: true,
+      user: {
+        userId: user.userId,
+        credits: user.credits,
+        walletAddress: user.walletAddress
+      }
+    });
+  } catch (error) {
+    logger.error('Error creating Stripe user:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Get Stripe-only user by userId
+ */
+app.get('/api/users/stripe/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const user = await User.findOne({ userId });
+    
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    res.json({
+      success: true,
+      user: {
+        userId: user.userId,
+        credits: user.credits,
+        totalCreditsEarned: user.totalCreditsEarned,
+        totalCreditsSpent: user.totalCreditsSpent,
+        gallery: user.gallery,
+        settings: user.settings
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching Stripe user:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Stripe-only payment intent creation
+ */
+app.post('/api/stripe/create-payment-intent-guest', async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stripe payment is not configured'
+      });
+    }
+
+    const { userId, amount, currency = 'usd' } = req.body;
+
+    if (!userId || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: userId and amount'
+      });
+    }
+
+    // Calculate credits (same rate as regular users: 1 USD = 6.67 credits)
+    const credits = Math.floor(parseFloat(amount) * 6.67);
+
+    // Create or get user
+    const dummyWalletAddress = `stripe_${userId}`.toLowerCase();
+    let user = await User.findOne({ userId });
+
+    if (!user) {
+      user = new User({
+        walletAddress: dummyWalletAddress,
+        userId: userId,
+        credits: 0,
+        totalCreditsEarned: 0,
+        totalCreditsSpent: 0,
+        nftCollections: [],
+        paymentHistory: [],
+        generationHistory: [],
+        gallery: [],
+        settings: {
+          preferredStyle: null,
+          defaultImageSize: '1024x1024',
+          enableNotifications: true
+        }
+      });
+      await user.save();
+    }
+
+    // Create Stripe payment intent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(parseFloat(amount) * 100), // Convert to cents
+      currency: currency.toLowerCase(),
+      metadata: {
+        userId: userId,
+        credits: credits.toString(),
+        type: 'stripe_guest'
+      }
+    });
+
+    res.json({
+      success: true,
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id
+    });
+  } catch (error) {
+    logger.error('Error creating Stripe payment intent (guest):', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Verify Stripe guest payment
+ */
+app.post('/api/stripe/verify-guest-payment', async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stripe payment is not configured'
+      });
+    }
+
+    const { paymentIntentId, userId } = req.body;
+
+    if (!paymentIntentId || !userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
+      });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({
+        success: false,
+        error: 'Payment not completed'
+      });
+    }
+
+    const user = await User.findOne({ userId });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Check if already processed
+    const existingPayment = user.paymentHistory.find(p => p.txHash === paymentIntentId);
+    
+    if (existingPayment) {
+      return res.json({
+        success: true,
+        credits: 0,
+        message: 'Payment already processed'
+      });
+    }
+
+    const credits = parseInt(paymentIntent.metadata.credits);
+    const amount = paymentIntent.amount / 100;
+
+    // Update user credits
+    user.credits += credits;
+    user.totalCreditsEarned += credits;
+    
+    // Add to payment history
+    user.paymentHistory.push({
+      txHash: paymentIntentId,
+      tokenSymbol: 'USD',
+      amount: amount,
+      credits: credits,
+      chainId: 'stripe',
+      walletType: 'card_guest',
+      timestamp: new Date()
+    });
+    
+    await user.save();
+
+    res.json({
+      success: true,
+      credits,
+      totalCredits: user.credits,
+      message: `Payment verified! ${credits} credits added to your account.`
+    });
+  } catch (error) {
+    logger.error('Error verifying guest payment:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Serve index.html for all non-API routes (SPA routing)
