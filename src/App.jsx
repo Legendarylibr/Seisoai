@@ -15,7 +15,7 @@ import Templates from './components/Templates';
 import Settings from './components/Settings';
 import LegalDisclaimer from './components/LegalDisclaimer';
 import GenerateButton from './components/GenerateButton';
-import { Image, Grid, File, Settings as SettingsIcon2, Coins, Wand2, Wallet, ArrowRight, Sparkles } from 'lucide-react';
+import { Image, Grid, File, Settings as SettingsIcon2, Coins, Wand2, Wallet, ArrowRight, Sparkles, CreditCard } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
@@ -143,27 +143,8 @@ function WalletPrompt({ onConnect }) {
             Create stunning AI-generated images with your preferred style
           </p>
           <p className="text-gray-400">
-            Connect your wallet to get started and access exclusive NFT holder discounts
+            Choose how to get started
           </p>
-        </div>
-
-        {/* Features */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-            <div className="text-2xl mb-2">🎨</div>
-            <h3 className="font-semibold text-white mb-1">20+ Styles</h3>
-            <p className="text-sm text-gray-400">Choose from photorealistic to artistic styles</p>
-          </div>
-          <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-            <div className="text-2xl mb-2">💳</div>
-            <h3 className="font-semibold text-white mb-1">NFT Discounts</h3>
-            <p className="text-sm text-gray-400">Free access for qualifying NFT holders</p>
-          </div>
-          <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-            <div className="text-2xl mb-2">⚡</div>
-            <h3 className="font-semibold text-white mb-1">Fast Generation</h3>
-            <p className="text-sm text-gray-400">High-quality images in seconds</p>
-          </div>
         </div>
 
         {/* Wallet Connection */}
@@ -172,6 +153,25 @@ function WalletPrompt({ onConnect }) {
             Connect Your Wallet
           </h2>
           
+          {/* Stripe Button - Above Wallet Connection */}
+          <button
+            onClick={onShowStripePayment}
+            className="w-full max-w-md mx-auto flex items-center justify-center gap-3 px-8 py-4 text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold rounded-lg transition-all duration-200 hover:scale-105 shadow-lg"
+          >
+            <CreditCard className="w-6 h-6" />
+            <span>Buy Credits with Card (No Wallet Required)</span>
+            <ArrowRight className="w-5 h-5" />
+          </button>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-600"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-gray-900 text-gray-400">OR</span>
+            </div>
+          </div>
+
           {/* Chain Selection */}
           {!selectedChain ? (
             <>
