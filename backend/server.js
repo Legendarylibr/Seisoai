@@ -1597,6 +1597,32 @@ app.put('/api/users/:walletAddress/settings', async (req, res) => {
 });
 
 /**
+ * Get gallery statistics
+ */
+app.get('/api/gallery/:walletAddress/stats', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const user = await getOrCreateUser(walletAddress);
+    
+    const stats = {
+      totalImages: user.gallery.length,
+      totalCreditsUsed: user.gallery.reduce((sum, item) => sum + (item.creditsUsed || 0), 0),
+      recentImages: user.gallery.filter(img => 
+        new Date(img.timestamp) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      ).length
+    };
+    
+    res.json({
+      success: true,
+      stats
+    });
+  } catch (error) {
+    logger.error('Error fetching gallery stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * Delete generation from gallery
  */
 app.delete('/api/gallery/:walletAddress/:generationId', async (req, res) => {
