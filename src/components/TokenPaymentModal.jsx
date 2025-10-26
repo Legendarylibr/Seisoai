@@ -740,13 +740,33 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           setPaymentStatus('confirmed');
           setCheckingPayment(false);
           
-          // Immediately fetch credits and close modal
-          await fetchCredits(address);
-          setError(`✅ Payment confirmed instantly! ${numAmount} USDC received. Credits added instantly!`);
+          // Poll for credits update with retry logic
+          let creditsUpdated = false;
+          for (let retry = 0; retry < 10; retry++) {
+            console.log(`[Credits] Refreshing credits (attempt ${retry + 1}/10)...`);
+            
+            const refreshedCredits = await fetchCredits(address);
+            
+            // Check if credits were actually updated
+            if (refreshedCredits !== undefined && refreshedCredits > 0) {
+              console.log(`[Credits] Credits updated successfully: ${refreshedCredits}`);
+              creditsUpdated = true;
+              break;
+            }
+            
+            // Wait 500ms before next retry
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          
+          if (creditsUpdated) {
+            setError(`✅ Payment confirmed! ${numAmount} USDC received. Credits updated successfully!`);
+          } else {
+            setError(`✅ Payment confirmed! ${numAmount} USDC received. Credits will be added shortly.`);
+          }
           
           setTimeout(() => {
             onClose();
-          }, 1000); // Even faster close
+          }, 1000);
         }
       } catch (error) {
         console.error('[Payment] Error checking payment:', error);

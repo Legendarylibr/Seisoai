@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { checkNFTHoldings } from '../services/nftVerificationService';
 
@@ -16,39 +16,65 @@ export const SimpleWalletProvider = ({ children }) => {
   const [nftCollections, setNftCollections] = useState([]);
   const [walletType, setWalletType] = useState(null); // 'evm' or 'solana'
 
-  // Fetch credits from backend
-  const fetchCredits = async (walletAddress) => {
-    try {
-      console.log(`🔍 Fetching credits for ${walletAddress}`);
-      const response = await fetch(`${API_URL}/api/users/${walletAddress}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // Add timeout to prevent hanging
-        signal: AbortSignal.timeout(5000)
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.user) {
-          setCredits(data.user.credits || 0);
-          console.log(`✅ Credits loaded: ${data.user.credits}`);
+  // Fetch credits from backend with retry logic
+  const fetchCredits = useCallback(async (walletAddress, retries = 3) => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`🔍 Fetching credits for ${walletAddress} (attempt ${attempt}/${retries})`);
+        const response = await fetch(`${API_URL}/api/users/${walletAddress}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          // Increased timeout to 15 seconds for production
+          signal: AbortSignal.timeout(15000)
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Defensive parsing - handle different response formats
+          let credits = 0;
+          if (data.success && data.user) {
+            credits = data.user.credits || 0;
+          } else if (data.success && typeof data.credits !== 'undefined') {
+            credits = data.credits || 0;
+          } else if (typeof data.credits !== 'undefined') {
+            credits = data.credits || 0;
+          }
+          
+          setCredits(credits);
+          console.log(`✅ Credits loaded: ${credits}`);
+          return credits; // Return for testing/verification
         } else {
-          console.warn('User not found, setting credits to 0');
-          setCredits(0);
+          console.warn(`Failed to fetch credits: ${response.status} (attempt ${attempt}/${retries})`);
+          if (attempt === retries) {
+            setCredits(0);
+          }
         }
-      } else {
-        console.warn('Failed to fetch credits:', response.status);
-        // Set a default value when backend is unavailable
-        setCredits(0);
+      } catch (error) {
+        console.error(`Error fetching credits (attempt ${attempt}/${retries}):`, error);
+        
+        // Don't retry on user abort
+        if (error.name === 'AbortError') {
+          console.warn('Request aborted');
+          setCredits(0);
+          return;
+        }
+        
+        // On last attempt, set credits to 0
+        if (attempt === retries) {
+          console.error('All retry attempts failed');
+          setCredits(0);
+        } else {
+          // Wait before retrying (exponential backoff)
+          const delay = Math.min(1000 * attempt, 5000);
+          console.log(`Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
-    } catch (error) {
-      console.error('Error fetching credits:', error);
-      // Set a default value when there's an error
-      setCredits(0);
     }
-  };
+  }, [API_URL]);
 
   // Check NFT holdings
   const checkNFTStatus = async (walletAddress) => {
@@ -279,6 +305,22 @@ export const SimpleWalletProvider = ({ children }) => {
   useEffect(() => {
     // No auto-reconnect - user chooses wallet explicitly
   }, []);
+
+  // Periodic credit refresh when connected
+  useEffect(() => {
+    if (!isConnected || !address) return;
+
+    // Refresh credits every 60 seconds to keep display updated
+    const refreshInterval = setInterval(() => {
+      console.log('🔄 Periodic credit refresh');
+      fetchCredits(address).catch(error => {
+        console.error('Periodic credit refresh failed:', error);
+      });
+    }, 60000); // Every 60 seconds
+
+    // Cleanup interval on unmount
+    return () => clearInterval(refreshInterval);
+  }, [isConnected, address, fetchCredits]);
 
   // Function to refresh credits without full reconnection
   const refreshCredits = async () => {
