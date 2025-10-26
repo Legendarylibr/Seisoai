@@ -15,7 +15,7 @@ import Templates from './components/Templates';
 import Settings from './components/Settings';
 import LegalDisclaimer from './components/LegalDisclaimer';
 import GenerateButton from './components/GenerateButton';
-import { Image, Grid, File, Settings as SettingsIcon2, Coins, Wand2, Wallet, ArrowRight, Sparkles } from 'lucide-react';
+import { Image, Grid, File, Settings as SettingsIcon2, Coins, Wand2, Wallet, ArrowRight, Sparkles, CreditCard } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
@@ -70,9 +70,12 @@ function App() {
 
 function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   const { isConnected } = useSimpleWallet();
+  
+  // Check if in Stripe mode (no wallet required)
+  const isStripeMode = localStorage.getItem('stripe_mode') === 'true';
 
-  // Show wallet connection prompt if not connected
-  if (!isConnected) {
+  // Show wallet connection prompt if not connected and not in Stripe mode
+  if (!isConnected && !isStripeMode) {
     return <WalletPrompt />;
   }
 
@@ -128,6 +131,32 @@ function WalletPrompt({ onConnect }) {
     setSelectedChain(null);
   };
 
+  const handleStripeLogin = () => {
+    // Generate or retrieve userId from localStorage
+    let userId = localStorage.getItem('stripe_user_id');
+    if (!userId) {
+      userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('stripe_user_id', userId);
+    }
+    
+    // Create user on backend
+    fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/users/stripe/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        // Set a flag to bypass wallet requirement
+        localStorage.setItem('stripe_mode', 'true');
+        localStorage.setItem('stripe_user_id', userId);
+        window.location.reload(); // Reload to activate Stripe mode
+      }
+    })
+    .catch(err => console.error('Stripe login failed:', err));
+  };
+
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="text-center max-w-2xl mx-auto">
@@ -143,7 +172,7 @@ function WalletPrompt({ onConnect }) {
             Create stunning AI-generated images with your preferred style
           </p>
           <p className="text-gray-400">
-            Connect your wallet to get started and access exclusive NFT holder discounts
+            Choose how to get started
           </p>
         </div>
 
@@ -166,24 +195,55 @@ function WalletPrompt({ onConnect }) {
           </div>
         </div>
 
-        {/* Wallet Connection */}
+        {/* Login Options */}
         <div className="space-y-4">
           <h2 className="text-2xl font-semibold text-white mb-4">
-            Connect Your Wallet
+            Get Started
           </h2>
           
-          {/* Chain Selection */}
-          {!selectedChain ? (
-            <>
-              {/* Main Connect Button */}
-              <button
-                onClick={() => setShowChainSelection(!showChainSelection)}
-                className="btn-primary flex items-center justify-center gap-3 px-8 py-4 text-lg mx-auto"
-              >
-                <Wallet className="w-6 h-6" />
-                <span>Choose Blockchain</span>
-                <ArrowRight className="w-5 h-5" />
-              </button>
+          {/* Stripe Quick Start Option */}
+          <div className="mb-6">
+            <button
+              onClick={handleStripeLogin}
+              className="w-full max-w-md mx-auto flex items-center justify-center gap-3 px-8 py-4 text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold rounded-lg transition-all duration-200 hover:scale-105 shadow-lg"
+            >
+              <CreditCard className="w-6 h-6" />
+              <span>Continue with Card (No Wallet Required)</span>
+              <ArrowRight className="w-5 h-5" />
+            </button>
+            <p className="text-sm text-gray-400 mt-2">
+              Quick start - Buy credits with your card
+            </p>
+          </div>
+
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-600"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-gray-900 text-gray-400">OR</span>
+            </div>
+          </div>
+
+          {/* Wallet Connection */}
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold text-white mb-4">
+              Connect Your Wallet
+            </h3>
+            
+            {/* Chain Selection */}
+            {!selectedChain ? (
+              <>
+                {/* Main Connect Button */}
+                <button
+                  onClick={() => setShowChainSelection(!showChainSelection)}
+                  className="btn-primary flex items-center justify-center gap-3 px-8 py-4 text-lg mx-auto"
+                >
+                  <Wallet className="w-6 h-6" />
+                  <span>Choose Blockchain</span>
+                  <ArrowRight className="w-5 h-5" />
+                </button>
 
               {/* Chain Options */}
               {showChainSelection && (
