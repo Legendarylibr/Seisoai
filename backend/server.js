@@ -274,6 +274,8 @@ const userSchema = new mongoose.Schema({
     tokenIds: [String],
     lastChecked: { type: Date, default: Date.now }
   }],
+  // Payment History Schema - All payment entries must match this structure
+  // Required fields: txHash, tokenSymbol, amount, credits, chainId, walletType, timestamp
   paymentHistory: [{
     txHash: String,
     tokenSymbol: String,
@@ -1050,12 +1052,13 @@ app.post('/api/payment/check-payment', async (req, res) => {
       user.credits += creditsToAdd;
       user.totalCreditsEarned += creditsToAdd;
       user.paymentHistory.push({
-        amount: parseFloat(payment.amount),
-        token: payment.token,
         txHash: payment.txHash,
+        tokenSymbol: payment.token || 'USDC',
+        amount: parseFloat(payment.amount),
         credits: creditsToAdd,
-        timestamp: new Date(payment.timestamp * 1000),
-        chain: payment.chain
+        chainId: payment.chain || 'unknown',
+        walletType: 'unknown', // Can be enhanced with actual wallet type
+        timestamp: new Date(payment.timestamp * 1000)
       });
       
       await user.save();
@@ -1322,15 +1325,15 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
     user.totalCreditsEarned += finalCredits;
     
     // Add to payment history
-    user.paymentHistory.push({
-      paymentIntentId,
-      paymentMethod: 'stripe',
-      amount: amount,
-      credits: finalCredits,
-      currency: paymentIntent.currency,
-      timestamp: new Date(),
-      isNFTHolder
-    });
+      user.paymentHistory.push({
+        txHash: paymentIntentId,
+        tokenSymbol: 'USD',
+        amount: amount,
+        credits: finalCredits,
+        chainId: 'stripe',
+        walletType: 'card',
+        timestamp: new Date()
+      });
     
     await user.save();
     
@@ -1416,12 +1419,13 @@ app.post('/api/payment/instant-check', async (req, res) => {
       user.credits += creditsToAdd;
       user.totalCreditsEarned += creditsToAdd;
       user.paymentHistory.push({
-        amount: parseFloat(quickPayment.amount),
-        token: quickPayment.token,
         txHash: quickPayment.txHash,
+        tokenSymbol: quickPayment.token || 'USDC',
+        amount: parseFloat(quickPayment.amount),
         credits: creditsToAdd,
-        timestamp: new Date(quickPayment.timestamp * 1000),
-        chain: quickPayment.chain
+        chainId: quickPayment.chain || 'unknown',
+        walletType: 'unknown',
+        timestamp: new Date(quickPayment.timestamp * 1000)
       });
       
       await user.save();
