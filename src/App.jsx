@@ -90,7 +90,7 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   );
 }
 
-function WalletPrompt({ onConnect }) {
+function WalletPrompt({ onConnect, onShowStripePayment }) {
   const { connectWallet } = useSimpleWallet();
   const [showChainSelection, setShowChainSelection] = useState(true);
   const [selectedChain, setSelectedChain] = useState(null);
