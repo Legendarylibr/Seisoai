@@ -73,7 +73,7 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
 
   // Show wallet connection prompt if not connected
   if (!isConnected) {
-    return <WalletPrompt />;
+    return <WalletPrompt onShowStripePayment={onShowStripePayment} />;
   }
 
   // Show main content if wallet is connected (AuthGuard will handle credit requirements)
