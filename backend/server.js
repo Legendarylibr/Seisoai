@@ -748,13 +748,12 @@ function getProvider(chain = 'ethereum') {
 }
 
 /**
- * Check for recent USDC/USDT transfers to payment address
+ * Check for recent USDC transfers to payment address
  */
-async function checkForTokenTransfer(paymentAddress, expectedAmount, token = 'USDC', chain = 'ethereum') {
+async function checkForTokenTransfer(paymentAddress, token = 'USDC', chain = 'ethereum') {
   try {
     console.log(`\n[${chain.toUpperCase()}] Starting check for ${token} transfers...`);
-    console.log(`[${chain.toUpperCase()}] Looking for transfers TO: ${paymentAddress}`);
-    console.log(`[${chain.toUpperCase()}] Expected amount: ${expectedAmount} ${token}`);
+    console.log(`[${chain.toUpperCase()}] Looking for ANY transfers TO: ${paymentAddress}`);
     
     const provider = getProvider(chain);
     const tokenAddress = TOKEN_ADDRESSES[chain]?.[token];
@@ -832,11 +831,10 @@ async function checkForTokenTransfer(paymentAddress, expectedAmount, token = 'US
 /**
  * Check for Solana USDC transfers
  */
-async function checkForSolanaUSDC(paymentAddress, expectedAmount) {
+async function checkForSolanaUSDC(paymentAddress) {
   try {
     console.log(`\n[SOLANA] Starting check for USDC transfers...`);
-    console.log(`[SOLANA] Looking for transfers TO: ${paymentAddress}`);
-    console.log(`[SOLANA] Expected amount: ${expectedAmount} USDC`);
+    console.log(`[SOLANA] Looking for ANY transfers TO: ${paymentAddress}`);
     
     // Use multiple RPC endpoints for better reliability
     const rpcUrls = [
@@ -994,7 +992,7 @@ app.post('/api/payment/check-payment', async (req, res) => {
     
     const evmPromises = evmChains.map(chain => 
       Promise.race([
-        checkForTokenTransfer(evmPaymentAddress, expectedAmount, token, chain),
+        checkForTokenTransfer(evmPaymentAddress, token, chain),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
       ]).catch(err => {
         console.log(`[WARN] ${chain} check failed:`, err.message);
@@ -1004,7 +1002,7 @@ app.post('/api/payment/check-payment', async (req, res) => {
     
     // Also check Solana with its own payment address
     const solanaPromise = Promise.race([
-      checkForSolanaUSDC(solanaPaymentAddress, expectedAmount),
+      checkForSolanaUSDC(solanaPaymentAddress),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
     ]).catch(err => {
       console.log(`[WARN] Solana check failed:`, err.message);
@@ -1398,7 +1396,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
     if (chainName) {
       console.log(`[INSTANT CHECK] Checking ${chainName} only (Chain ID: ${chainId})`);
       const quickPromises = [Promise.race([
-        checkForTokenTransfer(evmPaymentAddress, '1', token, chainName),
+        checkForTokenTransfer(evmPaymentAddress, token, chainName),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
       ]).catch(err => {
         console.log(`[QUICK] ${chainName} check failed:`, err.message);
@@ -1468,7 +1466,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
     const allChains = ['polygon', 'ethereum', 'base', 'arbitrum', 'optimism'];
     const quickPromises = allChains.map(chain => 
       Promise.race([
-        checkForTokenTransfer(evmPaymentAddress, '1', token, chain),
+        checkForTokenTransfer(evmPaymentAddress, token, chain),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
       ]).catch(err => {
         console.log(`[QUICK] ${chain} check failed:`, err.message);
