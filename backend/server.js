@@ -1145,7 +1145,92 @@ app.post('/api/payment/check-payment', async (req, res) => {
 });
 
 /**
- * Verify payment
+ * Credit user immediately after transaction signature (no blockchain verification)
+ */
+app.post('/api/payments/credit', async (req, res) => {
+  try {
+    const { 
+      txHash, 
+      walletAddress, 
+      tokenSymbol, 
+      amount, 
+      chainId, 
+      walletType 
+    } = req.body;
+
+    console.log('💰 [PAYMENT CREDIT] Starting immediate credit...');
+    console.log('💰 [PAYMENT CREDIT] Request:', { txHash, walletAddress, tokenSymbol, amount, chainId, walletType });
+
+    if (!txHash || !walletAddress || !amount) {
+      console.log('💰 [PAYMENT CREDIT] Missing fields');
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
+      });
+    }
+
+    // Check if payment already processed
+    const user = await getOrCreateUser(walletAddress);
+    const existingPayment = user.paymentHistory.find(p => p.txHash === txHash);
+    
+    if (existingPayment) {
+      console.log('💰 [PAYMENT CREDIT] Already processed');
+      return res.json({
+        success: true,
+        credits: 0,
+        totalCredits: user.credits,
+        message: 'Payment already processed'
+      });
+    }
+
+    // Credit immediately based on signature (no verification)
+    const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    const creditsPerUSDC = isNFTHolder ? 10 : 6.67;
+    const creditsToAdd = Math.floor(parseFloat(amount) * creditsPerUSDC);
+    
+    // Add credits
+    user.credits += creditsToAdd;
+    user.totalCreditsEarned += creditsToAdd;
+    
+    // Add to payment history
+    user.paymentHistory.push({
+      txHash,
+      tokenSymbol: tokenSymbol || 'USDC',
+      amount: parseFloat(amount),
+      credits: creditsToAdd,
+      chainId: chainId || 'unknown',
+      walletType: walletType || 'evm',
+      timestamp: new Date()
+    });
+    
+    await user.save();
+    
+    console.log('💰 [PAYMENT CREDIT] Credits added successfully', {
+      walletAddress: walletAddress.toLowerCase(),
+      credits: creditsToAdd,
+      totalCredits: user.credits,
+      txHash
+    });
+    
+    res.json({
+      success: true,
+      credits: creditsToAdd,
+      totalCredits: user.credits,
+      credits: creditsToAdd, // Duplicate for compatibility
+      message: `Payment credited! ${creditsToAdd} credits added to your account.`
+    });
+
+  } catch (error) {
+    console.error('💰 [PAYMENT CREDIT] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Verify payment (with blockchain verification)
  */
 app.post('/api/payments/verify', async (req, res) => {
   try {

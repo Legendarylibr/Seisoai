@@ -631,68 +631,47 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           // Send transaction to wallet
           const tx = await signer.sendTransaction(transaction);
           
-          console.log('⏳ Transaction submitted:', tx.hash);
-          setError(`⏳ USDC transaction submitted! Hash: ${tx.hash}\n\nWaiting for confirmation...`);
+          console.log('✅ Transaction signed! Hash:', tx.hash);
           
-          // Start checking immediately while waiting for confirmation
-          const immediateCheck = setTimeout(() => {
-            checkForPayment();
-          }, 200); // Check after 200ms for immediate detection
-          
-          // Wait for transaction confirmation
-          const receipt = await tx.wait();
-          
-          // Clear the immediate check since we got confirmation
-          clearTimeout(immediateCheck);
-          
-          if (receipt.status === 1) {
-            console.log('✅ USDC transaction confirmed!');
+          // Credit immediately based on signature (don't wait for confirmation)
+          try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+            console.log('💰 Crediting based on transaction signature...');
             
-            // Credit immediately based on confirmed transaction
-            try {
-              const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-              console.log('💰 Crediting based on confirmed transaction...');
+            const creditResponse = await fetch(`${apiUrl}/api/payments/credit`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                txHash: tx.hash,
+                walletAddress: address,
+                tokenSymbol: 'USDC',
+                amount: parseFloat(amount),
+                chainId: chainId,
+                walletType: 'evm'
+              })
+            });
+            
+            const creditData = await creditResponse.json();
+            
+            if (creditData.success) {
+              console.log('✅ Credits added!', creditData);
+              setError(`✅ Payment submitted! ${creditData.credits} credits added. New balance: ${creditData.totalCredits} credits.`);
+              setPaymentStatus('confirmed');
               
-              const creditResponse = await fetch(`${apiUrl}/api/payments/verify`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  txHash: tx.hash,
-                  walletAddress: address,
-                  tokenSymbol: 'USDC',
-                  amount: parseFloat(amount),
-                  chainId: chainId,
-                  walletType: 'evm'
-                })
-              });
+              // Refresh user credits
+              await fetchCredits(address);
               
-              const creditData = await creditResponse.json();
-              
-              if (creditData.success) {
-                console.log('✅ Credits added!', creditData);
-                setError(`✅ Payment confirmed! ${creditData.credits} credits added. New balance: ${creditData.totalCredits} credits.`);
-                setPaymentStatus('confirmed');
-                
-                // Refresh user credits
-                await fetchCredits(address);
-                
-                setTimeout(() => {
-                  onClose();
-                }, 2000);
-              } else {
-                // Fallback to blockchain check
-                console.log('⚠️ Direct credit failed, checking blockchain...');
-                checkForPayment();
-              }
-            } catch (creditError) {
-              console.error('Error crediting:', creditError);
-              // Fallback to blockchain check
-              checkForPayment();
+              setTimeout(() => {
+                onClose();
+              }, 2000);
+            } else {
+              throw new Error(creditData.error || 'Failed to credit');
             }
-          } else {
-            throw new Error('Transaction failed');
+          } catch (creditError) {
+            console.error('Error crediting:', creditError);
+            setError(`Transaction sent but crediting failed: ${creditError.message}`);
           }
           
         } catch (usdcError) {
