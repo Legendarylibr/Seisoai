@@ -19,6 +19,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     enableSafetyChecker,
     generationMode,
     controlNetImage,
+    controlNetImageDimensions,
     setCurrentGeneration
   } = useImageGenerator();
 
@@ -123,7 +124,8 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         enableSafetyChecker,
         generationMode,
         walletAddress: address, // Pass wallet address for safety logging
-        isNFTHolder: isNFTHolder || false // Pass NFT holder status for routing
+        isNFTHolder: isNFTHolder || false, // Pass NFT holder status for routing
+        referenceImageDimensions: controlNetImageDimensions // Pass dimensions to maintain resolution
       };
 
       logger.info('Starting image generation');
