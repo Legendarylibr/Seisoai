@@ -759,10 +759,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     }
   };
 
-  const handlePayment = () => {
-    if (!validateAmount()) return;
-    
-    checkForPayment();
+  const handlePayment = async () => {
+    // This now sends USDC and automatically checks for it
+    await handleSendTransaction();
   };
   
   const stopMonitoring = () => {
@@ -953,62 +952,31 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               </div>
             )}
 
-            {/* Send Transaction Buttons */}
-            <div className="space-y-2">
-              <button
-                onClick={handleSendTransaction}
-                disabled={!amount || !paymentAddress || isProcessing}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors text-sm"
-              >
-                <ExternalLink className="w-4 h-4" />
-                {isProcessing ? 'Opening Wallet...' : `Open Wallet & Send ${amount || '0'} USDC`}
-              </button>
-              
-              {/* Alternative: Deep Link for Mobile */}
-              {walletType === 'evm' && (
-                <button
-                  onClick={() => {
-                    const deepLink = `ethereum:${paymentAddress}@1?value=${ethers.parseUnits(amount || '0', 6).toString()}&gas=21000`;
-                    window.open(deepLink, '_blank');
-                  }}
-                  disabled={!amount || !paymentAddress}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-xs rounded-lg transition-colors"
-                >
-                  <Wallet className="w-4 h-4" />
-                  Open in Mobile Wallet
-                </button>
-              )}
-              
-              <div className="text-center text-xs text-gray-400">
-                This will open your wallet with the payment pre-filled
-              </div>
-            </div>
-
-            {/* Clear Instructions */}
-            <div className="bg-black/20 p-2 rounded border border-white/10">
-              <div className="text-xs text-white font-semibold mb-2">📋 How to Pay:</div>
-              <div className="text-xs text-gray-300 space-y-1">
-                <p><strong>1.</strong> Click "Open Wallet & Send USDC" above</p>
-                <p><strong>2.</strong> Confirm the transaction in your wallet</p>
-                <p><strong>3.</strong> Credits added instantly after confirmation!</p>
-                <p className="text-green-300"><strong>⚡ Ultra-Fast:</strong> Payment detection every 0.5 seconds</p>
-                <p className="text-blue-300"><strong>Note:</strong> Transaction is pre-built and ready to send</p>
-              </div>
-            </div>
-            
-            {/* Payment Status */}
-            {paymentStatus && (
-              <div className={`p-2 rounded text-xs ${
-                paymentStatus === 'confirmed' 
-                  ? 'bg-green-500/20 text-green-400' 
-                  : 'bg-yellow-500/20 text-yellow-400'
-              }`}>
-                {paymentStatus === 'pending' && '⏳ Monitoring for payment...'}
-                {paymentStatus === 'detected' && '👀 Payment detected! Confirming...'}
-                {paymentStatus === 'confirmed' && '✅ Payment confirmed! Credits added.'}
-              </div>
-            )}
           </div>
+
+          {/* Clear Instructions */}
+          <div className="p-2 rounded border border-white/10 bg-black/20">
+            <div className="text-xs text-white font-semibold mb-2">📋 How to Pay:</div>
+            <div className="text-xs text-gray-300 space-y-1">
+              <p><strong>1.</strong> Enter amount and click "Send USDC" below</p>
+              <p><strong>2.</strong> Confirm the transaction in your wallet</p>
+              <p><strong>3.</strong> Credits added automatically after confirmation!</p>
+              <p className="text-green-300"><strong>⚡ Automatic:</strong> No manual checking needed</p>
+            </div>
+          </div>
+          
+          {/* Payment Status */}
+          {paymentStatus && (
+            <div className={`p-2 rounded text-xs ${
+              paymentStatus === 'confirmed' 
+                ? 'bg-green-500/20 text-green-400' 
+                : 'bg-yellow-500/20 text-yellow-400'
+            }`}>
+              {paymentStatus === 'pending' && '⏳ Monitoring for payment...'}
+              {paymentStatus === 'detected' && '👀 Payment detected! Confirming...'}
+              {paymentStatus === 'confirmed' && '✅ Payment confirmed! Credits added.'}
+            </div>
+          )}
 
           {/* Network Switching Options */}
           {networksWithUSDC.length > 0 && currentNetworkBalance === 0 && (
@@ -1125,11 +1093,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 </button>
                 <button
                   onClick={handlePayment}
-                  disabled={!amount || parseFloat(amount) < 1}
+                  disabled={!amount || parseFloat(amount) < 1 || isProcessing}
                   className="flex-1 btn-primary py-3 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Coins className="w-4 h-4" />
-                  <span>Start Monitoring</span>
+                  <span>{isProcessing ? 'Sending USDC...' : 'Send USDC'}</span>
                 </button>
               </>
             )}
