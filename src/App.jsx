@@ -340,6 +340,16 @@ function GenerateTab({ onShowTokenPayment }) {
                 <StyleSelector />
               </div>
             </div>
+
+            {/* Generate Button - Mobile: Below style, Desktop: Center bottom */}
+            <div className="lg:hidden">
+              <div className="glass-effect rounded-lg p-3">
+                <GenerateButton 
+                  customPrompt={customPrompt}
+                  onShowTokenPayment={onShowTokenPayment}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Generated Image Output - Bigger */}
@@ -356,8 +366,8 @@ function GenerateTab({ onShowTokenPayment }) {
           </div>
         </div>
 
-        {/* Generate Button - Compact and Reorganized */}
-        <div className="flex justify-center my-4 md:my-6">
+        {/* Generate Button - Desktop: Show at bottom, Hidden on mobile */}
+        <div className="hidden lg:flex justify-center my-4 md:my-6">
           <div className="glass-effect rounded-lg p-3 md:p-4 w-full max-w-md">
             <GenerateButton 
               customPrompt={customPrompt}

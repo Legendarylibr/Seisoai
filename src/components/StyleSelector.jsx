@@ -146,23 +146,7 @@ const StyleSelector = () => {
         </div>
       )}
 
-      {/* Help Section */}
-      {!selectedStyle && !showStyleOptions && (
-        <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
-          <div className="flex items-start gap-2">
-            <div className="text-blue-400 text-sm">💡</div>
-            <div>
-              <h4 className="font-semibold text-blue-300 text-xs mb-1">Enhance reference image with style</h4>
-              <p className="text-xs text-gray-400">
-                Apply a visual style to your reference image. 
-                <strong>Photorealistic</strong> for realistic photos, 
-                <strong>Artistic</strong> for creative flair, and 
-                <strong>Professional</strong> for business use.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Help Section - REMOVED */}
     </div>
   );
 };
