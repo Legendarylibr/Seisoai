@@ -770,10 +770,11 @@ async function checkForTokenTransfer(paymentAddress, expectedAmount, token = 'US
     const decimals = await contract.decimals();
     console.log(`[${chain.toUpperCase()}] Token decimals: ${decimals}`);
     
-    // Get current block and check last 10 blocks to avoid free tier limitations
+    // Get current block and check recent blocks for new transfers
     const currentBlock = await provider.getBlockNumber();
-    const blocksToCheck = 10; // Reduced to avoid free tier limitations
+    const blocksToCheck = 100; // Check last 100 blocks to ensure we catch recent transfers
     const fromBlock = currentBlock - blocksToCheck;
+    if (fromBlock < 0) fromBlock = 0;
     
     console.log(`[${chain.toUpperCase()}] Scanning blocks ${fromBlock} to ${currentBlock} (${blocksToCheck} blocks)`);
     

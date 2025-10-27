@@ -647,12 +647,13 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           
           if (receipt.status === 1) {
             console.log('✅ USDC transaction confirmed!');
-            setError(`✅ USDC transaction confirmed! Hash: ${tx.hash}\n\n${amount} USDC sent to ${paymentAddress}. Checking for instant credit addition...`);
+            setError(`✅ USDC transaction confirmed! Hash: ${tx.hash}\n\nWaiting for blockchain confirmation...`);
             
-            // Trigger instant payment check
+            // Wait for block to be indexed by RPC (2-3 seconds for reliability)
             setTimeout(() => {
+              console.log('🔍 Checking for payment after 2 seconds...');
               checkForPayment();
-            }, 100); // Check after 100ms for instant detection
+            }, 2000); // Wait 2 seconds for RPC to index the new block
           } else {
             throw new Error('Transaction failed');
           }
