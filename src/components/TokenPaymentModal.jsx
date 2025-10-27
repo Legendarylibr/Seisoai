@@ -284,9 +284,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   const getRPCUrl = (chainId) => {
     const rpcUrls = {
       1: 'https://ethereum.publicnode.com',
-      137: 'https://polygon.llamarpc.com', // Using publicnode.com causes CORS issues, keep llamarpc
-      42161: 'https://arbitrum.llamarpc.com', // Using publicnode.com causes CORS issues, keep llamarpc
-      10: 'https://optimism.llamarpc.com', // Using publicnode.com causes CORS issues, keep llamarpc
+      137: 'https://rpc.ankr.com/polygon',
+      42161: 'https://rpc.ankr.com/arbitrum',
+      10: 'https://rpc.ankr.com/optimism',
       8453: 'https://base.publicnode.com'
     };
     return rpcUrls[chainId] || 'https://ethereum.publicnode.com';
