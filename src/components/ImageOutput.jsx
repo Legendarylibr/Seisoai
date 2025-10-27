@@ -303,30 +303,30 @@ const ImageOutput = () => {
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h3 className="text-lg md:text-xl font-semibold gradient-text">Generated Image</h3>
+        <h3 className="text-base sm:text-lg md:text-xl font-semibold gradient-text">Generated Image</h3>
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={handleDownload}
             disabled={isDownloading}
-            className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-secondary flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm px-2 sm:px-4 py-2"
           >
-            <span className="text-lg">{isDownloading ? '⏳' : '💾'}</span>
-            {isDownloading ? 'Downloading...' : 'Download'}
+            <span className="text-base">{isDownloading ? '⏳' : '💾'}</span>
+            <span className="hidden sm:inline">{isDownloading ? 'Downloading...' : 'Download'}</span>
           </button>
           <button
             onClick={handleRegenerate}
             disabled={isRegenerating || !isConnected || !currentGeneration}
-            className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-secondary flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm px-2 sm:px-4 py-2"
           >
-            <span className="text-lg">{isRegenerating ? '⏳' : '🔄'}</span>
-            {isRegenerating ? 'Regenerating...' : 'Regenerate'}
+            <span className="text-base">{isRegenerating ? '⏳' : '🔄'}</span>
+            <span className="hidden sm:inline">{isRegenerating ? 'Regenerating...' : 'Regenerate'}</span>
           </button>
           <button
             onClick={clearGeneration}
-            className="btn-secondary flex items-center gap-2"
+            className="btn-secondary flex items-center gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2"
           >
-            <span className="text-lg">🗑️</span>
-            Clear
+            <span className="text-base">🗑️</span>
+            <span className="hidden sm:inline">Clear</span>
           </button>
         </div>
       </div>
@@ -335,7 +335,8 @@ const ImageOutput = () => {
         <img
           src={generatedImage}
           alt="Generated AI image"
-          className="w-full h-auto max-h-96 md:max-h-[600px] lg:max-h-[700px] object-contain"
+          className="w-full h-auto max-h-[300px] sm:max-h-96 md:max-h-[600px] lg:max-h-[700px] object-contain"
+          style={{ maxWidth: '100%', height: 'auto' }}
         />
       </div>
 
@@ -434,10 +435,10 @@ const ImageOutput = () => {
 
       {/* Video Modal */}
       {showVideoModal && generatedVideo && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
           <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
-              <h2 className="text-xl font-semibold text-white">Generated Video</h2>
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-white/10">
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Generated Video</h2>
               <button
                 onClick={() => setShowVideoModal(false)}
                 className="p-2 rounded-lg hover:bg-white/10 transition-colors"
@@ -446,12 +447,13 @@ const ImageOutput = () => {
               </button>
             </div>
             
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <video
                 src={generatedVideo}
                 controls
                 className="w-full rounded-lg"
                 autoPlay
+                playsInline
               >
                 Your browser does not support the video tag.
               </video>
@@ -459,7 +461,7 @@ const ImageOutput = () => {
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() => setShowVideoModal(false)}
-                  className="btn-primary"
+                  className="btn-primary text-sm sm:text-base px-4 py-2"
                 >
                   Close
                 </button>
