@@ -235,10 +235,14 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       endpoint: fluxEndpoint,
       prompt: requestBody.prompt.substring(0, 100) + '...',
       hasImageUrl: !!requestBody.image_url,
+      hasImageUrls: !!requestBody.image_urls,
+      imageUrlCount: requestBody.image_urls?.length || 0,
       aspectRatio: requestBody.aspect_ratio,
       guidanceScale: requestBody.guidance_scale,
       seed: requestBody.seed
     });
+    
+    console.log('📤 [FAL Request] Full request body:', JSON.stringify(requestBody, null, 2));
 
     const response = await fetch(fluxEndpoint, {
       method: 'POST',
@@ -289,18 +293,38 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     }
 
     const data = await response.json();
-    logger.debug('Text-only API response received', { 
+    logger.debug('API response received', { 
+      data,
       hasImages: !!data.images,
       imageCount: data.images?.length || 0
     });
     
+    console.log('📥 [FAL Response] Full response:', JSON.stringify(data, null, 2));
+    
+    // Handle different response formats
+    let imageUrl = null;
+    
     if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-      // For single image, return the first image
-      // For multiple images, return the first image (you might want to handle this differently)
+      // Standard format: images array with URL
+      imageUrl = data.images[0].url || data.images[0];
       logger.info(`Generated ${data.images.length} image(s) successfully`);
-      return data.images[0].url;
+    } else if (data.image_url) {
+      // Alternative format: direct image_url
+      imageUrl = data.image_url;
+      logger.info('Generated image successfully (alternative format)');
+    } else if (data.data && data.data.images && Array.isArray(data.data.images)) {
+      // Wrapped format
+      imageUrl = data.data.images[0].url || data.data.images[0];
+      logger.info('Generated image successfully (wrapped format)');
     } else {
-      throw new Error('No image generated');
+      throw new Error(`Unexpected response format from FAL API: ${JSON.stringify(data)}`);
+    }
+    
+    if (imageUrl) {
+      logger.info('Returning image URL:', imageUrl);
+      return imageUrl;
+    } else {
+      throw new Error('No image URL found in response');
     }
   } catch (error) {
     console.error('FAL.ai API Error:', error);
