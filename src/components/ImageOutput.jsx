@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateImage } from '../services/smartImageService';
+import { generateVideo } from '../services/veo3Service';
 import GenerateButton from './GenerateButton';
+import { X } from 'lucide-react';
 
 const ImageOutput = () => {
   const { 
@@ -33,6 +35,8 @@ const ImageOutput = () => {
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [newPrompt, setNewPrompt] = useState('');
+  const [generatedVideo, setGeneratedVideo] = useState(null);
+  const [showVideoModal, setShowVideoModal] = useState(false);
 
   const handleDownload = async () => {
     if (!generatedImage || isDownloading) return;
@@ -221,12 +225,18 @@ const ImageOutput = () => {
     try {
       setGenerating(true);
       
-      // For now, we'll simulate video generation
-      // In a real implementation, you'd call a video generation service
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Simulate video generation time
+      // Generate video from the current image using Veo 3
+      const videoUrl = await generateVideo({
+        prompt: currentGeneration?.prompt || 'Turn this image into a video',
+        image: generatedImage,
+        options: {
+          aspectRatio: '16:9',
+          duration: '8s',
+        }
+      });
       
-      // For demo purposes, we'll just show a message
-      setError('Video generation is not yet implemented. This would create a video from your image.');
+      setGeneratedVideo(videoUrl);
+      setShowVideoModal(true);
       
     } catch (error) {
       console.error('Video generation failed:', error);
@@ -417,6 +427,43 @@ const ImageOutput = () => {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Video Modal */}
+      {showVideoModal && generatedVideo && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-white/10">
+              <h2 className="text-xl font-semibold text-white">Generated Video</h2>
+              <button
+                onClick={() => setShowVideoModal(false)}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <video
+                src={generatedVideo}
+                controls
+                className="w-full rounded-lg"
+                autoPlay
+              >
+                Your browser does not support the video tag.
+              </video>
+              
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setShowVideoModal(false)}
+                  className="btn-primary"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
