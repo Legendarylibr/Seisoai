@@ -8,6 +8,8 @@ const VideoGeneration = ({ onShowTokenPayment, onShowStripePayment }) => {
   const { credits, address } = useSimpleWallet();
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState(null);
+  const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [duration, setDuration] = useState('8s');
   const [generatedVideo, setGeneratedVideo] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
@@ -49,6 +51,10 @@ const VideoGeneration = ({ onShowTokenPayment, onShowStripePayment }) => {
       const videoUrl = await generateVideo({
         prompt: prompt.trim(),
         image: image,
+        options: {
+          aspectRatio: aspectRatio,
+          duration: duration,
+        }
       });
 
       clearInterval(progressInterval);
@@ -100,6 +106,39 @@ const VideoGeneration = ({ onShowTokenPayment, onShowStripePayment }) => {
             <img src={image} alt="Selected" className="max-w-full h-auto rounded-lg max-h-96" />
           </div>
         )}
+      </div>
+
+      {/* Video Settings */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="glass-effect rounded-xl p-4">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Aspect Ratio
+          </label>
+          <select
+            value={aspectRatio}
+            onChange={(e) => setAspectRatio(e.target.value)}
+            className="w-full p-3 rounded-lg bg-white/5 border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
+          >
+            <option value="16:9" className="bg-gray-800">16:9 (Landscape)</option>
+            <option value="9:16" className="bg-gray-800">9:16 (Portrait)</option>
+            <option value="1:1" className="bg-gray-800">1:1 (Square)</option>
+          </select>
+        </div>
+
+        <div className="glass-effect rounded-xl p-4">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Duration
+          </label>
+          <select
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            className="w-full p-3 rounded-lg bg-white/5 border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
+          >
+            <option value="4s" className="bg-gray-800">4 seconds</option>
+            <option value="6s" className="bg-gray-800">6 seconds</option>
+            <option value="8s" className="bg-gray-800">8 seconds</option>
+          </select>
+        </div>
       </div>
 
       {/* Prompt Input */}
