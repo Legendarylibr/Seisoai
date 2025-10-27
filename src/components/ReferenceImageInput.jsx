@@ -30,6 +30,9 @@ const ReferenceImageInput = () => {
             height: img.height 
           });
         };
+        img.onerror = () => {
+          setControlNetImage(e.target.result, null);
+        };
         img.src = e.target.result;
       };
       reader.readAsDataURL(file);

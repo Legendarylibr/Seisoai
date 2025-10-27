@@ -159,7 +159,7 @@ const imageGeneratorReducer = (state, action) => {
       return {
         ...state,
         controlNetImage: action.payload,
-        controlNetImageDimensions: action.dimensions || null
+        controlNetImageDimensions: (typeof action.payload === 'object' && action.payload.dimensions) ? action.payload.dimensions : null
       };
     
     default:
@@ -240,7 +240,7 @@ export const ImageGeneratorProvider = ({ children }) => {
   };
 
   const setControlNetImage = (image, dimensions = null) => {
-    dispatch({ type: 'SET_CONTROL_NET_IMAGE', payload: image, dimensions });
+    dispatch({ type: 'SET_CONTROL_NET_IMAGE', payload: { image, dimensions } });
   };
 
   const setCurrentGeneration = (generation) => {
