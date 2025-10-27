@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateVideo } from '../services/veo3Service';
 import { Video, Upload, Play, Loader } from 'lucide-react';
@@ -6,7 +6,8 @@ import ReferenceImageInput from './ReferenceImageInput';
 
 const VideoGeneration = ({ onShowTokenPayment }) => {
   // onShowStripePayment prop removed - Stripe disabled
-  const { credits, address } = useSimpleWallet();
+  const { credits: walletCredits, address } = useSimpleWallet();
+  const credits = walletCredits || 0;
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState(null);
   const [aspectRatio, setAspectRatio] = useState('auto');
@@ -15,6 +16,7 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState(0);
+
 
   const handleImageChange = (selectedImage) => {
     setImage(selectedImage);
@@ -203,7 +205,7 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
       )}
 
       {/* Generate Button */}
-      <div className="flex justify-center">
+      <div className="flex flex-col items-center gap-3">
         <button
           onClick={handleGenerate}
           disabled={isGenerating || !prompt.trim() || !image || credits < 5}
@@ -221,6 +223,20 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
             </>
           )}
         </button>
+        
+        {/* Status messages */}
+        {!prompt.trim() && (
+          <p className="text-sm text-yellow-400">⚠️ Enter a prompt to enable generation</p>
+        )}
+        {prompt.trim() && !image && (
+          <p className="text-sm text-yellow-400">⚠️ Upload an image to enable generation</p>
+        )}
+        {prompt.trim() && image && credits < 5 && (
+          <p className="text-sm text-yellow-400">⚠️ You need 5 credits. You have {credits} credits</p>
+        )}
+        {prompt.trim() && image && credits >= 5 && !isGenerating && (
+          <p className="text-sm text-green-400">✅ Ready to generate!</p>
+        )}
       </div>
     </div>
   );
