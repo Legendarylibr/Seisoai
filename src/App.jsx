@@ -13,7 +13,7 @@ import ImageGallery from './components/ImageGallery';
 import BatchProcessor from './components/BatchProcessor';
 import Templates from './components/Templates';
 import Settings from './components/Settings';
-import LegalDisclaimer from './components/LegalDisclaimer';
+// import LegalDisclaimer from './components/LegalDisclaimer'; // DISABLED - Legal/terms removed from main screen
 import GenerateButton from './components/GenerateButton';
 import VideoGeneration from './components/VideoGeneration';
 import { Image, Grid, File, Settings as SettingsIcon2, Coins, Wand2, Wallet, ArrowRight, Sparkles, Video } from 'lucide-react';
@@ -65,7 +65,9 @@ function App() {
           />
           */}
           
+          {/* DISABLED - Legal/terms panel removed from main screen
           <LegalDisclaimer />
+          */}
           
         </div>
       </ImageGeneratorProvider>
