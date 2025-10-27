@@ -3,7 +3,7 @@ import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { Upload, X, Image as ImageIcon, Eye } from 'lucide-react';
 
 const ReferenceImageInput = () => {
-  const { controlNetImage, setControlNetImage } = useImageGenerator();
+  const { controlNetImage, setControlNetImage, controlNetImageDimensions } = useImageGenerator();
   const fileInputRef = useRef(null);
 
   const handleImageUpload = (event) => {
@@ -23,7 +23,14 @@ const ReferenceImageInput = () => {
 
       const reader = new FileReader();
       reader.onload = (e) => {
-        setControlNetImage(e.target.result);
+        const img = new Image();
+        img.onload = () => {
+          setControlNetImage(e.target.result, { 
+            width: img.width, 
+            height: img.height 
+          });
+        };
+        img.src = e.target.result;
       };
       reader.readAsDataURL(file);
     }

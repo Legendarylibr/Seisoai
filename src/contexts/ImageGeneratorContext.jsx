@@ -20,6 +20,7 @@ const initialState = {
   // ControlNet settings
   controlNetType: null,
   controlNetImage: null,
+  controlNetImageDimensions: null, // Store reference image dimensions
   // Batch processing
   batchPrompts: [],
   batchResults: [],
@@ -157,7 +158,8 @@ const imageGeneratorReducer = (state, action) => {
     case 'SET_CONTROL_NET_IMAGE':
       return {
         ...state,
-        controlNetImage: action.payload
+        controlNetImage: action.payload,
+        controlNetImageDimensions: action.dimensions || null
       };
     
     default:
@@ -237,8 +239,8 @@ export const ImageGeneratorProvider = ({ children }) => {
     dispatch({ type: 'SET_CONTROL_NET_TYPE', payload: type });
   };
 
-  const setControlNetImage = (image) => {
-    dispatch({ type: 'SET_CONTROL_NET_IMAGE', payload: image });
+  const setControlNetImage = (image, dimensions = null) => {
+    dispatch({ type: 'SET_CONTROL_NET_IMAGE', payload: image, dimensions });
   };
 
   const setCurrentGeneration = (generation) => {

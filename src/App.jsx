@@ -311,7 +311,7 @@ function GenerateTab({ onShowTokenPayment }) {
                 <Image className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
                 <h2 className="text-base md:text-lg font-semibold text-white">Reference Image</h2>
               </div>
-              <div className="min-h-[300px] md:min-h-[400px] lg:min-h-[500px]">
+              <div className="min-h-[200px] md:min-h-[250px]">
                 <ReferenceImageInput />
               </div>
             </div>
@@ -347,7 +347,7 @@ function GenerateTab({ onShowTokenPayment }) {
                 <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
                 <h2 className="text-base md:text-lg font-semibold text-white">Generated Image</h2>
               </div>
-              <div className="min-h-[300px] md:min-h-[400px] lg:min-h-[500px]">
+              <div className="min-h-[200px] md:min-h-[250px]">
                 <ImageOutput />
               </div>
             </div>

@@ -210,7 +210,6 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     if (walletLoading) return <div className="w-4 h-4 animate-pulse text-lg">⏳</div>;
     if (!isConnected) return <div className="w-4 h-4 text-lg">🔗</div>;
     if (credits <= 0) return <div className="w-4 h-4 text-lg">💳</div>;
-    if (!selectedStyle) return <div className="w-4 h-4 text-lg">🎨</div>;
     return <div className="w-4 h-4 text-lg">✨</div>;
   };
 
