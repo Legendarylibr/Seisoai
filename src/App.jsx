@@ -316,6 +316,11 @@ function GenerateTab({ onShowTokenPayment }) {
               </div>
             </div>
 
+            {/* Style Selection for Reference Image */}
+            <div className="glass-effect rounded-lg p-3 md:p-4">
+              <StyleSelector />
+            </div>
+
             {/* Custom Prompt - Compact */}
             <div className="glass-effect rounded-lg p-3">
               <div className="flex items-center gap-2 mb-2">
@@ -345,11 +350,6 @@ function GenerateTab({ onShowTokenPayment }) {
               <div className="min-h-[300px] md:min-h-[400px] lg:min-h-[500px]">
                 <ImageOutput />
               </div>
-            </div>
-
-            {/* Style Selection - Compact */}
-            <div className="glass-effect rounded-lg p-3 md:p-4">
-              <StyleSelector />
             </div>
           </div>
         </div>

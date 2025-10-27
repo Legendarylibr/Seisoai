@@ -26,9 +26,9 @@ const StyleSelector = () => {
       <div className="flex items-center gap-3 mb-3">
         <Palette className="w-5 h-5 text-purple-400" />
         <div>
-          <h3 className="text-sm font-semibold">Choose Style</h3>
+          <h3 className="text-sm font-semibold">Style for Reference Image</h3>
           <p className="text-xs text-gray-400">
-            {selectedStyle ? `${selectedStyle.name} selected` : 'Optional - select visual style'}
+            {selectedStyle ? `${selectedStyle.name} applied` : 'Optional - enhance with visual style'}
           </p>
         </div>
       </div>
@@ -61,7 +61,7 @@ const StyleSelector = () => {
       className="w-full bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-purple-300 hover:from-purple-500/30 hover:to-pink-500/30 hover:border-purple-400/50 flex items-center justify-center gap-3 py-3 px-4 rounded-lg font-medium transition-all duration-200 hover:scale-105"
     >
         <Palette className="w-5 h-5" />
-        <span>{selectedStyle ? 'Change Style' : 'Choose Style (Optional)'}</span>
+        <span>{selectedStyle ? 'Change Style' : 'Select Style for Image (Optional)'}</span>
         {showStyleOptions ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
       </button>
 
@@ -152,9 +152,9 @@ const StyleSelector = () => {
           <div className="flex items-start gap-2">
             <div className="text-blue-400 text-sm">💡</div>
             <div>
-              <h4 className="font-semibold text-blue-300 text-xs mb-1">Choose a style</h4>
+              <h4 className="font-semibold text-blue-300 text-xs mb-1">Enhance reference image with style</h4>
               <p className="text-xs text-gray-400">
-                Each style applies specific visual characteristics to your image. 
+                Apply a visual style to your reference image. 
                 <strong>Photorealistic</strong> for realistic photos, 
                 <strong>Artistic</strong> for creative flair, and 
                 <strong>Professional</strong> for business use.
