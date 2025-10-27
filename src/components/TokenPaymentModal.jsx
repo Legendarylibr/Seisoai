@@ -632,46 +632,57 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           const tx = await signer.sendTransaction(transaction);
           
           console.log('✅ Transaction signed! Hash:', tx.hash);
+          setError(`⏳ Transaction submitted! Hash: ${tx.hash}\n\nWaiting for confirmation...`);
           
-          // Credit immediately based on signature (don't wait for confirmation)
-          try {
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-            console.log('💰 Crediting based on transaction signature...');
+          // Wait for transaction confirmation
+          console.log('⏳ Waiting for transaction confirmation...');
+          const receipt = await tx.wait();
+          
+          if (receipt.status === 1) {
+            console.log('✅ Transaction confirmed on blockchain!');
             
-            const creditResponse = await fetch(`${apiUrl}/api/payments/credit`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                txHash: tx.hash,
-                walletAddress: address,
-                tokenSymbol: 'USDC',
-                amount: parseFloat(amount),
-                chainId: chainId,
-                walletType: 'evm'
-              })
-            });
-            
-            const creditData = await creditResponse.json();
-            
-            if (creditData.success) {
-              console.log('✅ Credits added!', creditData);
-              setError(`✅ Payment submitted! ${creditData.credits} credits added. New balance: ${creditData.totalCredits} credits.`);
-              setPaymentStatus('confirmed');
+            // Credit after confirmation (transaction is guaranteed to be on-chain)
+            try {
+              const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+              console.log('💰 Crediting confirmed transaction...');
               
-              // Refresh user credits
-              await fetchCredits(address);
+              const creditResponse = await fetch(`${apiUrl}/api/payments/credit`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  txHash: tx.hash,
+                  walletAddress: address,
+                  tokenSymbol: 'USDC',
+                  amount: parseFloat(amount),
+                  chainId: chainId,
+                  walletType: 'evm'
+                })
+              });
               
-              setTimeout(() => {
-                onClose();
-              }, 2000);
-            } else {
-              throw new Error(creditData.error || 'Failed to credit');
+              const creditData = await creditResponse.json();
+              
+              if (creditData.success) {
+                console.log('✅ Credits added!', creditData);
+                setError(`✅ Payment confirmed! ${creditData.credits} credits added. New balance: ${creditData.totalCredits} credits.`);
+                setPaymentStatus('confirmed');
+                
+                // Refresh user credits
+                await fetchCredits(address);
+                
+                setTimeout(() => {
+                  onClose();
+                }, 2000);
+              } else {
+                throw new Error(creditData.error || 'Failed to credit');
+              }
+            } catch (creditError) {
+              console.error('Error crediting:', creditError);
+              setError(`Transaction confirmed but crediting failed: ${creditError.message}`);
             }
-          } catch (creditError) {
-            console.error('Error crediting:', creditError);
-            setError(`Transaction sent but crediting failed: ${creditError.message}`);
+          } else {
+            throw new Error('Transaction failed on blockchain');
           }
           
         } catch (usdcError) {
