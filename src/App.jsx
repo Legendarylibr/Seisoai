@@ -331,19 +331,19 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
           </div>
 
           {/* Generated Image Output - Bigger */}
-          <div className="space-y-3">
-            <div className="glass-effect rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="w-4 h-4 text-purple-400" />
-                <h2 className="text-base font-semibold text-white">Generated Image</h2>
+          <div className="space-y-3 md:space-y-4">
+            <div className="glass-effect rounded-lg p-3 md:p-4">
+              <div className="flex items-center gap-2 mb-3 md:mb-4">
+                <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
+                <h2 className="text-base md:text-lg font-semibold text-white">Generated Image</h2>
               </div>
-              <div className="min-h-[300px]">
+              <div className="min-h-[300px] md:min-h-[400px] lg:min-h-[500px]">
                 <ImageOutput />
               </div>
             </div>
 
             {/* Style Selection - Compact */}
-            <div className="glass-effect rounded-lg p-3">
+            <div className="glass-effect rounded-lg p-3 md:p-4">
               <StyleSelector />
             </div>
           </div>
