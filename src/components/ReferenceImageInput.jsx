@@ -7,20 +7,24 @@ const ReferenceImageInput = () => {
   const fileInputRef = useRef(null);
 
   const handleImageUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      // Validate file type
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    
+    // Validate all files
+    for (const file of files) {
       if (!file.type.startsWith('image/')) {
-        alert('Please select a valid image file');
+        alert('Please select only valid image files');
         return;
       }
-
-      // Validate file size (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
-        alert('Image file size must be less than 10MB');
+        alert(`Image "${file.name}" is too large (max 10MB)`);
         return;
       }
+    }
 
+    // If single file, process as before
+    if (files.length === 1) {
+      const file = files[0];
       const reader = new FileReader();
       reader.onload = (e) => {
         const img = new Image();
@@ -36,6 +40,36 @@ const ReferenceImageInput = () => {
         img.src = e.target.result;
       };
       reader.readAsDataURL(file);
+    } else {
+      // Multiple files - process all
+      console.log(`📸 Processing ${files.length} images for multi-image generation`);
+      const imageArray = [];
+      let loadedCount = 0;
+      
+      files.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            imageArray[index] = {
+              url: e.target.result,
+              dimensions: { width: img.width, height: img.height }
+            };
+            loadedCount++;
+            
+            // When all images are loaded, store as multi-image
+            if (loadedCount === files.length) {
+              setControlNetImage(imageArray.map(img => img.url), imageArray[0].dimensions);
+              console.log(`✅ Loaded ${imageArray.length} images for multi-image mode`);
+            }
+          };
+          img.onerror = () => {
+            setControlNetImage(null, null);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
     }
   };
 
@@ -67,10 +101,11 @@ const ReferenceImageInput = () => {
             }}
           >
           <Upload className="w-12 h-12 text-gray-400 mb-4" />
-          <p className="text-lg text-gray-300 mb-2">Click to upload reference image</p>
-          <p className="text-sm text-gray-500">JPG, PNG, WebP up to 10MB</p>
+          <p className="text-lg text-gray-300 mb-2">Click to upload reference image(s)</p>
+          <p className="text-sm text-gray-500">JPG, PNG, WebP up to 10MB each</p>
+          <p className="text-xs text-purple-400 mt-1">Hold Ctrl/Cmd for multiple</p>
           <div className="mt-4 text-xs text-gray-600 bg-white/5 px-3 py-2 rounded">
-            💡 Upload an image to guide the AI generation
+            💡 Upload 1+ images to guide the AI generation
           </div>
         </div>
       ) : (
@@ -103,13 +138,17 @@ const ReferenceImageInput = () => {
             </div>
           </div>
           <div className="mt-3 flex items-center justify-between text-sm text-gray-400">
-            <span>Reference image uploaded</span>
+            <span>
+              {Array.isArray(controlNetImage) 
+                ? `${controlNetImage.length} images uploaded` 
+                : 'Reference image uploaded'}
+            </span>
             <button
               onClick={handleClickUpload}
               className="text-purple-400 hover:text-purple-300 transition-colors px-3 py-1 rounded bg-white/5 hover:bg-white/10"
               aria-label="Change reference image"
             >
-              Change Image
+              Change Image(s)
             </button>
           </div>
           <div className="mt-2 text-xs text-gray-500 bg-white/5 p-3 rounded">
@@ -122,6 +161,7 @@ const ReferenceImageInput = () => {
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple
         onChange={handleImageUpload}
         className="hidden"
         id="reference-image-input"

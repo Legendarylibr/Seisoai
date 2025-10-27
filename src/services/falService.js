@@ -10,13 +10,16 @@ if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
 }
 
 // FLUX.1 Kontext endpoints
-const getFluxEndpoint = (hasReferenceImage = false) => {
-  if (hasReferenceImage) {
-    // Use Kontext [max] for image-to-image with reference
-    return 'https://fal.run/fal-ai/flux-pro/kontext/max';
-  } else {
-    // Use Kontext [pro] text-to-image when no reference image
+const getFluxEndpoint = (hasReferenceImage = false, isMultipleImages = false) => {
+  if (!hasReferenceImage) {
+    // No reference image - text-to-image
     return 'https://fal.run/fal-ai/flux-pro/kontext/text-to-image';
+  } else if (isMultipleImages) {
+    // Multiple images - use multi model
+    return 'https://fal.run/fal-ai/flux-pro/kontext/multi';
+  } else {
+    // Single image - use max model
+    return 'https://fal.run/fal-ai/flux-pro/kontext/max';
   }
 };
 
@@ -42,8 +45,8 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     throw new Error('Advanced settings must be an object');
   }
   
-  if (referenceImage && typeof referenceImage !== 'string') {
-    throw new Error('Reference image must be a string (base64 or URL)');
+  if (referenceImage && typeof referenceImage !== 'string' && !Array.isArray(referenceImage)) {
+    throw new Error('Reference image must be a string, URL, or array of images');
   }
 
   try {
@@ -141,12 +144,19 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     
     console.log('🎯 [PROMPT DEBUG] Final prompt being sent to API:', basePrompt);
     
-    // Choose the right endpoint based on whether we have a reference image
+    // Choose the right endpoint based on reference image type
     const hasRefImage = !!referenceImage;
-    const fluxEndpoint = getFluxEndpoint(hasRefImage);
-    logger.info(`Using ${hasRefImage ? 'Kontext [max] image-to-image' : 'Kontext [pro] text-to-image'} generation`, {
+    const isMultipleImages = Array.isArray(referenceImage);
+    const fluxEndpoint = getFluxEndpoint(hasRefImage, isMultipleImages);
+    
+    const modeDesc = hasRefImage 
+      ? (isMultipleImages ? 'Kontext [multi] multi-image' : 'Kontext [max] image-to-image')
+      : 'Kontext [pro] text-to-image';
+      
+    logger.info(`Using ${modeDesc} generation`, {
       endpoint: fluxEndpoint,
-      hasReferenceImage: hasRefImage
+      hasReferenceImage: hasRefImage,
+      isMultipleImages: isMultipleImages
     });
     
     // Build request body according to the official API schema
@@ -165,13 +175,20 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       
       console.log('🎲 Using random seed:', randomSeed);
 
-    // Add reference image only if provided (for image-to-image)
+    // Add reference image(s) if provided
     if (referenceImage) {
-      requestBody.image_url = referenceImage;
-      logger.debug('Using reference image for Kontext image-to-image generation');
+      if (Array.isArray(referenceImage)) {
+        // Multiple images for multi model
+        requestBody.image_urls = referenceImage;
+        console.log(`📸 Using ${referenceImage.length} reference images for multi-image generation`);
+      } else {
+        // Single image for max model
+        requestBody.image_url = referenceImage;
+        console.log('📸 Using single reference image for image-to-image generation');
+      }
     } else {
       // No reference image - using text-to-image mode
-      logger.debug('No reference image - using text-to-image generation');
+      console.log('📝 No reference image - using text-to-image generation');
     }
 
     // Add aspect ratio based on the selected size or reference image
