@@ -51,19 +51,44 @@ const ImageOutput = () => {
       // Create a blob URL
       const blobUrl = window.URL.createObjectURL(blob);
       
-      // Create download link
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = `ai-generated-${Date.now()}.png`;
-      document.body.appendChild(link);
-      link.click();
+      // Detect iOS
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
       
-      // Cleanup
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      if (isIOS) {
+        // iOS Safari requires opening in new tab for download
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `ai-generated-${Date.now()}.png`;
+        // Add to DOM temporarily (required for iOS)
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        
+        // Trigger download
+        const clickEvent = new MouseEvent('click', {
+          view: window,
+          bubbles: true,
+          cancelable: true
+        });
+        link.dispatchEvent(clickEvent);
+        
+        // Cleanup after a delay for iOS
+        setTimeout(() => {
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+        }, 100);
+      } else {
+        // Standard download for other browsers
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `ai-generated-${Date.now()}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+      }
     } catch (error) {
       console.error('Download failed:', error);
-      // Fallback to direct link method
+      // Fallback to opening image in new tab for iOS
       const link = document.createElement('a');
       link.href = generatedImage;
       link.download = `ai-generated-${Date.now()}.png`;
