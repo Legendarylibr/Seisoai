@@ -14,10 +14,10 @@ const PaymentModal = ({ isOpen, onClose }) => {
   const [txHash, setTxHash] = useState('');
 
   const chains = [
-    { id: 'ethereum', name: 'Ethereum', usdc: '0xA0b86a33E6441b8C4C8C0C4C0C4C0C4C0C4C0C4C' },
+    { id: 'ethereum', name: 'Ethereum', usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
     { id: 'polygon', name: 'Polygon', usdc: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' },
-    { id: 'arbitrum', name: 'Arbitrum', usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' },
-    { id: 'optimism', name: 'Optimism', usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85' },
+    { id: 'arbitrum', name: 'Arbitrum', usdc: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8' },
+    { id: 'optimism', name: 'Optimism', usdc: '0x7F5c764cBc14f9669B88837ca1490cCa17c31607' },
     { id: 'base', name: 'Base', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }
   ];
 
