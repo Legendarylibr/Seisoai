@@ -9,7 +9,7 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
   const { credits, address } = useSimpleWallet();
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState(null);
-  const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [aspectRatio, setAspectRatio] = useState('auto');
   const [duration, setDuration] = useState('8s');
   const [generatedVideo, setGeneratedVideo] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -24,6 +24,11 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       setError('Please enter a prompt');
+      return;
+    }
+
+    if (!image) {
+      setError('Please upload a reference image. Image-to-video requires an input image.');
       return;
     }
 
@@ -78,7 +83,7 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
           <h1 className="text-3xl font-bold gradient-text">Video Generation</h1>
         </div>
         <p className="text-gray-300 max-w-2xl mx-auto">
-          Create stunning videos with Google's Veo 3 AI model. Upload an image and describe the video you want.
+          Create stunning videos with Google's Veo 3 Fast Image-to-Video model. Upload an image and describe how it should be animated.
         </p>
       </div>
 
@@ -120,6 +125,7 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
             onChange={(e) => setAspectRatio(e.target.value)}
             className="w-full p-3 rounded-lg bg-white/5 border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
           >
+            <option value="auto" className="bg-gray-800">Auto (Match Image)</option>
             <option value="16:9" className="bg-gray-800">16:9 (Landscape)</option>
             <option value="9:16" className="bg-gray-800">9:16 (Portrait)</option>
             <option value="1:1" className="bg-gray-800">1:1 (Square)</option>
@@ -130,15 +136,9 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
           <label className="block text-sm font-medium text-gray-300 mb-2">
             Duration
           </label>
-          <select
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
-            className="w-full p-3 rounded-lg bg-white/5 border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
-          >
-            <option value="4s" className="bg-gray-800">4 seconds</option>
-            <option value="6s" className="bg-gray-800">6 seconds</option>
-            <option value="8s" className="bg-gray-800">8 seconds</option>
-          </select>
+          <div className="w-full p-3 rounded-lg bg-white/5 border border-white/20 text-gray-400">
+            8 seconds (Fixed)
+          </div>
         </div>
       </div>
 
@@ -151,12 +151,12 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Describe the video you want to generate. Be descriptive about the subject, context, action, style, camera motion, and ambiance..."
+          placeholder="Describe how the image should be animated. Include action, camera motion, style, and ambiance..."
           className="w-full p-4 rounded-lg bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 min-h-32"
           rows="5"
         />
         <p className="text-xs text-gray-400 mt-2">
-          Include: subject, context, action, style, camera motion, composition, and ambiance for best results.
+          Describe the animation: how objects move, camera perspective, style, and atmosphere.
         </p>
       </div>
 
@@ -206,7 +206,7 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
       <div className="flex justify-center">
         <button
           onClick={handleGenerate}
-          disabled={isGenerating || !prompt.trim() || credits < 5}
+          disabled={isGenerating || !prompt.trim() || !image || credits < 5}
           className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {isGenerating ? (

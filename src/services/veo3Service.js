@@ -1,5 +1,5 @@
-// Veo 3 Video Generation Service
-// Uses Google's Veo 3 model via fal.ai API
+// Veo 3 Fast Image-to-Video Service
+// Uses Google's Veo 3 Fast model via fal.ai API for image-to-video generation
 
 const FAL_API_KEY = import.meta.env.VITE_FAL_API_KEY;
 
@@ -8,27 +8,23 @@ if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
 }
 
 /**
- * Convert image to base64 data URI
+ * Convert image to data URI or ensure it's a valid URL
  */
-const imageToDataURI = async (imageUrl) => {
-  try {
-    const response = await fetch(imageUrl);
-    const blob = await response.blob();
-    
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    throw new Error(`Failed to convert image: ${error.message}`);
+const prepareImageUrl = (image) => {
+  if (!image) return null;
+  
+  // If already a URL or data URI, return as is
+  if (typeof image === 'string' && (image.startsWith('http') || image.startsWith('data:'))) {
+    return image;
   }
+  
+  // Otherwise assume it's base64 and return as data URI
+  return image;
 };
 
 /**
- * Generate video using Veo 3
- * @param {Object} params - { prompt, image (optional), options }
+ * Generate video using Veo 3 Fast Image-to-Video
+ * @param {Object} params - { prompt, image (required), options }
  * @returns {Promise<string>} - URL of generated video
  */
 export const generateVideo = async ({ prompt, image = null, options = {} }) => {
@@ -37,46 +33,25 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
       throw new Error('FAL API key not configured. Please set VITE_FAL_API_KEY in your .env file.');
     }
 
+    if (!image) {
+      throw new Error('Image input is required for Veo 3 Fast Image-to-Video API');
+    }
+
+    const imageUrl = prepareImageUrl(image);
+
     const input = {
       prompt: prompt,
-      aspect_ratio: options.aspectRatio || '16:9',
-      duration: options.duration || '8s',
-      enhance_prompt: options.enhancePrompt !== false,
+      image_url: imageUrl, // Required for image-to-video
+      aspect_ratio: options.aspectRatio || 'auto',
+      duration: '8s', // Fixed duration for this model
       resolution: options.resolution || '720p',
-      generate_audio: options.generateAudio !== false,
-      auto_fix: options.autoFix !== false,
+      generate_audio: options.generateAudio !== false
     };
 
-    // Add image if provided
-    if (image) {
-      // Convert image to data URI if it's not already
-      let imageData = image;
-      if (!image.startsWith('data:') && !image.startsWith('http')) {
-        // Assume it's already a base64 or data URI
-        imageData = image;
-      } else if (!image.startsWith('data:')) {
-        // Convert URL to data URI
-        console.log('📸 Converting image to data URI...');
-        imageData = await imageToDataURI(image);
-      }
-      
-      input.image_url = imageData;
-      console.log('✅ Image added to request');
-    }
+    console.log('🎬 Generating video with Veo 3 Fast Image-to-Video:', { prompt, hasImage: !!input.image_url, aspect_ratio: input.aspect_ratio, duration: input.duration });
 
-    // Add negative prompt if provided
-    if (options.negativePrompt) {
-      input.negative_prompt = options.negativePrompt;
-    }
-
-    // Add seed if provided
-    if (options.seed) {
-      input.seed = options.seed;
-    }
-
-    console.log('🎬 Generating video with Veo 3:', { prompt, hasImage: !!input.image_url, aspect_ratio: input.aspect_ratio, duration: input.duration });
-
-    const response = await fetch('https://queue.fal.run/fal-ai/veo3', {
+    // Submit to queue API
+    const response = await fetch('https://queue.fal.run/fal-ai/veo3/fast/image-to-video', {
       method: 'POST',
       headers: {
         'Authorization': `Key ${FAL_API_KEY}`,
@@ -86,8 +61,14 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || errorData.message || `HTTP error! status: ${response.status}`);
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorData.message || errorMessage;
+      } catch (e) {
+        errorMessage = await response.text();
+      }
+      throw new Error(errorMessage);
     }
 
     const { request_id } = await response.json();
@@ -95,12 +76,12 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
 
     // Poll for completion
     let attempts = 0;
-    const maxAttempts = 120; // 2 minutes max (60 * 2)
+    const maxAttempts = 120; // 2 minutes max
     
     while (attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
       
-      const statusResponse = await fetch(`https://queue.fal.run/fal-ai/veo3/requests/${request_id}/status`, {
+      const statusResponse = await fetch(`https://queue.fal.run/fal-ai/veo3/fast/image-to-video/requests/${request_id}/status`, {
         method: 'GET',
         headers: {
           'Authorization': `Key ${FAL_API_KEY}`,
@@ -112,7 +93,7 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
 
       if (status.status === 'COMPLETED') {
         // Get the result
-        const resultResponse = await fetch(`https://queue.fal.run/fal-ai/veo3/requests/${request_id}/result`, {
+        const resultResponse = await fetch(`https://queue.fal.run/fal-ai/veo3/fast/image-to-video/requests/${request_id}/result`, {
           method: 'GET',
           headers: {
             'Authorization': `Key ${FAL_API_KEY}`,
@@ -142,19 +123,19 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
 };
 
 /**
- * Get video generation options
+ * Get video generation options for Veo 3 Fast Image-to-Video
  */
 export const getVideoOptions = () => {
   return {
     aspectRatio: [
+      { value: 'auto', label: 'Auto (Match Image)' },
       { value: '16:9', label: '16:9 (Landscape)' },
       { value: '9:16', label: '9:16 (Portrait)' },
       { value: '1:1', label: '1:1 (Square)' }
     ],
     duration: [
-      { value: '4s', label: '4 seconds' },
-      { value: '6s', label: '6 seconds' },
       { value: '8s', label: '8 seconds' }
+      // Note: Veo 3 Fast Image-to-Video only supports 8s duration
     ],
     resolution: [
       { value: '720p', label: '720p HD' },
