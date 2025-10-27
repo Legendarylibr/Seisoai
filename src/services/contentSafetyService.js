@@ -1,30 +1,35 @@
-// Content Safety Service for CSAM and inappropriate content protection
-// This service implements multiple layers of content filtering
+// Content Safety Service for CSAM protection only
+// Very lax moderation - only blocking CSAM and extreme content
 
-// Blocked keywords and phrases - ZERO TOLERANCE for CSAM only
+// Blocked keywords and phrases - ONLY CSAM and extreme content
 const BLOCKED_KEYWORDS = [
-  // CSAM and age-related inappropriate content - ZERO TOLERANCE
-  'child', 'children', 'kid', 'kids', 'teen', 'teenager', 'minor', 'young',
-  'baby', 'infant', 'toddler', 'school', 'schoolgirl', 'schoolboy',
-  'underage', 'lolita', 'shota', 'loli', 'shota',
+  // CSAM - ZERO TOLERANCE
+  'child nsfw', 'children nsfw', 'kid nsfw', 'kids nsfw',
+  'teenager nsfw', 'minor nsfw', 'underage nsfw',
+  'lolita', 'shota', 'loli',
   
-  // CSAM-related patterns and descriptors
-  'innocent', 'pure', 'virgin', 'naive', 'vulnerable', 'little', 'small',
-  'young', 'child', 'teen', 'minor', 'underage', 'school', 'student', 'pupil',
+  // Extreme sexual content involving minors
+  'csam', 'cp', 'illegal',
   
-  // Other inappropriate content that could facilitate CSAM
-  'bestiality', 'animal', 'beast', 'zoophilia'
+  // Bestiality/extreme content
+  'bestiality', 'zoophilia', 'beastiality'
 ];
 
-// Blocked image styles - ZERO TOLERANCE for CSAM only
+// Blocked image styles - ONLY CSAM-related
 const BLOCKED_STYLES = [
-  'lolita', 'shota', 'underage', 'child', 'teen'
+  'lolita', 'shota', 'underage nsfw'
 ];
 
-// Blocked image descriptions - ZERO TOLERANCE for CSAM only
+// Blocked image descriptions - ONLY CSAM-related
 const BLOCKED_DESCRIPTIONS = [
-  'young', 'child', 'teen', 'minor', 'underage', 'school',
-  'innocent', 'pure', 'virgin', 'naive', 'vulnerable', 'little', 'small'
+  // Minimal blocking - only explicit CSAM phrases
+];
+
+// Suspicious patterns - ONLY very explicit CSAM patterns
+const SUSPICIOUS_PATTERNS = [
+  /\b(child|kid|teen|minor|underage)\s+(nude|naked|sex|nsfw|porn|explicit)\b/i,
+  /\b(age)\s*[0-9]{1,2}\s*(year|yr|old)\s+(nude|naked|sex|nsfw|porn|explicit)\b/i,
+  /\b(csam|child pornography)\b/i
 ];
 
 /**
@@ -47,26 +52,18 @@ export const checkPromptSafety = (prompt) => {
     }
   }
   
-  // Check for CSAM-related suspicious patterns - ZERO TOLERANCE
-  const suspiciousPatterns = [
-    /\b(young|little|small)\s+(girl|boy|child|kid|teen|teenager)\b/i,
-    /\b(child|kid|teen|teenager|minor|young)\s+(nude|naked|undressed|exposed)\b/i,
-    /\b(school|student|pupil)\s+(nude|naked|undressed|exposed)\b/i,
-    /\b(innocent|pure|virgin|naive)\s+(child|kid|teen|teenager|girl|boy)\b/i,
-    /\b(age|aged)\s*[0-9]{1,2}\s*(year|yr|old)\b/i,
-    /\b(underage|minor|young)\s+(adult|mature|grown)\b/i
-  ];
+  // Check for CSAM-related suspicious patterns - ONLY explicit CSAM
   
-  for (const pattern of suspiciousPatterns) {
+  for (const pattern of SUSPICIOUS_PATTERNS) {
     if (pattern.test(lowerPrompt)) {
-      blockedWords.push('suspicious_pattern');
+      blockedWords.push('explicit_csam_pattern');
     }
   }
   
   if (blockedWords.length > 0) {
     return {
       isBlocked: true,
-      reason: 'Content contains inappropriate or potentially harmful keywords',
+      reason: 'Content contains CSAM-related keywords',
       blockedWords: blockedWords
     };
   }
@@ -75,7 +72,7 @@ export const checkPromptSafety = (prompt) => {
 };
 
 /**
- * Check if a style is appropriate
+ * Check if a style is appropriate - Very minimal filtering
  * @param {Object} style - The style object to check
  * @returns {Object} - { isBlocked: boolean, reason: string }
  */
@@ -87,11 +84,12 @@ export const checkStyleSafety = (style) => {
   const lowerStyleName = style.name.toLowerCase();
   const lowerDescription = (style.description || '').toLowerCase();
   
+  // Only check for explicitly CSAM-related styles
   for (const blockedStyle of BLOCKED_STYLES) {
     if (lowerStyleName.includes(blockedStyle) || lowerDescription.includes(blockedStyle)) {
       return {
         isBlocked: true,
-        reason: 'Style contains inappropriate content descriptors'
+        reason: 'Style contains CSAM-related content'
       };
     }
   }
@@ -100,7 +98,7 @@ export const checkStyleSafety = (style) => {
 };
 
 /**
- * Check if a reference image description is appropriate
+ * Check if a reference image description is appropriate - Very minimal filtering
  * @param {string} description - The image description to check
  * @returns {Object} - { isBlocked: boolean, reason: string, blockedWords: string[] }
  */
@@ -112,16 +110,19 @@ export const checkImageDescriptionSafety = (description) => {
   const lowerDescription = description.toLowerCase();
   const blockedWords = [];
   
-  for (const blockedDesc of BLOCKED_DESCRIPTIONS) {
-    if (lowerDescription.includes(blockedDesc)) {
-      blockedWords.push(blockedDesc);
+  // Minimal checks for CSAM only
+  const csamKeywords = ['csam', 'child porn', 'underage nsfw'];
+  
+  for (const keyword of csamKeywords) {
+    if (lowerDescription.includes(keyword)) {
+      blockedWords.push(keyword);
     }
   }
   
   if (blockedWords.length > 0) {
     return {
       isBlocked: true,
-      reason: 'Image description contains inappropriate content',
+      reason: 'Image description contains CSAM-related content',
       blockedWords: blockedWords
     };
   }
