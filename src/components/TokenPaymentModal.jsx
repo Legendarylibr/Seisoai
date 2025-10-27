@@ -118,10 +118,10 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       transaction.feePayer = userPublicKey;
       
       // Sign and send transaction
-      const signedTransaction = await window.solana.signAndSendTransaction(transaction);
+      const result = await window.solana.signAndSendTransaction(transaction);
       
-      console.log('✅ Solana transaction sent:', signedTransaction);
-      return signedTransaction;
+      console.log('✅ Solana transaction sent:', result);
+      return result.signature; // Return just the signature string
       
     } catch (error) {
       console.error('Error building Solana transaction:', error);
@@ -503,27 +503,82 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         console.log('🔍 Processing Solana USDC payment...');
         
         try {
-          // Build and send Solana USDC transaction
-          const solanaTx = await buildSolanaUSDCTransaction(amount, solanaPaymentAddress);
+          const { Connection } = await import('@solana/web3.js');
+          const rpcUrl = process.env.REACT_APP_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+          const connection = new Connection(rpcUrl);
           
-          if (solanaTx) {
-            console.log('✅ Solana transaction sent:', solanaTx);
-            setError(`✅ Solana USDC transaction sent! Hash: ${solanaTx}\n\n${amount} USDC sent to ${solanaPaymentAddress}. Checking for instant credit addition...`);
+          // Build and send Solana USDC transaction
+          const txSignature = await buildSolanaUSDCTransaction(amount, solanaPaymentAddress);
+          
+          console.log('✅ Solana transaction signed! Signature:', txSignature);
+          setError(`⏳ Transaction submitted! Signature: ${txSignature}\n\nWaiting for confirmation...`);
+          
+          // Wait for confirmation
+          console.log('⏳ Waiting for Solana transaction confirmation...');
+          let confirmed = false;
+          let attempts = 0;
+          const maxAttempts = 20; // Wait up to 20 seconds
+          
+          while (!confirmed && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+            attempts++;
             
-            // Start checking immediately for Solana
-            const immediateCheck = setTimeout(() => {
-              checkForPayment();
-            }, 200); // Check after 200ms for immediate detection
-            
-            // Also trigger regular payment check
-            setTimeout(() => {
-              checkForPayment();
-            }, 100); // Check after 100ms for instant detection
-          } else {
-            // Fallback to copying address if transaction fails
-            await navigator.clipboard.writeText(solanaPaymentAddress);
-            setError(`✅ Solana USDC payment address copied to clipboard: ${solanaPaymentAddress}\n\nPlease send ${amount} USDC to this address and click "Check Payment" to verify.`);
+            const status = await connection.getSignatureStatus(txSignature);
+            if (status.value?.confirmationStatus === 'confirmed' || status.value?.confirmationStatus === 'finalized') {
+              if (status.value.err) {
+                throw new Error('Transaction failed on blockchain');
+              }
+              confirmed = true;
+              console.log('✅ Solana transaction confirmed on blockchain!');
+              break;
+            }
           }
+          
+          if (!confirmed) {
+            throw new Error('Transaction confirmation timeout');
+          }
+          
+          // Credit after confirmation
+          try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+            console.log('💰 Crediting confirmed Solana transaction...');
+            
+            const creditResponse = await fetch(`${apiUrl}/api/payments/credit`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                txHash: txSignature,
+                walletAddress: address,
+                tokenSymbol: 'USDC',
+                amount: parseFloat(amount),
+                chainId: 'solana',
+                walletType: 'solana'
+              })
+            });
+            
+            const creditData = await creditResponse.json();
+            
+            if (creditData.success) {
+              console.log('✅ Credits added!', creditData);
+              setError(`✅ Payment confirmed! ${creditData.credits} credits added. New balance: ${creditData.totalCredits} credits.`);
+              setPaymentStatus('confirmed');
+              
+              // Refresh user credits
+              await fetchCredits(address);
+              
+              setTimeout(() => {
+                onClose();
+              }, 2000);
+            } else {
+              throw new Error(creditData.error || 'Failed to credit');
+            }
+          } catch (creditError) {
+            console.error('Error crediting:', creditError);
+            setError(`Transaction confirmed but crediting failed: ${creditError.message}`);
+          }
+          
         } catch (solanaError) {
           console.error('❌ Solana transaction failed:', solanaError);
           
@@ -541,10 +596,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             errorMessage += `Error: ${solanaError.message}`;
           }
           
-          setError(errorMessage + `\n\nAs a fallback, payment address copied to clipboard: ${solanaPaymentAddress}`);
-          
-          // Fallback to copying address
-          await navigator.clipboard.writeText(solanaPaymentAddress);
+          setError(errorMessage);
         }
       } else {
         console.log('🔍 Processing USDC payment...');
