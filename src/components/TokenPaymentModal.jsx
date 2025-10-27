@@ -335,35 +335,35 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         chainId: '0x1',
         chainName: 'Ethereum Mainnet',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://rpc.ankr.com/eth', 'https://ethereum.publicnode.com'],
+        rpcUrls: ['https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
         blockExplorerUrls: ['https://etherscan.io']
       },
       137: {
         chainId: '0x89',
         chainName: 'Polygon Mainnet',
         nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
-        rpcUrls: ['https://rpc.ankr.com/polygon', 'https://polygon-rpc.com'],
+        rpcUrls: ['https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
         blockExplorerUrls: ['https://polygonscan.com']
       },
       42161: {
         chainId: '0xa4b1',
         chainName: 'Arbitrum One',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://rpc.ankr.com/arbitrum', 'https://arbitrum.publicnode.com'],
+        rpcUrls: ['https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
         blockExplorerUrls: ['https://arbiscan.io']
       },
       10: {
         chainId: '0xa',
         chainName: 'Optimism',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://rpc.ankr.com/optimism', 'https://optimism.publicnode.com'],
+        rpcUrls: ['https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
         blockExplorerUrls: ['https://optimistic.etherscan.io']
       },
       8453: {
         chainId: '0x2105',
         chainName: 'Base',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://rpc.ankr.com/base', 'https://base.publicnode.com'],
+        rpcUrls: ['https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
         blockExplorerUrls: ['https://basescan.org']
       }
     };

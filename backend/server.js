@@ -376,13 +376,13 @@ const TOKEN_CONFIGS = {
   }
 };
 
-// RPC endpoints with reliable public endpoints
+// RPC endpoints with Alchemy API key
 const RPC_ENDPOINTS = {
-  '1': process.env.ETH_RPC_URL || 'https://ethereum.publicnode.com',
-  '137': process.env.POLYGON_RPC_URL || 'https://polygon.publicnode.com',
-  '42161': process.env.ARBITRUM_RPC_URL || 'https://arbitrum.publicnode.com',
-  '10': process.env.OPTIMISM_RPC_URL || 'https://optimism.publicnode.com',
-  '8453': process.env.BASE_RPC_URL || 'https://base.publicnode.com'
+  '1': process.env.ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+  '137': process.env.POLYGON_RPC_URL || 'https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+  '42161': process.env.ARBITRUM_RPC_URL || 'https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+  '10': process.env.OPTIMISM_RPC_URL || 'https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+  '8453': process.env.BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
 };
 
 // ERC-20 ABI
