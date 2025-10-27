@@ -42,7 +42,7 @@ function App() {
             onShowStripePayment={() => setShowStripePaymentModal(true)}
           />
           
-          <main className="container mx-auto px-4 py-6">
+          <main className="container mx-auto px-2 md:px-4 py-4 md:py-6">
             <AppContent 
               activeTab={activeTab} 
               onShowTokenPayment={() => setShowTokenPaymentModal(true)}

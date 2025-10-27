@@ -24,10 +24,64 @@
   
   .btn-primary {
     @apply bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25;
+    @apply text-sm md:text-base md:py-3 md:px-6;
   }
   
   .btn-secondary {
     @apply glass-effect hover:bg-white/20 text-white font-medium py-2 px-4 rounded-lg transition-all duration-300;
+    @apply text-sm md:text-base;
+  }
+}
+
+/* Mobile-specific optimizations */
+@media (max-width: 768px) {
+  /* Prevent horizontal scroll on mobile */
+  body {
+    overflow-x: hidden;
   }
   
+  /* Make containers full width on mobile */
+  .container {
+    @apply px-3;
+  }
+  
+  /* Adjust modal sizes for mobile */
+  .modal-content {
+    @apply max-w-full mx-2;
+  }
+  
+  /* Better touch targets */
+  button, .btn {
+    @apply min-h-[44px];
+  }
+  
+  /* Stack layout for inputs on mobile */
+  .input-group {
+    @apply flex-col gap-2;
+  }
+  
+  /* Better spacing */
+  .space-y-6 {
+    @apply space-y-4;
+  }
+  
+  /* Smaller text on mobile */
+  .text-lg {
+    @apply text-base;
+  }
+  
+  .text-xl {
+    @apply text-lg;
+  }
+  
+  .text-3xl {
+    @apply text-2xl;
+  }
+}
+
+/* Desktop-only effects */
+@media (min-width: 768px) {
+  .btn-primary:hover {
+    transform: scale(1.05);
+  }
 }
