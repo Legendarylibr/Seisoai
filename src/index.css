@@ -60,11 +60,6 @@
     @apply flex-col gap-2;
   }
   
-  /* Better spacing */
-  .space-y-6 {
-    @apply space-y-4;
-  }
-  
   /* Smaller text on mobile */
   .text-lg {
     @apply text-base;
@@ -88,11 +83,6 @@
   /* Wider containers on desktop */
   .container {
     max-width: 1400px;
-  }
-
-  /* Better spacing on desktop */
-  .space-y-6 {
-    @apply space-y-6;
   }
 
   /* Larger text on desktop */
