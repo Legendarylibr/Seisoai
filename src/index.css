@@ -59,19 +59,6 @@
   .input-group {
     @apply flex-col gap-2;
   }
-  
-  /* Smaller text on mobile */
-  .text-lg {
-    @apply text-base;
-  }
-  
-  .text-xl {
-    @apply text-lg;
-  }
-  
-  .text-3xl {
-    @apply text-2xl;
-  }
 }
 
 /* Desktop-only optimizations */
@@ -83,15 +70,6 @@
   /* Wider containers on desktop */
   .container {
     max-width: 1400px;
-  }
-
-  /* Larger text on desktop */
-  .text-3xl {
-    @apply text-4xl;
-  }
-
-  .text-2xl {
-    @apply text-3xl;
   }
 
   /* Optimize grids for desktop */
