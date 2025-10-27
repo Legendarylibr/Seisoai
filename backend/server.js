@@ -1420,10 +1420,11 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
  */
 app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => {
   try {
-    const { walletAddress, chainId } = req.body;
+    const { walletAddress, chainId, expectedAmount } = req.body;
     const token = 'USDC';
     
     console.log(`[INSTANT CHECK] Starting instant payment check for ${walletAddress || 'any wallet'} on chain ${chainId}`);
+    console.log(`[INSTANT CHECK] Expected amount: ${expectedAmount} USDC`);
     
     const evmPaymentAddress = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
     
@@ -1459,6 +1460,32 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         
         // Get the sender's wallet address from the blockchain event
         const senderAddress = quickPayment.from;
+        
+        // Verify the payment is from the requesting wallet address
+        if (walletAddress && senderAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+          console.log(`[INSTANT] Payment sender ${senderAddress} does not match requesting wallet ${walletAddress}`);
+          return res.json({
+            success: true,
+            paymentDetected: false,
+            message: 'Payment found but sender does not match'
+          });
+        }
+        
+        // Verify amount if provided
+        if (expectedAmount) {
+          const paymentAmount = parseFloat(quickPayment.amount);
+          const expected = parseFloat(expectedAmount);
+          const tolerance = expected * 0.01; // 1% tolerance
+          
+          if (paymentAmount < expected - tolerance || paymentAmount > expected + tolerance) {
+            console.log(`[INSTANT] Payment amount ${paymentAmount} does not match expected ${expectedAmount} (tolerance: ${tolerance})`);
+            return res.json({
+              success: true,
+              paymentDetected: false,
+              message: `Payment found but amount ${paymentAmount} does not match expected ${expectedAmount}`
+            });
+          }
+        }
         
         console.log(`[CREDIT] Crediting sender: ${senderAddress} for USDC transfer`);
         
@@ -1530,6 +1557,32 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
       
       // Get the sender's wallet address from the blockchain event
       const senderAddress = quickPayment.from;
+      
+      // Verify the payment is from the requesting wallet address
+      if (walletAddress && senderAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+        console.log(`[INSTANT] Payment sender ${senderAddress} does not match requesting wallet ${walletAddress}`);
+        return res.json({
+          success: true,
+          paymentDetected: false,
+          message: 'Payment found but sender does not match'
+        });
+      }
+      
+      // Verify amount if provided
+      if (expectedAmount) {
+        const paymentAmount = parseFloat(quickPayment.amount);
+        const expected = parseFloat(expectedAmount);
+        const tolerance = expected * 0.01; // 1% tolerance
+        
+        if (paymentAmount < expected - tolerance || paymentAmount > expected + tolerance) {
+          console.log(`[INSTANT] Payment amount ${paymentAmount} does not match expected ${expectedAmount} (tolerance: ${tolerance})`);
+          return res.json({
+            success: true,
+            paymentDetected: false,
+            message: `Payment found but amount ${paymentAmount} does not match expected ${expectedAmount}`
+          });
+        }
+      }
       
       console.log(`[CREDIT] Crediting sender: ${senderAddress} for USDC transfer`);
       

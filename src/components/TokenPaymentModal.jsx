@@ -662,7 +662,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                   txHash: tx.hash,
                   walletAddress: address,
                   tokenSymbol: 'USDC',
-                  amount: numAmount,
+                  amount: parseFloat(amount),
                   chainId: chainId,
                   walletType: 'evm'
                 })
