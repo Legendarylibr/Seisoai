@@ -283,13 +283,13 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   // Get RPC URL for different networks
   const getRPCUrl = (chainId) => {
     const rpcUrls = {
-      1: 'https://eth.llamarpc.com',
-      137: 'https://polygon.llamarpc.com',
-      42161: 'https://arbitrum.llamarpc.com',
-      10: 'https://optimism.llamarpc.com',
-      8453: 'https://base.llamarpc.com'
+      1: 'https://ethereum.publicnode.com',
+      137: 'https://polygon.llamarpc.com', // Using publicnode.com causes CORS issues, keep llamarpc
+      42161: 'https://arbitrum.llamarpc.com', // Using publicnode.com causes CORS issues, keep llamarpc
+      10: 'https://optimism.llamarpc.com', // Using publicnode.com causes CORS issues, keep llamarpc
+      8453: 'https://base.publicnode.com'
     };
-    return rpcUrls[chainId] || 'https://eth.llamarpc.com';
+    return rpcUrls[chainId] || 'https://ethereum.publicnode.com';
   };
 
   // Switch to a specific network
@@ -330,40 +330,40 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
 
   // Add network if it doesn't exist
   const addNetwork = async (chainId) => {
-    const networkConfigs = {
+      const networkConfigs = {
       1: {
         chainId: '0x1',
         chainName: 'Ethereum Mainnet',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://eth.llamarpc.com'],
+        rpcUrls: ['https://rpc.ankr.com/eth', 'https://ethereum.publicnode.com'],
         blockExplorerUrls: ['https://etherscan.io']
       },
       137: {
         chainId: '0x89',
         chainName: 'Polygon Mainnet',
         nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
-        rpcUrls: ['https://polygon.llamarpc.com'],
+        rpcUrls: ['https://rpc.ankr.com/polygon', 'https://polygon-rpc.com'],
         blockExplorerUrls: ['https://polygonscan.com']
       },
       42161: {
         chainId: '0xa4b1',
         chainName: 'Arbitrum One',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://arbitrum.llamarpc.com'],
+        rpcUrls: ['https://rpc.ankr.com/arbitrum', 'https://arbitrum.publicnode.com'],
         blockExplorerUrls: ['https://arbiscan.io']
       },
       10: {
         chainId: '0xa',
         chainName: 'Optimism',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://optimism.llamarpc.com'],
+        rpcUrls: ['https://rpc.ankr.com/optimism', 'https://optimism.publicnode.com'],
         blockExplorerUrls: ['https://optimistic.etherscan.io']
       },
       8453: {
         chainId: '0x2105',
         chainName: 'Base',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://base.llamarpc.com'],
+        rpcUrls: ['https://rpc.ankr.com/base', 'https://base.publicnode.com'],
         blockExplorerUrls: ['https://basescan.org']
       }
     };
