@@ -84,7 +84,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     // Build optimized prompt - avoid unnecessary concatenation
     let basePrompt = '';
     
-    console.log('🔍 Prompt building debug:', {
+    console.log('🔍 [PROMPT DEBUG] Custom prompt received:', {
       customPrompt,
       customPromptType: typeof customPrompt,
       customPromptLength: customPrompt?.length,
@@ -97,7 +97,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     // User's custom prompt takes priority, style enhances without overriding
     if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
       const userPrompt = customPrompt.trim();
-      console.log('✅ Using custom prompt as base:', userPrompt);
+      console.log('✅ [PROMPT DEBUG] Using custom prompt as base:', userPrompt);
       
       // Add style enhancement only if we have a style and it adds value
       if (style && style.id) {
@@ -109,7 +109,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
           
           // Combine with user prompt: user content first, style modifiers enhance
           basePrompt = `${userPrompt}, ${keyModifiers}`;
-          console.log('✅ Added concise style enhancement:', basePrompt);
+          console.log('✅ [PROMPT DEBUG] Added concise style enhancement:', basePrompt);
         } else {
           basePrompt = userPrompt;
         }
@@ -121,11 +121,11 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     } else if (style && style.id) {
       // If no custom prompt but we have a style, use the style prompt
       basePrompt = getStylePrompt(style.id);
-      console.log('✅ Using style prompt only:', basePrompt);
+      console.log('✅ [PROMPT DEBUG] Using style prompt only:', basePrompt);
     } else {
       // If no prompt and no style, use a default optimized for Flux Kontext
       basePrompt = 'high quality, detailed, artistic image';
-      console.log('✅ Using default prompt:', basePrompt);
+      console.log('⚠️ [PROMPT DEBUG] Using default prompt (no user input):', basePrompt);
     }
     
     // Optimize prompt length for Flux Kontext Pro Max (prefers concise prompts)
@@ -134,7 +134,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       basePrompt = basePrompt.substring(0, 500).trim();
     }
     
-    console.log('🎯 Final prompt being sent to API:', basePrompt);
+    console.log('🎯 [PROMPT DEBUG] Final prompt being sent to API:', basePrompt);
     
     // Use FLUX.1 Kontext [max] for premium image generation
     const fluxEndpoint = getFluxEndpoint();
@@ -144,15 +144,20 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     });
     
     // Build request body according to the official API schema
-    const requestBody = {
-      prompt: basePrompt,
-      guidance_scale: guidanceScale,
-      num_images: numImages,
-      output_format: "jpeg",
-      safety_tolerance: enableSafetyChecker ? "2" : "6", // API expects string values
-      enhance_prompt: true,
-      seed: Math.floor(Math.random() * 1000000) // Add random seed for variety
-    };
+      // Generate random seed each time
+      const randomSeed = Math.floor(Math.random() * 2147483647); // Random seed for variety
+      
+      const requestBody = {
+        prompt: basePrompt,
+        guidance_scale: guidanceScale,
+        num_images: numImages,
+        output_format: "jpeg",
+        safety_tolerance: enableSafetyChecker ? "2" : "6", // API expects string values
+        enhance_prompt: true,
+        seed: randomSeed // Randomized seed every time
+      };
+      
+      console.log('🎲 Using random seed:', randomSeed);
 
     // Add reference image if provided (required for Kontext model)
     if (referenceImage) {
