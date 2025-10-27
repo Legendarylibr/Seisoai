@@ -9,10 +9,15 @@ if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
   console.error('⚠️ VITE_FAL_API_KEY is not set. Please add your FAL API key to .env file from https://fal.ai');
 }
 
-// FLUX.1 Kontext [max] endpoint - Updated to use the premium model
-const getFluxEndpoint = () => {
-  // Use the official FLUX.1 Kontext [max] model endpoint for premium quality
-  return 'https://fal.run/fal-ai/flux-pro/kontext/max';
+// FLUX.1 Kontext endpoints
+const getFluxEndpoint = (hasReferenceImage = false) => {
+  if (hasReferenceImage) {
+    // Use Kontext [max] for image-to-image with reference
+    return 'https://fal.run/fal-ai/flux-pro/kontext/max';
+  } else {
+    // Use Kontext [pro] text-to-image when no reference image
+    return 'https://fal.run/fal-ai/flux-pro/kontext/text-to-image';
+  }
 };
 
 // Get style prompt from the comprehensive styles configuration
@@ -136,11 +141,12 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     
     console.log('🎯 [PROMPT DEBUG] Final prompt being sent to API:', basePrompt);
     
-    // Use FLUX.1 Kontext [max] for premium image generation
-    const fluxEndpoint = getFluxEndpoint();
-    logger.info('Using FLUX.1 Kontext [max] generation', {
+    // Choose the right endpoint based on whether we have a reference image
+    const hasRefImage = !!referenceImage;
+    const fluxEndpoint = getFluxEndpoint(hasRefImage);
+    logger.info(`Using ${hasRefImage ? 'Kontext [max] image-to-image' : 'Kontext [pro] text-to-image'} generation`, {
       endpoint: fluxEndpoint,
-      hasReferenceImage: !!referenceImage
+      hasReferenceImage: hasRefImage
     });
     
     // Build request body according to the official API schema
@@ -159,13 +165,13 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       
       console.log('🎲 Using random seed:', randomSeed);
 
-    // Add reference image (required for Kontext model)
+    // Add reference image only if provided (for image-to-image)
     if (referenceImage) {
       requestBody.image_url = referenceImage;
-      logger.debug('Using reference image for Kontext generation');
+      logger.debug('Using reference image for Kontext image-to-image generation');
     } else {
-      console.warn('⚠️ No reference image provided, API may fail');
-      // Don't throw error, let API handle it
+      // No reference image - using text-to-image mode
+      logger.debug('No reference image - using text-to-image generation');
     }
 
     // Add aspect ratio based on the selected size or reference image
