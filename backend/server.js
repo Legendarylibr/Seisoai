@@ -1819,7 +1819,7 @@ app.post('/api/safety/violation', async (req, res) => {
 });
 
 /**
- * Get user gallery
+ * Get user gallery (filtered to last 30 days)
  */
 app.get('/api/gallery/:walletAddress', async (req, res) => {
   try {
@@ -1828,17 +1828,23 @@ app.get('/api/gallery/:walletAddress', async (req, res) => {
     
     const user = await getOrCreateUser(walletAddress);
     
+    // Filter gallery to last 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentGallery = user.gallery.filter(item => 
+      new Date(item.timestamp) >= thirtyDaysAgo
+    );
+    
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + parseInt(limit);
     
-    const gallery = user.gallery
+    const gallery = recentGallery
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
       .slice(startIndex, endIndex);
     
     res.json({
       success: true,
       gallery,
-      total: user.gallery.length,
+      total: recentGallery.length,
       page: parseInt(page),
       limit: parseInt(limit)
     });
@@ -1872,19 +1878,26 @@ app.put('/api/users/:walletAddress/settings', async (req, res) => {
 });
 
 /**
- * Get gallery statistics
+ * Get gallery statistics (30-day window)
  */
 app.get('/api/gallery/:walletAddress/stats', async (req, res) => {
   try {
     const { walletAddress } = req.params;
     const user = await getOrCreateUser(walletAddress);
     
+    // Filter to last 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentGallery = user.gallery.filter(item => 
+      new Date(item.timestamp) >= thirtyDaysAgo
+    );
+    
     const stats = {
-      totalImages: user.gallery.length,
-      totalCreditsUsed: user.gallery.reduce((sum, item) => sum + (item.creditsUsed || 0), 0),
-      recentImages: user.gallery.filter(img => 
+      totalImages: recentGallery.length,
+      totalCreditsUsed: recentGallery.reduce((sum, item) => sum + (item.creditsUsed || 0), 0),
+      recentImages: recentGallery.filter(img => 
         new Date(img.timestamp) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-      ).length
+      ).length,
+      storageDays: 30
     };
     
     res.json({
@@ -2266,6 +2279,51 @@ const startServer = async (port = process.env.PORT || 3001) => {
       process.exit(1);
     }
   });
+
+  // Cleanup job: Remove gallery items older than 30 days
+  const cleanupGallery = async () => {
+    try {
+      logger.info('Running gallery cleanup job...');
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      
+      const users = await User.find({});
+      let totalRemoved = 0;
+      
+      for (const user of users) {
+        const originalCount = user.gallery.length;
+        user.gallery = user.gallery.filter(item => new Date(item.timestamp) >= thirtyDaysAgo);
+        
+        if (user.gallery.length < originalCount) {
+          await user.save();
+          totalRemoved += originalCount - user.gallery.length;
+          logger.info(`Removed ${originalCount - user.gallery.length} old items for user ${user.walletAddress}`);
+        }
+      }
+      
+      logger.info(`Gallery cleanup complete. Removed ${totalRemoved} old items.`);
+    } catch (error) {
+      logger.error('Error running gallery cleanup:', error);
+    }
+  };
+
+  // Run cleanup daily at midnight
+  const scheduleCleanup = () => {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setHours(24, 0, 0, 0);
+    const msUntilMidnight = tomorrow.getTime() - now.getTime();
+    
+    setTimeout(() => {
+      cleanupGallery();
+      // Run cleanup every 24 hours
+      setInterval(cleanupGallery, 24 * 60 * 60 * 1000);
+    }, msUntilMidnight);
+    
+    logger.info('Gallery cleanup job scheduled');
+  };
+
+  // Start the cleanup schedule
+  scheduleCleanup();
 
   // Graceful shutdown
   process.on('SIGTERM', () => {
