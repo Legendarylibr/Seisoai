@@ -1371,18 +1371,97 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
  */
 app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => {
   try {
-    const { walletAddress } = req.body;
+    const { walletAddress, chainId } = req.body;
     const token = 'USDC';
     
-    console.log(`[INSTANT CHECK] Starting instant payment check for ${walletAddress || 'any wallet'}`);
+    console.log(`[INSTANT CHECK] Starting instant payment check for ${walletAddress || 'any wallet'} on chain ${chainId}`);
     
     const evmPaymentAddress = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
     
-    // Check all chains for ANY USDC transfer to payment wallet (no amount matching)
+    // Map chainId to backend chain name
+    const chainIdToChainName = {
+      1: 'ethereum',
+      137: 'polygon',
+      42161: 'arbitrum',
+      10: 'optimism',
+      8453: 'base'
+    };
+    
+    const chainName = chainIdToChainName[chainId];
+    
+    // Only check the chain the wallet is connected to
+    if (chainName) {
+      console.log(`[INSTANT CHECK] Checking ${chainName} only (Chain ID: ${chainId})`);
+      const quickPromises = [Promise.race([
+        checkForTokenTransfer(evmPaymentAddress, '1', token, chainName),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+      ]).catch(err => {
+        console.log(`[QUICK] ${chainName} check failed:`, err.message);
+        return null;
+      })];
+      
+      const quickResults = await Promise.all(quickPromises);
+      const quickPayment = quickResults.find(r => r && r.found);
+      
+      if (quickPayment) {
+        console.log(`[INSTANT] Payment found on ${quickPayment.chain}!`);
+        
+        // Get the sender's wallet address from the blockchain event
+        const senderAddress = quickPayment.from;
+        
+        // Process payment for the sender
+        const user = await getOrCreateUser(senderAddress);
+        const alreadyProcessed = user.paymentHistory.some(p => p.txHash === quickPayment.txHash);
+        
+        if (alreadyProcessed) {
+          return res.json({
+            success: true,
+            paymentDetected: true,
+            alreadyProcessed: true,
+            message: 'Payment already credited'
+          });
+        }
+        
+        // Calculate credits based on NFT holder status
+        const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+        const creditsPerUSDC = isNFTHolder ? 10 : 6.67;
+        const creditsToAdd = Math.floor(parseFloat(quickPayment.amount) * creditsPerUSDC);
+        
+        // Add credits instantly
+        user.credits += creditsToAdd;
+        user.totalCreditsEarned += creditsToAdd;
+        user.paymentHistory.push({
+          txHash: quickPayment.txHash,
+          tokenSymbol: quickPayment.token || 'USDC',
+          amount: parseFloat(quickPayment.amount),
+          credits: creditsToAdd,
+          chainId: quickPayment.chain || 'unknown',
+          walletType: 'unknown',
+          timestamp: new Date(quickPayment.timestamp * 1000)
+        });
+        
+        await user.save();
+        
+        console.log(`[INSTANT] Added ${creditsToAdd} credits to ${senderAddress}!`);
+        
+        return res.json({
+          success: true,
+          paymentDetected: true,
+          payment: quickPayment,
+          credits: creditsToAdd,
+          newBalance: user.credits,
+          senderAddress: senderAddress,
+          message: 'Payment detected and credits added instantly!'
+        });
+      }
+    }
+    
+    // If no chainId provided or chain not found, fall back to checking all chains
+    console.log(`[INSTANT CHECK] No specific chain requested or unsupported chainId (${chainId}), checking all chains`);
     const allChains = ['polygon', 'ethereum', 'base', 'arbitrum', 'optimism'];
     const quickPromises = allChains.map(chain => 
       Promise.race([
-        checkForTokenTransfer(evmPaymentAddress, '1', token, chain), // Pass dummy amount, we don't match on it anymore
+        checkForTokenTransfer(evmPaymentAddress, '1', token, chain),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
       ]).catch(err => {
         console.log(`[QUICK] ${chain} check failed:`, err.message);

@@ -708,6 +708,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     setPaymentStatus('pending');
     setError('');
     
+    // Get current network to pass to backend
+    const { chainId } = await getCurrentNetwork();
+    
     // Start instant payment detection - check every 200ms for near-instant detection
     const checkInterval = setInterval(async () => {
       try {
@@ -715,7 +718,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         console.log('[Payment] Instant checking for payment:', {
           walletAddress: address,
           expectedAmount: numAmount,
-          token: 'USDC'
+          token: 'USDC',
+          chainId: chainId
         });
         
         // Use instant-check endpoint for faster detection
@@ -727,7 +731,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           body: JSON.stringify({
             walletAddress: address,
             expectedAmount: numAmount,
-            token: 'USDC'
+            token: 'USDC',
+            chainId: chainId // Pass the current chain ID
           })
         });
         
