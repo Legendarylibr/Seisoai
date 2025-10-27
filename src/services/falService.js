@@ -6,7 +6,7 @@ import { generationLogger as logger } from '../utils/logger.js';
 const FAL_API_KEY = import.meta.env.VITE_FAL_API_KEY;
 
 if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
-  throw new Error('VITE_FAL_API_KEY environment variable is required. Please check your .env file and add your FAL API key from https://fal.ai');
+  console.error('⚠️ VITE_FAL_API_KEY is not set. Please add your FAL API key to .env file from https://fal.ai');
 }
 
 // FLUX.1 Kontext [max] endpoint - Updated to use the premium model
@@ -159,13 +159,13 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       
       console.log('🎲 Using random seed:', randomSeed);
 
-    // Add reference image if provided (required for Kontext model)
+    // Add reference image (required for Kontext model)
     if (referenceImage) {
       requestBody.image_url = referenceImage;
       logger.debug('Using reference image for Kontext generation');
     } else {
-      // Kontext [max] model requires an image_url, so we need to provide a default or throw an error
-      throw new Error('FLUX.1 Kontext [max] requires a reference image. Please upload an image to use this model.');
+      console.warn('⚠️ No reference image provided, API may fail');
+      // Don't throw error, let API handle it
     }
 
     // Add aspect ratio based on the selected size or reference image
@@ -203,7 +203,18 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       prompt: requestBody.prompt,
       hasImage: !!requestBody.image_url,
       numImages: requestBody.num_images,
-      aspectRatio: requestBody.aspect_ratio
+      aspectRatio: requestBody.aspect_ratio,
+      guidanceScale: requestBody.guidance_scale,
+      seed: requestBody.seed
+    });
+    
+    console.log('📤 [FAL Request] Sending to FAL.ai:', {
+      endpoint: fluxEndpoint,
+      prompt: requestBody.prompt.substring(0, 100) + '...',
+      hasImageUrl: !!requestBody.image_url,
+      aspectRatio: requestBody.aspect_ratio,
+      guidanceScale: requestBody.guidance_scale,
+      seed: requestBody.seed
     });
 
     const response = await fetch(fluxEndpoint, {
