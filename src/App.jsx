@@ -44,7 +44,7 @@ function App() {
             onShowStripePayment={() => setShowStripePaymentModal(true)}
           />
           
-          <main className="container mx-auto px-2 md:px-4 py-4 md:py-6">
+          <main className="container mx-auto px-2 md:px-6 lg:px-8 py-4 md:py-8">
             <AppContent 
               activeTab={activeTab} 
               onShowTokenPayment={() => setShowTokenPaymentModal(true)}
@@ -271,7 +271,7 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
   const { credits } = useSimpleWallet();
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4 md:space-y-6">
       {/* Compact Header */}
       <div className="text-center py-1">
         <h1 className="text-xl font-bold gradient-text mb-1">Seiso AI</h1>
@@ -298,15 +298,15 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
         </div>
 
         {/* Main Generation Area - Prioritized */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {/* Input Image Section - Bigger */}
-          <div className="space-y-3">
-            <div className="glass-effect rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-3">
-                <Image className="w-4 h-4 text-purple-400" />
-                <h2 className="text-base font-semibold text-white">Reference Image</h2>
+          <div className="space-y-3 md:space-y-4">
+            <div className="glass-effect rounded-lg p-3 md:p-4">
+              <div className="flex items-center gap-2 mb-3 md:mb-4">
+                <Image className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
+                <h2 className="text-base md:text-lg font-semibold text-white">Reference Image</h2>
               </div>
-              <div className="min-h-[300px]">
+              <div className="min-h-[300px] md:min-h-[400px] lg:min-h-[500px]">
                 <ReferenceImageInput />
               </div>
             </div>

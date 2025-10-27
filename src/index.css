@@ -79,9 +79,62 @@
   }
 }
 
-/* Desktop-only effects */
+/* Desktop-only optimizations */
 @media (min-width: 768px) {
   .btn-primary:hover {
     transform: scale(1.05);
+  }
+
+  /* Wider containers on desktop */
+  .container {
+    max-width: 1400px;
+  }
+
+  /* Better spacing on desktop */
+  .space-y-6 {
+    @apply space-y-6;
+  }
+
+  /* Larger text on desktop */
+  .text-3xl {
+    @apply text-4xl;
+  }
+
+  .text-2xl {
+    @apply text-3xl;
+  }
+
+  /* Optimize grids for desktop */
+  .grid-optimized {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+
+  /* Better hover states */
+  .hover-effect:hover {
+    @apply bg-white/20 transition-all duration-200;
+  }
+
+  /* Side-by-side layouts */
+  .desktop-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  /* Larger images on desktop */
+  .desktop-preview {
+    min-height: 500px;
+  }
+}
+
+/* Large desktop optimizations */
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1600px;
+  }
+
+  /* Larger images on large screens */
+  .desktop-preview {
+    min-height: 600px;
   }
 }

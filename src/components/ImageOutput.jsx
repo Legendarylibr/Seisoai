@@ -302,9 +302,9 @@ const ImageOutput = () => {
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold gradient-text">Generated Image</h3>
-        <div className="flex gap-2">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <h3 className="text-lg md:text-xl font-semibold gradient-text">Generated Image</h3>
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={handleDownload}
             disabled={isDownloading}
@@ -335,14 +335,14 @@ const ImageOutput = () => {
         <img
           src={generatedImage}
           alt="Generated AI image"
-          className="w-full h-auto max-h-96 object-contain"
+          className="w-full h-auto max-h-96 md:max-h-[600px] lg:max-h-[700px] object-contain"
         />
       </div>
 
       {/* Generate Button Section */}
       <div className="mb-4">
         <div className="glass-effect rounded-lg p-4">
-          <h4 className="text-md font-semibold text-gray-300 mb-3">Quick Actions</h4>
+          <h4 className="text-sm md:text-base font-semibold text-gray-300 mb-3">Quick Actions</h4>
           <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => setShowPromptModal(true)}
