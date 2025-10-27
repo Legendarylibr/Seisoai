@@ -22,6 +22,14 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     controlNetImageDimensions,
     setCurrentGeneration
   } = useImageGenerator();
+  
+  console.log('🎯 Generate button context:', {
+    hasSelectedStyle: !!selectedStyle,
+    styleId: selectedStyle?.id,
+    customPromptLength: customPrompt?.length,
+    hasReferenceImage: !!controlNetImage,
+    referenceDimensions: controlNetImageDimensions
+  });
 
   const {
     isConnected,
