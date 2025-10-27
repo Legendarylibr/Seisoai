@@ -6,13 +6,21 @@ import { generationLogger as logger } from '../utils/logger.js';
 const FAL_API_KEY = import.meta.env.VITE_FAL_API_KEY;
 
 if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
-  throw new Error('VITE_FAL_API_KEY environment variable is required. Please check your .env file and add your FAL API key from https://fal.ai');
+  console.error('⚠️ VITE_FAL_API_KEY is not set. Please add your FAL API key to .env file from https://fal.ai');
 }
 
-// FLUX.1 Kontext [max] endpoint - Updated to use the premium model
-const getFluxEndpoint = () => {
-  // Use the official FLUX.1 Kontext [max] model endpoint for premium quality
-  return 'https://fal.run/fal-ai/flux-pro/kontext/max';
+// FLUX.1 Kontext endpoints
+const getFluxEndpoint = (hasReferenceImage = false, isMultipleImages = false) => {
+  if (!hasReferenceImage) {
+    // No reference image - text-to-image
+    return 'https://fal.run/fal-ai/flux-pro/kontext/text-to-image';
+  } else if (isMultipleImages) {
+    // Multiple images - use multi model
+    return 'https://fal.run/fal-ai/flux-pro/kontext/multi';
+  } else {
+    // Single image - use max model
+    return 'https://fal.run/fal-ai/flux-pro/kontext/max';
+  }
 };
 
 // Get style prompt from the comprehensive styles configuration
@@ -37,8 +45,8 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     throw new Error('Advanced settings must be an object');
   }
   
-  if (referenceImage && typeof referenceImage !== 'string') {
-    throw new Error('Reference image must be a string (base64 or URL)');
+  if (referenceImage && typeof referenceImage !== 'string' && !Array.isArray(referenceImage)) {
+    throw new Error('Reference image must be a string, URL, or array of images');
   }
 
   try {
@@ -117,12 +125,23 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     
     console.log('🎯 Final prompt being sent to API:', basePrompt);
     
-    // Use FLUX.1 Kontext [max] for premium image generation
-    const fluxEndpoint = getFluxEndpoint();
-    logger.info('Using FLUX.1 Kontext [max] generation', {
+    // Choose the right endpoint based on reference image type
+    const hasRefImage = !!referenceImage;
+    const isMultipleImages = Array.isArray(referenceImage);
+    const fluxEndpoint = getFluxEndpoint(hasRefImage, isMultipleImages);
+    
+    const modeDesc = hasRefImage 
+      ? (isMultipleImages ? 'Kontext [multi] multi-image' : 'Kontext [max] image-to-image')
+      : 'Kontext [pro] text-to-image';
+      
+    logger.info(`Using ${modeDesc} generation`, {
       endpoint: fluxEndpoint,
-      hasReferenceImage: !!referenceImage
+      hasReferenceImage: hasRefImage,
+      isMultipleImages: isMultipleImages
     });
+    
+    // Generate random seed each time
+    const randomSeed = Math.floor(Math.random() * 2147483647);
     
     // Build request body according to the official API schema
     const requestBody = {
@@ -132,16 +151,23 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       output_format: "jpeg",
       safety_tolerance: enableSafetyChecker ? "2" : "6", // API expects string values
       enhance_prompt: true,
-      seed: Math.floor(Math.random() * 1000000) // Add random seed for variety
+      seed: randomSeed // Randomized seed every time
     };
 
-    // Add reference image if provided (required for Kontext model)
+    // Add reference image(s) if provided
     if (referenceImage) {
-      requestBody.image_url = referenceImage;
-      logger.debug('Using reference image for Kontext generation');
+      if (Array.isArray(referenceImage)) {
+        // Multiple images for multi model
+        requestBody.image_urls = referenceImage;
+        console.log(`📸 Using ${referenceImage.length} reference images for multi-image generation`);
+      } else {
+        // Single image for max model
+        requestBody.image_url = referenceImage;
+        console.log('📸 Using single reference image for image-to-image generation');
+      }
     } else {
-      // Kontext [max] model requires an image_url, so we need to provide a default or throw an error
-      throw new Error('FLUX.1 Kontext [max] requires a reference image. Please upload an image to use this model.');
+      // No reference image - using text-to-image mode
+      console.log('📝 No reference image - using text-to-image generation');
     }
 
     // Add aspect ratio based on the selected size
