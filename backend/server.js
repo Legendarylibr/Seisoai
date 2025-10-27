@@ -733,15 +733,15 @@ const TOKEN_ADDRESSES = {
   }
 };
 
-// Get provider for chain using public RPC endpoints
+// Get provider for chain using Alchemy RPC endpoints
 function getProvider(chain = 'ethereum') {
-  // Use public RPC endpoints as fallback to avoid rate limiting
+  // Use Alchemy RPC endpoints with API key
   const rpcUrls = {
-    ethereum: process.env.ETHEREUM_RPC_URL || 'https://rpc.ankr.com/eth',
-    polygon: process.env.POLYGON_RPC_URL || 'https://rpc.ankr.com/polygon',
-    arbitrum: process.env.ARBITRUM_RPC_URL || 'https://rpc.ankr.com/arbitrum',
-    optimism: process.env.OPTIMISM_RPC_URL || 'https://rpc.ankr.com/optimism',
-    base: process.env.BASE_RPC_URL || 'https://rpc.ankr.com/base'
+    ethereum: process.env.ETHEREUM_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+    polygon: process.env.POLYGON_RPC_URL || 'https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+    arbitrum: process.env.ARBITRUM_RPC_URL || 'https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+    optimism: process.env.OPTIMISM_RPC_URL || 'https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+    base: process.env.BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
   };
   
   return new ethers.JsonRpcProvider(rpcUrls[chain] || rpcUrls.ethereum);

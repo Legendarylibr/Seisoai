@@ -283,13 +283,13 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   // Get RPC URL for different networks
   const getRPCUrl = (chainId) => {
     const rpcUrls = {
-      1: 'https://ethereum.publicnode.com',
-      137: 'https://rpc.ankr.com/polygon',
-      42161: 'https://rpc.ankr.com/arbitrum',
-      10: 'https://rpc.ankr.com/optimism',
-      8453: 'https://base.publicnode.com'
+      1: 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+      137: 'https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+      42161: 'https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+      10: 'https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+      8453: 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
     };
-    return rpcUrls[chainId] || 'https://ethereum.publicnode.com';
+    return rpcUrls[chainId] || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY';
   };
 
   // Switch to a specific network
