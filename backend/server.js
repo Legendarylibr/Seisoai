@@ -790,50 +790,35 @@ async function checkForTokenTransfer(paymentAddress, expectedAmount, token = 'US
       return null;
     }
     
-    // Check if any transfer matches our expected amount (within 1% tolerance)
-    const expectedAmountWei = ethers.parseUnits(expectedAmount.toString(), decimals);
-    const tolerance = expectedAmountWei / 100n; // 1% tolerance
-    
-    console.log(`[${chain.toUpperCase()}] Expected amount (wei): ${expectedAmountWei.toString()}`);
-    console.log(`[${chain.toUpperCase()}] Tolerance range: ${(expectedAmountWei - tolerance).toString()} - ${(expectedAmountWei + tolerance).toString()}`);
-    
-    for (const event of events.reverse()) { // Check most recent first
+    // Get the most recent transfer (any amount to payment wallet qualifies)
+    if (events.length > 0) {
+      const event = events[events.length - 1]; // Most recent event
       const amount = event.args.value;
       const from = event.args.from;
       const to = event.args.to;
       const amountFormatted = ethers.formatUnits(amount, decimals);
       
-      console.log(`[${chain.toUpperCase()}]   Checking tx ${event.transactionHash}:`);
+      console.log(`[${chain.toUpperCase()}]   Found transfer to payment wallet:`);
+      console.log(`[${chain.toUpperCase()}]     TxHash: ${event.transactionHash}`);
       console.log(`[${chain.toUpperCase()}]     From: ${from}`);
       console.log(`[${chain.toUpperCase()}]     To: ${to}`);
-      console.log(`[${chain.toUpperCase()}]     Amount: ${amountFormatted} ${token} (${amount.toString()} wei)`);
+      console.log(`[${chain.toUpperCase()}]     Amount: ${amountFormatted} ${token}`);
       
-      // Check if amount matches (within tolerance)
-      if (amount >= expectedAmountWei - tolerance && amount <= expectedAmountWei + tolerance) {
-        const block = await event.getBlock();
-        
-        console.log(`[${chain.toUpperCase()}]   ✓ MATCH FOUND!`);
-        console.log(`[${chain.toUpperCase()}]     TxHash: ${event.transactionHash}`);
-        console.log(`[${chain.toUpperCase()}]     Block: ${event.blockNumber}`);
-        console.log(`[${chain.toUpperCase()}]     Timestamp: ${new Date(block.timestamp * 1000).toISOString()}`);
-        
-        return {
-          found: true,
-          txHash: event.transactionHash,
-          from: from,
-          amount: amountFormatted,
-          timestamp: block.timestamp,
-          blockNumber: event.blockNumber,
-          chain: chain,
-          token: token
-        };
-      } else {
-        console.log(`[${chain.toUpperCase()}]     ✗ Amount doesn't match (expected ${expectedAmount})`);
-      }
+      const block = await event.getBlock();
+      console.log(`[${chain.toUpperCase()}]     Block: ${event.blockNumber}`);
+      console.log(`[${chain.toUpperCase()}]     Timestamp: ${new Date(block.timestamp * 1000).toISOString()}`);
+      
+      return {
+        found: true,
+        txHash: event.transactionHash,
+        from: from,
+        amount: amountFormatted,
+        timestamp: block.timestamp,
+        blockNumber: event.blockNumber,
+        chain: chain,
+        token: token
+      };
     }
-    
-    console.log(`[${chain.toUpperCase()}] ✗ No matching amounts found`);
-    return null;
   } catch (error) {
     console.error(`[${chain.toUpperCase()}] ❌ Error:`, error.message);
     if (error.stack) {
@@ -1386,25 +1371,19 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
  */
 app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => {
   try {
-    const { walletAddress, expectedAmount, token = 'USDC' } = req.body;
+    const { walletAddress } = req.body;
+    const token = 'USDC';
     
-    console.log(`[INSTANT CHECK] Starting instant payment check for ${walletAddress}`);
-    
-    if (!walletAddress || !expectedAmount) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields'
-      });
-    }
+    console.log(`[INSTANT CHECK] Starting instant payment check for ${walletAddress || 'any wallet'}`);
     
     const evmPaymentAddress = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
     
-    // Quick check on most common chains first (Polygon and Ethereum)
-    const quickChains = ['polygon', 'ethereum'];
-    const quickPromises = quickChains.map(chain => 
+    // Check all chains for ANY USDC transfer to payment wallet (no amount matching)
+    const allChains = ['polygon', 'ethereum', 'base', 'arbitrum', 'optimism'];
+    const quickPromises = allChains.map(chain => 
       Promise.race([
-        checkForTokenTransfer(evmPaymentAddress, expectedAmount, token, chain),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+        checkForTokenTransfer(evmPaymentAddress, '1', token, chain), // Pass dummy amount, we don't match on it anymore
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
       ]).catch(err => {
         console.log(`[QUICK] ${chain} check failed:`, err.message);
         return null;
@@ -1417,8 +1396,11 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
     if (quickPayment) {
       console.log(`[INSTANT] Payment found on ${quickPayment.chain}!`);
       
-      // Process payment immediately
-      const user = await getOrCreateUser(walletAddress);
+      // Get the sender's wallet address from the blockchain event
+      const senderAddress = quickPayment.from;
+      
+      // Process payment for the sender
+      const user = await getOrCreateUser(senderAddress);
       const alreadyProcessed = user.paymentHistory.some(p => p.txHash === quickPayment.txHash);
       
       if (alreadyProcessed) {
@@ -1450,7 +1432,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
       
       await user.save();
       
-      console.log(`[INSTANT] Added ${creditsToAdd} credits instantly!`);
+      console.log(`[INSTANT] Added ${creditsToAdd} credits to ${senderAddress}!`);
       
       return res.json({
         success: true,
@@ -1458,6 +1440,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         payment: quickPayment,
         credits: creditsToAdd,
         newBalance: user.credits,
+        senderAddress: senderAddress,
         message: 'Payment detected and credits added instantly!'
       });
     }
