@@ -77,7 +77,8 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       imageSize = 'square',
       numImages = 1,
       enableSafetyChecker = false,
-      generationMode = 'flux-pro'
+      generationMode = 'flux-pro',
+      referenceImageDimensions = null
     } = advancedSettings;
 
     // Build optimized prompt - avoid unnecessary concatenation
@@ -162,9 +163,20 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       throw new Error('FLUX.1 Kontext [max] requires a reference image. Please upload an image to use this model.');
     }
 
-    // Add aspect ratio based on the selected size
-    if (imageSize && imageSize !== 'square_hd') {
-      // Map our image sizes to aspect ratios according to the API schema
+    // Add aspect ratio based on the selected size or reference image
+    let aspectRatio = null;
+    
+    if (referenceImageDimensions && referenceImageDimensions.width && referenceImageDimensions.height) {
+      // Calculate aspect ratio from reference image
+      const width = referenceImageDimensions.width;
+      const height = referenceImageDimensions.height;
+      const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+      const divisor = gcd(width, height);
+      aspectRatio = `${width / divisor}:${height / divisor}`;
+      requestBody.aspect_ratio = aspectRatio;
+      console.log('✅ Using reference image aspect ratio:', aspectRatio);
+    } else if (imageSize && imageSize !== 'square_hd') {
+      // Fall back to mapped aspect ratios
       const aspectRatioMap = {
         'square': '1:1',
         'portrait_4_3': '3:4',
@@ -178,6 +190,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       
       if (aspectRatioMap[imageSize]) {
         requestBody.aspect_ratio = aspectRatioMap[imageSize];
+        console.log('✅ Using mapped aspect ratio:', aspectRatioMap[imageSize]);
       }
     }
 
