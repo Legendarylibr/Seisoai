@@ -391,7 +391,8 @@ const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
   "function decimals() view returns (uint8)",
   "function symbol() view returns (string)",
-  "event Transfer(address indexed from, address indexed to, uint256 value)"
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+  "function transfer(address to, uint256 amount) returns (bool)"
 ];
 
 /**
@@ -480,12 +481,21 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
 
     for (const log of transferLogs) {
       try {
+        // Log raw log data for debugging
+        console.log(`[VERIFY] Raw log:`, {
+          address: log.address,
+          topics: log.topics,
+          data: log.data,
+          blockNumber: log.blockNumber
+        });
+        
         const decoded = tokenContract.interface.parseLog(log);
         const from = decoded.args[0];
         const to = decoded.args[1];
         const value = decoded.args[2];
         
-        console.log(`[VERIFY] Transfer log: from=${from}, to=${to}, value=${value.toString()}`);
+        console.log(`[VERIFY] Decoded transfer: from=${from}, to=${to}, value=${value.toString()}`);
+        console.log(`[VERIFY] Checking: to===${paymentWallet.toLowerCase()} && from===${walletAddress.toLowerCase()}`);
 
         if (to.toLowerCase() === paymentWallet.toLowerCase() && 
             from.toLowerCase() === walletAddress.toLowerCase()) {
@@ -493,9 +503,12 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
           actualAmount = parseFloat(ethers.formatUnits(value, tokenConfig.decimals));
           console.log(`[VERIFY] ✅ Valid transfer found! Amount: ${actualAmount}`);
           break;
+        } else {
+          console.log(`[VERIFY] Transfer doesn't match - to=${to}, from=${from}`);
         }
       } catch (e) {
         console.log(`[VERIFY] Error parsing log:`, e.message);
+        console.log(`[VERIFY] Error stack:`, e.stack);
         continue;
       }
     }
