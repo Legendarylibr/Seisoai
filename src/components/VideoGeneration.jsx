@@ -35,13 +35,16 @@ const VideoGeneration = ({ onShowTokenPayment, onShowStripePayment }) => {
     setProgress(0);
 
     try {
-      // Simulate progress
-      const progressInterval = setInterval(() => {
+      // Pass progress callback to update progress
+      let progressInterval;
+      
+      // Simulate initial progress
+      progressInterval = setInterval(() => {
         setProgress((prev) => {
           if (prev >= 90) return prev;
-          return prev + 5;
+          return prev + 1;
         });
-      }, 500);
+      }, 1000);
 
       const videoUrl = await generateVideo({
         prompt: prompt.trim(),
