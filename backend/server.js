@@ -1413,18 +1413,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         // Get the sender's wallet address from the blockchain event
         const senderAddress = quickPayment.from;
         
-        // Verify this payment is for the requesting user
-        const requestedAddress = walletAddress?.toLowerCase();
-        const actualSender = senderAddress?.toLowerCase();
-        
-        if (requestedAddress && requestedAddress !== actualSender) {
-          console.log(`[WARNING] Payment sender (${actualSender}) doesn't match requestor (${requestedAddress})`);
-          return res.json({
-            success: true,
-            paymentDetected: false,
-            message: 'A USDC transfer was found, but it was sent by a different wallet. Please make sure you are the sender.'
-          });
-        }
+        console.log(`[CREDIT] Crediting sender: ${senderAddress} for USDC transfer`);
         
         // Process payment for the sender
         const user = await getOrCreateUser(senderAddress);
@@ -1495,18 +1484,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
       // Get the sender's wallet address from the blockchain event
       const senderAddress = quickPayment.from;
       
-      // Verify this payment is for the requesting user
-      const requestedAddress = walletAddress?.toLowerCase();
-      const actualSender = senderAddress?.toLowerCase();
-      
-      if (requestedAddress && requestedAddress !== actualSender) {
-        console.log(`[WARNING] Payment sender (${actualSender}) doesn't match requestor (${requestedAddress})`);
-        return res.json({
-          success: true,
-          paymentDetected: false,
-          message: 'A USDC transfer was found, but it was sent by a different wallet. Please make sure you are the sender.'
-        });
-      }
+      console.log(`[CREDIT] Crediting sender: ${senderAddress} for USDC transfer`);
       
       // Process payment for the sender
       const user = await getOrCreateUser(senderAddress);
