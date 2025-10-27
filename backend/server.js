@@ -84,6 +84,18 @@ const paymentLimiter = rateLimit({
 
 app.use('/api/payments/', paymentLimiter);
 
+// More lenient rate limiting for instant-check endpoint (used for polling)
+const instantCheckLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 60, // limit each IP to 60 requests per minute (1 per second)
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+    retryAfter: '1 minute'
+  }
+});
+
+// Note: Applied directly to route handler below
+
 // CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
@@ -1371,8 +1383,9 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
 
 /**
  * Instant payment detection - checks for payments immediately after wallet connection
+ * Note: Rate limiting applied via instantCheckLimiter above
  */
-app.post('/api/payment/instant-check', async (req, res) => {
+app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => {
   try {
     const { walletAddress, expectedAmount, token = 'USDC' } = req.body;
     
