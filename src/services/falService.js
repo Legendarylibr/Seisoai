@@ -192,8 +192,23 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     logger.debug('Generation request prepared', {
       prompt: requestBody.prompt,
       hasImage: !!requestBody.image_url,
+      hasImages: !!requestBody.image_urls,
+      imageCount: requestBody.image_urls?.length || 0,
       numImages: requestBody.num_images,
       aspectRatio: requestBody.aspect_ratio
+    });
+    
+    console.log('🎯 [PROMPT CHECK] Request details:', {
+      endpoint: fluxEndpoint,
+      mode: modeDesc,
+      prompt: requestBody.prompt,
+      promptLength: requestBody.prompt.length,
+      hasImage_url: !!requestBody.image_url,
+      hasImage_urls: !!requestBody.image_urls,
+      imageUrlsCount: requestBody.image_urls?.length || 0,
+      guidance_scale: requestBody.guidance_scale,
+      seed: requestBody.seed,
+      aspect_ratio: requestBody.aspect_ratio
     });
 
     const response = await fetch(fluxEndpoint, {
