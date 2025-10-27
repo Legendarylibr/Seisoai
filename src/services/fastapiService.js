@@ -96,23 +96,38 @@ export const generateImageWithFastAPI = async (style, customPrompt = '', advance
       seed = -1
     } = advancedSettings;
 
-    // Build optimized prompt
+    // Build optimized prompt for Flux Kontext
+    // User's custom prompt takes priority, style enhances without overriding
     let basePrompt = '';
     
     if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
-      basePrompt = customPrompt.trim();
+      const userPrompt = customPrompt.trim();
       
-      // Add style prompt if we have a style and it adds value
+      // Add style enhancement only if we have a style and it adds value
       if (style && style.id) {
         const stylePrompt = getStylePrompt(style.id);
         if (stylePrompt && stylePrompt !== 'artistic colors and lighting') {
-          basePrompt = `${basePrompt}, ${stylePrompt}`;
+          // Extract only key style modifiers (first 3-4 keywords) to avoid overload
+          const styleWords = stylePrompt.split(', ');
+          const keyModifiers = styleWords.slice(0, 3).join(', ');
+          
+          // Combine: user content first, style modifiers enhance
+          basePrompt = `${userPrompt}, ${keyModifiers}`;
+        } else {
+          basePrompt = userPrompt;
         }
+      } else {
+        basePrompt = userPrompt;
       }
     } else if (style && style.id) {
       basePrompt = getStylePrompt(style.id);
     } else {
-      basePrompt = 'artistic image, high quality, detailed';
+      basePrompt = 'high quality, detailed, artistic image';
+    }
+    
+    // Optimize prompt length (prefers concise prompts)
+    if (basePrompt.length > 500) {
+      basePrompt = basePrompt.substring(0, 500).trim();
     }
     
     logger.info('Using FastAPI/ComfyUI generation', {
