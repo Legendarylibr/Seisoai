@@ -92,27 +92,43 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       styleId: style?.id
     });
     
-    // If we have a custom prompt, use it as the base
+    // Optimized prompt building for Flux Kontext Pro Max
+    // User's custom prompt takes priority, style enhances without overriding
     if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
-      basePrompt = customPrompt.trim();
-      console.log('✅ Using custom prompt as base:', basePrompt);
+      const userPrompt = customPrompt.trim();
+      console.log('✅ Using custom prompt as base:', userPrompt);
       
-      // Add style prompt only if we have a style and it adds value
+      // Add style enhancement only if we have a style and it adds value
       if (style && style.id) {
         const stylePrompt = getStylePrompt(style.id);
         if (stylePrompt && stylePrompt !== 'artistic colors and lighting') {
-          basePrompt = `${basePrompt}, ${stylePrompt}`;
-          console.log('✅ Added style prompt:', basePrompt);
+          // Extract only the key style modifiers (first 3-4 words) to avoid overload
+          const styleWords = stylePrompt.split(', ');
+          const keyModifiers = styleWords.slice(0, 3).join(', ');
+          
+          // Combine with user prompt: user content first, style modifiers enhance
+          basePrompt = `${userPrompt}, ${keyModifiers}`;
+          console.log('✅ Added concise style enhancement:', basePrompt);
+        } else {
+          basePrompt = userPrompt;
         }
+      } else {
+        basePrompt = userPrompt;
       }
     } else if (style && style.id) {
       // If no custom prompt but we have a style, use the style prompt
       basePrompt = getStylePrompt(style.id);
       console.log('✅ Using style prompt only:', basePrompt);
     } else {
-      // If no prompt and no style, use a default
-      basePrompt = 'artistic image, high quality, detailed';
+      // If no prompt and no style, use a default optimized for Flux Kontext
+      basePrompt = 'high quality, detailed, artistic image';
       console.log('✅ Using default prompt:', basePrompt);
+    }
+    
+    // Optimize prompt length for Flux Kontext Pro Max (prefers concise prompts)
+    if (basePrompt.length > 500) {
+      console.log('⚠️ Prompt is long, truncating for optimal Flux Kontext performance');
+      basePrompt = basePrompt.substring(0, 500).trim();
     }
     
     console.log('🎯 Final prompt being sent to API:', basePrompt);
