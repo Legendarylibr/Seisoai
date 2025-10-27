@@ -161,22 +161,19 @@ const ReferenceImageInput = () => {
             </div>
           )}
           
-          <div className="mt-3 flex items-center justify-between text-sm text-gray-400">
-            <span>
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-xs text-gray-400">
               {Array.isArray(controlNetImage) 
                 ? `${controlNetImage.length} images uploaded` 
                 : 'Reference image uploaded'}
             </span>
             <button
               onClick={handleClickUpload}
-              className="text-purple-400 hover:text-purple-300 transition-colors px-3 py-1 rounded bg-white/5 hover:bg-white/10 text-xs sm:text-sm"
+              className="btn-secondary text-xs px-3 py-1.5"
               aria-label="Change reference image"
             >
               Change Image(s)
             </button>
-          </div>
-          <div className="mt-2 text-xs text-gray-500 bg-white/5 p-3 rounded">
-            💡 The AI will use this image as a reference for style, composition, or elements in your generated image.
           </div>
         </div>
       )}

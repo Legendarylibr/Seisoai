@@ -306,10 +306,10 @@ function GenerateTab({ onShowTokenPayment }) {
 
         {/* Main Generation Area - Prioritized */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-          {/* Input Image Section - Bigger */}
-          <div className="space-y-3 md:space-y-4">
+          {/* Input Image Section - Compact and Reorganized */}
+          <div className="space-y-3 md:space-y-3">
             <div className="glass-effect rounded-lg p-3 md:p-4">
-              <div className="flex items-center gap-2 mb-3 md:mb-4">
+              <div className="flex items-center gap-2 mb-3">
                 <Image className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
                 <h2 className="text-base md:text-lg font-semibold text-white">Reference Image</h2>
               </div>
@@ -318,27 +318,27 @@ function GenerateTab({ onShowTokenPayment }) {
               </div>
             </div>
 
-            {/* Style Selection for Reference Image */}
-            <div className="glass-effect rounded-lg p-3 md:p-4">
-              <StyleSelector />
-            </div>
-
-            {/* Custom Prompt - Compact */}
-            <div className="glass-effect rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-4 h-4 text-purple-400 text-xs">✏️</div>
-                <div>
-                  <h2 className="text-sm font-semibold text-white">Describe</h2>
-                  <p className="text-xs text-gray-400">Optional changes</p>
-                </div>
+            {/* Prompt and Style Combined - Mobile and Desktop */}
+            <div className="glass-effect rounded-lg p-3 md:p-4 space-y-3">
+              {/* Custom Prompt - Reorganized */}
+              <div>
+                <label className="flex items-center gap-2 mb-2">
+                  <span className="text-base">✏️</span>
+                  <span className="text-sm font-semibold text-white">Describe Changes</span>
+                </label>
+                <textarea
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder="Describe changes to make... (optional)"
+                  className="w-full p-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none text-sm transition-all duration-200"
+                  rows={2}
+                />
               </div>
-              <textarea
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder="Describe changes to make..."
-                className="w-full p-2 rounded bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none text-xs transition-all duration-200"
-                rows={2}
-              />
+
+              {/* Style Selection */}
+              <div>
+                <StyleSelector />
+              </div>
             </div>
           </div>
 
@@ -356,21 +356,14 @@ function GenerateTab({ onShowTokenPayment }) {
           </div>
         </div>
 
-        {/* Generate Button - Compact */}
-        <div className="flex justify-center my-3">
-          <div className="glass-effect rounded-lg p-3">
-              <GenerateButton 
+        {/* Generate Button - Compact and Reorganized */}
+        <div className="flex justify-center my-4 md:my-6">
+          <div className="glass-effect rounded-lg p-3 md:p-4 w-full max-w-md">
+            <GenerateButton 
               customPrompt={customPrompt}
               onShowTokenPayment={onShowTokenPayment}
             />
           </div>
-        </div>
-
-        {/* Credits Info - Minimal */}
-        <div className="text-center mt-2">
-          <p className="text-xs text-gray-500">
-            Need credits? Use "Buy Credits" in navigation.
-          </p>
         </div>
       </div>
     </div>
