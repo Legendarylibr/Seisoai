@@ -7,7 +7,7 @@ import ImageOutput from './components/ImageOutput';
 import Navigation from './components/Navigation';
 import ReferenceImageInput from './components/ReferenceImageInput';
 import TokenPaymentModal from './components/TokenPaymentModal';
-import StripePaymentModal from './components/StripePaymentModal';
+// import StripePaymentModal from './components/StripePaymentModal'; // DISABLED - Stripe disabled, crypto only
 import AuthGuard from './components/AuthGuard';
 import ImageGallery from './components/ImageGallery';
 import BatchProcessor from './components/BatchProcessor';
@@ -16,12 +16,13 @@ import Settings from './components/Settings';
 import LegalDisclaimer from './components/LegalDisclaimer';
 import GenerateButton from './components/GenerateButton';
 import VideoGeneration from './components/VideoGeneration';
-import { Image, Grid, File, Settings as SettingsIcon2, Coins, Wand2, Wallet, ArrowRight, Sparkles, CreditCard, Video } from 'lucide-react';
+import { Image, Grid, File, Settings as SettingsIcon2, Coins, Wand2, Wallet, ArrowRight, Sparkles, Video } from 'lucide-react';
+// import { CreditCard } from 'lucide-react'; // DISABLED - Stripe disabled
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
   const [showTokenPaymentModal, setShowTokenPaymentModal] = useState(false);
-  const [showStripePaymentModal, setShowStripePaymentModal] = useState(false);
+  // const [showStripePaymentModal, setShowStripePaymentModal] = useState(false); // DISABLED - Stripe
 
   const tabs = [
     { id: 'generate', name: 'Generate', icon: Sparkles },
@@ -41,14 +42,14 @@ function App() {
             setActiveTab={setActiveTab}
             tabs={tabs}
             onShowTokenPayment={() => setShowTokenPaymentModal(true)}
-            onShowStripePayment={() => setShowStripePaymentModal(true)}
+            // onShowStripePayment={() => setShowStripePaymentModal(true)} // DISABLED - Stripe
           />
           
           <main className="container mx-auto px-2 md:px-6 lg:px-8 py-4 md:py-8">
             <AppContent 
               activeTab={activeTab} 
               onShowTokenPayment={() => setShowTokenPaymentModal(true)}
-              onShowStripePayment={() => setShowStripePaymentModal(true)}
+              // onShowStripePayment={() => setShowStripePaymentModal(true)} // DISABLED - Stripe
             />
           </main>
           
@@ -57,10 +58,12 @@ function App() {
             onClose={() => setShowTokenPaymentModal(false)} 
           />
           
+          {/* STRIPE DISABLED - Stripe disabled, crypto payments only
           <StripePaymentModal 
             isOpen={showStripePaymentModal} 
             onClose={() => setShowStripePaymentModal(false)} 
           />
+          */}
           
           <LegalDisclaimer />
           
@@ -70,21 +73,21 @@ function App() {
   );
 }
 
-function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
+function AppContent({ activeTab, onShowTokenPayment }) {
   const { isConnected } = useSimpleWallet();
 
   // Show wallet connection prompt if not connected
   if (!isConnected) {
-    return <WalletPrompt onShowStripePayment={onShowStripePayment} />;
+    return <WalletPrompt />;
   }
 
   // Show main content if wallet is connected (AuthGuard will handle credit requirements)
   return (
     <>
       <AuthGuard requireCredits={activeTab === 'generate' || activeTab === 'batch' || activeTab === 'video'}>
-        {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
+        {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} />}
         {activeTab === 'gallery' && <GalleryTab />}
-        {activeTab === 'video' && <VideoTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
+        {activeTab === 'video' && <VideoTab onShowTokenPayment={onShowTokenPayment} />}
         {activeTab === 'templates' && <TemplatesTab />}
         {activeTab === 'batch' && <BatchTab />}
         {activeTab === 'settings' && <SettingsTab />}
@@ -93,7 +96,8 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   );
 }
 
-function WalletPrompt({ onConnect, onShowStripePayment }) {
+function WalletPrompt({ onConnect }) {
+  // onShowStripePayment prop removed - Stripe disabled
   const { connectWallet } = useSimpleWallet();
   const [showChainSelection, setShowChainSelection] = useState(true);
   const [selectedChain, setSelectedChain] = useState(null);
@@ -156,7 +160,7 @@ function WalletPrompt({ onConnect, onShowStripePayment }) {
             Connect Your Wallet
           </h2>
           
-          {/* Stripe Button - Above Wallet Connection */}
+          {/* STRIPE DISABLED - Stripe button removed, crypto only
           <button
             onClick={onShowStripePayment}
             className="w-full max-w-md mx-auto flex items-center justify-center gap-3 px-8 py-4 text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold rounded-lg transition-all duration-200 hover:scale-105 shadow-lg"
@@ -174,6 +178,7 @@ function WalletPrompt({ onConnect, onShowStripePayment }) {
               <span className="px-4 bg-gray-900 text-gray-400">OR</span>
             </div>
           </div>
+          */}
 
           {/* Chain Selection */}
           {!selectedChain ? (
@@ -266,7 +271,7 @@ function WalletPrompt({ onConnect, onShowStripePayment }) {
 }
 
 
-function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
+function GenerateTab({ onShowTokenPayment }) {
   const [customPrompt, setCustomPrompt] = useState('');
   const { credits } = useSimpleWallet();
 
@@ -352,10 +357,9 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
         {/* Generate Button - Compact */}
         <div className="flex justify-center my-3">
           <div className="glass-effect rounded-lg p-3">
-            <GenerateButton 
+              <GenerateButton 
               customPrompt={customPrompt}
               onShowTokenPayment={onShowTokenPayment}
-              onShowStripePayment={onShowStripePayment}
             />
           </div>
         </div>
@@ -375,8 +379,8 @@ function GalleryTab() {
   return <ImageGallery />;
 }
 
-function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
-  return <VideoGeneration onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />;
+function VideoTab({ onShowTokenPayment }) {
+  return <VideoGeneration onShowTokenPayment={onShowTokenPayment} />;
 }
 
 function TemplatesTab() {

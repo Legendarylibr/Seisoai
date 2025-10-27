@@ -4,7 +4,8 @@ import { generateVideo } from '../services/veo3Service';
 import { Video, Upload, Play, Loader } from 'lucide-react';
 import ReferenceImageInput from './ReferenceImageInput';
 
-const VideoGeneration = ({ onShowTokenPayment, onShowStripePayment }) => {
+const VideoGeneration = ({ onShowTokenPayment }) => {
+  // onShowStripePayment prop removed - Stripe disabled
   const { credits, address } = useSimpleWallet();
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState(null);

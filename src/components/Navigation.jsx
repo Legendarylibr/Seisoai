@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Zap, Coins, ChevronDown, Wallet, RefreshCw, CreditCard, LogOut } from 'lucide-react';
+import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut } from 'lucide-react';
+// import { CreditCard } from 'lucide-react'; // DISABLED - Stripe disabled
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
-  const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment, onShowStripePayment }) => {
+  const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment }) => {
+    // onShowStripePayment prop removed - Stripe disabled
   const { isConnected, address, credits, disconnectWallet } = useSimpleWallet();
   const [showCreditsDropdown, setShowCreditsDropdown] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -84,7 +86,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
             })}
           </nav>
 
-          {/* Stripe Login Button - Always Visible */}
+          {/* STRIPE DISABLED - Stripe button removed, crypto only
           {!isConnected && (
             <button
               onClick={onShowStripePayment}
@@ -95,6 +97,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
               <span className="sm:hidden">Card</span>
             </button>
           )}
+          */}
 
           {/* Credits Dropdown */}
           {isConnected && (
@@ -134,6 +137,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                         <h3 className="text-sm font-semibold text-white mb-3">Purchase Credits</h3>
                         
                         <div className="space-y-2">
+                          {/* STRIPE DISABLED - Card payment option removed
                           <button
                             onClick={() => {
                               setShowCreditsDropdown(false);
@@ -147,6 +151,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                               <div className="text-xs text-gray-400">Visa, Mastercard, etc.</div>
                             </div>
                           </button>
+                          */}
                           
                           <button
                             onClick={() => {
@@ -206,7 +211,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
           {/* Mobile Credits & Menu */}
           <div className="md:hidden flex items-center gap-2">
-            {/* Mobile Stripe Button */}
+            {/* STRIPE DISABLED - Mobile stripe button removed
             {!isConnected && (
               <button
                 onClick={onShowStripePayment}
@@ -216,6 +221,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                 <span className="text-xs">Card</span>
               </button>
             )}
+            */}
 
             {/* Mobile Credits Display */}
             {isConnected && (
@@ -234,7 +240,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                     className="p-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg border border-purple-500/30 transition-colors"
                     title="Buy Credits"
                   >
-                    <CreditCard className="w-4 h-4 text-purple-400" />
+                    <Coins className="w-4 h-4 text-purple-400" />
                   </button>
 
                   {/* Mobile Dropdown Menu */}
@@ -244,6 +250,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                         <h3 className="text-xs font-semibold text-white mb-2">Purchase Credits</h3>
                         
                         <div className="space-y-2">
+                          {/* STRIPE DISABLED - Mobile card payment option removed
                           <button
                             onClick={() => {
                               setShowCreditsDropdown(false);
@@ -256,6 +263,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                               <div className="text-xs font-medium text-white">Pay with Card</div>
                             </div>
                           </button>
+                          */}
                           
                           <button
                             onClick={() => {

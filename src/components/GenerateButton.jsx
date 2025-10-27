@@ -5,7 +5,8 @@ import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
 import { generationLogger as logger } from '../utils/logger.js';
 
-const GenerateButton = ({ customPrompt = '', onShowTokenPayment, onShowStripePayment }) => {
+const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
+  // onShowStripePayment prop removed - Stripe disabled
   const {
     selectedStyle,
     isGenerating,
