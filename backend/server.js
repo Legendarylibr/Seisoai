@@ -1029,12 +1029,15 @@ app.post('/api/payment/check-payment', async (req, res) => {
       console.log(`[SUCCESS] Payment detected on ${payment.chain}!`);
       console.log(`[SUCCESS] Payment details:`, JSON.stringify(payment, null, 2));
       
-      // Check if already processed
-      const user = await getOrCreateUser(walletAddress);
+      // Get the sender's wallet address from the blockchain event (the actual person who sent USDC)
+      const senderAddress = payment.from;
+      
+      // Process payment for the actual sender
+      const user = await getOrCreateUser(senderAddress);
       const alreadyProcessed = user.paymentHistory.some(p => p.txHash === payment.txHash);
       
       if (alreadyProcessed) {
-        console.log(`[INFO] Payment ${payment.txHash} already processed for ${walletAddress}`);
+        console.log(`[INFO] Payment ${payment.txHash} already processed for ${senderAddress}`);
         console.log('='.repeat(80));
         return res.json({
           success: true,
@@ -1049,7 +1052,7 @@ app.post('/api/payment/check-payment', async (req, res) => {
       const creditsPerUSDC = isNFTHolder ? 10 : 6.67; // NFT holders get better rate
       const creditsToAdd = Math.floor(parseFloat(payment.amount) * creditsPerUSDC);
       
-      console.log(`[CREDIT] Adding ${creditsToAdd} credits to user ${walletAddress}`);
+      console.log(`[CREDIT] Adding ${creditsToAdd} credits to user ${senderAddress}`);
       console.log(`[CREDIT] Previous balance: ${user.credits} credits`);
       
       // Add credits to user
@@ -1080,7 +1083,8 @@ app.post('/api/payment/check-payment', async (req, res) => {
           chain: payment.chain,
           creditsAdded: creditsToAdd
         },
-        newBalance: user.credits
+        newBalance: user.credits,
+        senderAddress: senderAddress
       });
     }
     
