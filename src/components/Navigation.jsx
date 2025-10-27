@@ -92,7 +92,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
               onClick={onShowStripePayment}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium rounded-lg transition-all duration-200 hover:scale-105 shadow-lg"
             >
-              <CreditCard className="w-5 h-5" />
+              <span>💳</span>
               <span className="hidden sm:inline">Buy Credits with Card</span>
               <span className="sm:hidden">Card</span>
             </button>
@@ -121,11 +121,11 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                 
                 {/* Credits Dropdown */}
                 <div className="relative" ref={dropdownRef}>
-                  <button
+                    <button
                     onClick={() => setShowCreditsDropdown(!showCreditsDropdown)}
                     className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors"
                   >
-                    <CreditCard className="w-4 h-4 text-purple-400" />
+                    <Coins className="w-4 h-4 text-purple-400" />
                     <span className="text-sm font-medium text-white">Buy Credits</span>
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCreditsDropdown ? 'rotate-180' : ''}`} />
                   </button>
@@ -145,7 +145,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                             }}
                             className="w-full flex items-center gap-3 p-3 rounded-lg bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 transition-colors"
                           >
-                            <CreditCard className="w-5 h-5 text-green-400" />
+                            <span>💳</span>
                             <div className="text-left">
                               <div className="text-sm font-medium text-white">Pay with Card</div>
                               <div className="text-xs text-gray-400">Visa, Mastercard, etc.</div>
@@ -258,7 +258,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                             }}
                             className="w-full flex items-center gap-2 p-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 transition-colors"
                           >
-                            <CreditCard className="w-4 h-4 text-green-400" />
+                            <span>💳</span>
                             <div className="text-left">
                               <div className="text-xs font-medium text-white">Pay with Card</div>
                             </div>
