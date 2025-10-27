@@ -6,21 +6,13 @@ import { generationLogger as logger } from '../utils/logger.js';
 const FAL_API_KEY = import.meta.env.VITE_FAL_API_KEY;
 
 if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
-  console.error('⚠️ VITE_FAL_API_KEY is not set. Please add your FAL API key to .env file from https://fal.ai');
+  throw new Error('VITE_FAL_API_KEY environment variable is required. Please check your .env file and add your FAL API key from https://fal.ai');
 }
 
-// FLUX.1 Kontext endpoints
-const getFluxEndpoint = (hasReferenceImage = false, isMultipleImages = false) => {
-  if (!hasReferenceImage) {
-    // No reference image - text-to-image
-    return 'https://fal.run/fal-ai/flux-pro/kontext/text-to-image';
-  } else if (isMultipleImages) {
-    // Multiple images - use multi model
-    return 'https://fal.run/fal-ai/flux-pro/kontext/multi';
-  } else {
-    // Single image - use max model
-    return 'https://fal.run/fal-ai/flux-pro/kontext/max';
-  }
+// FLUX.1 Kontext [max] endpoint - Updated to use the premium model
+const getFluxEndpoint = () => {
+  // Use the official FLUX.1 Kontext [max] model endpoint for premium quality
+  return 'https://fal.run/fal-ai/flux-pro/kontext/max';
 };
 
 // Get style prompt from the comprehensive styles configuration
@@ -45,8 +37,8 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     throw new Error('Advanced settings must be an object');
   }
   
-  if (referenceImage && typeof referenceImage !== 'string' && !Array.isArray(referenceImage)) {
-    throw new Error('Reference image must be a string, URL, or array of images');
+  if (referenceImage && typeof referenceImage !== 'string') {
+    throw new Error('Reference image must be a string (base64 or URL)');
   }
 
   try {
@@ -85,14 +77,13 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       imageSize = 'square',
       numImages = 1,
       enableSafetyChecker = false,
-      generationMode = 'flux-pro',
-      referenceImageDimensions = null
+      generationMode = 'flux-pro'
     } = advancedSettings;
 
     // Build optimized prompt - avoid unnecessary concatenation
     let basePrompt = '';
     
-    console.log('🔍 [PROMPT DEBUG] Custom prompt received:', {
+    console.log('🔍 Prompt building debug:', {
       customPrompt,
       customPromptType: typeof customPrompt,
       customPromptLength: customPrompt?.length,
@@ -101,110 +92,61 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       styleId: style?.id
     });
     
-    // Optimized prompt building for Flux Kontext Pro Max
-    // User's custom prompt takes priority, style enhances without overriding
+    // If we have a custom prompt, use it as the base
     if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
-      const userPrompt = customPrompt.trim();
-      console.log('✅ [PROMPT DEBUG] Using custom prompt as base:', userPrompt);
+      basePrompt = customPrompt.trim();
+      console.log('✅ Using custom prompt as base:', basePrompt);
       
-      // Add style enhancement only if we have a style and it adds value
+      // Add style prompt only if we have a style and it adds value
       if (style && style.id) {
         const stylePrompt = getStylePrompt(style.id);
         if (stylePrompt && stylePrompt !== 'artistic colors and lighting') {
-          // Extract only the key style modifiers (first 3-4 words) to avoid overload
-          const styleWords = stylePrompt.split(', ');
-          const keyModifiers = styleWords.slice(0, 3).join(', ');
-          
-          // Combine with user prompt: user content first, style modifiers enhance
-          basePrompt = `${userPrompt}, ${keyModifiers}`;
-          console.log('✅ [PROMPT DEBUG] Added concise style enhancement:', basePrompt);
-        } else {
-          basePrompt = userPrompt;
+          basePrompt = `${basePrompt}, ${stylePrompt}`;
+          console.log('✅ Added style prompt:', basePrompt);
         }
-      } else {
-        // No style selected - pass prompt through unmodified
-        basePrompt = userPrompt;
-        console.log('✅ No preset selected - passing prompt through unchanged');
       }
     } else if (style && style.id) {
       // If no custom prompt but we have a style, use the style prompt
       basePrompt = getStylePrompt(style.id);
-      console.log('✅ [PROMPT DEBUG] Using style prompt only:', basePrompt);
+      console.log('✅ Using style prompt only:', basePrompt);
     } else {
-      // If no prompt and no style, use a default optimized for Flux Kontext
-      basePrompt = 'high quality, detailed, artistic image';
-      console.log('⚠️ [PROMPT DEBUG] Using default prompt (no user input):', basePrompt);
+      // If no prompt and no style, use a default
+      basePrompt = 'artistic image, high quality, detailed';
+      console.log('✅ Using default prompt:', basePrompt);
     }
     
-    // Optimize prompt length for Flux Kontext Pro Max (prefers concise prompts)
-    if (basePrompt.length > 500) {
-      console.log('⚠️ Prompt is long, truncating for optimal Flux Kontext performance');
-      basePrompt = basePrompt.substring(0, 500).trim();
-    }
+    console.log('🎯 Final prompt being sent to API:', basePrompt);
     
-    console.log('🎯 [PROMPT DEBUG] Final prompt being sent to API:', basePrompt);
-    
-    // Choose the right endpoint based on reference image type
-    const hasRefImage = !!referenceImage;
-    const isMultipleImages = Array.isArray(referenceImage);
-    const fluxEndpoint = getFluxEndpoint(hasRefImage, isMultipleImages);
-    
-    const modeDesc = hasRefImage 
-      ? (isMultipleImages ? 'Kontext [multi] multi-image' : 'Kontext [max] image-to-image')
-      : 'Kontext [pro] text-to-image';
-      
-    logger.info(`Using ${modeDesc} generation`, {
+    // Use FLUX.1 Kontext [max] for premium image generation
+    const fluxEndpoint = getFluxEndpoint();
+    logger.info('Using FLUX.1 Kontext [max] generation', {
       endpoint: fluxEndpoint,
-      hasReferenceImage: hasRefImage,
-      isMultipleImages: isMultipleImages
+      hasReferenceImage: !!referenceImage
     });
     
     // Build request body according to the official API schema
-      // Generate random seed each time
-      const randomSeed = Math.floor(Math.random() * 2147483647); // Random seed for variety
-      
-      const requestBody = {
-        prompt: basePrompt,
-        guidance_scale: guidanceScale,
-        num_images: numImages,
-        output_format: "jpeg",
-        safety_tolerance: enableSafetyChecker ? "2" : "6", // API expects string values
-        enhance_prompt: true,
-        seed: randomSeed // Randomized seed every time
-      };
-      
-      console.log('🎲 Using random seed:', randomSeed);
+    const requestBody = {
+      prompt: basePrompt,
+      guidance_scale: guidanceScale,
+      num_images: numImages,
+      output_format: "jpeg",
+      safety_tolerance: enableSafetyChecker ? "2" : "6", // API expects string values
+      enhance_prompt: true,
+      seed: Math.floor(Math.random() * 1000000) // Add random seed for variety
+    };
 
-    // Add reference image(s) if provided
+    // Add reference image if provided (required for Kontext model)
     if (referenceImage) {
-      if (Array.isArray(referenceImage)) {
-        // Multiple images for multi model
-        requestBody.image_urls = referenceImage;
-        console.log(`📸 Using ${referenceImage.length} reference images for multi-image generation`);
-      } else {
-        // Single image for max model
-        requestBody.image_url = referenceImage;
-        console.log('📸 Using single reference image for image-to-image generation');
-      }
+      requestBody.image_url = referenceImage;
+      logger.debug('Using reference image for Kontext generation');
     } else {
-      // No reference image - using text-to-image mode
-      console.log('📝 No reference image - using text-to-image generation');
+      // Kontext [max] model requires an image_url, so we need to provide a default or throw an error
+      throw new Error('FLUX.1 Kontext [max] requires a reference image. Please upload an image to use this model.');
     }
 
-    // Add aspect ratio based on the selected size or reference image
-    let aspectRatio = null;
-    
-    if (referenceImageDimensions && referenceImageDimensions.width && referenceImageDimensions.height) {
-      // Calculate aspect ratio from reference image
-      const width = referenceImageDimensions.width;
-      const height = referenceImageDimensions.height;
-      const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
-      const divisor = gcd(width, height);
-      aspectRatio = `${width / divisor}:${height / divisor}`;
-      requestBody.aspect_ratio = aspectRatio;
-      console.log('✅ Using reference image aspect ratio:', aspectRatio);
-    } else if (imageSize && imageSize !== 'square_hd') {
-      // Fall back to mapped aspect ratios
+    // Add aspect ratio based on the selected size
+    if (imageSize && imageSize !== 'square_hd') {
+      // Map our image sizes to aspect ratios according to the API schema
       const aspectRatioMap = {
         'square': '1:1',
         'portrait_4_3': '3:4',
@@ -218,7 +160,6 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       
       if (aspectRatioMap[imageSize]) {
         requestBody.aspect_ratio = aspectRatioMap[imageSize];
-        console.log('✅ Using mapped aspect ratio:', aspectRatioMap[imageSize]);
       }
     }
 
@@ -226,23 +167,8 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       prompt: requestBody.prompt,
       hasImage: !!requestBody.image_url,
       numImages: requestBody.num_images,
-      aspectRatio: requestBody.aspect_ratio,
-      guidanceScale: requestBody.guidance_scale,
-      seed: requestBody.seed
+      aspectRatio: requestBody.aspect_ratio
     });
-    
-    console.log('📤 [FAL Request] Sending to FAL.ai:', {
-      endpoint: fluxEndpoint,
-      prompt: requestBody.prompt.substring(0, 100) + '...',
-      hasImageUrl: !!requestBody.image_url,
-      hasImageUrls: !!requestBody.image_urls,
-      imageUrlCount: requestBody.image_urls?.length || 0,
-      aspectRatio: requestBody.aspect_ratio,
-      guidanceScale: requestBody.guidance_scale,
-      seed: requestBody.seed
-    });
-    
-    console.log('📤 [FAL Request] Full request body:', JSON.stringify(requestBody, null, 2));
 
     const response = await fetch(fluxEndpoint, {
       method: 'POST',
@@ -293,38 +219,18 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     }
 
     const data = await response.json();
-    logger.debug('API response received', { 
-      data,
+    logger.debug('Text-only API response received', { 
       hasImages: !!data.images,
       imageCount: data.images?.length || 0
     });
     
-    console.log('📥 [FAL Response] Full response:', JSON.stringify(data, null, 2));
-    
-    // Handle different response formats
-    let imageUrl = null;
-    
     if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-      // Standard format: images array with URL
-      imageUrl = data.images[0].url || data.images[0];
+      // For single image, return the first image
+      // For multiple images, return the first image (you might want to handle this differently)
       logger.info(`Generated ${data.images.length} image(s) successfully`);
-    } else if (data.image_url) {
-      // Alternative format: direct image_url
-      imageUrl = data.image_url;
-      logger.info('Generated image successfully (alternative format)');
-    } else if (data.data && data.data.images && Array.isArray(data.data.images)) {
-      // Wrapped format
-      imageUrl = data.data.images[0].url || data.data.images[0];
-      logger.info('Generated image successfully (wrapped format)');
+      return data.images[0].url;
     } else {
-      throw new Error(`Unexpected response format from FAL API: ${JSON.stringify(data)}`);
-    }
-    
-    if (imageUrl) {
-      logger.info('Returning image URL:', imageUrl);
-      return imageUrl;
-    } else {
-      throw new Error('No image URL found in response');
+      throw new Error('No image generated');
     }
   } catch (error) {
     console.error('FAL.ai API Error:', error);
