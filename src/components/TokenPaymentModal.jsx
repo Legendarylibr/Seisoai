@@ -711,83 +711,52 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     // Get current network to pass to backend
     const { chainId } = await getCurrentNetwork();
     
-    // Start instant payment detection - check every 200ms for near-instant detection
-    const checkInterval = setInterval(async () => {
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        console.log('[Payment] Instant checking for payment:', {
+    // Check once for any USDC transfer to payment wallet
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      console.log('[Payment] Checking for USDC transfer to payment wallet');
+      
+      // Use instant-check endpoint to detect ANY USDC transfer
+      const response = await fetch(`${apiUrl}/api/payment/instant-check`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           walletAddress: address,
           expectedAmount: numAmount,
           token: 'USDC',
           chainId: chainId
-        });
+        })
+      });
+      
+      const data = await response.json();
+      console.log('[Payment] Check result:', data);
+      
+      if (data.success && data.paymentDetected) {
+        console.log('[Payment] Payment detected!', data.payment);
+        setPaymentStatus('confirmed');
+        setCheckingPayment(false);
         
-        // Use instant-check endpoint for faster detection
-        const response = await fetch(`${apiUrl}/api/payment/instant-check`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            walletAddress: address,
-            expectedAmount: numAmount,
-            token: 'USDC',
-            chainId: chainId // Pass the current chain ID
-          })
-        });
+        // Update credits
+        await fetchCredits(address);
         
-        const data = await response.json();
-        console.log('[Payment] Instant check result:', data);
+        const senderInfo = data.senderAddress ? `Sender: ${data.senderAddress}` : '';
+        setError(`✅ Payment confirmed! ${data.credits} credits added. New balance: ${data.newBalance} credits. ${senderInfo}`);
         
-        if (data.success && data.paymentDetected) {
-          console.log('[Payment] Payment detected instantly!', data.payment);
-          clearInterval(checkInterval);
-          setPaymentStatus('confirmed');
-          setCheckingPayment(false);
-          
-          // Poll for credits update with retry logic
-          let creditsUpdated = false;
-          for (let retry = 0; retry < 10; retry++) {
-            console.log(`[Credits] Refreshing credits (attempt ${retry + 1}/10)...`);
-            
-            const refreshedCredits = await fetchCredits(address);
-            
-            // Check if credits were actually updated
-            if (refreshedCredits !== undefined && refreshedCredits > 0) {
-              console.log(`[Credits] Credits updated successfully: ${refreshedCredits}`);
-              creditsUpdated = true;
-              break;
-            }
-            
-            // Wait 500ms before next retry
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-          
-          if (creditsUpdated) {
-            setError(`✅ Payment confirmed! ${numAmount} USDC received. Credits updated successfully!`);
-          } else {
-            setError(`✅ Payment confirmed! ${numAmount} USDC received. Credits will be added shortly.`);
-          }
-          
-          setTimeout(() => {
-            onClose();
-          }, 1000);
-        }
-      } catch (error) {
-        console.error('[Payment] Error checking payment:', error);
-        // Don't stop checking on individual errors, keep trying
-      }
-    }, 200); // Check every 200ms for near-instant detection
-    
-    // Stop checking after 2 minutes to prevent infinite checking
-    setTimeout(() => {
-      clearInterval(checkInterval);
-      if (paymentStatus === 'pending') {
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+      } else {
         setCheckingPayment(false);
         setPaymentStatus('');
-        setError('Payment not detected after 2 minutes. Please try again or contact support.');
+        setError('No USDC transfer detected to the payment wallet. Please send the transaction first.');
       }
-    }, 120000); // 2 minutes timeout
+    } catch (error) {
+      console.error('[Payment] Error checking payment:', error);
+      setCheckingPayment(false);
+      setError('Error checking payment: ' + error.message);
+    }
   };
 
   const handlePayment = () => {
