@@ -117,6 +117,7 @@ export const generateImageWithFastAPI = async (style, customPrompt = '', advance
           basePrompt = userPrompt;
         }
       } else {
+        // No style selected - pass prompt through unmodified
         basePrompt = userPrompt;
       }
     } else if (style && style.id) {

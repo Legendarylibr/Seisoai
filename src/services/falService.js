@@ -113,7 +113,9 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
           basePrompt = userPrompt;
         }
       } else {
+        // No style selected - pass prompt through unmodified
         basePrompt = userPrompt;
+        console.log('✅ No preset selected - passing prompt through unchanged');
       }
     } else if (style && style.id) {
       // If no custom prompt but we have a style, use the style prompt
