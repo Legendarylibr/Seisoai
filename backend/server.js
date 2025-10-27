@@ -341,14 +341,15 @@ userSchema.index({ 'gallery.timestamp': 1 });
 
 const User = mongoose.model('User', userSchema);
 
-// Payment wallet addresses
+// Payment wallet addresses - use single EVM address for all EVM chains
+const EVM_PAYMENT_ADDRESS = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
 const PAYMENT_WALLETS = {
-  '1': process.env.ETH_PAYMENT_WALLET,
-  '137': process.env.POLYGON_PAYMENT_WALLET,
-  '42161': process.env.ARBITRUM_PAYMENT_WALLET,
-  '10': process.env.OPTIMISM_PAYMENT_WALLET,
-  '8453': process.env.BASE_PAYMENT_WALLET,
-  'solana': process.env.SOLANA_PAYMENT_WALLET
+  '1': EVM_PAYMENT_ADDRESS, // Ethereum
+  '137': EVM_PAYMENT_ADDRESS, // Polygon
+  '42161': EVM_PAYMENT_ADDRESS, // Arbitrum
+  '10': EVM_PAYMENT_ADDRESS, // Optimism
+  '8453': EVM_PAYMENT_ADDRESS, // Base
+  'solana': process.env.SOLANA_PAYMENT_WALLET_ADDRESS || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA'
 };
 
 // Token configurations
@@ -454,10 +455,15 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
     }
 
     const paymentWallet = PAYMENT_WALLETS[chainId];
+    console.log(`[VERIFY] Payment wallet for chain ${chainId}: ${paymentWallet}`);
+    
     if (!paymentWallet) {
       throw new Error(`Payment wallet not configured for chain ${chainId}`);
     }
 
+    console.log(`[VERIFY] Tx from: ${tx.from}`);
+    console.log(`[VERIFY] Wallet address: ${walletAddress}`);
+    
     if (tx.from.toLowerCase() !== walletAddress.toLowerCase()) {
       throw new Error('Transaction sender does not match wallet address');
     }
@@ -466,6 +472,8 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
     const tokenContract = new ethers.Contract(tokenConfig.address, ERC20_ABI, provider);
     const transferTopic = ethers.id('Transfer(address,address,uint256)');
     const transferLogs = receipt.logs.filter(log => log.topics[0] === transferTopic);
+    
+    console.log(`[VERIFY] Found ${transferLogs.length} transfer event(s)`);
     
     let validTransfer = false;
     let actualAmount = 0;
@@ -476,26 +484,25 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
         const from = decoded.args[0];
         const to = decoded.args[1];
         const value = decoded.args[2];
+        
+        console.log(`[VERIFY] Transfer log: from=${from}, to=${to}, value=${value.toString()}`);
 
         if (to.toLowerCase() === paymentWallet.toLowerCase() && 
             from.toLowerCase() === walletAddress.toLowerCase()) {
           validTransfer = true;
           actualAmount = parseFloat(ethers.formatUnits(value, tokenConfig.decimals));
+          console.log(`[VERIFY] ✅ Valid transfer found! Amount: ${actualAmount}`);
           break;
         }
       } catch (e) {
+        console.log(`[VERIFY] Error parsing log:`, e.message);
         continue;
       }
     }
 
     if (!validTransfer) {
+      console.log(`[VERIFY] ❌ No valid transfer found. Payment wallet: ${paymentWallet}`);
       throw new Error('No valid transfer found to payment wallet');
-    }
-
-    const expectedAmount = parseFloat(amount);
-    const tolerance = 0.001;
-    if (Math.abs(actualAmount - expectedAmount) > tolerance) {
-      throw new Error(`Amount mismatch. Expected: ${expectedAmount}, Actual: ${actualAmount}`);
     }
 
     const credits = Math.floor(actualAmount * tokenConfig.creditRate);
@@ -784,10 +791,29 @@ async function checkForTokenTransfer(paymentAddress, token = 'USDC', chain = 'et
     const events = await contract.queryFilter(filter, fromBlock, currentBlock);
     
     console.log(`[${chain.toUpperCase()}] Found ${events.length} incoming transfer(s) to payment wallet`);
+    console.log(`[${chain.toUpperCase()}] Blocks scanned: ${fromBlock} to ${currentBlock}`);
     
     if (events.length === 0) {
       console.log(`[${chain.toUpperCase()}] ✗ No transfers found to payment wallet in last ${blocksToCheck} blocks`);
+      console.log(`[${chain.toUpperCase()}] Payment wallet address: ${paymentAddress}`);
+      console.log(`[${chain.toUpperCase()}] USDC token address: ${tokenAddress}`);
       return null;
+    }
+    
+    // Log all found transfers for debugging
+    console.log(`[${chain.toUpperCase()}] DETAILED TRANSFER LOGS:`);
+    for (const event of events) {
+      const amount = event.args.value;
+      const from = event.args.from;
+      const to = event.args.to;
+      const amountFormatted = ethers.formatUnits(amount, decimals);
+      console.log(`[${chain.toUpperCase()}]   Transfer #${events.indexOf(event) + 1}:`);
+      console.log(`[${chain.toUpperCase()}]     From: ${from}`);
+      console.log(`[${chain.toUpperCase()}]     To: ${to}`);
+      console.log(`[${chain.toUpperCase()}]     Amount: ${amountFormatted} USDC`);
+      console.log(`[${chain.toUpperCase()}]     TxHash: ${event.transactionHash}`);
+      console.log(`[${chain.toUpperCase()}]     Block: ${event.blockNumber}`);
+      console.log(`[${chain.toUpperCase()}]     ---`);
     }
     
     // Get the most recent transfer (any amount to payment wallet qualifies)
@@ -1119,7 +1145,11 @@ app.post('/api/payments/verify', async (req, res) => {
       walletType 
     } = req.body;
 
+    console.log('💰 [PAYMENT VERIFY] Starting verification...');
+    console.log('💰 [PAYMENT VERIFY] Request:', { txHash, walletAddress, tokenSymbol, amount, chainId, walletType });
+
     if (!txHash || !walletAddress || !tokenSymbol || !amount || !chainId || !walletType) {
+      console.log('💰 [PAYMENT VERIFY] Missing fields');
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
@@ -1131,6 +1161,7 @@ app.post('/api/payments/verify', async (req, res) => {
     const existingPayment = user.paymentHistory.find(p => p.txHash === txHash);
     
     if (existingPayment) {
+      console.log('💰 [PAYMENT VERIFY] Already processed');
       return res.json({
         success: true,
         credits: 0,
@@ -1148,7 +1179,9 @@ app.post('/api/payments/verify', async (req, res) => {
         txHash
       };
     } else {
+      console.log('💰 [PAYMENT VERIFY] Calling verifyEVMPayment...');
       verification = await verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chainId);
+      console.log('💰 [PAYMENT VERIFY] Verification result:', verification);
     }
 
     if (verification.success) {
