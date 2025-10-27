@@ -15,7 +15,8 @@ import Templates from './components/Templates';
 import Settings from './components/Settings';
 import LegalDisclaimer from './components/LegalDisclaimer';
 import GenerateButton from './components/GenerateButton';
-import { Image, Grid, File, Settings as SettingsIcon2, Coins, Wand2, Wallet, ArrowRight, Sparkles, CreditCard } from 'lucide-react';
+import VideoGeneration from './components/VideoGeneration';
+import { Image, Grid, File, Settings as SettingsIcon2, Coins, Wand2, Wallet, ArrowRight, Sparkles, CreditCard, Video } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
@@ -25,6 +26,7 @@ function App() {
   const tabs = [
     { id: 'generate', name: 'Generate', icon: Sparkles },
     { id: 'gallery', name: 'Gallery', icon: Grid },
+    { id: 'video', name: 'Video', icon: Video },
     { id: 'templates', name: 'Templates', icon: File },
     { id: 'batch', name: 'Batch', icon: Wand2 },
     { id: 'settings', name: 'Settings', icon: SettingsIcon2 }
@@ -79,9 +81,10 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   // Show main content if wallet is connected (AuthGuard will handle credit requirements)
   return (
     <>
-      <AuthGuard requireCredits={activeTab === 'generate' || activeTab === 'batch'}>
+      <AuthGuard requireCredits={activeTab === 'generate' || activeTab === 'batch' || activeTab === 'video'}>
         {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
         {activeTab === 'gallery' && <GalleryTab />}
+        {activeTab === 'video' && <VideoTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
         {activeTab === 'templates' && <TemplatesTab />}
         {activeTab === 'batch' && <BatchTab />}
         {activeTab === 'settings' && <SettingsTab />}
@@ -370,6 +373,10 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
 
 function GalleryTab() {
   return <ImageGallery />;
+}
+
+function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
+  return <VideoGeneration onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />;
 }
 
 function TemplatesTab() {
