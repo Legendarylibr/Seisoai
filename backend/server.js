@@ -87,7 +87,7 @@ app.use('/api/payments/', paymentLimiter);
 // More lenient rate limiting for instant-check endpoint (used for polling)
 const instantCheckLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 60, // limit each IP to 60 requests per minute (1 per second)
+  max: 300, // limit each IP to 300 requests per minute (allow 5 per second for aggressive polling)
   message: {
     error: 'Too many requests from this IP, please try again later.',
     retryAfter: '1 minute'
