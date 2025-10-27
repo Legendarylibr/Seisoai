@@ -110,33 +110,57 @@ const ReferenceImageInput = () => {
         </div>
       ) : (
         <div className="flex-1 flex flex-col">
-          <div className="relative flex-1 rounded-lg overflow-hidden bg-white/5">
-            <img
-              src={controlNetImage}
-              alt="Reference"
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200">
-              <div className="flex gap-3">
-                  <button
-                    onClick={handleClickUpload}
-                    className="p-3 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
-                    title="Change image"
-                    aria-label="Change reference image"
-                  >
-                    <Upload className="w-5 h-5" />
-                  </button>
+          {/* Display images - grid if multiple, single if one */}
+          {Array.isArray(controlNetImage) ? (
+            <div className="grid grid-cols-2 gap-2 flex-1 rounded-lg overflow-hidden">
+              {controlNetImage.map((imageUrl, index) => (
+                <div key={index} className="relative rounded-lg overflow-hidden bg-white/5">
+                  <img
+                    src={imageUrl}
+                    alt={`Reference ${index + 1}`}
+                    className="w-full h-full object-cover min-h-[100px]"
+                  />
                   <button
                     onClick={handleRemoveImage}
-                    className="p-3 bg-red-500/20 rounded-full hover:bg-red-500/30 transition-colors"
-                    title="Remove image"
-                    aria-label="Remove reference image"
+                    className="absolute top-1 right-1 p-1 bg-red-500/80 hover:bg-red-500 rounded-full transition-colors"
+                    title={`Remove image ${index + 1}`}
+                    aria-label={`Remove image ${index + 1}`}
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-3 h-3 text-white" />
                   </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="relative flex-1 rounded-lg overflow-hidden bg-white/5">
+              <img
+                src={controlNetImage}
+                alt="Reference"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200">
+                <div className="flex gap-3">
+                    <button
+                      onClick={handleClickUpload}
+                      className="p-3 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+                      title="Change image"
+                      aria-label="Change reference image"
+                    >
+                      <Upload className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={handleRemoveImage}
+                      className="p-3 bg-red-500/20 rounded-full hover:bg-red-500/30 transition-colors"
+                      title="Remove image"
+                      aria-label="Remove reference image"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
+          
           <div className="mt-3 flex items-center justify-between text-sm text-gray-400">
             <span>
               {Array.isArray(controlNetImage) 
@@ -145,7 +169,7 @@ const ReferenceImageInput = () => {
             </span>
             <button
               onClick={handleClickUpload}
-              className="text-purple-400 hover:text-purple-300 transition-colors px-3 py-1 rounded bg-white/5 hover:bg-white/10"
+              className="text-purple-400 hover:text-purple-300 transition-colors px-3 py-1 rounded bg-white/5 hover:bg-white/10 text-xs sm:text-sm"
               aria-label="Change reference image"
             >
               Change Image(s)
