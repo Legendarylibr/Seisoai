@@ -1395,9 +1395,11 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
     // Only check the chain the wallet is connected to
     if (chainName) {
       console.log(`[INSTANT CHECK] Checking ${chainName} only (Chain ID: ${chainId})`);
+      console.log(`[INSTANT CHECK] Looking for USDC transfers TO: ${evmPaymentAddress}`);
+      console.log(`[INSTANT CHECK] On chain: ${chainName}`);
       const quickPromises = [Promise.race([
         checkForTokenTransfer(evmPaymentAddress, token, chainName),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 30000)) // Increase timeout to 30s
       ]).catch(err => {
         console.log(`[QUICK] ${chainName} check failed:`, err.message);
         return null;
