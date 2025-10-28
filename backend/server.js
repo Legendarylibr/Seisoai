@@ -643,13 +643,16 @@ app.post('/api/nft/check-holdings', async (req, res) => {
       });
     }
 
+    logger.info('Checking NFT holdings', { walletAddress });
+    
+    // Get or create user first
+    const user = await getOrCreateUser(walletAddress);
+    
     // TODO: Implement actual blockchain NFT verification
     // For now, return mock data. In production, you should:
     // 1. Use ethers.js to query NFT contract balanceOf()
     // 2. Check against a list of qualifying collections
     // 3. Cache results to avoid repeated blockchain calls
-    
-    logger.info('Checking NFT holdings', { walletAddress });
     
     // Mock implementation - replace with real verification
     const isHolder = false; // Set to true for testing
@@ -672,6 +675,12 @@ app.post('/api/nft/check-holdings', async (req, res) => {
     //     ownedCollections.push(collection);
     //   }
     // }
+    
+    // Update user's NFT collections in database (even if empty)
+    user.nftCollections = ownedCollections;
+    await user.save();
+    
+    logger.info('NFT collections updated for user', { walletAddress, isHolder, collectionCount: ownedCollections.length });
     
     res.json({
       success: true,
@@ -1192,6 +1201,16 @@ app.post('/api/payments/credit', async (req, res) => {
     const creditsPerUSDC = isNFTHolder ? 10 : 6.67;
     const creditsToAdd = Math.floor(parseFloat(amount) * creditsPerUSDC);
     
+    console.log('💰 [PAYMENT CREDIT] Calculating credits', {
+      walletAddress: user.walletAddress,
+      walletType: walletType || 'evm',
+      amount: parseFloat(amount),
+      isNFTHolder,
+      creditsPerUSDC,
+      creditsToAdd,
+      nftCollectionCount: user.nftCollections?.length || 0
+    });
+    
     // Add credits
     user.credits += creditsToAdd;
     user.totalCreditsEarned += creditsToAdd;
@@ -1213,6 +1232,7 @@ app.post('/api/payments/credit', async (req, res) => {
       walletAddress: user.walletAddress,
       credits: creditsToAdd,
       totalCredits: user.credits,
+      isNFTHolder,
       txHash
     });
     
