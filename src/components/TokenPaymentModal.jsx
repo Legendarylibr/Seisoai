@@ -856,9 +856,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount)) return 0;
     
-    // NFT holders: $0.10 per generation (10 credits per USDC)
+    // NFT holders: $0.08 per generation (12.5 credits per USDC)
     // Non-holders: $0.15 per generation (6.67 credits per USDC)
-    const creditsPerUSDC = isNFTHolder ? 10 : 6.67;
+    const creditsPerUSDC = isNFTHolder ? 12.5 : 6.67;
     return Math.floor(numAmount * creditsPerUSDC);
   };
 
@@ -962,7 +962,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             <div className="flex items-center justify-between text-xs">
               <span className="text-gray-400">Rate:</span>
               <span className="text-purple-400 font-semibold">
-                1 USDC = {isNFTHolder ? '10' : '6.67'} Credits
+                1 USDC = {isNFTHolder ? '12.5' : '6.67'} Credits
                 {isNFTHolder && <span className="text-green-400 ml-1">(NFT Holder)</span>}
               </span>
             </div>

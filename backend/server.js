@@ -648,33 +648,77 @@ app.post('/api/nft/check-holdings', async (req, res) => {
     // Get or create user first
     const user = await getOrCreateUser(walletAddress);
     
-    // TODO: Implement actual blockchain NFT verification
-    // For now, return mock data. In production, you should:
-    // 1. Use ethers.js to query NFT contract balanceOf()
-    // 2. Check against a list of qualifying collections
-    // 3. Cache results to avoid repeated blockchain calls
+    // Qualifying NFT collections and token contracts
+    const qualifyingCollections = [
+      // NFT Collections
+      { chainId: '1', address: '0x8e84dcAF616c3E04ed45d3e0912B81e7283a48DA', name: 'Your NFT Collection 1', type: 'erc721' },
+      { chainId: '8453', address: '0x1E71eA45FB939C92045FF32239a8922395eeb31B', name: 'Your NFT Collection 2', type: 'erc721' },
+      // Token Holdings
+      { chainId: '1', address: '0x0000000000c5dc95539589fbD24BE07c6C14eCa4', name: '$CULT Holders', type: 'erc20', minBalance: '500000' }
+    ];
     
-    // Mock implementation - replace with real verification
-    const isHolder = false; // Set to true for testing
     const ownedCollections = [];
     
-    // Example of how to check (commented out):
-    // for (const collection of collections || []) {
-    //   const rpcUrl = RPC_ENDPOINTS[collection.chainId];
-    //   if (!rpcUrl) continue;
-    //   
-    //   const provider = new ethers.JsonRpcProvider(rpcUrl);
-    //   const nftContract = new ethers.Contract(
-    //     collection.address,
-    //     ['function balanceOf(address owner) view returns (uint256)'],
-    //     provider
-    //   );
-    //   
-    //   const balance = await nftContract.balanceOf(walletAddress);
-    //   if (balance > 0) {
-    //     ownedCollections.push(collection);
-    //   }
-    // }
+    // Check each qualifying collection
+    for (const collection of qualifyingCollections) {
+      try {
+        const rpcUrl = RPC_ENDPOINTS[collection.chainId];
+        if (!rpcUrl) continue;
+        
+        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        
+        if (collection.type === 'erc721') {
+          // NFT contract check
+          const nftContract = new ethers.Contract(
+            collection.address,
+            ['function balanceOf(address owner) view returns (uint256)'],
+            provider
+          );
+          
+          const balance = await nftContract.balanceOf(walletAddress);
+          if (balance > 0) {
+            ownedCollections.push({
+              contractAddress: collection.address,
+              chainId: collection.chainId,
+              name: collection.name,
+              type: collection.type,
+              balance: balance.toString()
+            });
+          }
+        } else if (collection.type === 'erc20') {
+          // Token contract check
+          const tokenContract = new ethers.Contract(
+            collection.address,
+            ['function balanceOf(address owner) view returns (uint256)', 'function decimals() view returns (uint8)'],
+            provider
+          );
+          
+          const [balance, decimals] = await Promise.all([
+            tokenContract.balanceOf(walletAddress),
+            tokenContract.decimals()
+          ]);
+          
+          const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
+          const minBalance = parseFloat(collection.minBalance);
+          
+          if (formattedBalance >= minBalance) {
+            ownedCollections.push({
+              contractAddress: collection.address,
+              chainId: collection.chainId,
+              name: collection.name,
+              type: collection.type,
+              balance: formattedBalance.toString(),
+              minBalance: collection.minBalance
+            });
+          }
+        }
+      } catch (error) {
+        logger.warn(`Error checking collection ${collection.address}:`, error.message);
+        continue;
+      }
+    }
+    
+    const isHolder = ownedCollections.length > 0;
     
     // Update user's NFT collections in database (even if empty)
     user.nftCollections = ownedCollections;
