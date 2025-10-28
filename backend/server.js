@@ -53,6 +53,110 @@ const logger = {
   debug: (msg, meta) => console.log(`[DEBUG] ${msg}`, meta || '')
 };
 
+// Input validation utilities
+const isValidEthereumAddress = (address) => {
+  if (!address || typeof address !== 'string') return false;
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+};
+
+const isValidSolanaAddress = (address) => {
+  if (!address || typeof address !== 'string') return false;
+  try {
+    new PublicKey(address);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const isValidWalletAddress = (address) => {
+  if (!address || typeof address !== 'string') return false;
+  return isValidEthereumAddress(address) || isValidSolanaAddress(address);
+};
+
+const sanitizeString = (str) => {
+  if (typeof str !== 'string') return '';
+  return str.trim().slice(0, 1000); // Limit length
+};
+
+const sanitizeNumber = (num) => {
+  const parsed = parseFloat(num);
+  if (isNaN(parsed) || !isFinite(parsed)) return null;
+  return parsed;
+};
+
+// Middleware to validate request inputs
+const validateInput = (req, res, next) => {
+  // Sanitize query parameters
+  if (req.query) {
+    Object.keys(req.query).forEach(key => {
+      if (typeof req.query[key] === 'string') {
+        req.query[key] = sanitizeString(req.query[key]);
+      }
+    });
+  }
+
+  // Sanitize body parameters
+  if (req.body) {
+    Object.keys(req.body).forEach(key => {
+      const value = req.body[key];
+      if (typeof value === 'string') {
+        req.body[key] = sanitizeString(value);
+      } else if (typeof value === 'number') {
+        req.body[key] = sanitizeNumber(value);
+      }
+    });
+  }
+
+  next();
+};
+
+app.use(validateInput);
+
+// Transaction deduplication cache (in-memory)
+const processedTransactions = new Map();
+
+// Middleware to prevent duplicate transactions
+const checkTransactionDedup = async (req, res, next) => {
+  const txHash = req.body?.txHash || req.params?.txHash;
+  if (!txHash) {
+    return next();
+  }
+
+  // Check if transaction already processed
+  if (processedTransactions.has(txHash)) {
+    const processedData = processedTransactions.get(txHash);
+    logger.warn('Duplicate transaction attempt detected', { txHash, originalData: processedData });
+    return res.status(400).json({
+      success: false,
+      error: 'This transaction has already been processed',
+      alreadyProcessed: true
+    });
+  }
+
+  // Add transaction to cache
+  processedTransactions.set(txHash, {
+    timestamp: new Date(),
+    walletAddress: req.body?.walletAddress || 'unknown'
+  });
+
+  // Clean up old transactions (keep last 1000)
+  if (processedTransactions.size > 1000) {
+    const entries = Array.from(processedTransactions.entries());
+    entries.sort((a, b) => b[1].timestamp - a[1].timestamp);
+    processedTransactions.clear();
+    entries.slice(0, 1000).forEach(([hash, data]) => {
+      processedTransactions.set(hash, data);
+    });
+  }
+
+  next();
+};
+
+// Apply deduplication to payment endpoints
+app.use('/api/payments/', checkTransactionDedup);
+app.use('/api/payment/', checkTransactionDedup);
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -64,8 +168,8 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting for health checks and instant-check (has its own limiter)
-    return req.path === '/api/health' || req.path === '/api/payment/instant-check';
+    // Only skip rate limiting for health checks (not instant-check)
+    return req.path === '/api/health';
   }
 });
 
