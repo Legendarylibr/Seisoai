@@ -399,11 +399,15 @@ const ERC20_ABI = [
  * Get or create user
  */
 async function getOrCreateUser(walletAddress) {
-  let user = await User.findOne({ walletAddress: walletAddress.toLowerCase() });
+  // Detect wallet type: Solana addresses don't start with 0x
+  const isSolanaAddress = !walletAddress.startsWith('0x');
+  const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+  
+  let user = await User.findOne({ walletAddress: normalizedAddress });
   
   if (!user) {
     user = new User({
-      walletAddress: walletAddress.toLowerCase(),
+      walletAddress: normalizedAddress,
       credits: 0,
       totalCreditsEarned: 0,
       totalCreditsSpent: 0,
@@ -418,7 +422,7 @@ async function getOrCreateUser(walletAddress) {
       }
     });
     await user.save();
-    logger.info('New user created', { walletAddress: walletAddress.toLowerCase() });
+    logger.info('New user created', { walletAddress: normalizedAddress, isSolana: isSolanaAddress });
   } else {
     // Update last active
     user.lastActive = new Date();
@@ -1206,7 +1210,7 @@ app.post('/api/payments/credit', async (req, res) => {
     await user.save();
     
     console.log('💰 [PAYMENT CREDIT] Credits added successfully', {
-      walletAddress: walletAddress.toLowerCase(),
+      walletAddress: user.walletAddress,
       credits: creditsToAdd,
       totalCredits: user.credits,
       txHash
