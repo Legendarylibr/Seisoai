@@ -1100,7 +1100,7 @@ app.post('/api/payment/check-payment', async (req, res) => {
       
       // Calculate credits based on NFT holder status
       const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-      const creditsPerUSDC = isNFTHolder ? 10 : 6.67; // NFT holders get better rate
+      const creditsPerUSDC = isNFTHolder ? 12.5 : 6.67; // NFT holders: $0.08/credit, Non-holders: $0.15/credit
       const creditsToAdd = Math.floor(parseFloat(payment.amount) * creditsPerUSDC);
       
       console.log(`[CREDIT] Adding ${creditsToAdd} credits to user ${senderAddress}`);
@@ -1198,7 +1198,7 @@ app.post('/api/payments/credit', async (req, res) => {
 
     // Credit immediately based on signature (no verification)
     const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-    const creditsPerUSDC = isNFTHolder ? 10 : 6.67;
+    const creditsPerUSDC = isNFTHolder ? 12.5 : 6.67; // NFT holders: $0.08/credit, Non-holders: $0.15/credit
     const creditsToAdd = Math.floor(parseFloat(amount) * creditsPerUSDC);
     
     console.log('💰 [PAYMENT CREDIT] Calculating credits', {
@@ -1613,7 +1613,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         
         // Calculate credits based on NFT holder status
         const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-        const creditsPerUSDC = isNFTHolder ? 10 : 6.67;
+        const creditsPerUSDC = isNFTHolder ? 12.5 : 6.67; // NFT holders: $0.08/credit, Non-holders: $0.15/credit
         const creditsToAdd = Math.floor(parseFloat(quickPayment.amount) * creditsPerUSDC);
         
         // Add credits instantly
@@ -1710,7 +1710,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
       
       // Calculate credits based on NFT holder status
       const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-      const creditsPerUSDC = isNFTHolder ? 10 : 6.67;
+      const creditsPerUSDC = isNFTHolder ? 12.5 : 6.67; // NFT holders: $0.08/credit, Non-holders: $0.15/credit
       const creditsToAdd = Math.floor(parseFloat(quickPayment.amount) * creditsPerUSDC);
       
       // Add credits instantly
