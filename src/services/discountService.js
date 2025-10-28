@@ -58,13 +58,13 @@ const DISCOUNT_CONFIG = {
     {
       id: 'cult-holders',
       name: '$CULT Holders',
-      description: '30% discount for holding 100+ $CULT tokens',
+      description: '30% discount for holding 500k+ $CULT tokens',
       contractAddress: '0x0000000000c5dc95539589fbD24BE07c6C14eCa4',
       chainId: '1',
       type: 'erc20',
       discountType: 'percentage',
       discountValue: 30,
-      minBalance: '100',
+      minBalance: '500000',
       appliesTo: ['image_generation', 'batch_processing']
     }
   ],
