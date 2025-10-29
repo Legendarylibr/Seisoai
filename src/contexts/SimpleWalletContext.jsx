@@ -100,8 +100,16 @@ export const SimpleWalletProvider = ({ children }) => {
       let provider = null;
       let address = null;
 
-      // Handle different wallet types
-      switch (walletType) {
+      // Add timeout to prevent infinite loading
+      const connectionTimeout = setTimeout(() => {
+        setIsLoading(false);
+        setError('Connection timeout. Please try again.');
+        throw new Error('Connection timeout');
+      }, 30000); // 30 second timeout
+
+      try {
+        // Handle different wallet types
+        switch (walletType) {
         case 'metamask':
           if (!window.ethereum) {
             throw new Error('MetaMask not found. Please install MetaMask extension.');
@@ -280,11 +288,18 @@ export const SimpleWalletProvider = ({ children }) => {
         checkNFTStatus(address)
       ]);
 
-      console.log(`✅ Wallet connected: ${address} (${walletType})`);
+        console.log(`✅ Wallet connected: ${address} (${walletType})`);
+        clearTimeout(connectionTimeout);
+      } catch (error) {
+        console.error('Wallet connection error:', error);
+        setError(error.message);
+        clearTimeout(connectionTimeout);
+      } finally {
+        setIsLoading(false);
+      }
     } catch (error) {
       console.error('Wallet connection error:', error);
       setError(error.message);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -304,6 +319,11 @@ export const SimpleWalletProvider = ({ children }) => {
   // This ensures the correct wallet extension opens when selected
   useEffect(() => {
     // No auto-reconnect - user chooses wallet explicitly
+    
+    // Cleanup on unmount to prevent stuck loading states
+    return () => {
+      setIsLoading(false);
+    };
   }, []);
 
   // Periodic credit refresh when connected
