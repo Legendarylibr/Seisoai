@@ -19,22 +19,39 @@ export const SimpleWalletProvider = ({ children }) => {
 
   // Fetch credits from backend with retry logic and caching
   const fetchCredits = useCallback(async (walletAddress, retries = 3) => {
+    if (!walletAddress) {
+      console.warn('⚠️ No wallet address provided to fetchCredits');
+      setCredits(0);
+      return 0;
+    }
+
+    // Normalize wallet address (lowercase for EVM addresses)
+    const normalizedAddress = walletAddress.toLowerCase();
+    console.log('📊 Fetching credits for:', normalizedAddress, 'API URL:', API_URL);
+    
     // Check cache first (1 minute cache for credits)
-    const cacheKey = `credits_${walletAddress}`;
+    const cacheKey = `credits_${normalizedAddress}`;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
-      const { data, timestamp } = JSON.parse(cached);
-      if (Date.now() - timestamp < 60000) { // 1 minute
-        logger.debug('Using cached credits', { walletAddress, credits: data.credits });
-        setCredits(data.credits);
-        return data.credits;
+      try {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < 60000) { // 1 minute
+          logger.debug('Using cached credits', { walletAddress: normalizedAddress, credits: data.credits });
+          console.log('💾 Using cached credits:', data.credits);
+          setCredits(data.credits);
+          return data.credits;
+        }
+      } catch (cacheError) {
+        console.warn('Failed to parse cached credits', cacheError);
       }
     }
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        logger.debug('Fetching credits from backend', { walletAddress, attempt, retries, apiUrl: API_URL });
-        const response = await fetch(`${API_URL}/api/users/${walletAddress}`, {
+        const apiEndpoint = `${API_URL}/api/users/${normalizedAddress}`;
+        console.log(`🔄 Attempt ${attempt}/${retries}: Fetching credits from:`, apiEndpoint);
+        logger.debug('Fetching credits from backend', { walletAddress: normalizedAddress, attempt, retries, apiUrl: API_URL });
+        const response = await fetch(apiEndpoint, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -51,20 +68,21 @@ export const SimpleWalletProvider = ({ children }) => {
           let credits = 0;
           if (data.success && data.user && typeof data.user.credits !== 'undefined') {
             credits = Number(data.user.credits) || 0;
-            logger.info('Credits found in data.user.credits', { credits, walletAddress });
+            logger.info('Credits found in data.user.credits', { credits, walletAddress: normalizedAddress });
           } else if (data.success && typeof data.credits !== 'undefined') {
             credits = Number(data.credits) || 0;
-            logger.info('Credits found in data.credits', { credits, walletAddress });
+            logger.info('Credits found in data.credits', { credits, walletAddress: normalizedAddress });
           } else if (data.user && typeof data.user.credits !== 'undefined') {
             credits = Number(data.user.credits) || 0;
-            logger.info('Credits found in data.user.credits (no success flag)', { credits, walletAddress });
+            logger.info('Credits found in data.user.credits (no success flag)', { credits, walletAddress: normalizedAddress });
           } else {
-            logger.warn('Credits not found in expected format', { data, walletAddress });
+            logger.warn('Credits not found in expected format', { data, walletAddress: normalizedAddress });
+            console.error('❌ Credits not found in response:', data);
             credits = 0;
           }
           
           setCredits(credits);
-          console.log('✅ Credits loaded from backend:', credits, 'for wallet:', walletAddress);
+          console.log('✅ Credits loaded from backend:', credits, 'for wallet:', normalizedAddress);
           
           // Cache the result
           try {
@@ -76,46 +94,53 @@ export const SimpleWalletProvider = ({ children }) => {
             logger.warn('Failed to cache credits', { error: storageError.message });
           }
           
-          logger.info('Credits loaded successfully', { credits, walletAddress });
+          logger.info('Credits loaded successfully', { credits, walletAddress: normalizedAddress });
           return credits; // Return for testing/verification
         } else {
           const errorText = await response.text();
+          console.error(`❌ Credits fetch failed (${response.status}):`, errorText);
           logger.warn('Failed to fetch credits', { 
             status: response.status, 
             statusText: response.statusText,
             errorText,
             attempt, 
             retries, 
-            walletAddress 
+            walletAddress: normalizedAddress 
           });
           if (attempt === retries) {
             setCredits(0);
-            console.warn('⚠️ Failed to fetch credits, set to 0');
+            console.warn('⚠️ All attempts failed - credits set to 0');
           }
         }
       } catch (error) {
+        console.error(`❌ Error fetching credits (attempt ${attempt}/${retries}):`, error);
         logger.error('Error fetching credits', { 
-          error: error.message, 
+          error: error.message,
+          errorStack: error.stack,
           attempt, 
           retries, 
-          walletAddress 
+          walletAddress: normalizedAddress,
+          apiUrl: API_URL
         });
         
         // Don't retry on user abort
         if (error.name === 'AbortError') {
-          logger.warn('Request aborted', { walletAddress });
+          logger.warn('Request aborted', { walletAddress: normalizedAddress });
+          console.warn('⚠️ Request aborted');
           setCredits(0);
           return;
         }
         
         // On last attempt, set credits to 0
         if (attempt === retries) {
-          logger.error('All retry attempts failed', { walletAddress });
+          logger.error('All retry attempts failed', { walletAddress: normalizedAddress });
+          console.error('❌ All retry attempts failed');
           setCredits(0);
         } else {
           // Wait before retrying (exponential backoff)
           const delay = Math.min(1000 * attempt, 3000); // Max 3 second delay
-          logger.debug('Retrying credit fetch', { delay, attempt, walletAddress });
+          logger.debug('Retrying credit fetch', { delay, attempt, walletAddress: normalizedAddress });
+          console.log(`🔄 Retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
@@ -125,8 +150,19 @@ export const SimpleWalletProvider = ({ children }) => {
   // Check NFT holdings with caching
   const checkNFTStatus = async (walletAddress) => {
     try {
+      if (!walletAddress) {
+        console.warn('⚠️ No wallet address provided to checkNFTStatus');
+        setIsNFTHolder(false);
+        setNftCollections([]);
+        return;
+      }
+
+      // Normalize wallet address (lowercase for EVM addresses)
+      const normalizedAddress = walletAddress.toLowerCase();
+      console.log('🔍 Checking NFT status for:', normalizedAddress);
+      
       // Check cache first (5 minute cache)
-      const cacheKey = `nft_${walletAddress}`;
+      const cacheKey = `nft_${normalizedAddress}`;
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
         try {
@@ -142,8 +178,8 @@ export const SimpleWalletProvider = ({ children }) => {
         }
       }
 
-      logger.debug('Checking NFT holdings', { walletAddress });
-      const result = await checkNFTHoldings(walletAddress);
+      logger.debug('Checking NFT holdings', { walletAddress: normalizedAddress });
+      const result = await checkNFTHoldings(normalizedAddress);
       
       // Ensure we have valid boolean and array
       const isHolder = result.isHolder === true;
@@ -165,10 +201,16 @@ export const SimpleWalletProvider = ({ children }) => {
       logger.info('NFT status checked', { 
         isHolder, 
         collectionCount: collections.length,
-        walletAddress 
+        walletAddress: normalizedAddress 
       });
+      console.log(`✅ NFT status: ${isHolder ? 'Holder' : 'Non-holder'} (${collections.length} collections)`);
     } catch (error) {
-      logger.error('Error checking NFT status', { error: error.message, walletAddress });
+      console.error('❌ Error checking NFT status:', error);
+      logger.error('Error checking NFT status', { 
+        error: error.message,
+        errorStack: error.stack,
+        walletAddress: normalizedAddress 
+      });
       // Fail gracefully - don't set to false if cache had a value
       setIsNFTHolder(false);
       setNftCollections([]);

@@ -20,23 +20,28 @@ const QUALIFYING_COLLECTIONS = [
 export const checkNFTHoldings = async (walletAddress) => {
   try {
     if (!walletAddress) {
+      console.warn('⚠️ No wallet address provided to checkNFTHoldings');
       return { isHolder: false, collections: [] };
     }
 
-    console.log('🔍 Checking NFT holdings for:', walletAddress);
+    // Normalize wallet address (lowercase for EVM addresses)
+    const normalizedAddress = walletAddress.toLowerCase();
+    console.log('🔍 Checking NFT holdings for:', normalizedAddress, 'API URL:', API_URL);
     
     // Add timeout to prevent hanging
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
     try {
-      const response = await fetch(`${API_URL}/api/nft/check-holdings`, {
+      const apiEndpoint = `${API_URL}/api/nft/check-holdings`;
+      console.log('📡 Calling NFT endpoint:', apiEndpoint);
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ 
-          walletAddress
+          walletAddress: normalizedAddress
         }),
         signal: controller.signal
       });
@@ -45,21 +50,27 @@ export const checkNFTHoldings = async (walletAddress) => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.warn('NFT verification endpoint error', { 
+        console.error('❌ NFT verification endpoint error', { 
           status: response.status, 
           statusText: response.statusText,
-          error: errorText 
+          error: errorText,
+          walletAddress: normalizedAddress
         });
         return { isHolder: false, collections: [] };
       }
 
       const data = await response.json();
+      console.log('📥 NFT API response received:', data);
       
       // Handle different response formats
       const isHolder = data.isHolder === true || (data.success && data.isHolder === true);
       const collections = Array.isArray(data.collections) ? data.collections : [];
       
-      console.log('✅ NFT verification result:', { isHolder, collectionCount: collections.length });
+      console.log('✅ NFT verification result:', { 
+        isHolder, 
+        collectionCount: collections.length,
+        collections: collections.map(c => ({ name: c.name, balance: c.balance }))
+      });
       
       return {
         isHolder,
