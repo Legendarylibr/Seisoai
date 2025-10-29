@@ -164,9 +164,8 @@ export const SimpleWalletProvider = ({ children }) => {
         }
       }, 35000); // Increased to 35 seconds to allow wallet popups and multiple wallet attempts
 
-      try {
-        // Handle different wallet types
-        switch (walletType) {
+      // Handle different wallet types
+      switch (walletType) {
         case 'metamask':
           if (!window.ethereum) {
             throw new Error('MetaMask not found. Please install MetaMask extension.');
@@ -426,13 +425,12 @@ export const SimpleWalletProvider = ({ children }) => {
 
       logger.info('Wallet connected successfully', { address, walletType });
       if (connectionTimeout) clearTimeout(connectionTimeout);
-      } catch (error) {
-        if (connectionTimeout) clearTimeout(connectionTimeout);
-        logger.error('Wallet connection error', { error: error.message, walletType });
-        setError(error.message);
-      } finally {
-        setIsLoading(false);
-      }
+    } catch (error) {
+      if (connectionTimeout) clearTimeout(connectionTimeout);
+      logger.error('Wallet connection error', { error: error.message, walletType });
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
