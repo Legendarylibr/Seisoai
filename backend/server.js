@@ -874,10 +874,10 @@ app.post('/api/nft/check-holdings', async (req, res) => {
     
     // Qualifying NFT collections and token contracts
     const qualifyingCollections = [
-      // NFT Collections
-      // NOTE: Temporarily disabled problematic collections until valid addresses are provided
-      // { chainId: '1', address: '0x8e84dcAF616c3E04ed45d3e0912B81e7283a48DA', name: 'Your NFT Collection 1', type: 'erc721' },
-      // { chainId: '8453', address: '0x1E71eA45FB939C92045FF32239a8922395eeb31B', name: 'Your NFT Collection 2', type: 'erc721' },
+      // Your NFT Collections
+      { chainId: '1', address: '0x8e84dcaf616c3e04ed45d3e0912b81e7283a48da', name: 'Your NFT Collection 1', type: 'erc721' },
+      { chainId: '1', address: '0xd7d1431f43767a47bf7f5c6a651d24398e537729', name: 'Your NFT Collection 2', type: 'erc721' },
+      { chainId: '8453', address: '0x1e71ea45fb939c92045ff32239a8922395eeb31b', name: 'Your Base NFT Collection', type: 'erc721' },
       // Token Holdings
       { chainId: '1', address: '0x0000000000c5dc95539589fbD24BE07c6C14eCa4', name: '$CULT Holders', type: 'erc20', minBalance: '500000' }
     ];
