@@ -904,9 +904,20 @@ app.post('/api/nft/check-holdings', async (req, res) => {
         const provider = new ethers.JsonRpcProvider(rpcUrl);
         
         if (collection.type === 'erc721') {
+          // Skip EVM NFT checks for Solana addresses
+          if (!walletAddress.startsWith('0x')) {
+            logger.debug('Skipping EVM NFT check for Solana address', { walletAddress, collection: collection.name });
+            continue;
+          }
+          
           // Validate contract address format
           if (!ethers.isAddress(collection.address)) {
             throw new Error(`Invalid contract address: ${collection.address}`);
+          }
+          
+          // Validate wallet address format for EVM
+          if (!ethers.isAddress(walletAddress)) {
+            throw new Error(`Invalid EVM wallet address: ${walletAddress}`);
           }
           
           // Check if contract exists by getting its code
@@ -951,6 +962,17 @@ app.post('/api/nft/check-holdings', async (req, res) => {
             });
           }
         } else if (collection.type === 'erc20') {
+          // Skip EVM token checks for Solana addresses
+          if (!walletAddress.startsWith('0x')) {
+            logger.debug('Skipping EVM token check for Solana address', { walletAddress, collection: collection.name });
+            continue;
+          }
+          
+          // Validate wallet address format for EVM
+          if (!ethers.isAddress(walletAddress)) {
+            throw new Error(`Invalid EVM wallet address: ${walletAddress}`);
+          }
+          
           // Token contract check
           const tokenContract = new ethers.Contract(
             collection.address,
@@ -1001,20 +1023,15 @@ app.post('/api/nft/check-holdings', async (req, res) => {
           rpcUrl: RPC_ENDPOINTS[collection.chainId]
         });
         
-        // Add error details to response for debugging
-        ownedCollections.push({
-          contractAddress: collection.address,
-          chainId: collection.chainId,
-          name: collection.name,
-          type: collection.type,
-          error: error.message,
-          balance: '0'
-        });
+        // Don't add error entries to ownedCollections - they're not actual holdings
         continue;
       }
     }
     
-    const isHolder = ownedCollections.length > 0;
+    // Only consider wallet as NFT holder if they actually have NFTs (balance > 0)
+    const isHolder = ownedCollections.some(collection => 
+      collection.balance && parseInt(collection.balance) > 0 && !collection.error
+    );
     
     // Update user's NFT collections in database (even if empty)
     user.nftCollections = ownedCollections;
