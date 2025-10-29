@@ -29,9 +29,6 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   const [tokenBalances, setTokenBalances] = useState({});
   const [showTokenSelector, setShowTokenSelector] = useState(false);
   const [error, setError] = useState('');
-  const [paymentAddress, setPaymentAddress] = useState('');
-  const [solanaPaymentAddress, setSolanaPaymentAddress] = useState('');
-  const [copied, setCopied] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(''); // 'pending', 'detected', 'confirmed'
   const [networksWithUSDC, setNetworksWithUSDC] = useState([]);
@@ -171,42 +168,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       setAvailableTokens([usdcToken]);
       setSelectedToken(usdcToken);
       
-      // Set fallback addresses immediately
-      setPaymentAddress('0xa0aE05e2766A069923B2a51011F270aCadFf023a');
-      setSolanaPaymentAddress('CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA');
-      
-      // Try to get updated addresses from API
-      fetchPaymentAddress();
     }
   }, [isOpen]);
 
-  const fetchPaymentAddress = async () => {
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/payment/get-address`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ walletAddress: address })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        setPaymentAddress(data.paymentAddress); // EVM chains
-        setSolanaPaymentAddress(data.solanaPaymentAddress); // Solana
-      } else {
-        // If API fails, use fallback addresses
-        setPaymentAddress('0xa0aE05e2766A069923B2a51011F270aCadFf023a');
-        setSolanaPaymentAddress('CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA');
-      }
-    } catch (error) {
-      console.error('Error fetching payment address:', error);
-      // Fallback to default payment addresses
-      setPaymentAddress('0xa0aE05e2766A069923B2a51011F270aCadFf023a');
-      setSolanaPaymentAddress('CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA');
-    }
-  };
 
   // Load token balances when token is selected
   useEffect(() => {
@@ -439,31 +403,18 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     return true;
   };
 
-  const copyAddress = async () => {
-    try {
-      // Determine which address to copy based on selected token/chain
-      // For now, use EVM address (could be enhanced to detect chain)
-      const addressToCopy = paymentAddress;
-      await navigator.clipboard.writeText(addressToCopy);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('Failed to copy:', error);
-    }
-  };
 
   const handleSendTransaction = async () => {
     console.log('🚀 handleSendTransaction called', { 
       amount, 
-      paymentAddress, 
       walletType, 
       address,
       isConnected: !!address 
     });
     
-    if (!amount || !paymentAddress) {
-      console.log('❌ Missing amount or payment address');
-      setError('Please enter an amount and ensure payment address is loaded');
+    if (!amount) {
+      console.log('❌ Missing amount');
+      setError('Please enter an amount');
       return;
     }
     
@@ -531,10 +482,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         
         try {
           const { Connection } = await import('@solana/web3.js');
-          const rpcUrl = process.env.REACT_APP_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+          const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=dd9f8788-e583-423a-8ee9-51df2efb2c4e';
           const connection = new Connection(rpcUrl);
           
           // Build and send Solana USDC transaction
+          const solanaPaymentAddress = getPaymentWallet('solana', 'solana');
           const txSignature = await buildSolanaUSDCTransaction(amount, solanaPaymentAddress);
           
           console.log('✅ Solana transaction signed! Signature:', txSignature);
@@ -686,6 +638,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           // Convert amount to USDC units (6 decimals)
           const amountWei = ethers.parseUnits(amount, 6);
           
+          const currentChainId = await getCurrentNetwork();
+          const paymentAddress = getPaymentWallet(currentChainId, 'evm');
           console.log(`📤 Building USDC transaction to send ${amount} USDC to ${paymentAddress}...`);
           
           // Build the transaction data
@@ -993,72 +947,6 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 {isNFTHolder && <span className="text-green-400 ml-1">(NFT Holder)</span>}
               </span>
             </div>
-          </div>
-
-          {/* Payment Address */}
-          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-2">
-            <div className="flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-blue-400" />
-              <span className="text-sm font-semibold text-blue-400">
-                {walletType === 'solana' ? 'Solana Payment Address' : 'EVM Payment Address'}
-              </span>
-            </div>
-            
-            {/* Show only relevant payment address based on connected wallet type */}
-            {walletType === 'solana' ? (
-              // Solana Payment Address
-              <div className="space-y-2">
-                <div className="text-xs text-purple-400 font-semibold">Solana Network:</div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 p-2 bg-black/30 rounded border border-white/10 text-xs font-mono text-white break-all">
-                    {solanaPaymentAddress || 'Loading...'}
-                  </div>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(solanaPaymentAddress);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
-                      } catch (error) {
-                        console.error('Failed to copy:', error);
-                      }
-                    }}
-                    className="p-2 hover:bg-white/10 rounded transition-colors"
-                    title="Copy Solana address"
-                  >
-                    {copied ? (
-                      <Check className="w-4 h-4 text-green-400" />
-                    ) : (
-                      <Copy className="w-4 h-4 text-gray-400" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              // EVM Payment Address
-              <div className="space-y-2">
-                <div className="text-xs text-purple-400 font-semibold">
-                  EVM Networks (Ethereum, Polygon, Arbitrum, Optimism, Base):
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 p-2 bg-black/30 rounded border border-white/10 text-xs font-mono text-white break-all">
-                    {paymentAddress || 'Loading...'}
-                  </div>
-                  <button
-                    onClick={copyAddress}
-                    className="p-2 hover:bg-white/10 rounded transition-colors"
-                    title="Copy EVM address"
-                  >
-                    {copied ? (
-                      <Check className="w-4 h-4 text-green-400" />
-                    ) : (
-                      <Copy className="w-4 h-4 text-gray-400" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-
           </div>
 
           {/* Clear Instructions */}

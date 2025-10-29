@@ -3,6 +3,11 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
+// Buffer polyfill for Solana
+import { Buffer } from 'buffer'
+window.Buffer = Buffer
+global.Buffer = Buffer
+
 // Initialize Sentry for error monitoring (disabled in development)
 // import * as Sentry from '@sentry/react';
 

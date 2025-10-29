@@ -5,13 +5,19 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    include: ['ethers']
+    include: ['ethers', 'buffer']
   },
   resolve: {
     alias: {
       // Ensure ethers resolves correctly
-      'ethers': 'ethers'
+      'ethers': 'ethers',
+      // Add Buffer polyfill for Solana
+      'buffer': 'buffer'
     }
+  },
+  define: {
+    // Make Buffer available globally for Solana
+    global: 'globalThis',
   },
   build: {
     // Production build optimizations
