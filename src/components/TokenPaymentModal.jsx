@@ -75,7 +75,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       const { createTransferInstruction, getAssociatedTokenAddress, getAccount } = await import('@solana/spl-token');
 
       // Connect to Solana mainnet using configured RPC
-      const rpcUrl = process.env.REACT_APP_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+      const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=dd9f8788-e583-423a-8ee9-51df2efb2c4e';
       const connection = new Connection(rpcUrl);
       
       // USDC mint address on Solana
