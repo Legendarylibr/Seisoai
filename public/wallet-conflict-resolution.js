@@ -127,21 +127,31 @@
     originalError.apply(console, args);
   };
   
-  // Handle uncaught errors
+  // Handle uncaught errors - MUST USE CAPTURE PHASE
   window.addEventListener('error', function(event) {
     const error = event.error;
     const message = error?.message || '';
     const stack = error?.stack || '';
+    const filename = event.filename || '';
     
-    // Prevent ethereum property redefinition errors
+    // Prevent ethereum property redefinition errors - catch all variations
     if (message.includes('Cannot redefine property: ethereum') ||
+        message.includes('Cannot redefine property') ||
         message.includes('originalDefineProperty') ||
-        stack.includes('evmAsk.js')) {
+        message.includes('evmAsk') ||
+        message.includes('evmAsk.js') ||
+        stack.includes('evmAsk.js') ||
+        stack.includes('evmAsk') ||
+        filename.includes('evmAsk.js') ||
+        filename.includes('evmAsk') ||
+        (message.includes('defineProperty') && message.includes('ethereum'))) {
       event.preventDefault();
-      console.warn('🛡️ Wallet conflict error prevented:', message);
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      console.warn('🛡️ Wallet conflict error prevented');
       return false;
     }
-  });
+  }, true); // Use capture phase to catch earlier
   
   // Handle unhandled promise rejections
   window.addEventListener('unhandledrejection', function(event) {

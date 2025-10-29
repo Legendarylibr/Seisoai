@@ -16,7 +16,7 @@ const getFluxEndpoint = (hasReferenceImage = false, isMultipleImages = false) =>
     return 'https://fal.run/fal-ai/flux-pro/kontext/text-to-image';
   } else if (isMultipleImages) {
     // Multiple images - use multi model
-    return 'https://fal.run/fal-ai/flux-pro/kontext/multi';
+    return 'https://fal.run/fal-ai/flux-pro/kontext/max/multi';
   } else {
     // Single image - use max model
     return 'https://fal.run/fal-ai/flux-pro/kontext/max';
