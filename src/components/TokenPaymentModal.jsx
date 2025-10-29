@@ -226,40 +226,84 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       console.log('🔐 Signing transaction with wallet...');
       console.log(`📝 Transaction has ${transaction.instructions.length} instruction(s)`);
       
-      // Sign and send transaction
-      const result = await window.solana.signAndSendTransaction(transaction, {
-        skipPreflight: false,
-        maxRetries: 3
-      });
+      // Check if wallet is connected
+      if (!window.solana.isConnected) {
+        throw new Error('Wallet is not connected. Please connect your wallet first.');
+      }
       
-      console.log('✅ Solana transaction sent:', result);
-      
-      // Extract signature - handle different Phantom wallet response formats
-      let signature = null;
-      
-      if (result) {
-        // Try different possible signature locations
-        if (typeof result.signature === 'string') {
-          signature = result.signature;
-        } else if (result.signature && typeof result.signature.toString === 'function') {
-          signature = result.signature.toString();
-        } else if (result.pubkey && typeof result.pubkey.toString === 'function') {
-          // Some versions might return pubkey instead
-          signature = result.pubkey.toString();
-        } else if (result.value && typeof result.value === 'string') {
-          signature = result.value;
-        } else if (typeof result === 'string') {
-          // Result itself might be the signature
-          signature = result;
+      // Check if public key matches
+      const currentPublicKey = window.solana.publicKey;
+      if (!currentPublicKey || currentPublicKey.toString() !== address) {
+        console.warn('⚠️ Wallet public key mismatch, reconnecting...');
+        await window.solana.connect();
+        if (window.solana.publicKey.toString() !== address) {
+          throw new Error('Wallet address mismatch. Please reconnect with the correct wallet.');
         }
       }
       
-      if (signature) {
-        console.log(`📋 Transaction signature: ${signature}`);
-        return signature;
-      } else {
-        console.error('⚠️ Could not extract signature from result:', result);
-        throw new Error('Invalid transaction result: no signature found in response');
+      // Sign and send transaction - Phantom returns signature as string
+      let signature = null;
+      try {
+        const result = await window.solana.signAndSendTransaction(transaction, {
+          skipPreflight: false,
+          maxRetries: 3
+        });
+        
+        console.log('✅ Solana transaction result:', result);
+        console.log('✅ Result type:', typeof result);
+        console.log('✅ Result keys:', result ? Object.keys(result) : 'null');
+        
+        // Phantom wallet typically returns signature as base58 string directly
+        // But handle all possible formats
+        if (typeof result === 'string') {
+          signature = result;
+        } else if (result && typeof result === 'object') {
+          // Try signature property
+          if (result.signature) {
+            if (typeof result.signature === 'string') {
+              signature = result.signature;
+            } else if (result.signature.toString) {
+              signature = result.signature.toString();
+            }
+          }
+          // Try value property
+          if (!signature && result.value) {
+            if (typeof result.value === 'string') {
+              signature = result.value;
+            } else if (result.value.toString) {
+              signature = result.value.toString();
+            }
+          }
+          // Try txid property (some wallets use this)
+          if (!signature && result.txid) {
+            if (typeof result.txid === 'string') {
+              signature = result.txid;
+            } else if (result.txid.toString) {
+              signature = result.txid.toString();
+            }
+          }
+        }
+        
+        if (signature) {
+          console.log(`📋 Transaction signature extracted: ${signature}`);
+          return signature;
+        } else {
+          console.error('❌ Could not extract signature. Full result:', JSON.stringify(result, null, 2));
+          throw new Error('Invalid transaction result: no signature found. Result: ' + JSON.stringify(result));
+        }
+      } catch (signError) {
+        console.error('❌ Error signing/sending transaction:', signError);
+        
+        // Provide better error messages
+        if (signError.code === 4001 || signError.code === -32603) {
+          throw new Error('User rejected the transaction');
+        } else if (signError.message && signError.message.includes('insufficient')) {
+          throw new Error('Insufficient funds for transaction');
+        } else if (signError.message && signError.message.includes('token account')) {
+          throw new Error('USDC token account not found. Please add USDC to your wallet first.');
+        } else {
+          throw new Error(`Transaction failed: ${signError.message || signError.toString()}`);
+        }
       }
       
     } catch (error) {
