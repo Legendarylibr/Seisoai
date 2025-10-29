@@ -542,13 +542,13 @@ const TOKEN_CONFIGS = {
   }
 };
 
-// RPC endpoints with Alchemy API key
+// RPC endpoints with fallback to public endpoints
 const RPC_ENDPOINTS = {
-  '1': process.env.ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-  '137': process.env.POLYGON_RPC_URL || 'https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-  '42161': process.env.ARBITRUM_RPC_URL || 'https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-  '10': process.env.OPTIMISM_RPC_URL || 'https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-  '8453': process.env.BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
+  '1': process.env.ETH_RPC_URL || 'https://eth.llamarpc.com',
+  '137': process.env.POLYGON_RPC_URL || 'https://polygon.llamarpc.com',
+  '42161': process.env.ARBITRUM_RPC_URL || 'https://arbitrum.llamarpc.com',
+  '10': process.env.OPTIMISM_RPC_URL || 'https://optimism.llamarpc.com',
+  '8453': process.env.BASE_RPC_URL || 'https://base.llamarpc.com'
 };
 
 // ERC-20 ABI
@@ -886,9 +886,20 @@ app.post('/api/nft/check-holdings', async (req, res) => {
     // Check each qualifying collection
     for (const collection of qualifyingCollections) {
       try {
-        const rpcUrl = RPC_ENDPOINTS[collection.chainId];
-        if (!rpcUrl) continue;
+        logger.debug('Checking collection', { 
+          address: collection.address, 
+          chainId: collection.chainId, 
+          name: collection.name,
+          type: collection.type 
+        });
         
+        const rpcUrl = RPC_ENDPOINTS[collection.chainId];
+        if (!rpcUrl) {
+          logger.warn('No RPC URL for chain', { chainId: collection.chainId });
+          continue;
+        }
+        
+        logger.debug('Using RPC URL', { chainId: collection.chainId, rpcUrl });
         const provider = new ethers.JsonRpcProvider(rpcUrl);
         
         if (collection.type === 'erc721') {
@@ -900,7 +911,18 @@ app.post('/api/nft/check-holdings', async (req, res) => {
           );
           
           const balance = await nftContract.balanceOf(walletAddress);
+          logger.debug('NFT balance check result', { 
+            address: collection.address, 
+            walletAddress, 
+            balance: balance.toString() 
+          });
+          
           if (balance > 0) {
+            logger.info('NFT found!', { 
+              address: collection.address, 
+              name: collection.name, 
+              balance: balance.toString() 
+            });
             ownedCollections.push({
               contractAddress: collection.address,
               chainId: collection.chainId,
@@ -925,7 +947,21 @@ app.post('/api/nft/check-holdings', async (req, res) => {
           const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
           const minBalance = parseFloat(collection.minBalance);
           
+          logger.debug('Token balance check result', { 
+            address: collection.address, 
+            walletAddress, 
+            balance: formattedBalance,
+            minBalance,
+            decimals 
+          });
+          
           if (formattedBalance >= minBalance) {
+            logger.info('Token balance sufficient!', { 
+              address: collection.address, 
+              name: collection.name, 
+              balance: formattedBalance,
+              minBalance 
+            });
             ownedCollections.push({
               contractAddress: collection.address,
               chainId: collection.chainId,
@@ -1034,15 +1070,15 @@ const TOKEN_ADDRESSES = {
   }
 };
 
-// Get provider for chain using Alchemy RPC endpoints
+// Get provider for chain using public RPC endpoints
 function getProvider(chain = 'ethereum') {
-  // Use Alchemy RPC endpoints with API key
+  // Use public RPC endpoints
   const rpcUrls = {
-    ethereum: process.env.ETHEREUM_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-    polygon: process.env.POLYGON_RPC_URL || 'https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-    arbitrum: process.env.ARBITRUM_RPC_URL || 'https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-    optimism: process.env.OPTIMISM_RPC_URL || 'https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-    base: process.env.BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
+    ethereum: process.env.ETHEREUM_RPC_URL || 'https://eth.llamarpc.com',
+    polygon: process.env.POLYGON_RPC_URL || 'https://polygon.llamarpc.com',
+    arbitrum: process.env.ARBITRUM_RPC_URL || 'https://arbitrum.llamarpc.com',
+    optimism: process.env.OPTIMISM_RPC_URL || 'https://optimism.llamarpc.com',
+    base: process.env.BASE_RPC_URL || 'https://base.llamarpc.com'
   };
   
   return new ethers.JsonRpcProvider(rpcUrls[chain] || rpcUrls.ethereum);
