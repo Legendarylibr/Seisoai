@@ -875,8 +875,9 @@ app.post('/api/nft/check-holdings', async (req, res) => {
     // Qualifying NFT collections and token contracts
     const qualifyingCollections = [
       // NFT Collections
-      { chainId: '1', address: '0x8e84dcAF616c3E04ed45d3e0912B81e7283a48DA', name: 'Your NFT Collection 1', type: 'erc721' },
-      { chainId: '8453', address: '0x1E71eA45FB939C92045FF32239a8922395eeb31B', name: 'Your NFT Collection 2', type: 'erc721' },
+      // NOTE: Temporarily disabled problematic collections until valid addresses are provided
+      // { chainId: '1', address: '0x8e84dcAF616c3E04ed45d3e0912B81e7283a48DA', name: 'Your NFT Collection 1', type: 'erc721' },
+      // { chainId: '8453', address: '0x1E71eA45FB939C92045FF32239a8922395eeb31B', name: 'Your NFT Collection 2', type: 'erc721' },
       // Token Holdings
       { chainId: '1', address: '0x0000000000c5dc95539589fbD24BE07c6C14eCa4', name: '$CULT Holders', type: 'erc20', minBalance: '500000' }
     ];
@@ -903,6 +904,17 @@ app.post('/api/nft/check-holdings', async (req, res) => {
         const provider = new ethers.JsonRpcProvider(rpcUrl);
         
         if (collection.type === 'erc721') {
+          // Validate contract address format
+          if (!ethers.isAddress(collection.address)) {
+            throw new Error(`Invalid contract address: ${collection.address}`);
+          }
+          
+          // Check if contract exists by getting its code
+          const contractCode = await provider.getCode(collection.address);
+          if (contractCode === '0x') {
+            throw new Error(`Contract does not exist at address: ${collection.address}`);
+          }
+          
           // NFT contract check
           const nftContract = new ethers.Contract(
             collection.address,
@@ -910,7 +922,14 @@ app.post('/api/nft/check-holdings', async (req, res) => {
             provider
           );
           
-          const balance = await nftContract.balanceOf(walletAddress);
+          // Add timeout to prevent hanging
+          const balance = await Promise.race([
+            nftContract.balanceOf(walletAddress),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Contract call timeout')), 10000)
+            )
+          ]);
+          
           logger.debug('NFT balance check result', { 
             address: collection.address, 
             walletAddress, 
@@ -973,7 +992,24 @@ app.post('/api/nft/check-holdings', async (req, res) => {
           }
         }
       } catch (error) {
-        logger.warn(`Error checking collection ${collection.address}:`, error.message);
+        logger.warn(`Error checking collection ${collection.address}:`, {
+          error: error.message,
+          stack: error.stack,
+          chainId: collection.chainId,
+          name: collection.name,
+          type: collection.type,
+          rpcUrl: RPC_ENDPOINTS[collection.chainId]
+        });
+        
+        // Add error details to response for debugging
+        ownedCollections.push({
+          contractAddress: collection.address,
+          chainId: collection.chainId,
+          name: collection.name,
+          type: collection.type,
+          error: error.message,
+          balance: '0'
+        });
         continue;
       }
     }
