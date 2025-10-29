@@ -258,12 +258,20 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         if (typeof result === 'string') {
           signature = result;
         } else if (result && typeof result === 'object') {
-          // Try signature property
+          // Try signature property first (most common)
           if (result.signature) {
             if (typeof result.signature === 'string') {
               signature = result.signature;
             } else if (result.signature.toString) {
               signature = result.signature.toString();
+            }
+          }
+          // Try pubkey property (some Phantom versions return signature in pubkey)
+          if (!signature && result.pubkey) {
+            if (typeof result.pubkey === 'string') {
+              signature = result.pubkey;
+            } else if (result.pubkey.toString && typeof result.pubkey.toString === 'function') {
+              signature = result.pubkey.toString();
             }
           }
           // Try value property
