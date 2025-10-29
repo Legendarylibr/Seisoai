@@ -3,7 +3,7 @@
 
 import { VISUAL_STYLES } from '../utils/styles.js';
 // import { performContentSafetyCheck, logSafetyViolation, getSafeAlternatives } from './contentSafetyService.js';
-import { generationLogger as logger } from '../utils/logger.js';
+import logger from '../utils/logger.js';
 
 const FASTAPI_URL = import.meta.env.VITE_FASTAPI_URL || 'http://localhost:8000';
 const FASTAPI_ENABLED = import.meta.env.VITE_FASTAPI_ENABLED === 'true';

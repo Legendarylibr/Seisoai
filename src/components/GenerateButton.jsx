@@ -3,7 +3,7 @@ import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
-import { generationLogger as logger } from '../utils/logger.js';
+import logger from '../utils/logger.js';
 
 const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   // onShowStripePayment prop removed - Stripe disabled
