@@ -74,9 +74,36 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
       const { createTransferInstruction, getAssociatedTokenAddress, getAccount } = await import('@solana/spl-token');
 
-      // Connect to Solana mainnet using configured RPC
-      const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=dd9f8788-e583-423a-8ee9-51df2efb2c4e';
-      const connection = new Connection(rpcUrl);
+      // Connect to Solana mainnet using configured RPC with fallbacks
+      const rpcUrls = [
+        import.meta.env.VITE_SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=dd9f8788-e583-423a-8ee9-51df2efb2c4e',
+        'https://api.mainnet-beta.solana.com',
+        'https://solana-api.projectserum.com'
+      ];
+      
+      let connection = null;
+      let rpcUrl = rpcUrls[0];
+      
+      // Try each RPC endpoint until one works
+      for (const url of rpcUrls) {
+        try {
+          console.log(`🔗 Trying Solana RPC: ${url}`);
+          const testConnection = new Connection(url, 'confirmed');
+          // Test the connection
+          await testConnection.getHealth();
+          connection = testConnection;
+          rpcUrl = url;
+          console.log(`✅ Connected to Solana RPC: ${url}`);
+          break;
+        } catch (error) {
+          console.warn(`❌ Failed to connect to ${url}:`, error.message);
+          continue;
+        }
+      }
+      
+      if (!connection) {
+        throw new Error('All Solana RPC endpoints failed. Please try again later.');
+      }
       
       // USDC mint address on Solana
       const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');

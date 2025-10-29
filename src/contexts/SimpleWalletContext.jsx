@@ -120,7 +120,7 @@ export const SimpleWalletProvider = ({ children }) => {
         setIsLoading(false);
         setError('Connection timeout. Please try again.');
         throw new Error('Connection timeout');
-      }, 30000); // 30 second timeout
+      }, 15000); // Reduced to 15 second timeout
 
       try {
         // Handle different wallet types
@@ -162,6 +162,7 @@ export const SimpleWalletProvider = ({ children }) => {
           }
         address = accounts[0];
         setWalletType('evm');
+        console.log('✅ MetaMask connected successfully:', address);
         break;
 
       case 'rabby':
@@ -216,7 +217,7 @@ export const SimpleWalletProvider = ({ children }) => {
           }
         address = rabbyAccounts[0];
         setWalletType('evm');
-        console.log('✅ Rabby connected:', address);
+        console.log('✅ Rabby connected successfully:', address);
         break;
 
       case 'coinbase':
@@ -256,6 +257,7 @@ export const SimpleWalletProvider = ({ children }) => {
           }
         address = coinbaseAccounts[0];
         setWalletType('evm');
+        console.log('✅ Coinbase Wallet connected successfully:', address);
         break;
 
       case 'phantom':
@@ -263,13 +265,28 @@ export const SimpleWalletProvider = ({ children }) => {
             throw new Error('Phantom Wallet not found. Please install Phantom extension.');
           }
           provider = window.solana;
-          // This will prompt user to unlock Phantom if locked and connect
-          const resp = await provider.connect();
-          if (!resp || !resp.publicKey) {
-            throw new Error('Failed to connect. Please unlock Phantom and try again.');
+          
+          // Add connection timeout for Solana
+          const phantomTimeout = setTimeout(() => {
+            throw new Error('Phantom connection timeout. Please try again.');
+          }, 10000); // 10 second timeout for Phantom
+          
+          try {
+            // This will prompt user to unlock Phantom if locked and connect
+            const resp = await provider.connect();
+            clearTimeout(phantomTimeout);
+            
+            if (!resp || !resp.publicKey) {
+              throw new Error('Failed to connect. Please unlock Phantom and try again.');
+            }
+            address = resp.publicKey.toString();
+            setWalletType('solana');
+            console.log('✅ Phantom connected successfully:', address);
+          } catch (phantomError) {
+            clearTimeout(phantomTimeout);
+            console.error('❌ Phantom connection failed:', phantomError);
+            throw new Error(`Phantom connection failed: ${phantomError.message}`);
           }
-        address = resp.publicKey.toString();
-        setWalletType('solana');
         break;
 
       case 'solflare':
@@ -277,13 +294,28 @@ export const SimpleWalletProvider = ({ children }) => {
             throw new Error('Solflare Wallet not found. Please install Solflare extension.');
           }
           provider = window.solflare;
-          // This will prompt user to unlock Solflare if locked
-          await provider.connect();
-          if (!provider.publicKey) {
-            throw new Error('Failed to connect. Please unlock Solflare and try again.');
+          
+          // Add connection timeout for Solflare
+          const solflareTimeout = setTimeout(() => {
+            throw new Error('Solflare connection timeout. Please try again.');
+          }, 10000); // 10 second timeout for Solflare
+          
+          try {
+            // This will prompt user to unlock Solflare if locked
+            await provider.connect();
+            clearTimeout(solflareTimeout);
+            
+            if (!provider.publicKey) {
+              throw new Error('Failed to connect. Please unlock Solflare and try again.');
+            }
+            address = provider.publicKey.toString();
+            setWalletType('solana');
+            console.log('✅ Solflare connected successfully:', address);
+          } catch (solflareError) {
+            clearTimeout(solflareTimeout);
+            console.error('❌ Solflare connection failed:', solflareError);
+            throw new Error(`Solflare connection failed: ${solflareError.message}`);
           }
-        address = provider.publicKey.toString();
-        setWalletType('solana');
         break;
 
       default:
