@@ -45,7 +45,7 @@ import './index.css'
 // });
 
 // Validate required environment variables
-import { logger } from './utils/logger.js';
+import logger from './utils/logger.js';
 
 const requiredEnvVars = ['VITE_FAL_API_KEY'];
 const missingVars = requiredEnvVars.filter(varName => !import.meta.env[varName]);

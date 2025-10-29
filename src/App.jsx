@@ -16,7 +16,7 @@ import Settings from './components/Settings';
 // import LegalDisclaimer from './components/LegalDisclaimer'; // DISABLED - Legal/terms removed from main screen
 import GenerateButton from './components/GenerateButton';
 import VideoGeneration from './components/VideoGeneration';
-import { Grid, File, Settings as SettingsIcon2, Wand2, Sparkles, Video } from 'lucide-react';
+import { Grid, File, Settings as SettingsIcon2, Wand2, Sparkles, Video, Wallet, ArrowRight, Image } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
