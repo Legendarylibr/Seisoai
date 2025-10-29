@@ -18,6 +18,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     address, 
     credits, 
     fetchCredits,
+    setCreditsManually,
     walletType,
     isNFTHolder
   } = useSimpleWallet();
@@ -674,8 +675,16 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               setError(`✅ Payment confirmed! ${creditData.credits} credits added. New balance: ${creditData.totalCredits} credits.`);
               setPaymentStatus('confirmed');
               
-              // Refresh user credits
-              await fetchCredits(address);
+              // Optimistically update credits immediately
+              const newTotal = (typeof creditData.totalCredits !== 'undefined')
+                ? Number(creditData.totalCredits)
+                : Number(credits || 0) + Number(creditData.credits || 0);
+              if (!Number.isNaN(newTotal)) {
+                setCreditsManually(newTotal);
+              }
+
+              // Refresh user credits in background to reconcile
+              fetchCredits(address).catch(() => {});
               
               setTimeout(() => {
                 onClose();
@@ -835,8 +844,16 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 setError(`✅ Payment confirmed! ${creditData.credits} credits added. New balance: ${creditData.totalCredits} credits.`);
                 setPaymentStatus('confirmed');
                 
-                // Refresh user credits
-                await fetchCredits(address);
+                // Optimistically update credits immediately
+                const newTotal = (typeof creditData.totalCredits !== 'undefined')
+                  ? Number(creditData.totalCredits)
+                  : Number(credits || 0) + Number(creditData.credits || 0);
+                if (!Number.isNaN(newTotal)) {
+                  setCreditsManually(newTotal);
+                }
+
+                // Refresh user credits in background to reconcile
+                fetchCredits(address).catch(() => {});
                 
                 setTimeout(() => {
                   onClose();
@@ -934,8 +951,16 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         setPaymentStatus('confirmed');
         setCheckingPayment(false);
         
-        // Update credits
-        await fetchCredits(address);
+        // Optimistically update credits immediately
+        const optimisticTotal = (typeof data.newBalance !== 'undefined')
+          ? Number(data.newBalance)
+          : Number(credits || 0) + Number(data.credits || 0);
+        if (!Number.isNaN(optimisticTotal)) {
+          setCreditsManually(optimisticTotal);
+        }
+
+        // Refresh credits in background to reconcile
+        fetchCredits(address).catch(() => {});
         
         const senderInfo = data.senderAddress ? `Sender: ${data.senderAddress}` : '';
         setError(`✅ Payment confirmed! ${data.credits} credits added. New balance: ${data.newBalance} credits. ${senderInfo}`);
