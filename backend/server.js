@@ -551,9 +551,6 @@ const TOKEN_CONFIGS = {
 // RPC endpoints with fallback to public endpoints
 const RPC_ENDPOINTS = {
   '1': process.env.ETH_RPC_URL || 'https://eth.llamarpc.com',
-  '137': process.env.POLYGON_RPC_URL || 'https://polygon.llamarpc.com',
-  '42161': process.env.ARBITRUM_RPC_URL || 'https://arbitrum.llamarpc.com',
-  '10': process.env.OPTIMISM_RPC_URL || 'https://optimism.llamarpc.com',
   '8453': process.env.BASE_RPC_URL || 'https://base.llamarpc.com'
 };
 
@@ -1150,9 +1147,6 @@ function getProvider(chain = 'ethereum') {
   // Use public RPC endpoints with better fallbacks
   const rpcUrls = {
     ethereum: process.env.ETH_RPC_URL || 'https://eth.llamarpc.com',
-    polygon: process.env.POLYGON_RPC_URL || 'https://polygon.llamarpc.com',
-    arbitrum: process.env.ARBITRUM_RPC_URL || 'https://arbitrum.llamarpc.com',
-    optimism: process.env.OPTIMISM_RPC_URL || 'https://optimism.llamarpc.com',
     base: process.env.BASE_RPC_URL || 'https://base.llamarpc.com'
   };
   
@@ -1273,11 +1267,13 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
     console.log(`\n[SOLANA] Starting check for USDC transfers...`);
     console.log(`[SOLANA] Looking for ANY transfers TO: ${paymentAddress}`);
     
-    // Use optimized RPC endpoints for better reliability
+    // Use optimized RPC endpoints for better reliability with public endpoints
     const rpcUrls = [
       process.env.SOLANA_RPC_URL,
       'https://api.mainnet-beta.solana.com',
-      'https://solana-mainnet.g.alchemy.com/v2/demo'
+      'https://solana-mainnet.g.alchemy.com/v2/demo',
+      'https://rpc.ankr.com/solana',
+      'https://solana-api.projectserum.com'
     ].filter(Boolean);
     
     let connection;

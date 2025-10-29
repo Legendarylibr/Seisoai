@@ -108,7 +108,7 @@ export const checkSolanaNFTOwnership = async (walletAddress, mintAddress, solana
   try {
     // This is a simplified implementation
     // In practice, you'd use the Solana Web3.js library
-    const response = await fetch(import.meta.env.VITE_SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=dd9f8788-e583-423a-8ee9-51df2efb2c4e', {
+    const response = await fetch(import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -71,23 +71,28 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
       const { createTransferInstruction, getAssociatedTokenAddress, getAccount } = await import('@solana/spl-token');
 
-      // Connect to Solana mainnet using configured RPC with fallbacks
+      // Connect to Solana mainnet using configured RPC with better fallbacks
       const rpcUrls = [
-        import.meta.env.VITE_SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=dd9f8788-e583-423a-8ee9-51df2efb2c4e',
+        import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
         'https://api.mainnet-beta.solana.com',
+        'https://solana-mainnet.g.alchemy.com/v2/demo',
+        'https://rpc.ankr.com/solana',
         'https://solana-api.projectserum.com'
       ].filter(url => url); // Remove any undefined/null URLs
       
       let connection = null;
       let rpcUrl = rpcUrls[0];
       
-      // Try each RPC endpoint until one works
+      // Try each RPC endpoint until one works with better error handling
       for (const url of rpcUrls) {
         try {
           console.log(`🔗 Trying Solana RPC: ${url}`);
           const testConnection = new Connection(url, 'confirmed');
-          // Test the connection
-          await testConnection.getHealth();
+          // Test the connection with timeout
+          await Promise.race([
+            testConnection.getHealth(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Health check timeout')), 5000))
+          ]);
           connection = testConnection;
           rpcUrl = url;
           console.log(`✅ Connected to Solana RPC: ${url}`);
@@ -274,13 +279,10 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   // Get RPC URL for different networks
   const getRPCUrl = (chainId) => {
     const rpcUrls = {
-      1: 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-      137: 'https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-      42161: 'https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-      10: 'https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-      8453: 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
+      1: import.meta.env.VITE_ETH_RPC_URL || 'https://eth.llamarpc.com',
+      8453: import.meta.env.VITE_BASE_RPC_URL || 'https://base.llamarpc.com'
     };
-    return rpcUrls[chainId] || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY';
+    return rpcUrls[chainId] || 'https://eth.llamarpc.com';
   };
 
   // Switch to a specific network
@@ -326,35 +328,14 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         chainId: '0x1',
         chainName: 'Ethereum Mainnet',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
+        rpcUrls: [import.meta.env.VITE_ETH_RPC_URL || 'https://eth.llamarpc.com'],
         blockExplorerUrls: ['https://etherscan.io']
-      },
-      137: {
-        chainId: '0x89',
-        chainName: 'Polygon Mainnet',
-        nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
-        rpcUrls: ['https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
-        blockExplorerUrls: ['https://polygonscan.com']
-      },
-      42161: {
-        chainId: '0xa4b1',
-        chainName: 'Arbitrum One',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
-        blockExplorerUrls: ['https://arbiscan.io']
-      },
-      10: {
-        chainId: '0xa',
-        chainName: 'Optimism',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
-        blockExplorerUrls: ['https://optimistic.etherscan.io']
       },
       8453: {
         chainId: '0x2105',
         chainName: 'Base',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
+        rpcUrls: [import.meta.env.VITE_BASE_RPC_URL || 'https://base.llamarpc.com'],
         blockExplorerUrls: ['https://basescan.org']
       }
     };
@@ -482,8 +463,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         
         try {
           const { Connection } = await import('@solana/web3.js');
-          const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=dd9f8788-e583-423a-8ee9-51df2efb2c4e';
-          const connection = new Connection(rpcUrl);
+          const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+          const connection = new Connection(rpcUrl, 'confirmed');
           
           // Build and send Solana USDC transaction
           const solanaPaymentAddress = getPaymentWallet('solana', 'solana');
