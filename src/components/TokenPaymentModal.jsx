@@ -69,7 +69,15 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       }
 
       const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
-      const { createTransferInstruction, getAssociatedTokenAddress, getAccount } = await import('@solana/spl-token');
+      const { 
+        createTransferInstruction, 
+        getAssociatedTokenAddress, 
+        getAccount,
+        createAssociatedTokenAccountInstruction,
+        getAssociatedTokenAddressSync,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      } = await import('@solana/spl-token');
 
       // Connect to Solana mainnet using configured RPC with better fallbacks
       // Ensure we always have fallback RPCs even if env var is missing
@@ -132,43 +140,108 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       const userPublicKey = new PublicKey(address);
       const paymentPublicKey = new PublicKey(paymentAddress);
       
-      // Get user's USDC token account
-      const userTokenAccount = await getAssociatedTokenAddress(USDC_MINT, userPublicKey);
+      // Get user's USDC token account address (associated token account)
+      const userTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, userPublicKey);
       
-      // Get payment wallet's USDC token account
-      const paymentTokenAccount = await getAssociatedTokenAddress(USDC_MINT, paymentPublicKey);
+      // Get payment wallet's USDC token account address
+      const paymentTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, paymentPublicKey);
+      
+      console.log('🔍 Checking token accounts...');
+      console.log(`  User token account: ${userTokenAccount.toString()}`);
+      console.log(`  Payment token account: ${paymentTokenAccount.toString()}`);
       
       // Check if user has USDC token account
+      let userTokenAccountExists = false;
       try {
         await getAccount(connection, userTokenAccount);
+        userTokenAccountExists = true;
+        console.log('✅ User has USDC token account');
       } catch (error) {
+        console.error('❌ User USDC token account not found:', error.message);
         throw new Error('USDC token account not found. Please add USDC to your wallet first.');
       }
       
-      // Convert amount to USDC units (6 decimals)
-      const amountInUSDC = Math.floor(parseFloat(amount) * 1000000);
+      // Check if payment token account exists, create instruction if needed
+      let paymentTokenAccountExists = false;
+      try {
+        await getAccount(connection, paymentTokenAccount);
+        paymentTokenAccountExists = true;
+        console.log('✅ Payment token account exists');
+      } catch (error) {
+        console.log('ℹ️ Payment token account does not exist, will create it');
+        paymentTokenAccountExists = false;
+      }
       
-      // Create transfer instruction
+      // Convert amount to USDC units (6 decimals)
+      const amountInUSDC = BigInt(Math.floor(parseFloat(amount) * 1000000));
+      console.log(`💰 Transferring ${amount} USDC (${amountInUSDC} raw units)`);
+      
+      // Create transaction
+      const transaction = new Transaction();
+      
+      // Add instruction to create payment token account if it doesn't exist
+      if (!paymentTokenAccountExists) {
+        console.log('➕ Adding createAssociatedTokenAccount instruction');
+        try {
+          // Try the simpler signature first (payer, owner, mint)
+          const createATAInstruction = createAssociatedTokenAccountInstruction(
+            userPublicKey,          // payer (user pays for account creation)
+            paymentPublicKey,       // owner of the token account
+            USDC_MINT              // USDC mint
+          );
+          transaction.add(createATAInstruction);
+          console.log('✅ Added createATA instruction');
+        } catch (error) {
+          // If that fails, try with explicit program IDs
+          console.log('⚠️ Trying createATA with explicit program IDs...');
+          const createATAInstruction = createAssociatedTokenAccountInstruction(
+            userPublicKey,          // payer
+            paymentPublicKey,       // owner
+            USDC_MINT,              // mint
+            TOKEN_PROGRAM_ID,       // token program
+            ASSOCIATED_TOKEN_PROGRAM_ID // associated token program
+          );
+          transaction.add(createATAInstruction);
+          console.log('✅ Added createATA instruction with program IDs');
+        }
+      }
+      
+      // Create and add transfer instruction
+      console.log('➕ Adding transfer instruction');
       const transferInstruction = createTransferInstruction(
         userTokenAccount,    // source
         paymentTokenAccount, // destination
-        userPublicKey,       // owner
+        userPublicKey,       // owner (authority)
         amountInUSDC         // amount
       );
+      transaction.add(transferInstruction);
       
-      // Create transaction
-      const transaction = new Transaction().add(transferInstruction);
-      
-      // Get recent blockhash
-      const { blockhash } = await connection.getLatestBlockhash();
+      // Get recent blockhash and set transaction parameters
+      console.log('📡 Getting recent blockhash...');
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = userPublicKey;
       
+      console.log('🔐 Signing transaction with wallet...');
+      console.log(`📝 Transaction has ${transaction.instructions.length} instruction(s)`);
+      
       // Sign and send transaction
-      const result = await window.solana.signAndSendTransaction(transaction);
+      const result = await window.solana.signAndSendTransaction(transaction, {
+        skipPreflight: false,
+        maxRetries: 3
+      });
       
       console.log('✅ Solana transaction sent:', result);
-      return result.signature; // Return just the signature string
+      console.log(`📋 Transaction signature: ${result.signature}`);
+      
+      // Return the signature string
+      if (typeof result.signature === 'string') {
+        return result.signature;
+      } else if (result.signature?.toString) {
+        return result.signature.toString();
+      } else {
+        throw new Error('Invalid transaction result: no signature found');
+      }
       
     } catch (error) {
       console.error('Error building Solana transaction:', error);
