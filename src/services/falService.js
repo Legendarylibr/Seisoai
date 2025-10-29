@@ -1,7 +1,7 @@
 // FAL.ai API service for Flux Kontext image generation
 import { VISUAL_STYLES } from '../utils/styles.js';
 // import { performContentSafetyCheck, logSafetyViolation, getSafeAlternatives } from './contentSafetyService.js';
-import { generationLogger as logger } from '../utils/logger.js';
+import logger from '../utils/logger.js';
 
 const FAL_API_KEY = import.meta.env.VITE_FAL_API_KEY;
 
