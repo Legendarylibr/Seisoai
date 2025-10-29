@@ -265,7 +265,7 @@ export const getTokenBalance = async (walletAddress, tokenAddress, chainId, prov
  */
 export const getSolanaTokenBalance = async (walletAddress, mintAddress, solanaProvider) => {
   try {
-    const response = await fetch(`https://api.mainnet-beta.solana.com`, {
+    const response = await fetch(import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
