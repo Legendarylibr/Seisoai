@@ -33,7 +33,7 @@ export const SimpleWalletProvider = ({ children }) => {
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        logger.debug('Fetching credits', { walletAddress, attempt, retries });
+        logger.debug('Fetching credits from backend', { walletAddress, attempt, retries, apiUrl: API_URL });
         const response = await fetch(`${API_URL}/api/users/${walletAddress}`, {
           method: 'GET',
           headers: {
@@ -45,36 +45,52 @@ export const SimpleWalletProvider = ({ children }) => {
         
         if (response.ok) {
           const data = await response.json();
+          logger.debug('Credits API response received', { data, walletAddress });
           
           // Defensive parsing - handle different response formats
           let credits = 0;
-          if (data.success && data.user) {
-            credits = data.user.credits || 0;
+          if (data.success && data.user && typeof data.user.credits !== 'undefined') {
+            credits = Number(data.user.credits) || 0;
+            logger.info('Credits found in data.user.credits', { credits, walletAddress });
           } else if (data.success && typeof data.credits !== 'undefined') {
-            credits = data.credits || 0;
-          } else if (typeof data.credits !== 'undefined') {
-            credits = data.credits || 0;
+            credits = Number(data.credits) || 0;
+            logger.info('Credits found in data.credits', { credits, walletAddress });
+          } else if (data.user && typeof data.user.credits !== 'undefined') {
+            credits = Number(data.user.credits) || 0;
+            logger.info('Credits found in data.user.credits (no success flag)', { credits, walletAddress });
+          } else {
+            logger.warn('Credits not found in expected format', { data, walletAddress });
+            credits = 0;
           }
           
           setCredits(credits);
+          console.log('✅ Credits loaded from backend:', credits, 'for wallet:', walletAddress);
           
           // Cache the result
-          sessionStorage.setItem(cacheKey, JSON.stringify({
-            data: { credits },
-            timestamp: Date.now()
-          }));
+          try {
+            sessionStorage.setItem(cacheKey, JSON.stringify({
+              data: { credits },
+              timestamp: Date.now()
+            }));
+          } catch (storageError) {
+            logger.warn('Failed to cache credits', { error: storageError.message });
+          }
           
           logger.info('Credits loaded successfully', { credits, walletAddress });
           return credits; // Return for testing/verification
         } else {
+          const errorText = await response.text();
           logger.warn('Failed to fetch credits', { 
             status: response.status, 
+            statusText: response.statusText,
+            errorText,
             attempt, 
             retries, 
             walletAddress 
           });
           if (attempt === retries) {
             setCredits(0);
+            console.warn('⚠️ Failed to fetch credits, set to 0');
           }
         }
       } catch (error) {
@@ -378,9 +394,17 @@ export const SimpleWalletProvider = ({ children }) => {
       logger.info('Wallet connected successfully', { address, walletType });
 
       // Start credits and NFT fetch in parallel (non-blocking)
+      // But ensure credits are fetched immediately for display
       Promise.all([
-        fetchCredits(address).catch(error => {
-          logger.error('Credits fetch failed', { error: error.message, address });
+        fetchCredits(address).then(credits => {
+          console.log('✅ Credits fetched successfully:', credits);
+          logger.info('Credits fetch completed', { credits, address });
+          return credits;
+        }).catch(error => {
+          logger.error('Credits fetch failed', { error: error.message, error, address });
+          console.error('❌ Credits fetch failed:', error);
+          // Still show 0 credits so user knows it failed
+          setCredits(0);
         }),
         checkNFTStatus(address).catch(error => {
           logger.error('NFT check failed', { error: error.message, address });
@@ -422,6 +446,11 @@ export const SimpleWalletProvider = ({ children }) => {
   // Periodic credit refresh when connected
   useEffect(() => {
     if (!isConnected || !address) return;
+
+    // Refresh credits immediately when address changes or connection is established
+    fetchCredits(address).catch(error => {
+      logger.error('Initial credit refresh failed', { error: error.message, address });
+    });
 
     // Refresh credits every 60 seconds to keep display updated
     const refreshInterval = setInterval(() => {
