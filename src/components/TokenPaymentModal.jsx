@@ -279,10 +279,10 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   // Get RPC URL for different networks
   const getRPCUrl = (chainId) => {
     const rpcUrls = {
-      1: import.meta.env.VITE_ETH_RPC_URL || 'https://eth.llamarpc.com',
-      8453: import.meta.env.VITE_BASE_RPC_URL || 'https://base.llamarpc.com'
+      1: import.meta.env.VITE_ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+      8453: import.meta.env.VITE_BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
     };
-    return rpcUrls[chainId] || 'https://eth.llamarpc.com';
+    return rpcUrls[chainId] || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY';
   };
 
   // Switch to a specific network
@@ -328,14 +328,14 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         chainId: '0x1',
         chainName: 'Ethereum Mainnet',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [import.meta.env.VITE_ETH_RPC_URL || 'https://eth.llamarpc.com'],
+        rpcUrls: [import.meta.env.VITE_ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
         blockExplorerUrls: ['https://etherscan.io']
       },
       8453: {
         chainId: '0x2105',
         chainName: 'Base',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [import.meta.env.VITE_BASE_RPC_URL || 'https://base.llamarpc.com'],
+        rpcUrls: [import.meta.env.VITE_BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
         blockExplorerUrls: ['https://basescan.org']
       }
     };

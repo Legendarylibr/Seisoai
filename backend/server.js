@@ -550,8 +550,8 @@ const TOKEN_CONFIGS = {
 
 // RPC endpoints with fallback to public endpoints
 const RPC_ENDPOINTS = {
-  '1': process.env.ETH_RPC_URL || 'https://eth.llamarpc.com',
-  '8453': process.env.BASE_RPC_URL || 'https://base.llamarpc.com'
+  '1': process.env.ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+  '8453': process.env.BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
 };
 
 // ERC-20 ABI
@@ -907,7 +907,8 @@ app.post('/api/nft/check-holdings', async (req, res) => {
         const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
           polling: false,
           batchMaxCount: 5,
-          batchMaxWait: 50
+          batchMaxWait: 50,
+          staticNetwork: { chainId: parseInt(collection.chainId), name: collection.chainId === '1' ? 'mainnet' : 'base' }
         });
         
         if (collection.type === 'erc721') {
@@ -1146,8 +1147,8 @@ function getProvider(chain = 'ethereum') {
 
   // Use public RPC endpoints with better fallbacks
   const rpcUrls = {
-    ethereum: process.env.ETH_RPC_URL || 'https://eth.llamarpc.com',
-    base: process.env.BASE_RPC_URL || 'https://base.llamarpc.com'
+    ethereum: process.env.ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+    base: process.env.BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
   };
   
   const provider = new ethers.JsonRpcProvider(rpcUrls[chain] || rpcUrls.ethereum, undefined, {
