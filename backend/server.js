@@ -814,7 +814,8 @@ app.get('/api/users/:walletAddress', async (req, res) => {
   try {
     const { walletAddress } = req.params;
     
-    // Return default user data without database dependency
+    // For now, return default user data with standard pricing
+    // The frontend will call NFT checking separately to get pricing
     res.json({
       success: true,
       user: {
@@ -831,7 +832,12 @@ app.get('/api/users/:walletAddress', async (req, res) => {
           defaultImageSize: '1024x1024',
           enableNotifications: true
         },
-        lastActive: new Date()
+        lastActive: new Date(),
+        isNFTHolder: false,
+        pricing: {
+          costPerCredit: 0.15, // Default pricing for non-holders
+          creditsPerUSDC: 6.67
+        }
       }
     });
   } catch (error) {
@@ -847,12 +853,38 @@ app.post('/api/nft/check-credits', async (req, res) => {
   try {
     const { walletAddress } = req.body;
     
-    // Return default credits without database dependency
+    // Check NFT holdings to determine pricing
+    let isNFTHolder = false;
+    
+    try {
+      // Make internal call to NFT checking
+      const nftResponse = await fetch(`http://localhost:3001/api/nft/check-holdings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress })
+      });
+      
+      if (nftResponse.ok) {
+        const nftData = await nftResponse.json();
+        isNFTHolder = nftData.isHolder;
+      }
+    } catch (nftError) {
+      logger.warn('Failed to check NFT status for credits', { error: nftError.message });
+    }
+    
+    // Calculate credits based on NFT holder status
+    const baseCredits = isNFTHolder ? 10 : 0; // NFT holders get 10 free credits
+    
     res.json({
       success: true,
-      totalCredits: 0,
-      totalCreditsEarned: 0,
-      totalCreditsSpent: 0
+      totalCredits: baseCredits,
+      totalCreditsEarned: baseCredits,
+      totalCreditsSpent: 0,
+      isNFTHolder: isNFTHolder,
+      pricing: {
+        costPerCredit: isNFTHolder ? 0.08 : 0.15,
+        creditsPerUSDC: isNFTHolder ? 12.5 : 6.67
+      }
     });
   } catch (error) {
     logger.error('Error checking credits:', error);
@@ -1072,7 +1104,12 @@ app.post('/api/nft/check-holdings', async (req, res) => {
       collections: ownedCollections,
       message: isHolder 
         ? 'Qualifying NFTs found! You have access to free generation.' 
-        : 'No qualifying NFTs found. Purchase credits to generate images.'
+        : 'No qualifying NFTs found. Purchase credits to generate images.',
+      pricing: {
+        costPerCredit: isHolder ? 0.08 : 0.15,
+        creditsPerUSDC: isHolder ? 12.5 : 6.67
+      },
+      freeCredits: isHolder ? 10 : 0
     });
     
   } catch (error) {
