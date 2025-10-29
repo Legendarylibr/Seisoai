@@ -320,7 +320,7 @@ export const SimpleWalletProvider = ({ children }) => {
 
     // Cleanup interval on unmount
     return () => clearInterval(refreshInterval);
-  }, [isConnected, address, fetchCredits]);
+  }, [isConnected, address]); // Removed fetchCredits from dependencies
 
   // Function to refresh credits without full reconnection
   const refreshCredits = async () => {
