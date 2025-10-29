@@ -514,7 +514,7 @@ const PAYMENT_WALLETS = {
   '42161': EVM_PAYMENT_ADDRESS, // Arbitrum
   '10': EVM_PAYMENT_ADDRESS, // Optimism
   '8453': EVM_PAYMENT_ADDRESS, // Base
-  'solana': process.env.SOLANA_PAYMENT_WALLET_ADDRESS || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA'
+  'solana': process.env.SOLANA_PAYMENT_WALLET_ADDRESS || process.env.SOLANA_PAYMENT_WALLET || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA'
 };
 
 // Token configurations
@@ -1022,7 +1022,7 @@ app.post('/api/payment/get-address', async (req, res) => {
     
     // Return dedicated payment addresses for different chains
     const evmPaymentAddress = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
-    const solanaPaymentAddress = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA';
+    const solanaPaymentAddress = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || process.env.SOLANA_PAYMENT_WALLET || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA';
     
   res.json({
     success: true,
@@ -1187,7 +1187,7 @@ async function checkForTokenTransfer(paymentAddress, token = 'USDC', chain = 'et
 /**
  * Check for Solana USDC transfers
  */
-async function checkForSolanaUSDC(paymentAddress) {
+async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
   try {
     console.log(`\n[SOLANA] Starting check for USDC transfers...`);
     console.log(`[SOLANA] Looking for ANY transfers TO: ${paymentAddress}`);
@@ -1263,35 +1263,69 @@ async function checkForSolanaUSDC(paymentAddress) {
             console.log(`[SOLANA]       Authority: ${info.authority}`);
             
             // Check if it's to our payment address and is USDC
-            if (info.destination === paymentAddress) {
-              // Get token account info to verify it's USDC
-              const amount = info.amount / 1e6; // USDC has 6 decimals
-              
-              console.log(`[SOLANA]       Amount: ${amount} USDC`);
-              
-              // Check if amount matches (within 1% tolerance)
-              const tolerance = expectedAmount * 0.01;
-              console.log(`[SOLANA]       Expected: ${expectedAmount} ± ${tolerance}`);
-              
-              if (amount >= expectedAmount - tolerance && amount <= expectedAmount + tolerance) {
-                console.log(`[SOLANA]     ✓ MATCH FOUND!`);
-                console.log(`[SOLANA]       TxHash: ${sig.signature}`);
-                console.log(`[SOLANA]       Timestamp: ${new Date(sig.blockTime * 1000).toISOString()}`);
+            // Note: info.destination is the token account address, not the wallet address
+            // We need to check if this token account belongs to our payment wallet
+            try {
+              const destinationTokenAccount = await connection.getAccountInfo(new PublicKey(info.destination));
+              if (destinationTokenAccount && destinationTokenAccount.data) {
+                // Parse the token account data to get the owner
+                const tokenAccountData = destinationTokenAccount.data;
+                // Token account layout: mint(32) + owner(32) + amount(8) + ...
+                const ownerBytes = tokenAccountData.slice(32, 64);
+                const ownerAddress = new PublicKey(ownerBytes).toString();
                 
-                return {
-                  found: true,
-                  txHash: sig.signature,
-                  from: info.authority,
-                  amount: amount.toString(),
-                  timestamp: sig.blockTime,
-                  chain: 'solana',
-                  token: 'USDC'
-                };
-              } else {
-                console.log(`[SOLANA]       ✗ Amount doesn't match`);
+                console.log(`[SOLANA]       Token account owner: ${ownerAddress}`);
+                
+                if (ownerAddress === paymentAddress) {
+                  // Get token account info to verify it's USDC
+                  const amount = info.amount / 1e6; // USDC has 6 decimals
+                  
+                  console.log(`[SOLANA]       Amount: ${amount} USDC`);
+                  
+                  // Check if amount matches (within 1% tolerance) or if no expected amount specified
+                  if (expectedAmount === null || expectedAmount === undefined) {
+                    console.log(`[SOLANA]       No expected amount specified - accepting any USDC transfer`);
+                    console.log(`[SOLANA]     ✓ MATCH FOUND!`);
+                    console.log(`[SOLANA]       TxHash: ${sig.signature}`);
+                    console.log(`[SOLANA]       Timestamp: ${new Date(sig.blockTime * 1000).toISOString()}`);
+                    
+                    return {
+                      found: true,
+                      txHash: sig.signature,
+                      from: info.authority,
+                      amount: amount.toString(),
+                      timestamp: sig.blockTime,
+                      chain: 'solana',
+                      token: 'USDC'
+                    };
+                  }
+                  
+                  const tolerance = expectedAmount * 0.01;
+                  console.log(`[SOLANA]       Expected: ${expectedAmount} ± ${tolerance}`);
+                  
+                  if (amount >= expectedAmount - tolerance && amount <= expectedAmount + tolerance) {
+                    console.log(`[SOLANA]     ✓ MATCH FOUND!`);
+                    console.log(`[SOLANA]       TxHash: ${sig.signature}`);
+                    console.log(`[SOLANA]       Timestamp: ${new Date(sig.blockTime * 1000).toISOString()}`);
+                    
+                    return {
+                      found: true,
+                      txHash: sig.signature,
+                      from: info.authority,
+                      amount: amount.toString(),
+                      timestamp: sig.blockTime,
+                      chain: 'solana',
+                      token: 'USDC'
+                    };
+                  } else {
+                    console.log(`[SOLANA]       ✗ Amount doesn't match`);
+                  }
+                } else {
+                  console.log(`[SOLANA]       ✗ Not to our payment address`);
+                }
               }
-            } else {
-              console.log(`[SOLANA]       ✗ Not to our payment address`);
+            } catch (accountError) {
+              console.log(`[SOLANA]       ✗ Error checking token account: ${accountError.message}`);
             }
           }
         }
@@ -1332,7 +1366,7 @@ app.post('/api/payment/check-payment', async (req, res) => {
     }
     
     const evmPaymentAddress = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
-    const solanaPaymentAddress = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA';
+    const solanaPaymentAddress = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || process.env.SOLANA_PAYMENT_WALLET || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA';
     
     console.log(`[PAYMENT CHECK] Configuration:`);
     console.log(`  - User wallet: ${walletAddress}`);
@@ -1358,7 +1392,7 @@ app.post('/api/payment/check-payment', async (req, res) => {
     
     // Also check Solana with its own payment address
     const solanaPromise = Promise.race([
-      checkForSolanaUSDC(solanaPaymentAddress),
+      checkForSolanaUSDC(solanaPaymentAddress, expectedAmount),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
     ]).catch(err => {
       console.log(`[WARN] Solana check failed:`, err.message);
