@@ -23,36 +23,57 @@ export const checkNFTHoldings = async (walletAddress) => {
       return { isHolder: false, collections: [] };
     }
 
-    // For now, return mock data
-    // In production, this should call your backend which checks blockchain
     console.log('🔍 Checking NFT holdings for:', walletAddress);
     
-    // TODO: Implement actual NFT verification via backend
-    // This should call /api/nft/verify endpoint that checks blockchain
+    // Add timeout to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
-    const response = await fetch(`${API_URL}/api/nft/check-holdings`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ 
-        walletAddress
-        // Backend uses its own hardcoded collections, no need to send empty ones
-      })
-    });
+    try {
+      const response = await fetch(`${API_URL}/api/nft/check-holdings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          walletAddress
+        }),
+        signal: controller.signal
+      });
 
-    if (!response.ok) {
-      console.warn('NFT verification endpoint not available, assuming non-holder');
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn('NFT verification endpoint error', { 
+          status: response.status, 
+          statusText: response.statusText,
+          error: errorText 
+        });
+        return { isHolder: false, collections: [] };
+      }
+
+      const data = await response.json();
+      
+      // Handle different response formats
+      const isHolder = data.isHolder === true || (data.success && data.isHolder === true);
+      const collections = Array.isArray(data.collections) ? data.collections : [];
+      
+      console.log('✅ NFT verification result:', { isHolder, collectionCount: collections.length });
+      
+      return {
+        isHolder,
+        collections
+      };
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        console.warn('NFT check timed out');
+      } else {
+        console.error('NFT check request failed:', fetchError);
+      }
       return { isHolder: false, collections: [] };
     }
-
-    const data = await response.json();
-    
-    console.log('✅ NFT verification result:', data);
-    return {
-      isHolder: data.isHolder || false,
-      collections: data.collections || []
-    };
 
   } catch (error) {
     console.error('Error checking NFT holdings:', error);

@@ -113,33 +113,47 @@ export const SimpleWalletProvider = ({ children }) => {
       const cacheKey = `nft_${walletAddress}`;
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
-        const { data, timestamp } = JSON.parse(cached);
-        if (Date.now() - timestamp < 300000) { // 5 minutes
-          logger.debug('Using cached NFT status', { walletAddress });
-          setIsNFTHolder(data.isHolder);
-          setNftCollections(data.collections);
-          return;
+        try {
+          const { data, timestamp } = JSON.parse(cached);
+          if (Date.now() - timestamp < 300000) { // 5 minutes
+            logger.debug('Using cached NFT status', { walletAddress });
+            setIsNFTHolder(data.isHolder || false);
+            setNftCollections(Array.isArray(data.collections) ? data.collections : []);
+            return;
+          }
+        } catch (parseError) {
+          logger.warn('Failed to parse cached NFT status', { error: parseError.message });
         }
       }
 
       logger.debug('Checking NFT holdings', { walletAddress });
       const result = await checkNFTHoldings(walletAddress);
-      setIsNFTHolder(result.isHolder);
-      setNftCollections(result.collections);
+      
+      // Ensure we have valid boolean and array
+      const isHolder = result.isHolder === true;
+      const collections = Array.isArray(result.collections) ? result.collections : [];
+      
+      setIsNFTHolder(isHolder);
+      setNftCollections(collections);
       
       // Cache the result
-      sessionStorage.setItem(cacheKey, JSON.stringify({
-        data: result,
-        timestamp: Date.now()
-      }));
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify({
+          data: { isHolder, collections },
+          timestamp: Date.now()
+        }));
+      } catch (storageError) {
+        logger.warn('Failed to cache NFT status', { error: storageError.message });
+      }
       
       logger.info('NFT status checked', { 
-        isHolder: result.isHolder, 
-        collections: result.collections.length,
+        isHolder, 
+        collectionCount: collections.length,
         walletAddress 
       });
     } catch (error) {
       logger.error('Error checking NFT status', { error: error.message, walletAddress });
+      // Fail gracefully - don't set to false if cache had a value
       setIsNFTHolder(false);
       setNftCollections([]);
     }
@@ -154,7 +168,7 @@ export const SimpleWalletProvider = ({ children }) => {
       let provider = null;
       let address = null;
 
-      // Add timeout to prevent infinite loading - increased for wallet popups
+      // Add timeout to prevent infinite loading
       let timeoutTriggered = false;
       const connectionTimeout = setTimeout(() => {
         if (!timeoutTriggered) {
@@ -162,7 +176,7 @@ export const SimpleWalletProvider = ({ children }) => {
           setIsLoading(false);
           setError('Connection timeout. Please try again.');
         }
-      }, 35000); // Increased to 35 seconds to allow wallet popups and multiple wallet attempts
+      }, 25000); // 25 seconds - reduced since we removed unnecessary waits
 
       // Handle different wallet types
       switch (walletType) {
@@ -184,17 +198,7 @@ export const SimpleWalletProvider = ({ children }) => {
             throw new Error('MetaMask not found. Please install MetaMask extension.');
           }
           
-          // Request fresh permissions - this will show the wallet popup
-          try {
-            await provider.request({
-              method: 'wallet_requestPermissions',
-              params: [{ eth_accounts: {} }]
-            });
-          } catch (e) {
-            console.log('⚠️ wallet_requestPermissions not supported, using eth_requestAccounts');
-          }
-          
-          // This will prompt user to unlock MetaMask if locked
+          // Skip wallet_requestPermissions for speed - go straight to eth_requestAccounts
           const accounts = await provider.request({ 
             method: 'eth_requestAccounts' 
           });
@@ -207,72 +211,36 @@ export const SimpleWalletProvider = ({ children }) => {
         break;
 
       case 'rabby':
-          // Check if Rabby is available - wait a bit for extensions to inject
-          let retries = 0;
-          while (!window.ethereum && retries < 10) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            retries++;
-          }
-          
+          // Fast check - no waiting for injection
           if (!window.ethereum) {
             throw new Error('No wallet found. Please install Rabby Wallet extension.');
           }
           
-          console.log('🔍 Detecting Rabby Wallet...', {
-            hasEthereum: !!window.ethereum,
-            isRabby: window.ethereum.isRabby,
-            hasProviders: !!window.ethereum.providers,
-            providersCount: window.ethereum.providers?.length
-          });
-          
-          // Wait a bit more for providers array to be populated if needed
-          if (!window.ethereum.providers && retries < 5) {
-            await new Promise(resolve => setTimeout(resolve, 200));
-          }
-          
-          // Try multiple detection methods for Rabby
-          if (window.ethereum.providers && window.ethereum.providers.length > 0) {
-            // Multiple wallets installed - find Rabby in providers array
+          // Fast detection - try providers first, then primary
+          if (window.ethereum.providers?.length > 0) {
             provider = window.ethereum.providers.find(p => p.isRabby);
-            console.log('🔍 Found in providers array:', !!provider);
           }
           
           if (!provider && window.ethereum.isRabby) {
-            // Rabby is the primary wallet
             provider = window.ethereum;
-            console.log('🔍 Using primary ethereum provider (isRabby=true)');
           }
           
           if (!provider) {
-            // Last resort: just use window.ethereum and let it prompt whatever is available
-            // This handles cases where Rabby doesn't properly identify itself
             provider = window.ethereum;
-            console.log('⚠️ Rabby flag not detected, using default ethereum provider');
           }
           
-          if (!provider || !provider.request) {
+          if (!provider?.request) {
             throw new Error('Rabby wallet provider not ready. Please try again.');
           }
           
-          // Request fresh permissions - this will show the wallet popup
-          try {
-            await provider.request({
-              method: 'wallet_requestPermissions',
-              params: [{ eth_accounts: {} }]
-            });
-          } catch (e) {
-            console.log('⚠️ wallet_requestPermissions not supported, using eth_requestAccounts');
-          }
-          
-          // This will prompt user to unlock and connect
-          // Add explicit timeout to catch connection issues
+          // Skip wallet_requestPermissions for speed - go straight to eth_requestAccounts
           const rabbyAccounts = await Promise.race([
             provider.request({ 
               method: 'eth_requestAccounts' 
             }),
             new Promise((_, reject) => setTimeout(() => {
               reject(new Error('Connection timeout. Please ensure your wallet is unlocked and try again.'));
-            }, 30000)) // 30 second timeout for wallet popup
+            }, 20000)) // Reduced to 20 seconds
           ]);
           
           if (!rabbyAccounts || rabbyAccounts.length === 0) {
@@ -301,17 +269,7 @@ export const SimpleWalletProvider = ({ children }) => {
             throw new Error('Coinbase Wallet not found. Please install Coinbase Wallet extension.');
           }
           
-          // Request fresh permissions - this will show the wallet popup
-          try {
-            await provider.request({
-              method: 'wallet_requestPermissions',
-              params: [{ eth_accounts: {} }]
-            });
-          } catch (e) {
-            console.log('⚠️ wallet_requestPermissions not supported, using eth_requestAccounts');
-          }
-          
-          // This will prompt user to unlock Coinbase Wallet if locked
+          // Skip wallet_requestPermissions for speed - go straight to eth_requestAccounts
           const coinbaseAccounts = await provider.request({ 
             method: 'eth_requestAccounts' 
           });
@@ -414,17 +372,22 @@ export const SimpleWalletProvider = ({ children }) => {
 
       setAddress(address);
       setIsConnected(true);
-
-      // Fetch credits immediately, NFT check can happen in background
-      await fetchCredits(address);
-      
-      // Start NFT check in background (non-blocking)
-      checkNFTStatus(address).catch(error => {
-        logger.error('Background NFT check failed', { error: error.message, address });
-      });
-
-      logger.info('Wallet connected successfully', { address, walletType });
       if (connectionTimeout) clearTimeout(connectionTimeout);
+
+      // Mark connection complete immediately - don't wait for credits/NFT
+      logger.info('Wallet connected successfully', { address, walletType });
+
+      // Start credits and NFT fetch in parallel (non-blocking)
+      Promise.all([
+        fetchCredits(address).catch(error => {
+          logger.error('Credits fetch failed', { error: error.message, address });
+        }),
+        checkNFTStatus(address).catch(error => {
+          logger.error('NFT check failed', { error: error.message, address });
+        })
+      ]).catch(error => {
+        logger.error('Background operations failed', { error: error.message, address });
+      });
     } catch (error) {
       if (connectionTimeout) clearTimeout(connectionTimeout);
       logger.error('Wallet connection error', { error: error.message, walletType });
