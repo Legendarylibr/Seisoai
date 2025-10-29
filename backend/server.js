@@ -551,7 +551,10 @@ const TOKEN_CONFIGS = {
 // RPC endpoints with fallback to public endpoints
 const RPC_ENDPOINTS = {
   '1': process.env.ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-  '8453': process.env.BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
+  '8453': process.env.BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+  '137': process.env.POLYGON_RPC_URL || 'https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+  '42161': process.env.ARBITRUM_RPC_URL || 'https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+  '10': process.env.OPTIMISM_RPC_URL || 'https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
 };
 
 // ERC-20 ABI
@@ -813,30 +816,156 @@ app.get('/', (req, res) => {
 app.get('/api/users/:walletAddress', async (req, res) => {
   try {
     const { walletAddress } = req.params;
+    const { refreshNFTs } = req.query; // Allow forcing NFT refresh with ?refreshNFTs=true
     
-    // For now, return default user data with standard pricing
-    // The frontend will call NFT checking separately to get pricing
+    // Get actual user data from database
+    const user = await getOrCreateUser(walletAddress);
+    
+    // Refresh NFT holdings from blockchain if requested or if user has no NFT data
+    let isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    
+    if (refreshNFTs === 'true' || !isNFTHolder) {
+      try {
+        // Call NFT check internally to refresh holdings
+        const qualifyingCollections = [
+          { chainId: '1', address: '0x8e84dcaf616c3e04ed45d3e0912b81e7283a48da', name: 'Your NFT Collection 1', type: 'erc721' },
+          { chainId: '1', address: '0xd7d1431f43767a47bf7f5c6a651d24398e537729', name: 'Your NFT Collection 2', type: 'erc721' },
+          { chainId: '8453', address: '0x1e71ea45fb939c92045ff32239a8922395eeb31b', name: 'Your Base NFT Collection', type: 'erc721' },
+          { chainId: '1', address: '0x0000000000c5dc95539589fbD24BE07c6C14eCa4', name: '$CULT Holders', type: 'erc20', minBalance: '500000' }
+        ];
+        
+        const ownedCollections = [];
+        const collectionsByChain = {};
+        
+        for (const collection of qualifyingCollections) {
+          if (!collectionsByChain[collection.chainId]) {
+            collectionsByChain[collection.chainId] = [];
+          }
+          collectionsByChain[collection.chainId].push(collection);
+        }
+        
+        // Check each chain
+        for (const [chainId, collections] of Object.entries(collectionsByChain)) {
+          try {
+            const rpcUrl = RPC_ENDPOINTS[chainId] || RPC_ENDPOINTS['1'];
+            if (!rpcUrl) continue;
+            
+            const provider = new ethers.JsonRpcProvider(rpcUrl);
+            
+            for (const collection of collections) {
+              try {
+                if (collection.type === 'erc721' && walletAddress.startsWith('0x')) {
+                  const nftContract = new ethers.Contract(
+                    collection.address,
+                    ['function balanceOf(address owner) view returns (uint256)'],
+                    provider
+                  );
+                  
+                  const balance = await Promise.race([
+                    nftContract.balanceOf(walletAddress),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+                  ]);
+                  
+                  if (balance > 0) {
+                    ownedCollections.push({
+                      contractAddress: collection.address,
+                      chainId: collection.chainId,
+                      name: collection.name,
+                      type: collection.type,
+                      balance: balance.toString(),
+                      tokenIds: [],
+                      lastChecked: new Date()
+                    });
+                  }
+                } else if (collection.type === 'erc20' && walletAddress.startsWith('0x')) {
+                  const tokenContract = new ethers.Contract(
+                    collection.address,
+                    ['function balanceOf(address owner) view returns (uint256)', 'function decimals() view returns (uint8)'],
+                    provider
+                  );
+                  
+                  const [balance, decimals] = await Promise.race([
+                    Promise.all([tokenContract.balanceOf(walletAddress), tokenContract.decimals()]),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+                  ]);
+                  
+                  const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
+                  const minBalance = parseFloat(collection.minBalance);
+                  
+                  if (formattedBalance >= minBalance) {
+                    ownedCollections.push({
+                      contractAddress: collection.address,
+                      chainId: collection.chainId,
+                      name: collection.name,
+                      type: collection.type,
+                      balance: formattedBalance.toString(),
+                      minBalance: collection.minBalance,
+                      lastChecked: new Date()
+                    });
+                  }
+                }
+              } catch (error) {
+                logger.warn(`Error checking ${collection.name}:`, {
+                  error: error.message,
+                  chainId,
+                  collectionAddress: collection.address,
+                  walletAddress
+                });
+              }
+            }
+          } catch (error) {
+            logger.warn(`Error checking chain ${chainId}:`, {
+              error: error.message,
+              rpcUrl: RPC_ENDPOINTS[chainId]
+            });
+          }
+        }
+        
+        // Update user's NFT collections in database
+        if (ownedCollections.length > 0) {
+          user.nftCollections = ownedCollections;
+          await user.save();
+          isNFTHolder = true;
+          logger.info('✅ Updated NFT collections for user', { 
+            walletAddress, 
+            collectionCount: ownedCollections.length,
+            collections: ownedCollections.map(c => ({ name: c.name, balance: c.balance, chainId: c.chainId }))
+          });
+        } else {
+          logger.info('No NFTs found for user', { walletAddress, refreshNFTs });
+          // Clear old NFT data if refresh was forced
+          if (refreshNFTs === 'true') {
+            user.nftCollections = [];
+            await user.save();
+          }
+        }
+      } catch (nftError) {
+        logger.warn('Error refreshing NFT holdings', { error: nftError.message });
+        // Continue with existing data
+      }
+    }
+    
     res.json({
       success: true,
       user: {
-        walletAddress: walletAddress,
-        credits: 0,
-        totalCreditsEarned: 0,
-        totalCreditsSpent: 0,
-        nftCollections: [],
-        paymentHistory: [],
-        generationHistory: [],
-        gallery: [],
-        settings: {
+        walletAddress: user.walletAddress,
+        credits: user.credits || 0,
+        totalCreditsEarned: user.totalCreditsEarned || 0,
+        totalCreditsSpent: user.totalCreditsSpent || 0,
+        nftCollections: user.nftCollections || [],
+        paymentHistory: user.paymentHistory || [],
+        generationHistory: user.generationHistory || [],
+        gallery: user.gallery || [],
+        settings: user.settings || {
           preferredStyle: null,
           defaultImageSize: '1024x1024',
           enableNotifications: true
         },
-        lastActive: new Date(),
-        isNFTHolder: false,
+        lastActive: user.lastActive || new Date(),
+        isNFTHolder: isNFTHolder,
         pricing: {
-          costPerCredit: 0.15, // Default pricing for non-holders
-          creditsPerUSDC: 6.67
+          costPerCredit: isNFTHolder ? 0.08 : 0.15,
+          creditsPerUSDC: isNFTHolder ? 12.5 : 6.67
         }
       }
     });

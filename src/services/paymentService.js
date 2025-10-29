@@ -374,10 +374,10 @@ export const calculateCredits = (tokenSymbol, amount, chainId, walletType = 'evm
   }
   
   // Apply dynamic pricing based on NFT ownership
-  // NFT holders: $0.10 per generation, Non-holders: $0.15 per generation
-  // 1 USDC = 10 generations for NFT holders, 1 USDC = 6.67 generations for non-holders
+  // NFT holders: $0.08 per credit (12.5 credits per USDC), Non-holders: $0.15 per credit (6.67 credits per USDC)
+  // 1 USDC = 12.5 credits for NFT holders, 1 USDC = 6.67 credits for non-holders
   const baseCreditRate = tokenConfig.creditRate;
-  const pricingMultiplier = isNFTHolder ? 10 : 6.67; // NFT holders get 10 credits per USDC, non-holders get 6.67
+  const pricingMultiplier = isNFTHolder ? 12.5 : 6.67; // NFT holders get 12.5 credits per USDC, non-holders get 6.67
   const adjustedCreditRate = baseCreditRate * pricingMultiplier;
   
   return Math.floor(amount * adjustedCreditRate);
