@@ -154,12 +154,15 @@ export const SimpleWalletProvider = ({ children }) => {
       let provider = null;
       let address = null;
 
-      // Add timeout to prevent infinite loading
+      // Add timeout to prevent infinite loading - increased for wallet popups
+      let timeoutTriggered = false;
       const connectionTimeout = setTimeout(() => {
-        setIsLoading(false);
-        setError('Connection timeout. Please try again.');
-        throw new Error('Connection timeout');
-      }, 8000); // Reduced to 8 second timeout for faster failure
+        if (!timeoutTriggered) {
+          timeoutTriggered = true;
+          setIsLoading(false);
+          setError('Connection timeout. Please try again.');
+        }
+      }, 35000); // Increased to 35 seconds to allow wallet popups and multiple wallet attempts
 
       try {
         // Handle different wallet types
@@ -205,7 +208,13 @@ export const SimpleWalletProvider = ({ children }) => {
         break;
 
       case 'rabby':
-          // Check if Rabby is available
+          // Check if Rabby is available - wait a bit for extensions to inject
+          let retries = 0;
+          while (!window.ethereum && retries < 10) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            retries++;
+          }
+          
           if (!window.ethereum) {
             throw new Error('No wallet found. Please install Rabby Wallet extension.');
           }
@@ -216,6 +225,11 @@ export const SimpleWalletProvider = ({ children }) => {
             hasProviders: !!window.ethereum.providers,
             providersCount: window.ethereum.providers?.length
           });
+          
+          // Wait a bit more for providers array to be populated if needed
+          if (!window.ethereum.providers && retries < 5) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
           
           // Try multiple detection methods for Rabby
           if (window.ethereum.providers && window.ethereum.providers.length > 0) {
@@ -237,6 +251,10 @@ export const SimpleWalletProvider = ({ children }) => {
             console.log('⚠️ Rabby flag not detected, using default ethereum provider');
           }
           
+          if (!provider || !provider.request) {
+            throw new Error('Rabby wallet provider not ready. Please try again.');
+          }
+          
           // Request fresh permissions - this will show the wallet popup
           try {
             await provider.request({
@@ -248,9 +266,16 @@ export const SimpleWalletProvider = ({ children }) => {
           }
           
           // This will prompt user to unlock and connect
-          const rabbyAccounts = await provider.request({ 
-            method: 'eth_requestAccounts' 
-          });
+          // Add explicit timeout to catch connection issues
+          const rabbyAccounts = await Promise.race([
+            provider.request({ 
+              method: 'eth_requestAccounts' 
+            }),
+            new Promise((_, reject) => setTimeout(() => {
+              reject(new Error('Connection timeout. Please ensure your wallet is unlocked and try again.'));
+            }, 30000)) // 30 second timeout for wallet popup
+          ]);
+          
           if (!rabbyAccounts || rabbyAccounts.length === 0) {
             throw new Error('No accounts found. Please unlock your wallet and try again.');
           }
@@ -306,13 +331,25 @@ export const SimpleWalletProvider = ({ children }) => {
           provider = window.solana;
           
           // Add connection timeout for Solana
+          let phantomTimeoutTriggered = false;
           const phantomTimeout = setTimeout(() => {
-            throw new Error('Phantom connection timeout. Please try again.');
-          }, 10000); // 10 second timeout for Phantom
+            if (!phantomTimeoutTriggered) {
+              phantomTimeoutTriggered = true;
+              throw new Error('Phantom connection timeout. Please try again.');
+            }
+          }, 15000); // 15 second timeout for Phantom
           
           try {
             // This will prompt user to unlock Phantom if locked and connect
-            const resp = await provider.connect();
+            const resp = await Promise.race([
+              provider.connect(),
+              new Promise((_, reject) => setTimeout(() => {
+                if (!phantomTimeoutTriggered) {
+                  phantomTimeoutTriggered = true;
+                  reject(new Error('Phantom connection timeout. Please try again.'));
+                }
+              }, 15000))
+            ]);
             clearTimeout(phantomTimeout);
             
             if (!resp || !resp.publicKey) {
@@ -335,13 +372,24 @@ export const SimpleWalletProvider = ({ children }) => {
           provider = window.solflare;
           
           // Add connection timeout for Solflare
+          let solflareTimeoutTriggered = false;
           const solflareTimeout = setTimeout(() => {
-            throw new Error('Solflare connection timeout. Please try again.');
-          }, 10000); // 10 second timeout for Solflare
+            if (!solflareTimeoutTriggered) {
+              solflareTimeoutTriggered = true;
+            }
+          }, 15000); // 15 second timeout for Solflare
           
           try {
             // This will prompt user to unlock Solflare if locked
-            await provider.connect();
+            await Promise.race([
+              provider.connect(),
+              new Promise((_, reject) => setTimeout(() => {
+                if (!solflareTimeoutTriggered) {
+                  solflareTimeoutTriggered = true;
+                  reject(new Error('Solflare connection timeout. Please try again.'));
+                }
+              }, 15000))
+            ]);
             clearTimeout(solflareTimeout);
             
             if (!provider.publicKey) {
@@ -377,18 +425,14 @@ export const SimpleWalletProvider = ({ children }) => {
       });
 
       logger.info('Wallet connected successfully', { address, walletType });
-      clearTimeout(connectionTimeout);
+      if (connectionTimeout) clearTimeout(connectionTimeout);
       } catch (error) {
+        if (connectionTimeout) clearTimeout(connectionTimeout);
         logger.error('Wallet connection error', { error: error.message, walletType });
         setError(error.message);
-        clearTimeout(connectionTimeout);
       } finally {
         setIsLoading(false);
       }
-    } catch (error) {
-      logger.error('Wallet connection error', { error: error.message, walletType });
-      setError(error.message);
-      setIsLoading(false);
     }
   };
 

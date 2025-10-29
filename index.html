@@ -24,72 +24,80 @@
         }
         window.__walletConflictResolutionSetup = true;
         
-        // AGGRESSIVE: Block evmAsk.js completely before it can load
-        const originalFetch = window.fetch;
-        const originalXHROpen = XMLHttpRequest.prototype.open;
-        const originalXHRSend = XMLHttpRequest.prototype.send;
-        
-        // Block fetch requests to evmAsk.js
-        window.fetch = function(...args) {
-          const url = args[0];
-          if (typeof url === 'string' && (url.includes('evmAsk') || url.includes('evmAsk.js'))) {
-            console.warn('🛡️ Blocked evmAsk.js fetch request:', url);
-            return Promise.reject(new Error('evmAsk.js blocked by conflict resolution'));
-          }
-          return originalFetch.apply(this, args);
-        };
-        
-        // Block XMLHttpRequest to evmAsk.js
-        XMLHttpRequest.prototype.open = function(method, url, ...args) {
-          if (typeof url === 'string' && (url.includes('evmAsk') || url.includes('evmAsk.js'))) {
-            console.warn('🛡️ Blocked evmAsk.js XHR request:', url);
-            throw new Error('evmAsk.js blocked by conflict resolution');
-          }
-          return originalXHROpen.call(this, method, url, ...args);
-        };
+        // Note: We no longer block evmAsk.js - we handle redefinition gracefully instead
         
         // Store original methods
         const originalDefineProperty = Object.defineProperty;
         const originalDefineProperties = Object.defineProperties;
         
-        // ULTRA-AGGRESSIVE defineProperty override
+        // GRACEFUL defineProperty override - silently handle redefinition attempts
         Object.defineProperty = function(obj, prop, descriptor) {
-          // COMPLETELY BLOCK ethereum property redefinition
+          // Handle ethereum property redefinition gracefully
           if (prop === 'ethereum' && obj === window) {
-            console.warn('🛡️ BLOCKED: ethereum property redefinition attempt');
-            console.warn('🛡️ Stack trace:', new Error().stack);
-            
-            // Always return the existing ethereum object or create a safe one
+            // If ethereum already exists, silently return it (don't redefine)
+            // This prevents errors from evmAsk.js and other wallet extensions
             if (window.ethereum) {
-              return window.ethereum;
+              // Modern wallets consolidate via providers array, so check if we can enhance
+              const existingEthereum = window.ethereum;
+              const newValue = descriptor.value;
+              
+              // If new value is a provider and existing doesn't have providers array yet
+              if (newValue && typeof newValue === 'object' && newValue.request && 
+                  existingEthereum && !existingEthereum.providers && 
+                  (newValue.isMetaMask || newValue.isRabby || newValue.isCoinbaseWallet)) {
+                try {
+                  // Try to set up providers array if possible
+                  if (descriptor.configurable !== false && existingEthereum !== newValue) {
+                    const providers = [existingEthereum];
+                    if (!providers.some(p => (p.isMetaMask && newValue.isMetaMask) || 
+                                              (p.isRabby && newValue.isRabby) || 
+                                              (p.isCoinbaseWallet && newValue.isCoinbaseWallet))) {
+                      providers.push(newValue);
+                    }
+                    
+                    // Only update if we have multiple providers
+                    if (providers.length > 1) {
+                      Object.defineProperty(window, 'ethereum', {
+                        value: {
+                          providers: providers,
+                          request: function(...args) {
+                            return providers[0].request(...args);
+                          },
+                          on: function(...args) {
+                            providers.forEach(p => p.on?.(...args));
+                          },
+                          removeListener: function(...args) {
+                            providers.forEach(p => p.removeListener?.(...args));
+                          },
+                          addListener: function(...args) {
+                            providers.forEach(p => p.addListener?.(...args));
+                          }
+                        },
+                        configurable: true,
+                        enumerable: true,
+                        writable: true
+                      });
+                      return window.ethereum;
+                    }
+                  }
+                } catch (e) {
+                  // Silent fail - just use existing
+                }
+              }
+              
+              // Return existing without error (silent success)
+              return existingEthereum;
             }
             
-            // Create a safe ethereum object that won't conflict
-            const safeEthereum = {
-              isMetaMask: false,
-              isRabby: false,
-              isCoinbaseWallet: false,
-              isWalletConnect: false,
-              request: function() {
-                console.warn('🛡️ Safe ethereum object used - no wallet connected');
-                return Promise.reject(new Error('No wallet connected'));
-              },
-              on: function() {},
-              removeListener: function() {},
-              addListener: function() {}
-            };
-            
+            // First definition - allow it
             try {
-              return originalDefineProperty.call(this, obj, prop, {
-                value: safeEthereum,
-                configurable: true,
-                enumerable: true,
-                writable: true
-              });
+              return originalDefineProperty.call(this, obj, prop, descriptor);
             } catch (error) {
-              console.warn('🛡️ Safe ethereum fallback applied');
-              window.ethereum = safeEthereum;
-              return safeEthereum;
+              // If it fails, check if ethereum was set another way
+              if (window.ethereum) {
+                return window.ethereum;
+              }
+              throw error;
             }
           }
           
@@ -136,87 +144,58 @@
         window.originalDefineProperty = originalDefineProperty;
         window.originalDefineProperties = originalDefineProperties;
         
-        // Global error handler for wallet conflicts
-        const originalError = console.error;
-        console.error = function(...args) {
-          const message = args[0]?.toString?.() || '';
-          
-          // Filter out wallet conflict errors
-          if (message.includes('Cannot redefine property: ethereum') ||
-              message.includes('originalDefineProperty') ||
-              message.includes('evmAsk.js') ||
-              message.includes('inject')) {
-            console.warn('🛡️ Wallet conflict error filtered:', message);
-            return;
-          }
-          
-          originalError.apply(console, args);
-        };
-        
-        // Handle uncaught errors
+        // Handle uncaught errors - silently catch wallet redefinition errors
         window.addEventListener('error', function(event) {
           const error = event.error;
           const message = error?.message || '';
           const stack = error?.stack || '';
           const filename = event.filename || '';
           
-          // Prevent ethereum property redefinition errors
+          // Silently catch ethereum property redefinition errors (harmless)
           if (message.includes('Cannot redefine property: ethereum') ||
-              message.includes('originalDefineProperty') ||
-              message.includes('evmAsk.js') ||
-              stack.includes('evmAsk.js') ||
-              filename.includes('evmAsk.js') ||
-              message.includes('Cannot redefine property') ||
-              message.includes('inject') ||
-              stack.includes('inject')) {
+              (message.includes('Cannot redefine property') && message.includes('ethereum')) ||
+              (filename && filename.includes('evmAsk.js') && message.includes('defineProperty'))) {
             event.preventDefault();
             event.stopPropagation();
-            console.warn('🛡️ Wallet conflict error prevented:', message);
+            event.stopImmediatePropagation();
+            // Silent - don't log to avoid console noise
             return false;
           }
-        });
+        }, true); // Use capture phase to catch earlier
         
         // ULTRA-AGGRESSIVE: Override ALL error handling
         const originalOnError = window.onerror;
         const originalConsoleError = console.error;
         const originalConsoleWarn = console.warn;
         
-        // Override console.error to filter out wallet conflicts
+        // Filter out harmless wallet redefinition errors from console
         console.error = function(...args) {
           const message = args[0]?.toString?.() || '';
           if (message.includes('Cannot redefine property: ethereum') ||
-              message.includes('evmAsk.js') ||
-              message.includes('inject') ||
-              message.includes('originalDefineProperty')) {
-            console.warn('🛡️ Console error filtered:', message);
+              (message.includes('evmAsk.js') && message.includes('defineProperty'))) {
+            // Silent - these are harmless
             return;
           }
           return originalConsoleError.apply(this, args);
         };
         
-        // Override console.warn to filter out wallet conflicts
+        // Filter out wallet conflict warnings
         console.warn = function(...args) {
           const message = args[0]?.toString?.() || '';
-          if (message.includes('Cannot redefine property: ethereum') ||
-              message.includes('evmAsk.js') ||
-              message.includes('inject')) {
-            return; // Don't show these warnings
+          if (message.includes('Cannot redefine property: ethereum')) {
+            return; // Silent
           }
           return originalConsoleWarn.apply(this, args);
         };
         
-        // Override the global error handler
+        // Override the global error handler - silently catch wallet redefinition errors
         window.onerror = function(message, source, lineno, colno, error) {
           if (message && (
               message.includes('Cannot redefine property: ethereum') ||
-              message.includes('evmAsk.js') ||
-              message.includes('inject') ||
-              message.includes('originalDefineProperty') ||
-              (source && source.includes('evmAsk')) ||
-              (error && error.stack && error.stack.includes('evmAsk'))
+              ((source && source.includes('evmAsk')) && message.includes('defineProperty'))
             )) {
-            console.warn('🛡️ Global error handler prevented wallet conflict:', message);
-            return true; // Prevent default error handling
+            // Silent - return true to prevent default error handling
+            return true;
           }
           if (originalOnError) {
             return originalOnError.call(this, message, source, lineno, colno, error);
@@ -224,164 +203,23 @@
           return false;
         };
         
-        // Handle unhandled promise rejections
+        // Handle unhandled promise rejections - silently catch wallet redefinition errors
         window.addEventListener('unhandledrejection', function(event) {
           const reason = event.reason;
           const message = reason?.message || '';
           const stack = reason?.stack || '';
           
-          // Prevent wallet-related promise rejections
+          // Silently prevent wallet-related promise rejections from redefinition
           if (message.includes('Cannot redefine property: ethereum') ||
-              message.includes('originalDefineProperty') ||
-              message.includes('evmAsk.js') ||
-              stack.includes('evmAsk.js') ||
-              message.includes('Cannot redefine property')) {
+              (message.includes('evmAsk.js') && message.includes('defineProperty'))) {
             event.preventDefault();
             event.stopPropagation();
-            console.warn('🛡️ Wallet conflict promise rejection prevented:', message);
+            // Silent - don't log
             return false;
           }
         });
         
-        // ULTRA-AGGRESSIVE: Intercept ALL script creation and injection
-        const originalCreateElement = document.createElement;
-        const originalCreateElementNS = document.createElementNS;
-        const originalWrite = document.write;
-        const originalWriteln = document.writeln;
-        
-        // Block document.write/writeln
-        document.write = function(content) {
-          if (typeof content === 'string' && content.includes('evmAsk')) {
-            console.warn('🛡️ Blocked evmAsk.js via document.write');
-            return;
-          }
-          return originalWrite.call(this, content);
-        };
-        
-        document.writeln = function(content) {
-          if (typeof content === 'string' && content.includes('evmAsk')) {
-            console.warn('🛡️ Blocked evmAsk.js via document.writeln');
-            return;
-          }
-          return originalWriteln.call(this, content);
-        };
-        
-        // Block createElementNS
-        document.createElementNS = function(namespaceURI, qualifiedName) {
-          const element = originalCreateElementNS.call(this, namespaceURI, qualifiedName);
-          if (qualifiedName.toLowerCase() === 'script') {
-            return createBlockedScriptElement(element);
-          }
-          return element;
-        };
-        
-        // Enhanced script element creation
-        document.createElement = function(tagName) {
-          const element = originalCreateElement.call(this, tagName);
-          
-          if (tagName.toLowerCase() === 'script') {
-            return createBlockedScriptElement(element);
-          }
-          
-          return element;
-        };
-        
-        function createBlockedScriptElement(element) {
-          const originalSetAttribute = element.setAttribute;
-          const originalAppendChild = element.appendChild;
-          const originalInsertBefore = element.insertBefore;
-          const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
-          
-          // Block src attribute
-          element.setAttribute = function(name, value) {
-            if (name === 'src' && typeof value === 'string') {
-              if (value.includes('evmAsk.js') || 
-                  value.includes('evmAsk') ||
-                  (value.includes('wallet') && value.includes('inject'))) {
-                console.warn('🛡️ Blocked problematic wallet script:', value);
-                return; // Don't set the src
-              }
-            }
-            return originalSetAttribute.call(this, name, value);
-          };
-          
-          // Block innerHTML changes
-          Object.defineProperty(element, 'innerHTML', {
-            set: function(value) {
-              if (typeof value === 'string' && value.includes('evmAsk')) {
-                console.warn('🛡️ Blocked evmAsk.js via innerHTML');
-                return;
-              }
-              if (originalInnerHTML && originalInnerHTML.set) {
-                originalInnerHTML.set.call(this, value);
-              }
-            },
-            get: function() {
-              if (originalInnerHTML && originalInnerHTML.get) {
-                return originalInnerHTML.get.call(this);
-              }
-              return '';
-            },
-            configurable: true
-          });
-            
-          // Override appendChild to prevent script injection
-          element.appendChild = function(child) {
-            if (child.tagName === 'SCRIPT' && child.src && 
-                (child.src.includes('evmAsk') || child.src.includes('evmAsk.js'))) {
-              console.warn('🛡️ Blocked script injection via appendChild:', child.src);
-              return child; // Return the child but don't actually append
-            }
-            return originalAppendChild.call(this, child);
-          };
-            
-          // Override insertBefore to prevent script injection
-          element.insertBefore = function(newNode, referenceNode) {
-            if (newNode.tagName === 'SCRIPT' && newNode.src && 
-                (newNode.src.includes('evmAsk') || newNode.src.includes('evmAsk.js'))) {
-              console.warn('🛡️ Blocked script injection via insertBefore:', newNode.src);
-              return newNode; // Return the node but don't actually insert
-            }
-            return originalInsertBefore.call(this, newNode, referenceNode);
-          };
-          
-          return element;
-        };
-        
-        // Also intercept document.head.appendChild and document.body.appendChild
-        // Wait for DOM to be ready before setting up these interceptors
-        function setupDOMInterceptors() {
-          if (document.head) {
-            const originalHeadAppendChild = document.head.appendChild;
-            document.head.appendChild = function(child) {
-              if (child.tagName === 'SCRIPT' && child.src && 
-                  (child.src.includes('evmAsk') || child.src.includes('evmAsk.js'))) {
-                console.warn('🛡️ Blocked script injection via head.appendChild:', child.src);
-                return child;
-              }
-              return originalHeadAppendChild.call(this, child);
-            };
-          }
-          
-          if (document.body) {
-            const originalBodyAppendChild = document.body.appendChild;
-            document.body.appendChild = function(child) {
-              if (child.tagName === 'SCRIPT' && child.src && 
-                  (child.src.includes('evmAsk') || child.src.includes('evmAsk.js'))) {
-                console.warn('🛡️ Blocked script injection via body.appendChild:', child.src);
-                return child;
-              }
-              return originalBodyAppendChild.call(this, child);
-            };
-          }
-        }
-        
-        // Set up DOM interceptors when DOM is ready
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', setupDOMInterceptors);
-        } else {
-          setupDOMInterceptors();
-        }
+        // Note: We no longer aggressively block script injection - we handle redefinition gracefully
         
         console.log('🛡️ Enhanced wallet conflict resolution initialized');
       })();
