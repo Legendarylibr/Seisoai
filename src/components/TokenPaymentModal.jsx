@@ -72,26 +72,38 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       const { createTransferInstruction, getAssociatedTokenAddress, getAccount } = await import('@solana/spl-token');
 
       // Connect to Solana mainnet using configured RPC with better fallbacks
+      // Ensure we always have fallback RPCs even if env var is missing
+      const envRpcUrl = import.meta.env.VITE_SOLANA_RPC_URL;
       const rpcUrls = [
-        import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+        ...(envRpcUrl && envRpcUrl.trim() ? [envRpcUrl.trim()] : []),
         'https://api.mainnet-beta.solana.com',
-        'https://solana-mainnet.g.alchemy.com/v2/demo',
+        'https://solana-api.projectserum.com',
         'https://rpc.ankr.com/solana',
-        'https://solana-api.projectserum.com'
-      ].filter(url => url); // Remove any undefined/null URLs
+        'https://solana-mainnet.g.alchemy.com/v2/demo',
+        'https://mainnet.helius-rpc.com'
+      ].filter(url => url && typeof url === 'string' && url.length > 0);
+      
+      if (rpcUrls.length === 0) {
+        throw new Error('No Solana RPC endpoints available. Please configure VITE_SOLANA_RPC_URL in your environment.');
+      }
       
       let connection = null;
       let rpcUrl = rpcUrls[0];
+      let lastError = null;
+      const failedRpcs = [];
       
       // Try each RPC endpoint until one works with better error handling
       for (const url of rpcUrls) {
         try {
           console.log(`🔗 Trying Solana RPC: ${url}`);
-          const testConnection = new Connection(url, 'confirmed');
-          // Test the connection with timeout
+          const testConnection = new Connection(url, {
+            commitment: 'confirmed',
+            disableRetryOnRateLimit: false
+          });
+          // Test the connection with timeout using getLatestBlockhash (more reliable than getHealth)
           await Promise.race([
-            testConnection.getHealth(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Health check timeout')), 5000))
+            testConnection.getLatestBlockhash(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 8000))
           ]);
           connection = testConnection;
           rpcUrl = url;
@@ -99,12 +111,18 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           break;
         } catch (error) {
           console.warn(`❌ Failed to connect to ${url}:`, error.message);
+          failedRpcs.push(url);
+          lastError = error;
           continue;
         }
       }
       
       if (!connection) {
-        throw new Error('All Solana RPC endpoints failed. Please try again later.');
+        const errorMsg = `All ${rpcUrls.length} Solana RPC endpoints failed:\n` +
+          `- Tried: ${failedRpcs.join(', ')}\n` +
+          `- Last error: ${lastError?.message || 'Unknown error'}\n\n` +
+          `Please check your internet connection or configure VITE_SOLANA_RPC_URL with a valid RPC endpoint.`;
+        throw new Error(errorMsg);
       }
       
       // USDC mint address on Solana
@@ -463,8 +481,40 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         
         try {
           const { Connection } = await import('@solana/web3.js');
-          const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-          const connection = new Connection(rpcUrl, 'confirmed');
+          
+          // Use same RPC fallback logic as buildSolanaUSDCTransaction
+          const envRpcUrl = import.meta.env.VITE_SOLANA_RPC_URL;
+          const rpcUrls = [
+            ...(envRpcUrl && envRpcUrl.trim() ? [envRpcUrl.trim()] : []),
+            'https://api.mainnet-beta.solana.com',
+            'https://solana-api.projectserum.com',
+            'https://rpc.ankr.com/solana',
+            'https://solana-mainnet.g.alchemy.com/v2/demo',
+            'https://mainnet.helius-rpc.com'
+          ].filter(url => url && typeof url === 'string' && url.length > 0);
+          
+          let connection = null;
+          let lastError = null;
+          
+          for (const url of rpcUrls) {
+            try {
+              const testConnection = new Connection(url, { commitment: 'confirmed' });
+              await Promise.race([
+                testConnection.getLatestBlockhash(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
+              ]);
+              connection = testConnection;
+              console.log(`✅ Using RPC for confirmation: ${url}`);
+              break;
+            } catch (error) {
+              lastError = error;
+              continue;
+            }
+          }
+          
+          if (!connection) {
+            throw new Error(`Failed to connect to any Solana RPC endpoint. Last error: ${lastError?.message}`);
+          }
           
           // Build and send Solana USDC transaction
           const solanaPaymentAddress = getPaymentWallet('solana', 'solana');
@@ -552,6 +602,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             errorMessage += 'USDC token account not found. Please add USDC to your wallet first.';
           } else if (solanaError.message.includes('Phantom wallet not found')) {
             errorMessage += 'Phantom wallet not found. Please install and connect Phantom wallet.';
+          } else if (solanaError.message.includes('RPC') || solanaError.message.includes('endpoints')) {
+            errorMessage += `RPC connection issue: ${solanaError.message}`;
           } else {
             errorMessage += `Error: ${solanaError.message}`;
           }

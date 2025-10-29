@@ -1070,7 +1070,8 @@ app.post('/api/nft/check-holdings', async (req, res) => {
                 error: error.message,
                 chainId: collection.chainId,
                 name: collection.name,
-                type: collection.type
+                type: collection.type,
+                walletAddress: walletAddress
               });
               return null; // Return null instead of throwing to continue processing
             }
