@@ -887,158 +887,169 @@ app.post('/api/nft/check-holdings', async (req, res) => {
     
     const ownedCollections = [];
     
-    // Check each qualifying collection
+    // Group collections by chain for parallel processing
+    const collectionsByChain = {};
     for (const collection of qualifyingCollections) {
-      try {
-        logger.debug('Checking collection', { 
-          address: collection.address, 
-          chainId: collection.chainId, 
-          name: collection.name,
-          type: collection.type 
-        });
-        
-        const rpcUrl = RPC_ENDPOINTS[collection.chainId];
+      if (!collectionsByChain[collection.chainId]) {
+        collectionsByChain[collection.chainId] = [];
+      }
+      collectionsByChain[collection.chainId].push(collection);
+    }
+    
+    // Process each chain in parallel
+    const chainResults = await Promise.allSettled(
+      Object.entries(collectionsByChain).map(async ([chainId, collections]) => {
+        const rpcUrl = RPC_ENDPOINTS[chainId];
         if (!rpcUrl) {
-          logger.warn('No RPC URL for chain', { chainId: collection.chainId });
-          continue;
+          logger.warn('No RPC URL for chain', { chainId });
+          return [];
         }
         
-        logger.debug('Using RPC URL', { chainId: collection.chainId, rpcUrl });
+        logger.debug('Processing chain collections', { chainId, count: collections.length });
         const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
           polling: false,
-          batchMaxCount: 5,
-          batchMaxWait: 50,
-          staticNetwork: { chainId: parseInt(collection.chainId), name: collection.chainId === '1' ? 'mainnet' : 'base' }
+          batchMaxCount: 10,
+          batchMaxWait: 100,
+          staticNetwork: { chainId: parseInt(chainId), name: chainId === '1' ? 'mainnet' : 'base' }
         });
         
-        if (collection.type === 'erc721') {
-          // Skip EVM NFT checks for Solana addresses
-          if (!walletAddress.startsWith('0x')) {
-            logger.debug('Skipping EVM NFT check for Solana address', { walletAddress, collection: collection.name });
-            continue;
-          }
-          
-          // Validate contract address format
-          if (!ethers.isAddress(collection.address)) {
-            throw new Error(`Invalid contract address: ${collection.address}`);
-          }
-          
-          // Validate wallet address format for EVM
-          if (!ethers.isAddress(walletAddress)) {
-            throw new Error(`Invalid EVM wallet address: ${walletAddress}`);
-          }
-          
-          // Check if contract exists by getting its code
-          const contractCode = await provider.getCode(collection.address);
-          if (contractCode === '0x') {
-            throw new Error(`Contract does not exist at address: ${collection.address}`);
-          }
-          
-          // NFT contract check
-          const nftContract = new ethers.Contract(
-            collection.address,
-            ['function balanceOf(address owner) view returns (uint256)'],
-            provider
-          );
-          
-          // Add timeout to prevent hanging
-          const balance = await Promise.race([
-            nftContract.balanceOf(walletAddress),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Contract call timeout')), 10000)
-            )
-          ]);
-          
-          logger.debug('NFT balance check result', { 
-            address: collection.address, 
-            walletAddress, 
-            balance: balance.toString() 
-          });
-          
-          if (balance > 0) {
-            logger.info('NFT found!', { 
-              address: collection.address, 
-              name: collection.name, 
-              balance: balance.toString() 
-            });
-            ownedCollections.push({
-              contractAddress: collection.address,
-              chainId: collection.chainId,
-              name: collection.name,
-              type: collection.type,
-              balance: balance.toString()
-            });
-          }
-        } else if (collection.type === 'erc20') {
-          // Skip EVM token checks for Solana addresses
-          if (!walletAddress.startsWith('0x')) {
-            logger.debug('Skipping EVM token check for Solana address', { walletAddress, collection: collection.name });
-            continue;
-          }
-          
-          // Validate wallet address format for EVM
-          if (!ethers.isAddress(walletAddress)) {
-            throw new Error(`Invalid EVM wallet address: ${walletAddress}`);
-          }
-          
-          // Token contract check
-          const tokenContract = new ethers.Contract(
-            collection.address,
-            ['function balanceOf(address owner) view returns (uint256)', 'function decimals() view returns (uint8)'],
-            provider
-          );
-          
-          const [balance, decimals] = await Promise.all([
-            Promise.race([
-              tokenContract.balanceOf(walletAddress),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Balance check timeout')), 5000))
-            ]),
-            Promise.race([
-              tokenContract.decimals(),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Decimals check timeout')), 5000))
-            ])
-          ]);
-          
-          const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
-          const minBalance = parseFloat(collection.minBalance);
-          
-          logger.debug('Token balance check result', { 
-            address: collection.address, 
-            walletAddress, 
-            balance: formattedBalance,
-            minBalance,
-            decimals 
-          });
-          
-          if (formattedBalance >= minBalance) {
-            logger.info('Token balance sufficient!', { 
-              address: collection.address, 
-              name: collection.name, 
-              balance: formattedBalance,
-              minBalance 
-            });
-            ownedCollections.push({
-              contractAddress: collection.address,
-              chainId: collection.chainId,
-              name: collection.name,
-              type: collection.type,
-              balance: formattedBalance.toString(),
-              minBalance: collection.minBalance
-            });
+        // Process collections in parallel within each chain
+        return Promise.allSettled(
+          collections.map(async (collection) => {
+            try {
+              logger.debug('Checking collection', { 
+                address: collection.address, 
+                chainId: collection.chainId, 
+                name: collection.name,
+                type: collection.type 
+              });
+              
+              if (collection.type === 'erc721') {
+                // Skip EVM NFT checks for Solana addresses
+                if (!walletAddress.startsWith('0x')) {
+                  logger.debug('Skipping EVM NFT check for Solana address', { walletAddress, collection: collection.name });
+                  return null;
+                }
+                
+                // Validate addresses
+                if (!ethers.isAddress(collection.address) || !ethers.isAddress(walletAddress)) {
+                  throw new Error(`Invalid address format`);
+                }
+                
+                // NFT contract check with faster timeout
+                const nftContract = new ethers.Contract(
+                  collection.address,
+                  ['function balanceOf(address owner) view returns (uint256)'],
+                  provider
+                );
+                
+                // Reduced timeout for faster failure
+                const balance = await Promise.race([
+                  nftContract.balanceOf(walletAddress),
+                  new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Contract call timeout')), 3000) // Reduced from 10s to 3s
+                  )
+                ]);
+                
+                logger.debug('NFT balance check result', { 
+                  address: collection.address, 
+                  walletAddress, 
+                  balance: balance.toString() 
+                });
+                
+                if (balance > 0) {
+                  logger.info('NFT found!', { 
+                    address: collection.address, 
+                    name: collection.name, 
+                    balance: balance.toString() 
+                  });
+                  return {
+                    contractAddress: collection.address,
+                    chainId: collection.chainId,
+                    name: collection.name,
+                    type: collection.type,
+                    balance: balance.toString()
+                  };
+                }
+                return null;
+              } else if (collection.type === 'erc20') {
+                // Skip EVM token checks for Solana addresses
+                if (!walletAddress.startsWith('0x')) {
+                  logger.debug('Skipping EVM token check for Solana address', { walletAddress, collection: collection.name });
+                  return null;
+                }
+                
+                // Validate addresses
+                if (!ethers.isAddress(collection.address) || !ethers.isAddress(walletAddress)) {
+                  throw new Error(`Invalid address format`);
+                }
+                
+                // Token contract check with faster timeout
+                const tokenContract = new ethers.Contract(
+                  collection.address,
+                  ['function balanceOf(address owner) view returns (uint256)', 'function decimals() view returns (uint8)'],
+                  provider
+                );
+                
+                // Reduced timeout for faster failure
+                const [balance, decimals] = await Promise.race([
+                  Promise.all([tokenContract.balanceOf(walletAddress), tokenContract.decimals()]),
+                  new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Contract call timeout')), 3000) // Reduced from 10s to 3s
+                  )
+                ]);
+                
+                const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
+                const minBalance = parseFloat(collection.minBalance);
+                
+                logger.debug('Token balance check result', { 
+                  address: collection.address, 
+                  walletAddress, 
+                  balance: formattedBalance,
+                  minBalance,
+                  decimals 
+                });
+                
+                if (formattedBalance >= minBalance) {
+                  logger.info('Token balance sufficient!', { 
+                    address: collection.address, 
+                    name: collection.name, 
+                    balance: formattedBalance,
+                    minBalance 
+                  });
+                  return {
+                    contractAddress: collection.address,
+                    chainId: collection.chainId,
+                    name: collection.name,
+                    type: collection.type,
+                    balance: formattedBalance.toString(),
+                    minBalance: collection.minBalance
+                  };
+                }
+                return null;
+              }
+            } catch (error) {
+              logger.warn(`Error checking collection ${collection.address}:`, {
+                error: error.message,
+                chainId: collection.chainId,
+                name: collection.name,
+                type: collection.type
+              });
+              return null; // Return null instead of throwing to continue processing
+            }
+          })
+        );
+      })
+    );
+    
+    // Flatten results and filter out nulls
+    for (const chainResult of chainResults) {
+      if (chainResult.status === 'fulfilled') {
+        for (const collectionResult of chainResult.value) {
+          if (collectionResult.status === 'fulfilled' && collectionResult.value) {
+            ownedCollections.push(collectionResult.value);
           }
         }
-      } catch (error) {
-        logger.warn(`Error checking collection ${collection.address}:`, {
-          error: error.message,
-          stack: error.stack,
-          chainId: collection.chainId,
-          name: collection.name,
-          type: collection.type,
-          rpcUrl: RPC_ENDPOINTS[collection.chainId]
-        });
-        
-        // Don't add error entries to ownedCollections - they're not actual holdings
-        continue;
       }
     }
     

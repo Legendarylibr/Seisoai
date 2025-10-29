@@ -17,8 +17,20 @@ export const SimpleWalletProvider = ({ children }) => {
   const [nftCollections, setNftCollections] = useState([]);
   const [walletType, setWalletType] = useState(null); // 'evm' or 'solana'
 
-  // Fetch credits from backend with retry logic
+  // Fetch credits from backend with retry logic and caching
   const fetchCredits = useCallback(async (walletAddress, retries = 3) => {
+    // Check cache first (1 minute cache for credits)
+    const cacheKey = `credits_${walletAddress}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < 60000) { // 1 minute
+        logger.debug('Using cached credits', { walletAddress, credits: data.credits });
+        setCredits(data.credits);
+        return data.credits;
+      }
+    }
+
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         logger.debug('Fetching credits', { walletAddress, attempt, retries });
@@ -27,8 +39,8 @@ export const SimpleWalletProvider = ({ children }) => {
           headers: {
             'Content-Type': 'application/json',
           },
-          // Increased timeout to 15 seconds for production
-          signal: AbortSignal.timeout(15000)
+          // Reduced timeout for faster failure
+          signal: AbortSignal.timeout(5000) // Reduced from 15s to 5s
         });
         
         if (response.ok) {
@@ -45,6 +57,13 @@ export const SimpleWalletProvider = ({ children }) => {
           }
           
           setCredits(credits);
+          
+          // Cache the result
+          sessionStorage.setItem(cacheKey, JSON.stringify({
+            data: { credits },
+            timestamp: Date.now()
+          }));
+          
           logger.info('Credits loaded successfully', { credits, walletAddress });
           return credits; // Return for testing/verification
         } else {
@@ -79,7 +98,7 @@ export const SimpleWalletProvider = ({ children }) => {
           setCredits(0);
         } else {
           // Wait before retrying (exponential backoff)
-          const delay = Math.min(1000 * attempt, 5000);
+          const delay = Math.min(1000 * attempt, 3000); // Max 3 second delay
           logger.debug('Retrying credit fetch', { delay, attempt, walletAddress });
           await new Promise(resolve => setTimeout(resolve, delay));
         }
@@ -87,13 +106,33 @@ export const SimpleWalletProvider = ({ children }) => {
     }
   }, [API_URL]);
 
-  // Check NFT holdings
+  // Check NFT holdings with caching
   const checkNFTStatus = async (walletAddress) => {
     try {
+      // Check cache first (5 minute cache)
+      const cacheKey = `nft_${walletAddress}`;
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < 300000) { // 5 minutes
+          logger.debug('Using cached NFT status', { walletAddress });
+          setIsNFTHolder(data.isHolder);
+          setNftCollections(data.collections);
+          return;
+        }
+      }
+
       logger.debug('Checking NFT holdings', { walletAddress });
       const result = await checkNFTHoldings(walletAddress);
       setIsNFTHolder(result.isHolder);
       setNftCollections(result.collections);
+      
+      // Cache the result
+      sessionStorage.setItem(cacheKey, JSON.stringify({
+        data: result,
+        timestamp: Date.now()
+      }));
+      
       logger.info('NFT status checked', { 
         isHolder: result.isHolder, 
         collections: result.collections.length,
@@ -120,7 +159,7 @@ export const SimpleWalletProvider = ({ children }) => {
         setIsLoading(false);
         setError('Connection timeout. Please try again.');
         throw new Error('Connection timeout');
-      }, 15000); // Reduced to 15 second timeout
+      }, 8000); // Reduced to 8 second timeout for faster failure
 
       try {
         // Handle different wallet types
@@ -329,14 +368,16 @@ export const SimpleWalletProvider = ({ children }) => {
       setAddress(address);
       setIsConnected(true);
 
-      // Fetch credits and check NFT status
-      await Promise.all([
-        fetchCredits(address),
-        checkNFTStatus(address)
-      ]);
+      // Fetch credits immediately, NFT check can happen in background
+      await fetchCredits(address);
+      
+      // Start NFT check in background (non-blocking)
+      checkNFTStatus(address).catch(error => {
+        logger.error('Background NFT check failed', { error: error.message, address });
+      });
 
-        logger.info('Wallet connected successfully', { address, walletType });
-        clearTimeout(connectionTimeout);
+      logger.info('Wallet connected successfully', { address, walletType });
+      clearTimeout(connectionTimeout);
       } catch (error) {
         logger.error('Wallet connection error', { error: error.message, walletType });
         setError(error.message);
