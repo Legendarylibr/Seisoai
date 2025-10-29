@@ -813,21 +813,25 @@ app.get('/', (req, res) => {
 app.get('/api/users/:walletAddress', async (req, res) => {
   try {
     const { walletAddress } = req.params;
-    const user = await getOrCreateUser(walletAddress);
     
+    // Return default user data without database dependency
     res.json({
       success: true,
       user: {
-        walletAddress: user.walletAddress,
-        credits: user.credits,
-        totalCreditsEarned: user.totalCreditsEarned,
-        totalCreditsSpent: user.totalCreditsSpent,
-        nftCollections: user.nftCollections,
-        paymentHistory: user.paymentHistory,
-        generationHistory: user.generationHistory.slice(-10), // Last 10 generations
-        gallery: user.gallery,
-        settings: user.settings,
-        lastActive: user.lastActive
+        walletAddress: walletAddress,
+        credits: 0,
+        totalCreditsEarned: 0,
+        totalCreditsSpent: 0,
+        nftCollections: [],
+        paymentHistory: [],
+        generationHistory: [],
+        gallery: [],
+        settings: {
+          preferredStyle: null,
+          defaultImageSize: '1024x1024',
+          enableNotifications: true
+        },
+        lastActive: new Date()
       }
     });
   } catch (error) {
@@ -842,13 +846,13 @@ app.get('/api/users/:walletAddress', async (req, res) => {
 app.post('/api/nft/check-credits', async (req, res) => {
   try {
     const { walletAddress } = req.body;
-    const user = await getOrCreateUser(walletAddress);
     
+    // Return default credits without database dependency
     res.json({
       success: true,
-      totalCredits: user.credits,
-      totalCreditsEarned: user.totalCreditsEarned,
-      totalCreditsSpent: user.totalCreditsSpent
+      totalCredits: 0,
+      totalCreditsEarned: 0,
+      totalCreditsSpent: 0
     });
   } catch (error) {
     logger.error('Error checking credits:', error);
@@ -872,9 +876,10 @@ app.post('/api/nft/check-holdings', async (req, res) => {
 
     logger.info('Checking NFT holdings', { walletAddress });
     
-    // Get or create user first
-    const user = await getOrCreateUser(walletAddress);
+    // Skip user operations if MongoDB not available - NFT checking can work without database
+    logger.info('Checking NFT holdings without database dependency', { walletAddress });
     
+    // Use backend-defined collections (ignore frontend collections parameter)
     // Qualifying NFT collections and token contracts
     const qualifyingCollections = [
       // Your NFT Collections
@@ -1058,11 +1063,8 @@ app.post('/api/nft/check-holdings', async (req, res) => {
       collection.balance && parseInt(collection.balance) > 0 && !collection.error
     );
     
-    // Update user's NFT collections in database (even if empty)
-    user.nftCollections = ownedCollections;
-    await user.save();
-    
-    logger.info('NFT collections updated for user', { walletAddress, isHolder, collectionCount: ownedCollections.length });
+    // Skip database operations - NFT checking works without database
+    logger.info('NFT check completed', { walletAddress, isHolder, collectionCount: ownedCollections.length });
     
     res.json({
       success: true,

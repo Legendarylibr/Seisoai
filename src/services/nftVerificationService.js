@@ -36,8 +36,8 @@ export const checkNFTHoldings = async (walletAddress) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ 
-        walletAddress,
-        collections: QUALIFYING_COLLECTIONS 
+        walletAddress
+        // Backend uses its own hardcoded collections, no need to send empty ones
       })
     });
 
