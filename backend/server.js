@@ -386,16 +386,22 @@ if (process.env.MONGODB_URI) {
 async function createIndexes() {
   try {
     if (mongoose.connection.readyState === 1) {
-      // Create indexes for frequently queried fields
-      await User.collection.createIndex({ "walletAddress": 1 });
-      await User.collection.createIndex({ "paymentHistory.txHash": 1 });
-      await User.collection.createIndex({ "createdAt": 1 });
-      await User.collection.createIndex({ "userId": 1 });
+      // Create indexes for frequently queried fields (only if they don't exist)
+      await User.collection.createIndex({ "walletAddress": 1 }, { background: true });
+      await User.collection.createIndex({ "paymentHistory.txHash": 1 }, { background: true });
+      await User.collection.createIndex({ "createdAt": 1 }, { background: true });
+      await User.collection.createIndex({ "userId": 1 }, { background: true });
+      await User.collection.createIndex({ "expiresAt": 1 }, { background: true });
       
       logger.info('Database indexes created successfully');
     }
   } catch (error) {
-    logger.error('Error creating database indexes', { error: error.message });
+    // Ignore duplicate key errors (index already exists)
+    if (error.code !== 11000) {
+      logger.error('Error creating database indexes', { error: error.message });
+    } else {
+      logger.info('Database indexes already exist');
+    }
   }
 }
 
@@ -901,7 +907,11 @@ app.post('/api/nft/check-holdings', async (req, res) => {
         }
         
         logger.debug('Using RPC URL', { chainId: collection.chainId, rpcUrl });
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
+          polling: false,
+          batchMaxCount: 5,
+          batchMaxWait: 50
+        });
         
         if (collection.type === 'erc721') {
           // Skip EVM NFT checks for Solana addresses
@@ -981,8 +991,14 @@ app.post('/api/nft/check-holdings', async (req, res) => {
           );
           
           const [balance, decimals] = await Promise.all([
-            tokenContract.balanceOf(walletAddress),
-            tokenContract.decimals()
+            Promise.race([
+              tokenContract.balanceOf(walletAddress),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Balance check timeout')), 5000))
+            ]),
+            Promise.race([
+              tokenContract.decimals(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Decimals check timeout')), 5000))
+            ])
           ]);
           
           const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
@@ -1123,18 +1139,31 @@ const TOKEN_ADDRESSES = {
   }
 };
 
-// Get provider for chain using public RPC endpoints
+// Get provider for chain using public RPC endpoints with connection pooling
+const providerCache = new Map();
+
 function getProvider(chain = 'ethereum') {
-  // Use public RPC endpoints
+  if (providerCache.has(chain)) {
+    return providerCache.get(chain);
+  }
+
+  // Use public RPC endpoints with better fallbacks
   const rpcUrls = {
-    ethereum: process.env.ETHEREUM_RPC_URL || 'https://eth.llamarpc.com',
+    ethereum: process.env.ETH_RPC_URL || 'https://eth.llamarpc.com',
     polygon: process.env.POLYGON_RPC_URL || 'https://polygon.llamarpc.com',
     arbitrum: process.env.ARBITRUM_RPC_URL || 'https://arbitrum.llamarpc.com',
     optimism: process.env.OPTIMISM_RPC_URL || 'https://optimism.llamarpc.com',
     base: process.env.BASE_RPC_URL || 'https://base.llamarpc.com'
   };
   
-  return new ethers.JsonRpcProvider(rpcUrls[chain] || rpcUrls.ethereum);
+  const provider = new ethers.JsonRpcProvider(rpcUrls[chain] || rpcUrls.ethereum, undefined, {
+    polling: false, // Disable automatic polling
+    batchMaxCount: 10, // Batch requests
+    batchMaxWait: 100 // Wait max 100ms for batching
+  });
+  
+  providerCache.set(chain, provider);
+  return provider;
 }
 
 /**
@@ -1159,11 +1188,10 @@ async function checkForTokenTransfer(paymentAddress, token = 'USDC', chain = 'et
     const decimals = await contract.decimals();
     console.log(`[${chain.toUpperCase()}] Token decimals: ${decimals}`);
     
-    // Get current block and check recent blocks for new transfers
+    // Get current block and check recent blocks for new transfers (reduced for performance)
     const currentBlock = await provider.getBlockNumber();
-    const blocksToCheck = 100; // Check last 100 blocks to ensure we catch recent transfers
-    const fromBlock = currentBlock - blocksToCheck;
-    if (fromBlock < 0) fromBlock = 0;
+    const blocksToCheck = 20; // Check last 20 blocks for better performance
+    const fromBlock = Math.max(0, currentBlock - blocksToCheck);
     
     console.log(`[${chain.toUpperCase()}] Scanning blocks ${fromBlock} to ${currentBlock} (${blocksToCheck} blocks)`);
     
@@ -1245,24 +1273,25 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
     console.log(`\n[SOLANA] Starting check for USDC transfers...`);
     console.log(`[SOLANA] Looking for ANY transfers TO: ${paymentAddress}`);
     
-    // Use multiple RPC endpoints for better reliability
+    // Use optimized RPC endpoints for better reliability
     const rpcUrls = [
       process.env.SOLANA_RPC_URL,
       'https://api.mainnet-beta.solana.com',
-      'https://api.devnet.solana.com', // Devnet as fallback
-      'https://solana-mainnet.g.alchemy.com/v2/demo', // Alchemy demo endpoint
-      'https://rpc.ankr.com/solana' // Ankr (may require API key)
+      'https://solana-mainnet.g.alchemy.com/v2/demo'
     ].filter(Boolean);
     
     let connection;
     let lastError;
     
-    // Try each RPC endpoint until one works
+    // Try each RPC endpoint until one works with timeout
     for (const rpcUrl of rpcUrls) {
       try {
         connection = new Connection(rpcUrl, 'confirmed');
-        // Test the connection
-        await connection.getLatestBlockhash();
+        // Test the connection with timeout
+        await Promise.race([
+          connection.getLatestBlockhash(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 5000))
+        ]);
         console.log(`[SOLANA] Using RPC endpoint: ${rpcUrl}`);
         break;
       } catch (error) {
@@ -1281,8 +1310,8 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
     // USDC Token Mint on Solana
     const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
     
-    // Get recent signatures for the payment address
-    const signatures = await connection.getSignaturesForAddress(paymentPubkey, { limit: 50 });
+    // Get recent signatures for the payment address (reduced for performance)
+    const signatures = await connection.getSignaturesForAddress(paymentPubkey, { limit: 20 });
     
     console.log(`[SOLANA] Found ${signatures.length} recent transaction(s)`);
     
@@ -1291,12 +1320,15 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
       return null;
     }
     
-    // Check each transaction for USDC transfers
+    // Check each transaction for USDC transfers with timeout
     for (const sig of signatures) {
       try {
-        const tx = await connection.getParsedTransaction(sig.signature, {
-          maxSupportedTransactionVersion: 0
-        });
+        const tx = await Promise.race([
+          connection.getParsedTransaction(sig.signature, {
+            maxSupportedTransactionVersion: 0
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Transaction fetch timeout')), 3000))
+        ]);
         
         if (!tx || !tx.meta) continue;
         
