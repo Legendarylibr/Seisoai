@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { checkNFTHoldings } from '../services/nftVerificationService';
+import logger from '../utils/logger';
 
 const SimpleWalletContext = createContext();
 
@@ -20,7 +21,7 @@ export const SimpleWalletProvider = ({ children }) => {
   const fetchCredits = useCallback(async (walletAddress, retries = 3) => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        console.log(`🔍 Fetching credits for ${walletAddress} (attempt ${attempt}/${retries})`);
+        logger.debug('Fetching credits', { walletAddress, attempt, retries });
         const response = await fetch(`${API_URL}/api/users/${walletAddress}`, {
           method: 'GET',
           headers: {
@@ -44,32 +45,42 @@ export const SimpleWalletProvider = ({ children }) => {
           }
           
           setCredits(credits);
-          console.log(`✅ Credits loaded: ${credits}`);
+          logger.info('Credits loaded successfully', { credits, walletAddress });
           return credits; // Return for testing/verification
         } else {
-          console.warn(`Failed to fetch credits: ${response.status} (attempt ${attempt}/${retries})`);
+          logger.warn('Failed to fetch credits', { 
+            status: response.status, 
+            attempt, 
+            retries, 
+            walletAddress 
+          });
           if (attempt === retries) {
             setCredits(0);
           }
         }
       } catch (error) {
-        console.error(`Error fetching credits (attempt ${attempt}/${retries}):`, error);
+        logger.error('Error fetching credits', { 
+          error: error.message, 
+          attempt, 
+          retries, 
+          walletAddress 
+        });
         
         // Don't retry on user abort
         if (error.name === 'AbortError') {
-          console.warn('Request aborted');
+          logger.warn('Request aborted', { walletAddress });
           setCredits(0);
           return;
         }
         
         // On last attempt, set credits to 0
         if (attempt === retries) {
-          console.error('All retry attempts failed');
+          logger.error('All retry attempts failed', { walletAddress });
           setCredits(0);
         } else {
           // Wait before retrying (exponential backoff)
           const delay = Math.min(1000 * attempt, 5000);
-          console.log(`Retrying in ${delay}ms...`);
+          logger.debug('Retrying credit fetch', { delay, attempt, walletAddress });
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
@@ -79,13 +90,17 @@ export const SimpleWalletProvider = ({ children }) => {
   // Check NFT holdings
   const checkNFTStatus = async (walletAddress) => {
     try {
-      console.log(`🎨 Checking NFT holdings for ${walletAddress}`);
+      logger.debug('Checking NFT holdings', { walletAddress });
       const result = await checkNFTHoldings(walletAddress);
       setIsNFTHolder(result.isHolder);
       setNftCollections(result.collections);
-      console.log(`✅ NFT status: ${result.isHolder ? 'Holder' : 'Non-holder'}`);
+      logger.info('NFT status checked', { 
+        isHolder: result.isHolder, 
+        collections: result.collections.length,
+        walletAddress 
+      });
     } catch (error) {
-      console.error('Error checking NFT status:', error);
+      logger.error('Error checking NFT status', { error: error.message, walletAddress });
       setIsNFTHolder(false);
       setNftCollections([]);
     }
@@ -288,17 +303,17 @@ export const SimpleWalletProvider = ({ children }) => {
         checkNFTStatus(address)
       ]);
 
-        console.log(`✅ Wallet connected: ${address} (${walletType})`);
+        logger.info('Wallet connected successfully', { address, walletType });
         clearTimeout(connectionTimeout);
       } catch (error) {
-        console.error('Wallet connection error:', error);
+        logger.error('Wallet connection error', { error: error.message, walletType });
         setError(error.message);
         clearTimeout(connectionTimeout);
       } finally {
         setIsLoading(false);
       }
     } catch (error) {
-      console.error('Wallet connection error:', error);
+      logger.error('Wallet connection error', { error: error.message, walletType });
       setError(error.message);
       setIsLoading(false);
     }
@@ -332,9 +347,9 @@ export const SimpleWalletProvider = ({ children }) => {
 
     // Refresh credits every 60 seconds to keep display updated
     const refreshInterval = setInterval(() => {
-      console.log('🔄 Periodic credit refresh');
+      logger.debug('Periodic credit refresh');
       fetchCredits(address).catch(error => {
-        console.error('Periodic credit refresh failed:', error);
+        logger.error('Periodic credit refresh failed', { error: error.message, address });
       });
     }, 60000); // Every 60 seconds
 

@@ -10,6 +10,7 @@ import compression from 'compression';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import logger from './utils/logger.js';
 
 // ES module setup
 const __filename = fileURLToPath(import.meta.url);
@@ -45,13 +46,6 @@ app.use(helmet({
 // Compression middleware
 app.use(compression());
 
-// Simple logging
-const logger = {
-  info: (msg, meta) => console.log(`[INFO] ${msg}`, meta || ''),
-  error: (msg, meta) => console.error(`[ERROR] ${msg}`, meta || ''),
-  warn: (msg, meta) => console.warn(`[WARN] ${msg}`, meta || ''),
-  debug: (msg, meta) => console.log(`[DEBUG] ${msg}`, meta || '')
-};
 
 // Input validation utilities
 const isValidEthereumAddress = (address) => {
@@ -113,8 +107,54 @@ const validateInput = (req, res, next) => {
 
 app.use(validateInput);
 
-// Transaction deduplication cache (in-memory)
-const processedTransactions = new Map();
+// Transaction deduplication cache with LRU behavior
+class LRUCache {
+  constructor(maxSize = 1000) {
+    this.maxSize = maxSize;
+    this.cache = new Map();
+  }
+
+  set(key, value) {
+    if (this.cache.has(key)) {
+      // Move to end (most recently used)
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      // Remove least recently used (first item)
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+
+  get(key) {
+    if (this.cache.has(key)) {
+      const value = this.cache.get(key);
+      // Move to end (most recently used)
+      this.cache.delete(key);
+      this.cache.set(key, value);
+      return value;
+    }
+    return undefined;
+  }
+
+  has(key) {
+    return this.cache.has(key);
+  }
+
+  delete(key) {
+    return this.cache.delete(key);
+  }
+
+  size() {
+    return this.cache.size;
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+}
+
+const processedTransactions = new LRUCache(1000);
 
 // Middleware to prevent duplicate transactions
 const checkTransactionDedup = async (req, res, next) => {
@@ -230,9 +270,11 @@ const corsOptions = {
     }
     
     // Log the rejected origin for debugging
-    console.log('CORS rejected origin:', origin);
-    console.log('Allowed origins:', process.env.ALLOWED_ORIGINS);
-    console.log('NODE_ENV:', process.env.NODE_ENV);
+    logger.warn('CORS rejected origin', { 
+      origin, 
+      allowedOrigins: process.env.ALLOWED_ORIGINS,
+      nodeEnv: process.env.NODE_ENV 
+    });
     
     callback(new Error('Not allowed by CORS'));
   },
@@ -334,19 +376,38 @@ if (process.env.NODE_ENV === 'production') {
 
 // Connect to MongoDB
 if (process.env.MONGODB_URI) {
-  console.log('📡 Connecting to MongoDB...');
+  logger.info('Connecting to MongoDB');
   mongoose.connect(process.env.MONGODB_URI, mongoOptions);
 } else {
-  console.warn('⚠️ MONGODB_URI not provided, running without database');
+  logger.warn('MONGODB_URI not provided, running without database');
 }
 
-mongoose.connection.on('connected', () => {
+// Create indexes for better performance
+async function createIndexes() {
+  try {
+    if (mongoose.connection.readyState === 1) {
+      // Create indexes for frequently queried fields
+      await User.collection.createIndex({ "walletAddress": 1 });
+      await User.collection.createIndex({ "paymentHistory.txHash": 1 });
+      await User.collection.createIndex({ "createdAt": 1 });
+      await User.collection.createIndex({ "userId": 1 });
+      
+      logger.info('Database indexes created successfully');
+    }
+  } catch (error) {
+    logger.error('Error creating database indexes', { error: error.message });
+  }
+}
+
+// Create indexes after connection
+mongoose.connection.on('connected', async () => {
   logger.info('MongoDB connected successfully');
+  await createIndexes();
 });
 
 mongoose.connection.on('error', (err) => {
-  logger.error('MongoDB connection error:', err);
-  console.log('⚠️ MongoDB connection failed - app will continue without database');
+  logger.error('MongoDB connection error', { error: err.message });
+  logger.warn('MongoDB connection failed - app will continue without database');
 });
 
 mongoose.connection.on('disconnected', () => {
@@ -356,19 +417,19 @@ mongoose.connection.on('disconnected', () => {
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   if (err.message && err.message.includes('querySrv ENOTFOUND')) {
-    console.log('⚠️ MongoDB DNS error - continuing without database');
+    logger.warn('MongoDB DNS error - continuing without database');
     return;
   }
-  logger.error('Uncaught Exception:', err);
+  logger.error('Uncaught Exception', { error: err.message, stack: err.stack });
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   if (reason && reason.message && reason.message.includes('querySrv ENOTFOUND')) {
-    console.log('⚠️ MongoDB DNS error - continuing without database');
+    logger.warn('MongoDB DNS error - continuing without database');
     return;
   }
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('Unhandled Rejection', { reason: reason?.message, promise });
 });
 
 
@@ -564,14 +625,16 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
     }
 
     const paymentWallet = PAYMENT_WALLETS[chainId];
-    console.log(`[VERIFY] Payment wallet for chain ${chainId}: ${paymentWallet}`);
+    logger.debug('Payment wallet for chain', { chainId, paymentWallet });
     
     if (!paymentWallet) {
       throw new Error(`Payment wallet not configured for chain ${chainId}`);
     }
 
-    console.log(`[VERIFY] Tx from: ${tx.from}`);
-    console.log(`[VERIFY] Wallet address: ${walletAddress}`);
+    logger.debug('Transaction verification', { 
+      txFrom: tx.from, 
+      walletAddress: walletAddress.toLowerCase() 
+    });
     
     if (tx.from.toLowerCase() !== walletAddress.toLowerCase()) {
       throw new Error('Transaction sender does not match wallet address');
@@ -669,6 +732,63 @@ app.get('/api/health', async (req, res) => {
       error: error.message,
       timestamp: new Date().toISOString()
     });
+  }
+});
+
+/**
+ * Frontend logging endpoint
+ */
+app.post('/api/logs', (req, res) => {
+  try {
+    const { level, message, data, timestamp, userAgent, url } = req.body;
+    
+    // Log frontend messages with appropriate level
+    switch (level) {
+      case 'error':
+        logger.error(`[FRONTEND] ${message}`, { 
+          data, 
+          userAgent, 
+          url, 
+          timestamp 
+        });
+        break;
+      case 'warn':
+        logger.warn(`[FRONTEND] ${message}`, { 
+          data, 
+          userAgent, 
+          url, 
+          timestamp 
+        });
+        break;
+      case 'info':
+        logger.info(`[FRONTEND] ${message}`, { 
+          data, 
+          userAgent, 
+          url, 
+          timestamp 
+        });
+        break;
+      case 'debug':
+        logger.debug(`[FRONTEND] ${message}`, { 
+          data, 
+          userAgent, 
+          url, 
+          timestamp 
+        });
+        break;
+      default:
+        logger.info(`[FRONTEND] ${message}`, { 
+          data, 
+          userAgent, 
+          url, 
+          timestamp 
+        });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Error processing frontend log', { error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to process log' });
   }
 });
 

@@ -1,74 +1,99 @@
-// Centralized logging utility for the application
-const isDevelopment = import.meta.env.MODE === 'development';
-const isProduction = import.meta.env.MODE === 'production';
-
+// Frontend logging utility
 class Logger {
-  constructor(module = 'APP') {
-    this.module = module;
+  constructor() {
+    this.isDevelopment = import.meta.env.DEV;
+    this.logLevel = import.meta.env.VITE_LOG_LEVEL || 'info';
+    
+    // Define log levels
+    this.levels = {
+      error: 0,
+      warn: 1,
+      info: 2,
+      debug: 3
+    };
   }
 
-  formatMessage(level, message, data = {}) {
+  shouldLog(level) {
+    return this.levels[level] <= this.levels[this.logLevel];
+  }
+
+  formatMessage(level, message, data = null) {
     const timestamp = new Date().toISOString();
-    const moduleTag = `[${this.module}]`;
-    const levelTag = `[${level}]`;
+    const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
     
-    if (isDevelopment) {
-      return `${timestamp} ${moduleTag} ${levelTag} ${message}`;
+    if (data) {
+      return `${prefix} ${message} ${JSON.stringify(data)}`;
     }
+    return `${prefix} ${message}`;
+  }
+
+  error(message, data = null) {
+    if (!this.shouldLog('error')) return;
     
-    return JSON.stringify({
-      timestamp,
-      module: this.module,
-      level,
-      message,
-      data: Object.keys(data).length > 0 ? data : undefined
-    });
-  }
-
-  info(message, data = {}) {
-    if (isDevelopment) {
-      console.log(this.formatMessage('INFO', message, data));
-    }
-    // In production, you might want to send to a logging service
-  }
-
-  warn(message, data = {}) {
-    if (isDevelopment) {
-      console.warn(this.formatMessage('WARN', message, data));
-    }
-    // In production, you might want to send to a logging service
-  }
-
-  error(message, data = {}) {
-    console.error(this.formatMessage('ERROR', message, data));
-    // In production, you might want to send to a logging service
-  }
-
-  debug(message, data = {}) {
-    if (isDevelopment) {
-      console.debug(this.formatMessage('DEBUG', message, data));
+    if (this.isDevelopment) {
+      console.error(this.formatMessage('error', message, data));
+    } else {
+      // In production, send to logging service
+      this.sendToLoggingService('error', message, data);
     }
   }
 
-  // Special method for sensitive data that should never be logged
-  secure(message, data = {}) {
-    if (isDevelopment) {
-      console.log(this.formatMessage('SECURE', message, { ...data, sensitive: true }));
+  warn(message, data = null) {
+    if (!this.shouldLog('warn')) return;
+    
+    if (this.isDevelopment) {
+      console.warn(this.formatMessage('warn', message, data));
+    } else {
+      this.sendToLoggingService('warn', message, data);
+    }
+  }
+
+  info(message, data = null) {
+    if (!this.shouldLog('info')) return;
+    
+    if (this.isDevelopment) {
+      console.info(this.formatMessage('info', message, data));
+    } else {
+      this.sendToLoggingService('info', message, data);
+    }
+  }
+
+  debug(message, data = null) {
+    if (!this.shouldLog('debug')) return;
+    
+    if (this.isDevelopment) {
+      console.debug(this.formatMessage('debug', message, data));
+    } else {
+      this.sendToLoggingService('debug', message, data);
+    }
+  }
+
+  // Send logs to backend logging endpoint in production
+  async sendToLoggingService(level, message, data) {
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      await fetch(`${API_URL}/api/logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          level,
+          message,
+          data,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent,
+          url: window.location.href
+        })
+      });
+    } catch (error) {
+      // Fallback to console if logging service fails
+      console.error('Failed to send log to service:', error);
     }
   }
 }
 
-// Create logger instances for different modules
-export const createLogger = (module) => new Logger(module);
-
-// Default logger
-export const logger = new Logger('APP');
-
-// Module-specific loggers
-export const walletLogger = new Logger('WALLET');
-export const paymentLogger = new Logger('PAYMENT');
-export const discountLogger = new Logger('DISCOUNT');
-export const generationLogger = new Logger('GENERATION');
-export const safetyLogger = new Logger('SAFETY');
+// Create singleton instance
+const logger = new Logger();
 
 export default logger;
