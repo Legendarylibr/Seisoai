@@ -816,7 +816,7 @@ app.get('/', (req, res) => {
 app.get('/api/users/:walletAddress', async (req, res) => {
   try {
     const { walletAddress } = req.params;
-    const { refreshNFTs } = req.query; // Allow forcing NFT refresh with ?refreshNFTs=true
+    const { refreshNFTs, skipNFTs } = req.query; // Allow forcing NFT refresh or skipping NFT checks
     
     // Get actual user data from database
     const user = await getOrCreateUser(walletAddress);
@@ -824,7 +824,8 @@ app.get('/api/users/:walletAddress', async (req, res) => {
     // Refresh NFT holdings from blockchain if requested or if user has no NFT data
     let isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
     
-    if (refreshNFTs === 'true' || !isNFTHolder) {
+    // Skip NFT checks if skipNFTs=true (for faster credits fetching)
+    if (skipNFTs !== 'true' && (refreshNFTs === 'true' || !isNFTHolder)) {
       try {
         // Call NFT check internally to refresh holdings
         const qualifyingCollections = [

@@ -48,7 +48,8 @@ export const SimpleWalletProvider = ({ children }) => {
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const apiEndpoint = `${API_URL}/api/users/${normalizedAddress}`;
+        // Skip NFT checks for faster credits fetching - NFT checks happen separately
+        const apiEndpoint = `${API_URL}/api/users/${normalizedAddress}?skipNFTs=true`;
         console.log(`🔄 Attempt ${attempt}/${retries}: Fetching credits from:`, apiEndpoint);
         logger.debug('Fetching credits from backend', { walletAddress: normalizedAddress, attempt, retries, apiUrl: API_URL });
         const response = await fetch(apiEndpoint, {
@@ -56,8 +57,8 @@ export const SimpleWalletProvider = ({ children }) => {
           headers: {
             'Content-Type': 'application/json',
           },
-          // Reduced timeout for faster failure
-          signal: AbortSignal.timeout(5000) // Reduced from 15s to 5s
+          // Increased timeout since backend might be slow
+          signal: AbortSignal.timeout(15000) // 15 seconds - backend NFT checks can be slow
         });
         
         if (response.ok) {
