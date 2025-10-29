@@ -232,15 +232,33 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       });
       
       console.log('✅ Solana transaction sent:', result);
-      console.log(`📋 Transaction signature: ${result.signature}`);
       
-      // Return the signature string
-      if (typeof result.signature === 'string') {
-        return result.signature;
-      } else if (result.signature?.toString) {
-        return result.signature.toString();
+      // Extract signature - handle different Phantom wallet response formats
+      let signature = null;
+      
+      if (result) {
+        // Try different possible signature locations
+        if (typeof result.signature === 'string') {
+          signature = result.signature;
+        } else if (result.signature && typeof result.signature.toString === 'function') {
+          signature = result.signature.toString();
+        } else if (result.pubkey && typeof result.pubkey.toString === 'function') {
+          // Some versions might return pubkey instead
+          signature = result.pubkey.toString();
+        } else if (result.value && typeof result.value === 'string') {
+          signature = result.value;
+        } else if (typeof result === 'string') {
+          // Result itself might be the signature
+          signature = result;
+        }
+      }
+      
+      if (signature) {
+        console.log(`📋 Transaction signature: ${signature}`);
+        return signature;
       } else {
-        throw new Error('Invalid transaction result: no signature found');
+        console.error('⚠️ Could not extract signature from result:', result);
+        throw new Error('Invalid transaction result: no signature found in response');
       }
       
     } catch (error) {
@@ -313,7 +331,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       let networksWithUSDC = [];
 
       // Check current network first
-      const { chainId: currentChainId } = await getCurrentNetwork();
+      const currentNetworkInfo = await getCurrentNetwork();
+      const currentChainId = currentNetworkInfo?.chainId || null;
       
       for (const network of networks) {
         try {
@@ -369,8 +388,15 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
 
   // Get RPC URL for different networks
   const getRPCUrl = (chainId) => {
+    if (!chainId) {
+      return 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY';
+    }
+    
     const rpcUrls = {
       1: import.meta.env.VITE_ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+      137: import.meta.env.VITE_POLYGON_RPC_URL || 'https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+      42161: import.meta.env.VITE_ARBITRUM_RPC_URL || 'https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
+      10: import.meta.env.VITE_OPTIMISM_RPC_URL || 'https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
       8453: import.meta.env.VITE_BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
     };
     return rpcUrls[chainId] || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY';
@@ -688,7 +714,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         
         try {
           // Get current network info
-          const { chainId, network } = await getCurrentNetwork();
+          const networkInfo = await getCurrentNetwork();
+          const chainId = networkInfo?.chainId;
+          const network = networkInfo?.network;
           
           if (!chainId || !network) {
             throw new Error('Unable to detect current network. Please switch to a supported network.');
@@ -744,8 +772,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           // Convert amount to USDC units (6 decimals)
           const amountWei = ethers.parseUnits(amount, 6);
           
-          const currentChainId = await getCurrentNetwork();
-          const paymentAddress = getPaymentWallet(currentChainId, 'evm');
+          // Use chainId from above (already fetched)
+          const paymentAddress = getPaymentWallet(chainId, 'evm');
           console.log(`📤 Building USDC transaction to send ${amount} USDC to ${paymentAddress}...`);
           
           // Build the transaction data
@@ -876,7 +904,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     setError('');
     
     // Get current network to pass to backend
-    const { chainId } = await getCurrentNetwork();
+    const networkInfo3 = await getCurrentNetwork();
+    const chainId = networkInfo3?.chainId || null;
     
     // Check once for any USDC transfer to payment wallet
     try {
