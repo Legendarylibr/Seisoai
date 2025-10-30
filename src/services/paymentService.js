@@ -374,11 +374,11 @@ export const calculateCredits = (tokenSymbol, amount, chainId, walletType = 'evm
     throw new Error(`Token ${tokenSymbol} not supported on chain ${chainId}`);
   }
   
-  // Apply dynamic pricing based on NFT ownership
-  // NFT holders: $0.08 per credit (12.5 credits per USDC), Non-holders: $0.15 per credit (6.67 credits per USDC)
-  // 1 USDC = 12.5 credits for NFT holders, 1 USDC = 6.67 credits for non-holders
+  // Standard pricing for all users
+  // $0.15 per credit (6.67 credits per USDC)
+  // 1 USDC = 6.67 credits
   const baseCreditRate = tokenConfig.creditRate;
-  const pricingMultiplier = isNFTHolder ? 12.5 : 6.67; // NFT holders get 12.5 credits per USDC, non-holders get 6.67
+  const pricingMultiplier = 6.67; // Standard rate: 6.67 credits per USDC
   const adjustedCreditRate = baseCreditRate * pricingMultiplier;
   
   return Math.floor(amount * adjustedCreditRate);

@@ -1068,6 +1068,25 @@ app.get('/api/users/:walletAddress', async (req, res) => {
       return res.status(500).json({ success: false, error: 'User not found' });
     }
     
+    // Ensure totalCreditsEarned field exists - fix legacy documents
+    if (latestUser.totalCreditsEarned == null) {
+      logger.warn('User missing totalCreditsEarned field, initializing', {
+        walletAddress: normalizedAddress,
+        credits: latestUser.credits
+      });
+      // Initialize based on existing credits (if they have credits, they were earned)
+      latestUser.totalCreditsEarned = latestUser.credits || 0;
+      // Also ensure totalCreditsSpent exists
+      if (latestUser.totalCreditsSpent == null) {
+        latestUser.totalCreditsSpent = 0;
+      }
+      await latestUser.save();
+      logger.info('Fixed missing totalCreditsEarned field', {
+        walletAddress: normalizedAddress,
+        totalCreditsEarned: latestUser.totalCreditsEarned
+      });
+    }
+    
     // Update isNFTHolder based on latest data
     isNFTHolder = latestUser.nftCollections && latestUser.nftCollections.length > 0;
     
@@ -1114,8 +1133,8 @@ app.get('/api/users/:walletAddress', async (req, res) => {
         lastActive: latestUser.lastActive || new Date(),
         isNFTHolder: isNFTHolder,
         pricing: {
-          costPerCredit: isNFTHolder ? 0.08 : 0.15,
-          creditsPerUSDC: isNFTHolder ? 12.5 : 6.67
+          costPerCredit: 0.15,
+          creditsPerUSDC: 6.67
         }
       }
     });
@@ -1151,8 +1170,8 @@ app.post('/api/nft/check-credits', async (req, res) => {
       logger.warn('Failed to check NFT status for credits', { error: nftError.message });
     }
     
-    // Calculate credits based on NFT holder status
-    const baseCredits = isNFTHolder ? 10 : 0; // NFT holders get 10 free credits
+    // Base credits (no NFT holder bonus)
+    const baseCredits = 0;
     
     res.json({
       success: true,
@@ -1161,8 +1180,8 @@ app.post('/api/nft/check-credits', async (req, res) => {
       totalCreditsSpent: 0,
       isNFTHolder: isNFTHolder,
       pricing: {
-        costPerCredit: isNFTHolder ? 0.08 : 0.15,
-        creditsPerUSDC: isNFTHolder ? 12.5 : 6.67
+        costPerCredit: 0.15,
+        creditsPerUSDC: 6.67
       }
     });
   } catch (error) {
@@ -1848,9 +1867,8 @@ app.post('/api/payment/check-payment', async (req, res) => {
         });
       }
       
-      // Calculate credits based on NFT holder status
-      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-      const creditsPerUSDC = isNFTHolder ? 12.5 : 6.67; // NFT holders: $0.08/credit, Non-holders: $0.15/credit
+      // Calculate credits (standard pricing for all users)
+      const creditsPerUSDC = 6.67; // $0.15/credit
       const creditsToAdd = Math.floor(parseFloat(payment.amount) * creditsPerUSDC);
       
       console.log(`[CREDIT] Adding ${creditsToAdd} credits to user ${senderAddress}`);
@@ -1947,8 +1965,7 @@ app.post('/api/payments/credit', async (req, res) => {
     }
 
     // Credit immediately based on signature (no verification)
-    const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-    const creditsPerUSDC = isNFTHolder ? 12.5 : 6.67; // NFT holders: $0.08/credit, Non-holders: $0.15/credit
+    const creditsPerUSDC = 6.67; // $0.15/credit
     const creditsToAdd = Math.floor(parseFloat(amount) * creditsPerUSDC);
     
     console.log('💰 [PAYMENT CREDIT] Calculating credits', {
@@ -2229,8 +2246,8 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
       logger.warn('Error checking NFT holdings for Stripe payment:', error);
     }
 
-    // Apply NFT discount if applicable
-    const finalCredits = isNFTHolder ? Math.floor(credits * 1.2) : credits; // 20% bonus for NFT holders
+    // Use credits as-is (no NFT bonus)
+    const finalCredits = credits;
 
     // Update user credits
     user.credits += finalCredits;
@@ -2361,9 +2378,8 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
           });
         }
         
-        // Calculate credits based on NFT holder status
-        const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-        const creditsPerUSDC = isNFTHolder ? 12.5 : 6.67; // NFT holders: $0.08/credit, Non-holders: $0.15/credit
+        // Calculate credits (standard pricing for all users)
+        const creditsPerUSDC = 6.67; // $0.15/credit
         const creditsToAdd = Math.floor(parseFloat(quickPayment.amount) * creditsPerUSDC);
         
         // Add credits instantly
@@ -2458,9 +2474,8 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         });
       }
       
-      // Calculate credits based on NFT holder status
-      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-      const creditsPerUSDC = isNFTHolder ? 12.5 : 6.67; // NFT holders: $0.08/credit, Non-holders: $0.15/credit
+      // Calculate credits (standard pricing for all users)
+      const creditsPerUSDC = 6.67; // $0.15/credit
       const creditsToAdd = Math.floor(parseFloat(quickPayment.amount) * creditsPerUSDC);
       
       // Add credits instantly
