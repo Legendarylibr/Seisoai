@@ -44,6 +44,19 @@ const ImageOutput = () => {
     setIsDownloading(true);
     
     try {
+      const getNextSeisoFilename = () => {
+        try {
+          const key = 'seiso_download_index';
+          const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+          const next = current + 1;
+          localStorage.setItem(key, String(next));
+          return `seiso${next}.png`;
+        } catch (_) {
+          return `seiso${Date.now()}.png`;
+        }
+      };
+      const filename = getNextSeisoFilename();
+
       // Fetch the image as a blob to handle CORS issues
       const response = await fetch(generatedImage);
       const blob = await response.blob();
@@ -58,7 +71,7 @@ const ImageOutput = () => {
         // iOS Safari requires opening in new tab for download
         const link = document.createElement('a');
         link.href = blobUrl;
-        link.download = `ai-generated-${Date.now()}.png`;
+        link.download = filename;
         // Add to DOM temporarily (required for iOS)
         link.style.display = 'none';
         document.body.appendChild(link);
@@ -80,7 +93,7 @@ const ImageOutput = () => {
         // Standard download for other browsers
         const link = document.createElement('a');
         link.href = blobUrl;
-        link.download = `ai-generated-${Date.now()}.png`;
+        link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -91,7 +104,15 @@ const ImageOutput = () => {
       // Fallback to opening image in new tab for iOS
       const link = document.createElement('a');
       link.href = generatedImage;
-      link.download = `ai-generated-${Date.now()}.png`;
+      try {
+        const key = 'seiso_download_index';
+        const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+        const next = current + 1;
+        localStorage.setItem(key, String(next));
+        link.download = `seiso${next}.png`;
+      } catch (_) {
+        link.download = `seiso${Date.now()}.png`;
+      }
       link.target = '_blank';
       document.body.appendChild(link);
       link.click();
