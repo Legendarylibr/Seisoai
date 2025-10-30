@@ -329,6 +329,72 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath));
 
+// Proxy Veo3 Fast Image-to-Video to bypass browser CORS
+const FAL_API_KEY = process.env.FAL_API_KEY || process.env.VITE_FAL_API_KEY;
+
+app.post('/api/veo3/submit', async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+    const input = req.body?.input || req.body;
+    const response = await fetch('https://queue.fal.run/fal-ai/veo3/fast/image-to-video', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ input })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json({ success: false, ...data });
+    }
+    res.json({ success: true, ...data });
+  } catch (error) {
+    logger.error('Veo3 submit proxy error', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/veo3/status/:requestId', async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+    const { requestId } = req.params;
+    const url = `https://queue.fal.run/fal-ai/veo3/fast/image-to-video/requests/${requestId}/status`;
+    const response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json({ success: false, ...data });
+    }
+    res.json({ success: true, ...data });
+  } catch (error) {
+    logger.error('Veo3 status proxy error', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/veo3/result/:requestId', async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+    const { requestId } = req.params;
+    const url = `https://queue.fal.run/fal-ai/veo3/fast/image-to-video/requests/${requestId}/result`;
+    const response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json({ success: false, ...data });
+    }
+    res.json({ success: true, ...data });
+  } catch (error) {
+    logger.error('Veo3 result proxy error', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Validate required environment variables
 const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'SESSION_SECRET'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);

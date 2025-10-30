@@ -50,15 +50,14 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
 
     console.log('🎬 Generating video with Veo 3 Fast Image-to-Video:', { prompt, hasImage: !!input.image_url, aspect_ratio: input.aspect_ratio, duration: input.duration });
 
-    // Submit to queue API
-    const response = await fetch('https://queue.fal.run/fal-ai/veo3/fast/image-to-video', {
+    // Submit via backend proxy to avoid CORS
+    const backendBase = import.meta.env.VITE_BACKEND_URL || '';
+    const response = await fetch(`${backendBase}/api/veo3/submit`, {
       method: 'POST',
       headers: {
-        'Authorization': `Key ${FAL_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      // Some fal endpoints validate top-level fields; include both to be safe
-      body: JSON.stringify({ input, ...input })
+      body: JSON.stringify({ input })
     });
 
     if (!response.ok) {
@@ -82,11 +81,8 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
     while (attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
       
-      const statusResponse = await fetch(`https://queue.fal.run/fal-ai/veo3/fast/image-to-video/requests/${request_id}/status`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Key ${FAL_API_KEY}`,
-        }
+      const statusResponse = await fetch(`${backendBase}/api/veo3/status/${request_id}`, {
+        method: 'GET'
       });
 
       const status = await statusResponse.json();
@@ -94,11 +90,8 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
 
       if (status.status === 'COMPLETED') {
         // Get the result
-        const resultResponse = await fetch(`https://queue.fal.run/fal-ai/veo3/fast/image-to-video/requests/${request_id}/result`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Key ${FAL_API_KEY}`,
-          }
+        const resultResponse = await fetch(`${backendBase}/api/veo3/result/${request_id}`, {
+          method: 'GET'
         });
 
         const result = await resultResponse.json();
