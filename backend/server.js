@@ -998,10 +998,15 @@ app.get('/api/users/:walletAddress', async (req, res) => {
           }
         }
         
-        // Update user's NFT collections in database
+        // Update user's NFT collections in database (atomically to preserve credits)
         if (ownedCollections.length > 0) {
+          await User.findOneAndUpdate(
+            { walletAddress: user.walletAddress },
+            { $set: { nftCollections: ownedCollections } },
+            { new: true }
+          );
+          // Update local user object for response
           user.nftCollections = ownedCollections;
-          await user.save();
           isNFTHolder = true;
           logger.info('✅ Updated NFT collections for user', { 
             walletAddress, 
@@ -1010,10 +1015,14 @@ app.get('/api/users/:walletAddress', async (req, res) => {
           });
         } else {
           logger.info('No NFTs found for user', { walletAddress, refreshNFTs });
-          // Clear old NFT data if refresh was forced
+          // Clear old NFT data if refresh was forced (atomically)
           if (refreshNFTs === 'true') {
+            await User.findOneAndUpdate(
+              { walletAddress: user.walletAddress },
+              { $set: { nftCollections: [] } },
+              { new: true }
+            );
             user.nftCollections = [];
-            await user.save();
           }
         }
       } catch (nftError) {

@@ -446,9 +446,9 @@ export const SimpleWalletProvider = ({ children }) => {
       logger.info('Wallet connected successfully', { address, walletType });
 
       // Start credits and NFT fetch in parallel (non-blocking)
-      // But ensure credits are fetched immediately for display
+      // But ensure credits are fetched immediately for display (skip cache for fresh data)
       Promise.all([
-        fetchCredits(address).then(credits => {
+        fetchCredits(address, 3, true).then(credits => {
           console.log('✅ Credits fetched successfully:', credits);
           logger.info('Credits fetch completed', { credits, address });
           return credits;
