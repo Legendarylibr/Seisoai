@@ -3,13 +3,14 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateVideo } from '../services/veo3Service';
 import { Video, Upload, Play, Loader } from 'lucide-react';
 import ReferenceImageInput from './ReferenceImageInput';
+import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 
 const VideoGeneration = ({ onShowTokenPayment }) => {
   // onShowStripePayment prop removed - Stripe disabled
   const { credits: walletCredits, address } = useSimpleWallet();
   const credits = walletCredits || 0;
   const [prompt, setPrompt] = useState('');
-  const [image, setImage] = useState(null);
+  const { controlNetImage } = useImageGenerator();
   const [aspectRatio, setAspectRatio] = useState('auto');
   const [duration, setDuration] = useState('8s');
   const [generatedVideo, setGeneratedVideo] = useState(null);
@@ -18,10 +19,7 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
   const [progress, setProgress] = useState(0);
 
 
-  const handleImageChange = (selectedImage) => {
-    setImage(selectedImage);
-    setError('');
-  };
+  const image = controlNetImage;
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -108,7 +106,7 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
           <Upload className="w-5 h-5 text-purple-400" />
           Reference Image (Optional)
         </h3>
-        <ReferenceImageInput onImageChange={handleImageChange} />
+        <ReferenceImageInput />
         {image && (
           <div className="mt-4">
             <img src={image} alt="Selected" className="max-w-full h-auto rounded-lg max-h-96" />
