@@ -193,14 +193,25 @@ async function main() {
           });
           console.log('✅ Connected to MongoDB');
         }
-        await User.findOneAndUpdate(
-          { walletAddress: address },
+        // Ensure address is normalized (lowercase for EVM addresses)
+        const normalizedAddr = address.toLowerCase();
+        const result = await User.findOneAndUpdate(
+          { walletAddress: normalizedAddr },
           {
-            $setOnInsert: { walletAddress: address },
+            $setOnInsert: { walletAddress: normalizedAddr },
             $inc: { credits: creditsToAdd, totalCreditsEarned: creditsToAdd },
           },
-          { upsert: true }
+          { upsert: true, new: true }
         );
+        
+        // Verify the update worked
+        const verifyUser = await User.findOne({ walletAddress: normalizedAddr });
+        if (verifyUser) {
+          console.log(`✓ Verified: ${normalizedAddr} now has ${verifyUser.credits} credits (earned: ${verifyUser.totalCreditsEarned})`);
+        } else {
+          console.error(`✗ ERROR: Could not verify update for ${normalizedAddr}`);
+        }
+        
         usersUpdated += 1;
       }
     }
@@ -266,6 +277,15 @@ async function main() {
       user.credits = (user.credits || 0) + creditsToAdd;
       user.totalCreditsEarned = (user.totalCreditsEarned || 0) + creditsToAdd;
       await user.save();
+      
+      // Verify the save worked
+      const verifyUser = await User.findOne({ walletAddress: user.walletAddress });
+      if (verifyUser) {
+        console.log(`✓ Verified: ${user.walletAddress} now has ${verifyUser.credits} credits (earned: ${verifyUser.totalCreditsEarned})`);
+      } else {
+        console.error(`✗ ERROR: Could not verify save for ${user.walletAddress}`);
+      }
+      
       usersUpdated += 1;
     }
   }

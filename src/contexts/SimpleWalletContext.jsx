@@ -51,6 +51,16 @@ export const SimpleWalletProvider = ({ children }) => {
     } else {
       // Clear cache when forcing refresh
       sessionStorage.removeItem(cacheKey);
+      // Also clear all credit caches for this wallet to be thorough
+      try {
+        Object.keys(sessionStorage).forEach(key => {
+          if (key.startsWith(`credits_${normalizedAddress}`) || key.includes(normalizedAddress)) {
+            sessionStorage.removeItem(key);
+          }
+        });
+      } catch (e) {
+        // Ignore errors during cache clearing
+      }
       console.log('🔄 Cache cleared, fetching fresh credits');
     }
 

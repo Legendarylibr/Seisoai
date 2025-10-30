@@ -1053,11 +1053,15 @@ app.get('/api/users/:walletAddress', async (req, res) => {
     
     // Always refetch user from database to ensure we have the latest credits
     // This is critical to ensure granted credits are always returned correctly
-    // Use user.walletAddress which is already normalized (handles both EVM and Solana correctly)
-    const latestUser = await User.findOne({ walletAddress: user.walletAddress });
+    // Normalize the address to ensure we query with the correct case (lowercase for EVM)
+    const isSolanaAddress = !walletAddress.startsWith('0x');
+    const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    
+    const latestUser = await User.findOne({ walletAddress: normalizedAddress });
     if (!latestUser) {
       logger.error('User not found after refetch', { 
         walletAddress, 
+        normalizedAddress,
         userWalletAddress: user.walletAddress,
         warning: 'User should exist after getOrCreateUser'
       });
@@ -1067,20 +1071,37 @@ app.get('/api/users/:walletAddress', async (req, res) => {
     // Update isNFTHolder based on latest data
     isNFTHolder = latestUser.nftCollections && latestUser.nftCollections.length > 0;
     
+    // Explicitly check for null/undefined and default to 0, but preserve actual 0 values
+    const userCredits = latestUser.credits != null ? latestUser.credits : 0;
+    const userTotalCreditsEarned = latestUser.totalCreditsEarned != null ? latestUser.totalCreditsEarned : 0;
+    const userTotalCreditsSpent = latestUser.totalCreditsSpent != null ? latestUser.totalCreditsSpent : 0;
+    
     logger.debug('Returning user data', { 
-      walletAddress, 
-      credits: latestUser.credits,
-      totalCreditsEarned: latestUser.totalCreditsEarned,
+      walletAddress,
+      normalizedAddress,
+      credits: userCredits,
+      totalCreditsEarned: userTotalCreditsEarned,
+      rawCredits: latestUser.credits,
+      rawTotalCreditsEarned: latestUser.totalCreditsEarned,
       isNFTHolder 
     });
+    
+    // Log if totalCreditsEarned seems wrong
+    if (userTotalCreditsEarned === 0 && userCredits > 0) {
+      logger.warn('totalCreditsEarned is 0 but credits > 0 - this might indicate a data issue', {
+        walletAddress: normalizedAddress,
+        credits: userCredits,
+        totalCreditsEarned: userTotalCreditsEarned
+      });
+    }
     
     res.json({
       success: true,
       user: {
         walletAddress: latestUser.walletAddress,
-        credits: latestUser.credits || 0,
-        totalCreditsEarned: latestUser.totalCreditsEarned || 0,
-        totalCreditsSpent: latestUser.totalCreditsSpent || 0,
+        credits: userCredits,
+        totalCreditsEarned: userTotalCreditsEarned,
+        totalCreditsSpent: userTotalCreditsSpent,
         nftCollections: latestUser.nftCollections || [],
         paymentHistory: latestUser.paymentHistory || [],
         generationHistory: latestUser.generationHistory || [],
