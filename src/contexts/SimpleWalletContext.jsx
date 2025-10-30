@@ -18,7 +18,7 @@ export const SimpleWalletProvider = ({ children }) => {
   const [walletType, setWalletType] = useState(null); // 'evm' or 'solana'
 
   // Fetch credits from backend with retry logic and caching
-  const fetchCredits = useCallback(async (walletAddress, retries = 3) => {
+  const fetchCredits = useCallback(async (walletAddress, retries = 3, skipCache = false) => {
     if (!walletAddress) {
       console.warn('⚠️ No wallet address provided to fetchCredits');
       setCredits(0);
@@ -29,21 +29,27 @@ export const SimpleWalletProvider = ({ children }) => {
     const normalizedAddress = walletAddress.toLowerCase();
     console.log('📊 Fetching credits for:', normalizedAddress, 'API URL:', API_URL);
     
-    // Check cache first (1 minute cache for credits)
+    // Check cache first (1 minute cache for credits) - skip if skipCache is true
     const cacheKey = `credits_${normalizedAddress}`;
-    const cached = sessionStorage.getItem(cacheKey);
-    if (cached) {
-      try {
-        const { data, timestamp } = JSON.parse(cached);
-        if (Date.now() - timestamp < 60000) { // 1 minute
-          logger.debug('Using cached credits', { walletAddress: normalizedAddress, credits: data.credits });
-          console.log('💾 Using cached credits:', data.credits);
-          setCredits(data.credits);
-          return data.credits;
+    if (!skipCache) {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const { data, timestamp } = JSON.parse(cached);
+          if (Date.now() - timestamp < 60000) { // 1 minute
+            logger.debug('Using cached credits', { walletAddress: normalizedAddress, credits: data.credits });
+            console.log('💾 Using cached credits:', data.credits);
+            setCredits(data.credits);
+            return data.credits;
+          }
+        } catch (cacheError) {
+          console.warn('Failed to parse cached credits', cacheError);
         }
-      } catch (cacheError) {
-        console.warn('Failed to parse cached credits', cacheError);
       }
+    } else {
+      // Clear cache when forcing refresh
+      sessionStorage.removeItem(cacheKey);
+      console.log('🔄 Cache cleared, fetching fresh credits');
     }
 
     for (let attempt = 1; attempt <= retries; attempt++) {
@@ -507,10 +513,10 @@ export const SimpleWalletProvider = ({ children }) => {
     return () => clearInterval(refreshInterval);
   }, [isConnected, address]); // Removed fetchCredits from dependencies
 
-  // Function to refresh credits without full reconnection
+  // Function to refresh credits without full reconnection (bypasses cache)
   const refreshCredits = async () => {
     if (address) {
-      await fetchCredits(address);
+      await fetchCredits(address, 3, true); // Skip cache to force fresh data
     }
   };
 

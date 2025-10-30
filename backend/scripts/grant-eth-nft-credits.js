@@ -1,10 +1,17 @@
 #!/usr/bin/env node
 /*
-  One-off script: Grant 2 credits per ETH NFT (counts multiples) to all users.
-  - Filters NFTs by chainId === '1' (Ethereum mainnet)
-  - Adds 2 credits per tokenId across all ETH collections per user
+  One-off script: Grant credits to users.
+  Modes:
+  1) NFT mode (default): 2 credits per ETH NFT (counts multiples)
+     - Filters NFTs by chainId === '1' (Ethereum mainnet)
+  2) Address list mode: grant N credits per provided quantity
+     - Use --addresses <file> (CSV or plain text)
+     - Default per-quantity credits: 3 (override with --per <number>)
+
+  Common:
   - Supports --dry-run to preview without writing
-  - Uses MONGODB_URI from environment (load ../backend.env automatically if present)
+  - Supports --json for machine-readable output
+  - Uses MONGODB_URI from environment (loads ../backend.env if present)
 */
 
 /* eslint-disable no-console */
@@ -53,6 +60,29 @@ if (!MONGODB_URI) {
 }
 
 const isDryRun = process.argv.includes('--dry-run');
+const outputJson = process.argv.includes('--json');
+
+// Address-list mode flags
+function readFlagValue(longName, shortName) {
+  const argsLocal = process.argv.slice(2);
+  const eq = argsLocal.find(a => a.startsWith(`--${longName}=`));
+  if (eq) return eq.slice(longName.length + 3);
+  const idx = argsLocal.indexOf(`--${longName}`);
+  if (idx !== -1 && argsLocal[idx + 1]) return argsLocal[idx + 1];
+  if (shortName) {
+    const sIdx = argsLocal.indexOf(shortName);
+    if (sIdx !== -1 && argsLocal[sIdx + 1]) return argsLocal[sIdx + 1];
+  }
+  return null;
+}
+
+const addressesFile = readFlagValue('addresses', '-a');
+const perQuantityStr = readFlagValue('per', '-p');
+const perQuantityCredits = perQuantityStr ? Number(perQuantityStr) : 3;
+if (Number.isNaN(perQuantityCredits)) {
+  console.error('❌ Invalid --per value. It must be a number.');
+  process.exit(1);
+}
 
 // Minimal User schema for this script
 const userSchema = new mongoose.Schema({
@@ -78,17 +108,132 @@ function countEthTokens(nftCollections) {
     .reduce((sum, c) => sum + (Array.isArray(c?.tokenIds) ? c.tokenIds.length : 0), 0);
 }
 
+function parseAddressList(filePath) {
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const lines = raw.split(/\r?\n/);
+  const entries = [];
+  const stripQuotes = (s) => {
+    if (s == null) return s;
+    const t = s.trim();
+    if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith('\'') && t.endsWith('\''))) {
+      return t.slice(1, -1);
+    }
+    return t;
+  };
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('#')) continue;
+
+    // Support CSV: address,quantity and whitespace-separated formats
+    let address = null;
+    let quantity = 1;
+
+    if (trimmed.includes(',')) {
+      const parts = trimmed.split(',');
+      const a = stripQuotes(parts[0]);
+      const q = stripQuotes(parts[1]);
+      // Silently skip header rows like HolderAddress,Quantity,...
+      if (/holderaddress/i.test(a)) continue;
+      address = a;
+      if (q !== undefined && q !== '') {
+        const qNum = Number(q);
+        if (!Number.isNaN(qNum) && qNum > 0) quantity = qNum;
+      }
+    } else {
+      const parts = trimmed.split(/\s+/);
+      address = stripQuotes(parts[0]);
+      if (parts[1]) {
+        const qNum = Number(stripQuotes(parts[1]));
+        if (!Number.isNaN(qNum) && qNum > 0) quantity = qNum;
+      }
+    }
+
+    if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      console.warn(`⚠️ Skipping invalid address line: ${trimmed}`);
+      continue;
+    }
+    entries.push({ address: address.toLowerCase(), quantity });
+  }
+  return entries;
+}
+
 async function main() {
   const start = Date.now();
   console.log(`🚀 Starting grant (dryRun=${isDryRun})`);
 
+  // Address list mode: grant per provided quantities
+  if (addressesFile) {
+    if (!fs.existsSync(addressesFile)) {
+      console.error(`❌ Addresses file not found: ${addressesFile}`);
+      process.exit(1);
+    }
+
+    const entries = parseAddressList(addressesFile);
+    let usersUpdated = 0;
+    let creditsTotal = 0;
+    const jsonRows = [];
+
+    for (const { address, quantity } of entries) {
+      const creditsToAdd = perQuantityCredits * quantity;
+      creditsTotal += creditsToAdd;
+
+      if (outputJson) {
+        jsonRows.push({ walletAddress: address, quantity, creditsToAdd });
+      } else {
+        console.log(`→ ${address} | qty=${quantity} | per=${perQuantityCredits} | add=${creditsToAdd}`);
+      }
+
+      if (!isDryRun) {
+        // Connect lazily only when we need to write
+        if (mongoose.connection.readyState === 0) {
+          await mongoose.connect(MONGODB_URI, {
+            maxPoolSize: 5,
+            serverSelectionTimeoutMS: 8000,
+          });
+          console.log('✅ Connected to MongoDB');
+        }
+        await User.findOneAndUpdate(
+          { walletAddress: address },
+          {
+            $setOnInsert: { walletAddress: address },
+            $inc: { credits: creditsToAdd, totalCreditsEarned: creditsToAdd },
+          },
+          { upsert: true }
+        );
+        usersUpdated += 1;
+      }
+    }
+
+    if (outputJson) {
+      console.log(JSON.stringify({
+        mode: 'addresses',
+        dryRun: isDryRun,
+        usersUpdated,
+        totalCreditsToAdd: creditsTotal,
+        perQuantityCredits,
+        entries: jsonRows,
+        tookSeconds: (Date.now() - start) / 1000,
+      }, null, 2));
+    } else {
+      console.log('—'.repeat(60));
+      console.log(`✅ Users updated: ${usersUpdated}${isDryRun ? ' (dry-run)' : ''}`);
+      console.log(`➕ Credits to add total: ${creditsTotal}`);
+      console.log(`⏱️ Took ${(Date.now() - start) / 1000}s`);
+    }
+
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+    }
+    process.exit(0);
+  }
+
+  // NFT mode: Find users that have at least one ETH NFT
   await mongoose.connect(MONGODB_URI, {
     maxPoolSize: 5,
     serverSelectionTimeoutMS: 8000,
   });
   console.log('✅ Connected to MongoDB');
-
-  // Find users that have at least one ETH NFT
   const cursor = User.find({ 'nftCollections.chainId': '1' })
     .select('walletAddress credits totalCreditsEarned nftCollections')
     .cursor();
@@ -96,6 +241,7 @@ async function main() {
   let usersSeen = 0;
   let usersUpdated = 0;
   let creditsTotal = 0;
+  const jsonRows = [];
 
   for await (const user of cursor) {
     usersSeen += 1;
@@ -105,7 +251,16 @@ async function main() {
     const creditsToAdd = 2 * tokenCount;
     creditsTotal += creditsToAdd;
 
-    console.log(`→ ${user.walletAddress} | tokens=${tokenCount} | add=${creditsToAdd} | prev=${user.credits}`);
+    if (outputJson) {
+      jsonRows.push({
+        walletAddress: user.walletAddress,
+        tokenCount,
+        creditsToAdd,
+        previousCredits: user.credits || 0,
+      });
+    } else {
+      console.log(`→ ${user.walletAddress} | tokens=${tokenCount} | add=${creditsToAdd} | prev=${user.credits}`);
+    }
 
     if (!isDryRun) {
       user.credits = (user.credits || 0) + creditsToAdd;
@@ -115,11 +270,22 @@ async function main() {
     }
   }
 
-  console.log('—'.repeat(60));
-  console.log(`👥 Users scanned: ${usersSeen}`);
-  console.log(`✅ Users updated: ${usersUpdated}${isDryRun ? ' (dry-run)' : ''}`);
-  console.log(`➕ Credits to add total: ${creditsTotal}`);
-  console.log(`⏱️ Took ${(Date.now() - start) / 1000}s`);
+  if (outputJson) {
+    console.log(JSON.stringify({
+      dryRun: isDryRun,
+      usersScanned: usersSeen,
+      usersUpdated: usersUpdated,
+      totalCreditsToAdd: creditsTotal,
+      holders: jsonRows,
+      tookSeconds: (Date.now() - start) / 1000,
+    }, null, 2));
+  } else {
+    console.log('—'.repeat(60));
+    console.log(`👥 Users scanned: ${usersSeen}`);
+    console.log(`✅ Users updated: ${usersUpdated}${isDryRun ? ' (dry-run)' : ''}`);
+    console.log(`➕ Credits to add total: ${creditsTotal}`);
+    console.log(`⏱️ Took ${(Date.now() - start) / 1000}s`);
+  }
 
   await mongoose.disconnect();
   process.exit(0);
