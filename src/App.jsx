@@ -139,7 +139,7 @@ function WalletPrompt({ onConnect }) {
             Welcome to Seiso AI
           </h1>
           <p className="text-xl text-gray-300 mb-2">
-            Create and edit stunning AI-generated images
+            Create and edit high quality images with AI
           </p>
           <p className="text-gray-400">
             Choose how to get started
