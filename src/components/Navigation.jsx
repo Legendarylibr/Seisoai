@@ -55,9 +55,13 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
-              <Zap className="w-6 h-6 text-white" />
+            <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-10 h-10 rounded-xl object-cover" />
+            <div>
+              <h1 className="text-xl font-bold gradient-text">Seiso AI</h1>
             </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-10 h-10 rounded-xl object-cover" />
             <div>
               <h1 className="text-xl font-bold gradient-text">Seiso AI</h1>
             </div>
