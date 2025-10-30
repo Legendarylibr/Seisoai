@@ -11,11 +11,11 @@ import TokenPaymentModal from './components/TokenPaymentModal';
 import AuthGuard from './components/AuthGuard';
 import ImageGallery from './components/ImageGallery';
 // Batch and Templates removed from UI
-import Settings from './components/Settings';
+// Settings removed from UI
 // import LegalDisclaimer from './components/LegalDisclaimer'; // DISABLED - Legal/terms removed from main screen
 import GenerateButton from './components/GenerateButton';
 import VideoGeneration from './components/VideoGeneration';
-import { Grid, Settings as SettingsIcon2, Sparkles, Video, Wallet, ArrowRight, Image } from 'lucide-react';
+import { Grid, Sparkles, Video, Wallet, ArrowRight, Image } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
@@ -26,7 +26,7 @@ function App() {
     { id: 'generate', name: 'Generate', icon: Sparkles },
     { id: 'gallery', name: 'Gallery', icon: Grid },
     { id: 'video', name: 'Video', icon: Video },
-    { id: 'settings', name: 'Settings', icon: SettingsIcon2 }
+    // Settings tab removed
   ];
 
   return (
@@ -86,7 +86,7 @@ function AppContent({ activeTab, onShowTokenPayment }) {
         {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} />}
         {activeTab === 'gallery' && <GalleryTab />}
         {activeTab === 'video' && <VideoTab onShowTokenPayment={onShowTokenPayment} />}
-        {activeTab === 'settings' && <SettingsTab />}
+        {/* Settings route removed */}
       </AuthGuard>
     </>
   );
@@ -384,8 +384,6 @@ function VideoTab({ onShowTokenPayment }) {
 
 // TemplatesTab and BatchTab removed
 
-function SettingsTab() {
-  return <Settings />;
-}
+// SettingsTab removed
 
 export default App;
