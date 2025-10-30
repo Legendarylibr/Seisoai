@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateVideo } from '../services/veo3Service';
-import { Video, Upload, Play, Loader } from 'lucide-react';
+import { Video, Upload, Play, Loader, Download } from 'lucide-react';
 import ReferenceImageInput from './ReferenceImageInput';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 
@@ -20,6 +20,55 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
 
 
   const image = controlNetImage;
+
+  const handleDownloadVideo = async () => {
+    if (!generatedVideo) return;
+    try {
+      const getNextSeisoVideoFilename = () => {
+        try {
+          const key = 'seiso_download_index';
+          const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+          const next = current + 1;
+          localStorage.setItem(key, String(next));
+          return `seiso${next}.mp4`;
+        } catch (_) {
+          return `seiso${Date.now()}.mp4`;
+        }
+      };
+      const filename = getNextSeisoVideoFilename();
+
+      const response = await fetch(generatedVideo);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      if (isIOS) link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Video download failed:', error);
+      const link = document.createElement('a');
+      link.href = generatedVideo;
+      try {
+        const key = 'seiso_download_index';
+        const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+        const next = current + 1;
+        localStorage.setItem(key, String(next));
+        link.download = `seiso${next}.mp4`;
+      } catch (_) {
+        link.download = `seiso${Date.now()}.mp4`;
+      }
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -192,6 +241,12 @@ const VideoGeneration = ({ onShowTokenPayment }) => {
           >
             Your browser does not support the video tag.
           </video>
+          <div className="mt-4 flex justify-end">
+            <button onClick={handleDownloadVideo} className="btn-secondary flex items-center gap-2">
+              <Download className="w-4 h-4" />
+              Download
+            </button>
+          </div>
         </div>
       )}
 

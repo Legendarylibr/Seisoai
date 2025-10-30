@@ -165,6 +165,19 @@ const BatchProcessor = () => {
     for (let i = 0; i < batchResults.length; i++) {
       const result = batchResults[i];
       try {
+        const getNextSeisoFilename = () => {
+          try {
+            const key = 'seiso_download_index';
+            const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+            const next = current + 1;
+            localStorage.setItem(key, String(next));
+            return `seiso${next}.png`;
+          } catch (_) {
+            return `seiso${Date.now()}.png`;
+          }
+        };
+        const filename = getNextSeisoFilename();
+
         // Fetch the image as a blob to handle CORS issues
         const response = await fetch(result.imageUrl);
         const blob = await response.blob();
@@ -175,7 +188,7 @@ const BatchProcessor = () => {
         // Create download link
         const link = document.createElement('a');
         link.href = blobUrl;
-        link.download = `batch-${i + 1}-${Date.now()}.png`;
+        link.download = filename;
         document.body.appendChild(link);
         link.click();
         
@@ -190,7 +203,15 @@ const BatchProcessor = () => {
         // Fallback to direct link method
         const link = document.createElement('a');
         link.href = result.imageUrl;
-        link.download = `batch-${i + 1}-${Date.now()}.png`;
+        try {
+          const key = 'seiso_download_index';
+          const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+          const next = current + 1;
+          localStorage.setItem(key, String(next));
+          link.download = `seiso${next}.png`;
+        } catch (_) {
+          link.download = `seiso${Date.now()}.png`;
+        }
         link.target = '_blank';
         document.body.appendChild(link);
         link.click();
@@ -371,6 +392,19 @@ const BatchProcessor = () => {
                   <button
                     onClick={async () => {
                       try {
+                        const getNextSeisoFilename = () => {
+                          try {
+                            const key = 'seiso_download_index';
+                            const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+                            const next = current + 1;
+                            localStorage.setItem(key, String(next));
+                            return `seiso${next}.png`;
+                          } catch (_) {
+                            return `seiso${Date.now()}.png`;
+                          }
+                        };
+                        const filename = getNextSeisoFilename();
+
                         // Fetch the image as a blob to handle CORS issues
                         const response = await fetch(result.imageUrl);
                         const blob = await response.blob();
@@ -381,7 +415,7 @@ const BatchProcessor = () => {
                         // Create download link
                         const link = document.createElement('a');
                         link.href = blobUrl;
-                        link.download = `batch-${index + 1}-${Date.now()}.png`;
+                        link.download = filename;
                         document.body.appendChild(link);
                         link.click();
                         
@@ -393,7 +427,15 @@ const BatchProcessor = () => {
                         // Fallback to direct link method
                         const link = document.createElement('a');
                         link.href = result.imageUrl;
-                        link.download = `batch-${index + 1}-${Date.now()}.png`;
+                        try {
+                          const key = 'seiso_download_index';
+                          const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+                          const next = current + 1;
+                          localStorage.setItem(key, String(next));
+                          link.download = `seiso${next}.png`;
+                        } catch (_) {
+                          link.download = `seiso${Date.now()}.png`;
+                        }
                         link.target = '_blank';
                         document.body.appendChild(link);
                         link.click();
