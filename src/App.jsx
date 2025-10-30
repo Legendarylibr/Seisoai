@@ -288,6 +288,9 @@ function GenerateTab({ onShowTokenPayment }) {
                 <Image className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
                 <h2 className="text-base md:text-lg font-semibold text-white">Reference Image</h2>
               </div>
+              <p className="text-xs text-gray-400 mb-3">
+                0 images: text-to-image • 1 image: edit from reference • 2+ images: blend
+              </p>
               <div className="min-h-[200px] md:min-h-[250px]">
                 <ReferenceImageInput />
               </div>
