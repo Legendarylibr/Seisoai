@@ -10,7 +10,8 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 export const SimpleWalletProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [address, setAddress] = useState(null);
-  const [credits, setCredits] = useState(0);
+  const [credits, setCredits] = useState(0); // Current spendable balance
+  const [totalCreditsEarned, setTotalCreditsEarned] = useState(0); // Total rewarded amount
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isNFTHolder, setIsNFTHolder] = useState(false);
@@ -37,10 +38,11 @@ export const SimpleWalletProvider = ({ children }) => {
         try {
           const { data, timestamp } = JSON.parse(cached);
           if (Date.now() - timestamp < 60000) { // 1 minute
-            logger.debug('Using cached credits', { walletAddress: normalizedAddress, credits: data.credits });
-            console.log('💾 Using cached credits:', data.credits);
-            setCredits(data.credits);
-            return data.credits;
+            logger.debug('Using cached credits', { walletAddress: normalizedAddress, credits: data.credits, totalCreditsEarned: data.totalCreditsEarned });
+            console.log('💾 Using cached credits - Current:', data.credits, 'Rewarded:', data.totalCreditsEarned);
+            setCredits(data.credits || 0);
+            setTotalCreditsEarned(data.totalCreditsEarned || 0);
+            return data.credits || 0;
           }
         } catch (cacheError) {
           console.warn('Failed to parse cached credits', cacheError);
@@ -71,25 +73,36 @@ export const SimpleWalletProvider = ({ children }) => {
           const data = await response.json();
           logger.debug('Credits API response received', { data, walletAddress });
           
-          // Defensive parsing - handle different response formats
-          let credits = 0;
+          // Extract both credits (current balance) and totalCreditsEarned (rewarded amount)
+          let currentCredits = 0;
+          let rewardedAmount = 0;
+          
+          // Get current balance (for spending)
           if (data.success && data.user && typeof data.user.credits !== 'undefined') {
-            credits = Number(data.user.credits) || 0;
-            logger.info('Credits found in data.user.credits', { credits, walletAddress: normalizedAddress });
+            currentCredits = Number(data.user.credits) || 0;
           } else if (data.success && typeof data.credits !== 'undefined') {
-            credits = Number(data.credits) || 0;
-            logger.info('Credits found in data.credits', { credits, walletAddress: normalizedAddress });
+            currentCredits = Number(data.credits) || 0;
           } else if (data.user && typeof data.user.credits !== 'undefined') {
-            credits = Number(data.user.credits) || 0;
-            logger.info('Credits found in data.user.credits (no success flag)', { credits, walletAddress: normalizedAddress });
-          } else {
-            logger.warn('Credits not found in expected format', { data, walletAddress: normalizedAddress });
-            console.error('❌ Credits not found in response:', data);
-            credits = 0;
+            currentCredits = Number(data.user.credits) || 0;
           }
           
-          setCredits(credits);
-          console.log('✅ Credits loaded from backend:', credits, 'for wallet:', normalizedAddress);
+          // Get rewarded amount (totalCreditsEarned)
+          if (data.success && data.user && typeof data.user.totalCreditsEarned !== 'undefined') {
+            rewardedAmount = Number(data.user.totalCreditsEarned) || 0;
+            logger.info('Rewarded amount found in data.user.totalCreditsEarned', { rewardedAmount, walletAddress: normalizedAddress });
+          } else if (data.success && typeof data.totalCreditsEarned !== 'undefined') {
+            rewardedAmount = Number(data.totalCreditsEarned) || 0;
+            logger.info('Rewarded amount found in data.totalCreditsEarned', { rewardedAmount, walletAddress: normalizedAddress });
+          } else if (data.user && typeof data.user.totalCreditsEarned !== 'undefined') {
+            rewardedAmount = Number(data.user.totalCreditsEarned) || 0;
+            logger.info('Rewarded amount found in data.user.totalCreditsEarned (no success flag)', { rewardedAmount, walletAddress: normalizedAddress });
+          }
+          
+          // Use credits for spending (current balance), but track rewarded amount separately
+          setCredits(currentCredits);
+          setTotalCreditsEarned(rewardedAmount);
+          
+          console.log(`✅ Credits loaded - Current: ${currentCredits}, Rewarded: ${rewardedAmount}, for wallet: ${normalizedAddress}`);
           if (skipCache) {
             console.log('🔄 Fresh credits fetched (cache bypassed)');
           }
@@ -97,15 +110,15 @@ export const SimpleWalletProvider = ({ children }) => {
           // Cache the result
           try {
             sessionStorage.setItem(cacheKey, JSON.stringify({
-              data: { credits },
+              data: { credits: currentCredits, totalCreditsEarned: rewardedAmount },
               timestamp: Date.now()
             }));
           } catch (storageError) {
             logger.warn('Failed to cache credits', { error: storageError.message });
           }
           
-          logger.info('Credits loaded successfully', { credits, walletAddress: normalizedAddress });
-          return credits; // Return for testing/verification
+          logger.info('Credits loaded successfully', { credits: currentCredits, totalCreditsEarned: rewardedAmount, walletAddress: normalizedAddress });
+          return currentCredits; // Return current balance for testing/verification
         } else {
           const errorText = await response.text();
           console.error(`❌ Credits fetch failed (${response.status}):`, errorText);
@@ -478,6 +491,7 @@ export const SimpleWalletProvider = ({ children }) => {
     setIsConnected(false);
     setAddress(null);
     setCredits(0);
+    setTotalCreditsEarned(0);
     setError(null);
     setIsNFTHolder(false);
     setNftCollections([]);
@@ -531,7 +545,8 @@ export const SimpleWalletProvider = ({ children }) => {
   const value = {
     isConnected,
     address,
-    credits,
+    credits, // Current spendable balance
+    totalCreditsEarned, // Total rewarded amount
     isLoading,
     error,
     isNFTHolder,
