@@ -33,7 +33,20 @@ const mongoose = require('mongoose');
   }
 })();
 
-const MONGODB_URI = process.env.MONGODB_URI;
+// Parse CLI flags
+const args = process.argv.slice(2);
+const uriEq = args.find(a => a.startsWith('--uri='));
+let overrideUri = null;
+if (uriEq) {
+  overrideUri = uriEq.slice('--uri='.length);
+} else {
+  const uriIdx = args.indexOf('--uri');
+  if (uriIdx !== -1 && args[uriIdx + 1]) {
+    overrideUri = args[uriIdx + 1];
+  }
+}
+
+const MONGODB_URI = overrideUri || process.env.MONGODB_URI;
 if (!MONGODB_URI) {
   console.error('❌ MONGODB_URI is not set. Please set it in backend.env or your environment.');
   process.exit(1);
