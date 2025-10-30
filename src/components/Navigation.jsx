@@ -5,7 +5,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
   const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment }) => {
     // onShowStripePayment prop removed - Stripe disabled
-  const { isConnected, address, credits, totalCreditsEarned, disconnectWallet } = useSimpleWallet();
+  const { isConnected, address, credits, disconnectWallet } = useSimpleWallet();
   const [showCreditsDropdown, setShowCreditsDropdown] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const dropdownRef = useRef(null);
@@ -112,16 +112,9 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
                   <Coins className="w-4 h-4 text-purple-400" />
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-white">
-                      {credits} credits
-                    </span>
-                    {totalCreditsEarned > 0 && totalCreditsEarned !== credits && (
-                      <span className="text-xs text-green-400/80">
-                        {totalCreditsEarned} total rewarded
-                      </span>
-                    )}
-                  </div>
+                  <span className="text-sm font-medium text-white">
+                    {credits} credits
+                  </span>
                 </div>
                 
                 {/* Credits Dropdown */}

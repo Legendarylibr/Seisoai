@@ -576,8 +576,7 @@ export const SimpleWalletProvider = ({ children }) => {
   const value = {
     isConnected,
     address,
-    credits, // Current spendable balance
-    totalCreditsEarned, // Total rewarded amount
+    credits, // Current spendable balance (uses Math.max of credits and totalCreditsEarned internally)
     isLoading,
     error,
     isNFTHolder,

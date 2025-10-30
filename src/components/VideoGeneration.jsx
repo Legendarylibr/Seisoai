@@ -7,9 +7,7 @@ import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 
 const VideoGeneration = ({ onShowTokenPayment }) => {
   // onShowStripePayment prop removed - Stripe disabled
-  const { credits: walletCredits, totalCreditsEarned, address } = useSimpleWallet();
-  // Use the maximum of credits and totalCreditsEarned for validation
-  const credits = Math.max(walletCredits || 0, totalCreditsEarned || 0);
+  const { credits, address } = useSimpleWallet();
   const [prompt, setPrompt] = useState('');
   const { controlNetImage } = useImageGenerator();
   const [aspectRatio, setAspectRatio] = useState('auto');

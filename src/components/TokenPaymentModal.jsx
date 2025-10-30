@@ -755,8 +755,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 setCreditsManually(newTotal);
               }
 
-              // Refresh user credits in background to reconcile
-              fetchCredits(address).catch(() => {});
+              // Refresh user credits immediately (skip cache to get fresh data)
+              fetchCredits(address, 3, true).catch(() => {});
               
               setTimeout(() => {
                 onClose();
@@ -925,7 +925,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 }
 
                 // Refresh user credits in background to reconcile
-                fetchCredits(address).catch(() => {});
+                fetchCredits(address, 3, true).catch(() => {});
                 
                 setTimeout(() => {
                   onClose();
@@ -1031,8 +1031,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           setCreditsManually(optimisticTotal);
         }
 
-        // Refresh credits in background to reconcile
-        fetchCredits(address).catch(() => {});
+        // Refresh credits immediately (skip cache to get fresh data)
+        fetchCredits(address, 3, true).catch(() => {});
         
         const senderInfo = data.senderAddress ? `Sender: ${data.senderAddress}` : '';
         setError(`✅ Payment confirmed! ${data.credits} credits added. New balance: ${data.newBalance} credits. ${senderInfo}`);
