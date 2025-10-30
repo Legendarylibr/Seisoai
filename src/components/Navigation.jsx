@@ -60,12 +60,6 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
               <h1 className="text-xl font-bold gradient-text">Seiso AI</h1>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-10 h-10 rounded-xl object-cover" />
-            <div>
-              <h1 className="text-xl font-bold gradient-text">Seiso AI</h1>
-            </div>
-          </div>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-1">
