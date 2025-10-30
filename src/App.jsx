@@ -132,8 +132,12 @@ function WalletPrompt({ onConnect }) {
       <div className="text-center max-w-2xl mx-auto">
         {/* Hero Section */}
         <div className="mb-8">
-          <div className="w-20 h-20 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Sparkles className="w-10 h-10 text-white" />
+          <div className="w-20 h-20 flex items-center justify-center mx-auto mb-6">
+            <img 
+              src="/1d1c7555360a737bb22bbdfc2784655f.png" 
+              alt="Seiso AI Logo" 
+              className="w-20 h-20 object-contain"
+            />
           </div>
           <h1 className="text-4xl font-bold text-white mb-4">
             Welcome to Seiso AI
