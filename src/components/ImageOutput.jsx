@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateImage } from '../services/smartImageService';
-import { generateVideo } from '../services/veo3Service';
 import GenerateButton from './GenerateButton';
 import { X } from 'lucide-react';
 
@@ -31,12 +30,8 @@ const ImageOutput = () => {
   
   const [isDownloading, setIsDownloading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const [isUpscaling, setIsUpscaling] = useState(false);
-  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [newPrompt, setNewPrompt] = useState('');
-  const [generatedVideo, setGeneratedVideo] = useState(null);
-  const [showVideoModal, setShowVideoModal] = useState(false);
 
   const handleDownload = async () => {
     if (!generatedImage || isDownloading) return;
@@ -216,82 +211,6 @@ const ImageOutput = () => {
     }
   };
 
-  const handleUpscale = async () => {
-    if (!generatedImage || isUpscaling || !isConnected) return;
-    
-    setIsUpscaling(true);
-    setError(null);
-    
-    try {
-      setGenerating(true);
-      
-      // For now, we'll simulate upscaling by regenerating with higher resolution
-      // In a real implementation, you'd call an upscaling service
-      const advancedSettings = {
-        guidanceScale: (currentGeneration?.guidanceScale || 7.5) * 0.8, // Lower guidance for upscaling
-        imageSize: 'square_hd', // Use highest quality
-        numImages: 1,
-        enableSafetyChecker: currentGeneration?.enableSafetyChecker || enableSafetyChecker,
-        generationMode: 'flux-pro', // Use best quality model
-        isNFTHolder: isNFTHolder || false
-      };
-      
-      const result = await generateImage(
-        currentGeneration?.style,
-        currentGeneration?.prompt || 'upscale this image',
-        advancedSettings,
-        generatedImage // Use current image as reference
-      );
-      
-      setGeneratedImage(result.imageUrl);
-      
-      // Update current generation
-      setCurrentGeneration({
-        ...currentGeneration,
-        image: result.imageUrl,
-        imageSize: 'square_hd',
-        timestamp: new Date().toISOString()
-      });
-      
-    } catch (error) {
-      console.error('Upscaling failed:', error);
-      setError(error.message || 'Failed to upscale image. Please try again.');
-    } finally {
-      setIsUpscaling(false);
-      setGenerating(false);
-    }
-  };
-
-  const handleGenerateVideo = async () => {
-    if (!generatedImage || isGeneratingVideo || !isConnected) return;
-    
-    setIsGeneratingVideo(true);
-    setError(null);
-    
-    try {
-      setGenerating(true);
-      
-      // Generate video from the current image using Veo 3
-      const videoUrl = await generateVideo({
-        prompt: currentGeneration?.prompt || 'Turn this image into a video',
-        image: generatedImage,
-        options: {
-          aspectRatio: '16:9',
-          duration: '8s',
-        }
-      });
-      
-      setGeneratedVideo(videoUrl);
-      setShowVideoModal(true);
-      
-    } catch (error) {
-      console.error('Video generation failed:', error);
-      setError(error.message || 'Failed to generate video. Please try again.');
-    } finally {
-      setIsGeneratingVideo(false);
-      setGenerating(false);
-    }
-  };
 
   if (isGenerating) {
     return (
@@ -399,22 +318,6 @@ const ImageOutput = () => {
               <span className="text-lg">✨</span>
               New Prompt
             </button>
-            <button
-              onClick={handleUpscale}
-              disabled={isUpscaling || !isConnected || !currentGeneration}
-              className="btn-secondary flex items-center gap-2 text-sm px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="text-lg">{isUpscaling ? '⏳' : '🔍'}</span>
-              {isUpscaling ? 'Upscaling...' : 'Upscale'}
-            </button>
-            <button
-              onClick={handleGenerateVideo}
-              disabled={isGeneratingVideo || !isConnected || !currentGeneration}
-              className="btn-secondary flex items-center gap-2 text-sm px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="text-lg">{isGeneratingVideo ? '⏳' : '🎬'}</span>
-              {isGeneratingVideo ? 'Generating...' : 'Video'}
-            </button>
           </div>
         </div>
       </div>
@@ -479,43 +382,6 @@ const ImageOutput = () => {
         </div>
       )}
 
-      {/* Video Modal */}
-      {showVideoModal && generatedVideo && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-white/10">
-              <h2 className="text-lg sm:text-xl font-semibold text-white">Generated Video</h2>
-              <button
-                onClick={() => setShowVideoModal(false)}
-                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-400" />
-              </button>
-            </div>
-            
-            <div className="p-4 sm:p-6">
-              <video
-                src={generatedVideo}
-                controls
-                className="w-full rounded-lg"
-                autoPlay
-                playsInline
-              >
-                Your browser does not support the video tag.
-              </video>
-              
-              <div className="mt-4 flex justify-end">
-                <button
-                  onClick={() => setShowVideoModal(false)}
-                  className="btn-primary text-sm sm:text-base px-4 py-2"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
