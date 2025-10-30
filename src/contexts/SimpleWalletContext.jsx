@@ -98,11 +98,12 @@ export const SimpleWalletProvider = ({ children }) => {
             logger.info('Rewarded amount found in data.user.totalCreditsEarned (no success flag)', { rewardedAmount, walletAddress: normalizedAddress });
           }
           
-          // Use credits for spending (current balance), but track rewarded amount separately
+          // Store both values separately - credits (current balance) and totalCreditsEarned (rewarded amount)
+          // Both are available for display and validation
           setCredits(currentCredits);
           setTotalCreditsEarned(rewardedAmount);
           
-          console.log(`✅ Credits loaded - Current: ${currentCredits}, Rewarded: ${rewardedAmount}, for wallet: ${normalizedAddress}`);
+          console.log(`✅ Credits loaded - Current Balance: ${currentCredits}, Total Rewarded: ${rewardedAmount}, for wallet: ${normalizedAddress}`);
           if (skipCache) {
             console.log('🔄 Fresh credits fetched (cache bypassed)');
           }

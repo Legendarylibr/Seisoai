@@ -7,6 +7,7 @@ const SimpleWalletConnect = () => {
     isConnected,
     address,
     credits,
+    totalCreditsEarned,
     isLoading,
     error,
     connectWallet,
@@ -74,20 +75,30 @@ const SimpleWalletConnect = () => {
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-gray-400">Credits:</span>
-          <div className="flex items-center gap-2">
-            <span className="text-purple-400 font-semibold text-lg">
-              {credits}
-            </span>
-            <button
-              onClick={() => fetchCredits(address)}
-              className="p-1 rounded hover:bg-white/10 transition-colors"
-              title="Refresh credits"
-            >
-              <RefreshCw className="w-3 h-3" />
-            </button>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-gray-400">Available Credits:</span>
+            <div className="flex items-center gap-2">
+              <span className="text-purple-400 font-semibold text-lg">
+                {credits}
+              </span>
+              <button
+                onClick={() => fetchCredits(address)}
+                className="p-1 rounded hover:bg-white/10 transition-colors"
+                title="Refresh credits"
+              >
+                <RefreshCw className="w-3 h-3" />
+              </button>
+            </div>
           </div>
+          {totalCreditsEarned > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-500">Total Rewarded:</span>
+              <span className="text-xs text-green-400 font-medium">
+                {totalCreditsEarned}
+              </span>
+            </div>
+          )}
         </div>
         
         {/* Pricing Info */}

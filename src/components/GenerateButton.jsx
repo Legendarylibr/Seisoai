@@ -35,10 +35,15 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     isConnected,
     address,
     credits,
+    totalCreditsEarned,
     isLoading: walletLoading,
     isNFTHolder,
     refreshCredits
   } = useSimpleWallet();
+  
+  // Use the maximum of credits and totalCreditsEarned for validation
+  // This ensures granted credits are usable even if credits field is temporarily 0
+  const availableCredits = Math.max(credits || 0, totalCreditsEarned || 0);
 
   const [progress, setProgress] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -107,8 +112,8 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       return;
     }
 
-    // Check if user has credits
-    if (credits <= 0) {
+    // Check if user has credits (use available credits which considers both fields)
+    if (availableCredits <= 0) {
       if (onShowTokenPayment) {
         onShowTokenPayment();
       }
