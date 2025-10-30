@@ -1972,10 +1972,8 @@ app.post('/api/payments/credit', async (req, res) => {
       walletAddress: user.walletAddress,
       walletType: walletType || 'evm',
       amount: parseFloat(amount),
-      isNFTHolder,
       creditsPerUSDC,
-      creditsToAdd,
-      nftCollectionCount: user.nftCollections?.length || 0
+      creditsToAdd
     });
     
     // Add credits
@@ -1999,7 +1997,6 @@ app.post('/api/payments/credit', async (req, res) => {
       walletAddress: user.walletAddress,
       credits: creditsToAdd,
       totalCredits: user.credits,
-      isNFTHolder,
       txHash
     });
     
@@ -2236,15 +2233,7 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
     const credits = parseInt(paymentIntent.metadata.credits);
     const amount = paymentIntent.amount / 100; // Convert from cents
 
-    // Check for NFT holdings to apply discounts
-    let isNFTHolder = false;
-    try {
-      // This would integrate with your existing NFT checking logic
-      // For now, we'll set it to false, but you can enhance this
-      isNFTHolder = false;
-    } catch (error) {
-      logger.warn('Error checking NFT holdings for Stripe payment:', error);
-    }
+    // NFT holder check removed - standard pricing for all users
 
     // Use credits as-is (no NFT bonus)
     const finalCredits = credits;
@@ -2269,16 +2258,14 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
     logger.info('Stripe payment verified successfully', {
       walletAddress: walletAddress.toLowerCase(),
       credits: finalCredits,
-      paymentIntentId,
-      isNFTHolder
+      paymentIntentId
     });
     
     res.json({
       success: true,
       credits: finalCredits,
       totalCredits: user.credits,
-      message: `Payment verified! ${finalCredits} credits added to your account.`,
-      isNFTHolder
+      message: `Payment verified! ${finalCredits} credits added to your account.`
     });
 
   } catch (error) {
