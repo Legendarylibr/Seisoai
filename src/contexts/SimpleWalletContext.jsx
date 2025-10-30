@@ -90,6 +90,9 @@ export const SimpleWalletProvider = ({ children }) => {
           
           setCredits(credits);
           console.log('✅ Credits loaded from backend:', credits, 'for wallet:', normalizedAddress);
+          if (skipCache) {
+            console.log('🔄 Fresh credits fetched (cache bypassed)');
+          }
           
           // Cache the result
           try {
@@ -496,8 +499,8 @@ export const SimpleWalletProvider = ({ children }) => {
   useEffect(() => {
     if (!isConnected || !address) return;
 
-    // Refresh credits immediately when address changes or connection is established
-    fetchCredits(address).catch(error => {
+    // Refresh credits immediately when address changes or connection is established (skip cache for fresh data)
+    fetchCredits(address, 3, true).catch(error => {
       logger.error('Initial credit refresh failed', { error: error.message, address });
     });
 
