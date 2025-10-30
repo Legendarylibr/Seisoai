@@ -640,30 +640,40 @@ async function getOrCreateUser(walletAddress) {
   const isSolanaAddress = !walletAddress.startsWith('0x');
   const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
   
-  let user = await User.findOne({ walletAddress: normalizedAddress });
-  
-  if (!user) {
-    user = new User({
-      walletAddress: normalizedAddress,
-      credits: 0,
-      totalCreditsEarned: 0,
-      totalCreditsSpent: 0,
-      nftCollections: [],
-      paymentHistory: [],
-      generationHistory: [],
-      gallery: [],
-      settings: {
-        preferredStyle: null,
-        defaultImageSize: '1024x1024',
-        enableNotifications: true
+  // Use findOneAndUpdate with upsert to make this atomic and prevent race conditions
+  // This ensures that if credits were granted before user connects, they won't be lost
+  const user = await User.findOneAndUpdate(
+    { walletAddress: normalizedAddress },
+    {
+      $setOnInsert: {
+        walletAddress: normalizedAddress,
+        credits: 0,
+        totalCreditsEarned: 0,
+        totalCreditsSpent: 0,
+        nftCollections: [],
+        paymentHistory: [],
+        generationHistory: [],
+        gallery: [],
+        settings: {
+          preferredStyle: null,
+          defaultImageSize: '1024x1024',
+          enableNotifications: true
+        }
+      },
+      $set: {
+        lastActive: new Date()
       }
-    });
-    await user.save();
-    logger.info('New user created', { walletAddress: normalizedAddress, isSolana: isSolanaAddress });
-  } else {
-    // Update last active
-    user.lastActive = new Date();
-    await user.save();
+    },
+    {
+      upsert: true,
+      new: true,
+      setDefaultsOnInsert: true
+    }
+  );
+  
+  // Log if this was a new user creation
+  if (user.createdAt && Date.now() - new Date(user.createdAt).getTime() < 1000) {
+    logger.info('New user created', { walletAddress: normalizedAddress, isSolana: isSolanaAddress, credits: user.credits });
   }
   
   return user;
