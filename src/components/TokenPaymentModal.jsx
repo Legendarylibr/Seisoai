@@ -183,28 +183,16 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       // Add instruction to create payment token account if it doesn't exist
       if (!paymentTokenAccountExists) {
         console.log('➕ Adding createAssociatedTokenAccount instruction');
-        try {
-          // Try the simpler signature first (payer, owner, mint)
-          const createATAInstruction = createAssociatedTokenAccountInstruction(
-            userPublicKey,          // payer (user pays for account creation)
-            paymentPublicKey,       // owner of the token account
-            USDC_MINT              // USDC mint
-          );
-          transaction.add(createATAInstruction);
-          console.log('✅ Added createATA instruction');
-        } catch (error) {
-          // If that fails, try with explicit program IDs
-          console.log('⚠️ Trying createATA with explicit program IDs...');
-          const createATAInstruction = createAssociatedTokenAccountInstruction(
-            userPublicKey,          // payer
-            paymentPublicKey,       // owner
-            USDC_MINT,              // mint
-            TOKEN_PROGRAM_ID,       // token program
-            ASSOCIATED_TOKEN_PROGRAM_ID // associated token program
-          );
-          transaction.add(createATAInstruction);
-          console.log('✅ Added createATA instruction with program IDs');
-        }
+        const createATAInstruction = createAssociatedTokenAccountInstruction(
+          userPublicKey,           // payer (user pays for account creation)
+          paymentTokenAccount,     // associated token account address to create
+          paymentPublicKey,        // owner of the token account
+          USDC_MINT,               // USDC mint
+          TOKEN_PROGRAM_ID,        // token program
+          ASSOCIATED_TOKEN_PROGRAM_ID // associated token program
+        );
+        transaction.add(createATAInstruction);
+        console.log('✅ Added createATA instruction (ATA will be created for recipient)');
       }
       
       // Create and add transfer instruction
