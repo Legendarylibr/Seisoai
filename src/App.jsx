@@ -10,13 +10,12 @@ import TokenPaymentModal from './components/TokenPaymentModal';
 // import StripePaymentModal from './components/StripePaymentModal'; // DISABLED - Stripe disabled, crypto only
 import AuthGuard from './components/AuthGuard';
 import ImageGallery from './components/ImageGallery';
-import BatchProcessor from './components/BatchProcessor';
-import Templates from './components/Templates';
+// Batch and Templates removed from UI
 import Settings from './components/Settings';
 // import LegalDisclaimer from './components/LegalDisclaimer'; // DISABLED - Legal/terms removed from main screen
 import GenerateButton from './components/GenerateButton';
 import VideoGeneration from './components/VideoGeneration';
-import { Grid, File, Settings as SettingsIcon2, Wand2, Sparkles, Video, Wallet, ArrowRight, Image } from 'lucide-react';
+import { Grid, Settings as SettingsIcon2, Sparkles, Video, Wallet, ArrowRight, Image } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
@@ -27,8 +26,6 @@ function App() {
     { id: 'generate', name: 'Generate', icon: Sparkles },
     { id: 'gallery', name: 'Gallery', icon: Grid },
     { id: 'video', name: 'Video', icon: Video },
-    { id: 'templates', name: 'Templates', icon: File },
-    { id: 'batch', name: 'Batch', icon: Wand2 },
     { id: 'settings', name: 'Settings', icon: SettingsIcon2 }
   ];
 
@@ -85,12 +82,10 @@ function AppContent({ activeTab, onShowTokenPayment }) {
   // Show main content if wallet is connected (AuthGuard will handle credit requirements)
   return (
     <>
-      <AuthGuard requireCredits={activeTab === 'generate' || activeTab === 'batch' || activeTab === 'video'}>
+      <AuthGuard requireCredits={activeTab === 'generate' || activeTab === 'video'}>
         {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} />}
         {activeTab === 'gallery' && <GalleryTab />}
         {activeTab === 'video' && <VideoTab onShowTokenPayment={onShowTokenPayment} />}
-        {activeTab === 'templates' && <TemplatesTab />}
-        {activeTab === 'batch' && <BatchTab />}
         {activeTab === 'settings' && <SettingsTab />}
       </AuthGuard>
     </>
@@ -387,13 +382,7 @@ function VideoTab({ onShowTokenPayment }) {
   return <VideoGeneration onShowTokenPayment={onShowTokenPayment} />;
 }
 
-function TemplatesTab() {
-  return <Templates />;
-}
-
-function BatchTab() {
-  return <BatchProcessor />;
-}
+// TemplatesTab and BatchTab removed
 
 function SettingsTab() {
   return <Settings />;
