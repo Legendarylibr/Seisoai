@@ -36,14 +36,14 @@ export const SimpleWalletProvider = ({ children }) => {
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
         try {
-          const { data, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < 60000) { // 1 minute
-            logger.debug('Using cached credits', { walletAddress: normalizedAddress, credits: data.credits, totalCreditsEarned: data.totalCreditsEarned });
-            console.log('💾 Using cached credits - Current:', data.credits, 'Rewarded:', data.totalCreditsEarned);
-            setCredits(data.credits || 0);
-            setTotalCreditsEarned(data.totalCreditsEarned || 0);
-            return data.credits || 0;
-          }
+            const { data, timestamp } = JSON.parse(cached);
+            if (Date.now() - timestamp < 60000) { // 1 minute
+              logger.debug('Using cached credits', { walletAddress: normalizedAddress, credits: data.credits, totalCreditsEarned: data.totalCreditsEarned, rawCredits: data.rawCredits });
+              console.log('💾 Using cached credits - Current:', data.credits, 'Rewarded:', data.totalCreditsEarned, 'Raw:', data.rawCredits);
+              setCredits(data.credits || 0);
+              setTotalCreditsEarned(data.totalCreditsEarned || 0);
+              return data.credits || 0;
+            }
         } catch (cacheError) {
           console.warn('Failed to parse cached credits', cacheError);
         }
@@ -87,6 +87,7 @@ export const SimpleWalletProvider = ({ children }) => {
           }
           
           // Get rewarded amount (totalCreditsEarned)
+          // Try multiple paths to ensure we get the value
           if (data.success && data.user && typeof data.user.totalCreditsEarned !== 'undefined') {
             rewardedAmount = Number(data.user.totalCreditsEarned) || 0;
             logger.info('Rewarded amount found in data.user.totalCreditsEarned', { rewardedAmount, walletAddress: normalizedAddress });
@@ -96,30 +97,49 @@ export const SimpleWalletProvider = ({ children }) => {
           } else if (data.user && typeof data.user.totalCreditsEarned !== 'undefined') {
             rewardedAmount = Number(data.user.totalCreditsEarned) || 0;
             logger.info('Rewarded amount found in data.user.totalCreditsEarned (no success flag)', { rewardedAmount, walletAddress: normalizedAddress });
+          } else {
+            // Log warning if we expected it but didn't find it
+            logger.warn('totalCreditsEarned not found in response', { 
+              hasUser: !!data.user, 
+              hasSuccess: data.success,
+              dataKeys: Object.keys(data),
+              userKeys: data.user ? Object.keys(data.user) : [],
+              walletAddress: normalizedAddress 
+            });
+            console.warn('⚠️ totalCreditsEarned not found in API response. Response structure:', data);
           }
           
           // Store both values separately - credits (current balance) and totalCreditsEarned (rewarded amount)
+          // Use totalCreditsEarned if it's higher than credits (for granted credits that might not be in credits field yet)
           // Both are available for display and validation
-          setCredits(currentCredits);
+          const effectiveCredits = Math.max(currentCredits, rewardedAmount);
+          
+          setCredits(effectiveCredits);
           setTotalCreditsEarned(rewardedAmount);
           
-          console.log(`✅ Credits loaded - Current Balance: ${currentCredits}, Total Rewarded: ${rewardedAmount}, for wallet: ${normalizedAddress}`);
+          console.log(`✅ Credits loaded - Current Balance: ${currentCredits}, Total Rewarded: ${rewardedAmount}, Effective Credits (for use): ${effectiveCredits}, for wallet: ${normalizedAddress}`);
+          console.log(`📊 Full API response data:`, JSON.stringify(data, null, 2));
           if (skipCache) {
             console.log('🔄 Fresh credits fetched (cache bypassed)');
           }
           
-          // Cache the result
+          // Cache the result (cache effective credits for faster access)
           try {
             sessionStorage.setItem(cacheKey, JSON.stringify({
-              data: { credits: currentCredits, totalCreditsEarned: rewardedAmount },
+              data: { credits: effectiveCredits, totalCreditsEarned: rewardedAmount, rawCredits: currentCredits },
               timestamp: Date.now()
             }));
           } catch (storageError) {
             logger.warn('Failed to cache credits', { error: storageError.message });
           }
           
-          logger.info('Credits loaded successfully', { credits: currentCredits, totalCreditsEarned: rewardedAmount, walletAddress: normalizedAddress });
-          return currentCredits; // Return current balance for testing/verification
+          logger.info('Credits loaded successfully', { 
+            rawCredits: currentCredits, 
+            totalCreditsEarned: rewardedAmount, 
+            effectiveCredits: effectiveCredits,
+            walletAddress: normalizedAddress 
+          });
+          return effectiveCredits; // Return effective credits (max of current and rewarded) for testing/verification
         } else {
           const errorText = await response.text();
           console.error(`❌ Credits fetch failed (${response.status}):`, errorText);

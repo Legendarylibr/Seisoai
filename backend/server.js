@@ -671,12 +671,35 @@ async function getOrCreateUser(walletAddress) {
     }
   );
   
-  // Log if this was a new user creation
-  if (user.createdAt && Date.now() - new Date(user.createdAt).getTime() < 1000) {
-    logger.info('New user created', { walletAddress: normalizedAddress, isSolana: isSolanaAddress, credits: user.credits });
+  // Always refetch to ensure we have the absolute latest data, especially credits
+  // This handles the case where credits might have been granted between the upsert and now
+  const latestUser = await User.findOne({ walletAddress: normalizedAddress });
+  
+  if (!latestUser) {
+    // This shouldn't happen, but handle edge case
+    logger.error('User not found after creation', { walletAddress: normalizedAddress });
+    return user;
   }
   
-  return user;
+  // Log if this was a new user creation
+  if (latestUser.createdAt && Date.now() - new Date(latestUser.createdAt).getTime() < 2000) {
+    logger.info('New user created/accessed', { 
+      walletAddress: normalizedAddress, 
+      isSolana: isSolanaAddress, 
+      credits: latestUser.credits,
+      totalCreditsEarned: latestUser.totalCreditsEarned
+    });
+  }
+  
+  // If user already had credits (granted before first connection), log it
+  if (latestUser.credits > 0 && latestUser.createdAt && Date.now() - new Date(latestUser.createdAt).getTime() < 2000) {
+    logger.info('User created with existing credits (granted before first connection)', {
+      walletAddress: normalizedAddress,
+      credits: latestUser.credits
+    });
+  }
+  
+  return latestUser;
 }
 
 /**
@@ -1005,8 +1028,6 @@ app.get('/api/users/:walletAddress', async (req, res) => {
             { $set: { nftCollections: ownedCollections } },
             { new: true }
           );
-          // Update local user object for response
-          user.nftCollections = ownedCollections;
           isNFTHolder = true;
           logger.info('✅ Updated NFT collections for user', { 
             walletAddress, 
@@ -1022,7 +1043,6 @@ app.get('/api/users/:walletAddress', async (req, res) => {
               { $set: { nftCollections: [] } },
               { new: true }
             );
-            user.nftCollections = [];
           }
         }
       } catch (nftError) {
@@ -1031,23 +1051,46 @@ app.get('/api/users/:walletAddress', async (req, res) => {
       }
     }
     
+    // Always refetch user from database to ensure we have the latest credits
+    // This is critical to ensure granted credits are always returned correctly
+    // Use user.walletAddress which is already normalized (handles both EVM and Solana correctly)
+    const latestUser = await User.findOne({ walletAddress: user.walletAddress });
+    if (!latestUser) {
+      logger.error('User not found after refetch', { 
+        walletAddress, 
+        userWalletAddress: user.walletAddress,
+        warning: 'User should exist after getOrCreateUser'
+      });
+      return res.status(500).json({ success: false, error: 'User not found' });
+    }
+    
+    // Update isNFTHolder based on latest data
+    isNFTHolder = latestUser.nftCollections && latestUser.nftCollections.length > 0;
+    
+    logger.debug('Returning user data', { 
+      walletAddress, 
+      credits: latestUser.credits,
+      totalCreditsEarned: latestUser.totalCreditsEarned,
+      isNFTHolder 
+    });
+    
     res.json({
       success: true,
       user: {
-        walletAddress: user.walletAddress,
-        credits: user.credits || 0,
-        totalCreditsEarned: user.totalCreditsEarned || 0,
-        totalCreditsSpent: user.totalCreditsSpent || 0,
-        nftCollections: user.nftCollections || [],
-        paymentHistory: user.paymentHistory || [],
-        generationHistory: user.generationHistory || [],
-        gallery: user.gallery || [],
-        settings: user.settings || {
+        walletAddress: latestUser.walletAddress,
+        credits: latestUser.credits || 0,
+        totalCreditsEarned: latestUser.totalCreditsEarned || 0,
+        totalCreditsSpent: latestUser.totalCreditsSpent || 0,
+        nftCollections: latestUser.nftCollections || [],
+        paymentHistory: latestUser.paymentHistory || [],
+        generationHistory: latestUser.generationHistory || [],
+        gallery: latestUser.gallery || [],
+        settings: latestUser.settings || {
           preferredStyle: null,
           defaultImageSize: '1024x1024',
           enableNotifications: true
         },
-        lastActive: user.lastActive || new Date(),
+        lastActive: latestUser.lastActive || new Date(),
         isNFTHolder: isNFTHolder,
         pricing: {
           costPerCredit: isNFTHolder ? 0.08 : 0.15,

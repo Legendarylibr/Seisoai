@@ -99,6 +99,14 @@ const SimpleWalletConnect = () => {
               </span>
             </div>
           )}
+          {totalCreditsEarned === 0 && credits > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-500">Note:</span>
+              <span className="text-xs text-yellow-400 font-medium">
+                Rewarded amount not available
+              </span>
+            </div>
+          )}
         </div>
         
         {/* Pricing Info */}
