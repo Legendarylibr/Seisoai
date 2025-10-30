@@ -14,8 +14,8 @@ import ImageGallery from './components/ImageGallery';
 // Settings removed from UI
 // import LegalDisclaimer from './components/LegalDisclaimer'; // DISABLED - Legal/terms removed from main screen
 import GenerateButton from './components/GenerateButton';
-import VideoGeneration from './components/VideoGeneration';
-import { Grid, Sparkles, Video, Wallet, ArrowRight, Image } from 'lucide-react';
+// Video tab removed
+import { Grid, Sparkles, Wallet, ArrowRight, Image } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
@@ -24,9 +24,7 @@ function App() {
 
   const tabs = [
     { id: 'generate', name: 'Generate', icon: Sparkles },
-    { id: 'gallery', name: 'Gallery', icon: Grid },
-    { id: 'video', name: 'Video', icon: Video },
-    // Settings tab removed
+    { id: 'gallery', name: 'Gallery', icon: Grid }
   ];
 
   return (
@@ -82,10 +80,9 @@ function AppContent({ activeTab, onShowTokenPayment }) {
   // Show main content if wallet is connected (AuthGuard will handle credit requirements)
   return (
     <>
-      <AuthGuard requireCredits={activeTab === 'generate' || activeTab === 'video'}>
+      <AuthGuard requireCredits={activeTab === 'generate'}>
         {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} />}
         {activeTab === 'gallery' && <GalleryTab />}
-        {activeTab === 'video' && <VideoTab onShowTokenPayment={onShowTokenPayment} />}
         {/* Settings route removed */}
       </AuthGuard>
     </>
@@ -95,7 +92,6 @@ function AppContent({ activeTab, onShowTokenPayment }) {
 function WalletPrompt({ onConnect }) {
   // onShowStripePayment prop removed - Stripe disabled
   const { connectWallet } = useSimpleWallet();
-  const [showChainSelection, setShowChainSelection] = useState(true);
   const [selectedChain, setSelectedChain] = useState(null);
 
   const chainOptions = [
@@ -143,7 +139,7 @@ function WalletPrompt({ onConnect }) {
             Welcome to Seiso AI
           </h1>
           <p className="text-xl text-gray-300 mb-2">
-            Create stunning AI-generated images with your preferred style
+            Create and edit stunning AI-generated images
           </p>
           <p className="text-gray-400">
             Choose how to get started
@@ -178,37 +174,22 @@ function WalletPrompt({ onConnect }) {
 
           {/* Chain Selection */}
           {!selectedChain ? (
-            <>
-              {/* Main Connect Button */}
-              <button
-                onClick={() => setShowChainSelection(!showChainSelection)}
-                className="btn-primary flex items-center justify-center gap-3 px-8 py-4 text-lg mx-auto"
-              >
-                <Wallet className="w-6 h-6" />
-                <span>Choose Blockchain</span>
-                <ArrowRight className="w-5 h-5" />
-              </button>
-
-              {/* Chain Options */}
-              {showChainSelection && (
-                <div className="mt-6 space-y-3 max-w-md mx-auto">
-                  {chainOptions.map((chain) => (
-                    <button
-                      key={chain.id}
-                      onClick={() => handleChainSelect(chain.id)}
-                      className="w-full flex items-center gap-4 p-4 rounded-lg bg-white/5 hover:bg-white/10 border border-white/20 transition-all duration-200 hover:scale-105"
-                    >
-                      <span className="text-2xl">{chain.icon}</span>
-                      <div className="flex-1 text-left">
-                        <div className="font-semibold text-white">{chain.name}</div>
-                        <div className="text-sm text-gray-400">{chain.description}</div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-gray-400" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
+            <div className="mt-2 space-y-3 max-w-md mx-auto">
+              {chainOptions.map((chain) => (
+                <button
+                  key={chain.id}
+                  onClick={() => handleChainSelect(chain.id)}
+                  className="w-full flex items-center gap-4 p-4 rounded-lg bg-white/5 hover:bg-white/10 border border-white/20 transition-all duration-200 hover:scale-105"
+                >
+                  <span className="text-2xl">{chain.icon}</span>
+                  <div className="flex-1 text-left">
+                    <div className="font-semibold text-white">{chain.name}</div>
+                    <div className="text-sm text-gray-400">{chain.description}</div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-gray-400" />
+                </button>
+              ))}
+            </div>
           ) : (
             /* Wallet Selection for Selected Chain */
             <div className="space-y-4">
@@ -276,7 +257,7 @@ function GenerateTab({ onShowTokenPayment }) {
       {/* Compact Header */}
       <div className="text-center py-1">
         <h1 className="text-xl font-bold gradient-text mb-1">Seiso AI</h1>
-        <p className="text-gray-400 text-xs">Create stunning images with AI</p>
+        <p className="text-gray-400 text-xs">Create and edit stunning AI-generated images</p>
       </div>
 
       {/* Credits Status Banner */}
