@@ -43,7 +43,8 @@ const PAYMENT_CONFIG = {
     '42161': import.meta.env.VITE_ARBITRUM_PAYMENT_WALLET || '0x0000000000000000000000000000000000000000',
     '10': import.meta.env.VITE_OPTIMISM_PAYMENT_WALLET || '0x0000000000000000000000000000000000000000',
     '8453': import.meta.env.VITE_BASE_PAYMENT_WALLET || '0x0000000000000000000000000000000000000000',
-    'solana': import.meta.env.VITE_SOLANA_PAYMENT_WALLET || 'So11111111111111111111111111111111111111112'
+    // Default Solana payment wallet mirrors backend default to avoid mismatch
+    'solana': import.meta.env.VITE_SOLANA_PAYMENT_WALLET || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA'
   },
   // EVM chains payment tokens
   evmTokens: {
