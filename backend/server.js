@@ -2526,17 +2526,22 @@ app.post('/api/generations/add', async (req, res) => {
 
     const user = await getOrCreateUser(walletAddress);
     
+    // Use effective credits (max of credits and totalCreditsEarned) to handle granted credits
+    const effectiveCredits = Math.max(user.credits || 0, user.totalCreditsEarned || 0);
+    
     // Check if user has enough credits
-    if (user.credits < creditsUsed) {
+    if (effectiveCredits < creditsUsed) {
       return res.status(400).json({
         success: false,
         error: 'Insufficient credits'
       });
     }
 
-    // Deduct credits
-    user.credits -= creditsUsed;
-    user.totalCreditsSpent += creditsUsed;
+    // Deduct credits from the credits field (current balance)
+    // If credits is lower than totalCreditsEarned, we still deduct from credits
+    // and it will naturally show the lower balance
+    user.credits = Math.max(0, (user.credits || 0) - creditsUsed);
+    user.totalCreditsSpent = (user.totalCreditsSpent || 0) + creditsUsed;
     
     // Add generation to history
     const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
