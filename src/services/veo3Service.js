@@ -57,7 +57,8 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
         'Authorization': `Key ${FAL_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ input })
+      // Some fal endpoints validate top-level fields; include both to be safe
+      body: JSON.stringify({ input, ...input })
     });
 
     if (!response.ok) {
