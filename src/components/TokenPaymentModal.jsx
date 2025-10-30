@@ -147,9 +147,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       // Get payment wallet's USDC token account address
       const paymentTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, paymentPublicKey);
       
-      console.log('🔍 Checking token accounts...');
-      console.log(`  User token account: ${userTokenAccount.toString()}`);
-      console.log(`  Payment token account: ${paymentTokenAccount.toString()}`);
+      if (import.meta.env.MODE !== 'production') {
+        console.log('🔍 Checking token accounts...');
+        console.log(`  User token account: ${userTokenAccount.toString()}`);
+        console.log(`  Payment token account: ${paymentTokenAccount.toString()}`);
+      }
       
       // Check if user has USDC token account
       let userTokenAccountExists = false;
@@ -175,7 +177,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       
       // Convert amount to USDC units (6 decimals)
       const amountInUSDC = BigInt(Math.floor(parseFloat(amount) * 1000000));
-      console.log(`💰 Transferring ${amount} USDC (${amountInUSDC} raw units)`);
+      if (import.meta.env.MODE !== 'production') {
+        console.log(`💰 Transferring ${amount} USDC (${amountInUSDC} raw units)`);
+      }
       
       // Create transaction
       const transaction = new Transaction();
@@ -206,13 +210,17 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       transaction.add(transferInstruction);
       
       // Get recent blockhash and set transaction parameters
-      console.log('📡 Getting recent blockhash...');
+      if (import.meta.env.MODE !== 'production') {
+        console.log('📡 Getting recent blockhash...');
+      }
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = userPublicKey;
       
-      console.log('🔐 Signing transaction with wallet...');
-      console.log(`📝 Transaction has ${transaction.instructions.length} instruction(s)`);
+      if (import.meta.env.MODE !== 'production') {
+        console.log('🔐 Signing transaction with wallet...');
+        console.log(`📝 Transaction has ${transaction.instructions.length} instruction(s)`);
+      }
       
       // Check if wallet is connected
       if (!window.solana.isConnected) {
@@ -237,9 +245,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           maxRetries: 3
         });
         
-        console.log('✅ Solana transaction result:', result);
-        console.log('✅ Result type:', typeof result);
-        console.log('✅ Result keys:', result ? Object.keys(result) : 'null');
+        if (import.meta.env.MODE !== 'production') {
+          console.log('✅ Solana transaction result:', result);
+          console.log('✅ Result type:', typeof result);
+          console.log('✅ Result keys:', result ? Object.keys(result) : 'null');
+        }
         
         // Phantom wallet typically returns signature as base58 string directly
         // But handle all possible formats
@@ -281,7 +291,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         }
         
         if (signature) {
-          console.log(`📋 Transaction signature extracted: ${signature}`);
+          if (import.meta.env.MODE !== 'production') {
+            console.log(`📋 Transaction signature extracted: ${signature}`);
+          }
           return signature;
         } else {
           console.error('❌ Could not extract signature. Full result:', JSON.stringify(result, null, 2));
@@ -657,7 +669,27 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           }
           
           // Build and send Solana USDC transaction
-          const solanaPaymentAddress = getPaymentWallet('solana', 'solana');
+          // Reconcile frontend vs backend payment address for safety
+          let solanaPaymentAddress = getPaymentWallet('solana', 'solana');
+          try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+            const resp = await fetch(`${apiUrl}/api/payment/get-address`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ walletAddress: address })
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data?.solanaPaymentAddress && data.solanaPaymentAddress !== solanaPaymentAddress) {
+                if (import.meta.env.MODE !== 'production') {
+                  console.warn('[Payment] Frontend Solana address differs from backend. Using backend value.');
+                }
+                solanaPaymentAddress = data.solanaPaymentAddress;
+              }
+            }
+          } catch (_) {
+            // Non-fatal; continue with local value
+          }
           const txSignature = await buildSolanaUSDCTransaction(amount, solanaPaymentAddress);
           
           console.log('✅ Solana transaction signed! Signature:', txSignature);
