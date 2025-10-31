@@ -1,6 +1,8 @@
 // Veo 3 Fast Image-to-Video Service
 // Uses Google's Veo 3 Fast model via fal.ai API for image-to-video generation
 
+import { optimizeImage, needsOptimization } from '../utils/imageOptimizer';
+
 const FAL_API_KEY = import.meta.env.VITE_FAL_API_KEY;
 
 if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
@@ -9,12 +11,34 @@ if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
 
 /**
  * Convert image to data URI or ensure it's a valid URL
+ * Optimizes the image if it's a data URI and needs optimization
  */
-const prepareImageUrl = (image) => {
+const prepareImageUrl = async (image) => {
   if (!image) return null;
   
-  // If already a URL or data URI, return as is
-  if (typeof image === 'string' && (image.startsWith('http') || image.startsWith('data:'))) {
+  // If already a URL (not data URI), return as is
+  if (typeof image === 'string' && image.startsWith('http')) {
+    return image;
+  }
+  
+  // If it's a data URI, check if it needs optimization
+  if (typeof image === 'string' && image.startsWith('data:')) {
+    // Optimize large images to reduce payload size
+    if (needsOptimization(image, 300)) { // Optimize if > 300KB
+      console.log('🔄 Optimizing image before sending to fal.ai...');
+      try {
+        const optimized = await optimizeImage(image, {
+          maxWidth: 2048,
+          maxHeight: 2048,
+          quality: 0.85,
+          format: 'jpeg'
+        });
+        return optimized;
+      } catch (error) {
+        console.warn('Image optimization failed, using original:', error);
+        return image;
+      }
+    }
     return image;
   }
   
@@ -37,7 +61,8 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
       throw new Error('Image input is required for Veo 3 Fast Image-to-Video API');
     }
 
-    const imageUrl = prepareImageUrl(image);
+    // Optimize image before sending (async)
+    const imageUrl = await prepareImageUrl(image);
 
     const input = {
       prompt: prompt,

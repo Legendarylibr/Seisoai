@@ -338,13 +338,27 @@ app.post('/api/veo3/submit', async (req, res) => {
       return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
     }
     const input = req.body?.input || req.body;
+    
+    // Log payload size for debugging
+    const payload = JSON.stringify({ input });
+    const payloadSizeKB = (payload.length / 1024).toFixed(2);
+    const imageUrl = input?.image_url || '';
+    const imageSizeKB = imageUrl.startsWith('data:') ? (imageUrl.length / 1024).toFixed(2) : 'N/A (URL)';
+    
+    logger.info('Veo3 submit request', {
+      payloadSizeKB,
+      imageSizeKB,
+      hasImage: !!imageUrl,
+      promptLength: input?.prompt?.length || 0
+    });
+    
     const response = await fetch('https://queue.fal.run/fal-ai/veo3/fast/image-to-video', {
       method: 'POST',
       headers: {
         'Authorization': `Key ${FAL_API_KEY}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ input })
+      body: payload
     });
     const data = await response.json();
     if (!response.ok) {

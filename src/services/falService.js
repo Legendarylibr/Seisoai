@@ -2,6 +2,7 @@
 import { VISUAL_STYLES } from '../utils/styles.js';
 // import { performContentSafetyCheck, logSafetyViolation, getSafeAlternatives } from './contentSafetyService.js';
 import logger from '../utils/logger.js';
+import { optimizeImages, needsOptimization } from '../utils/imageOptimizer.js';
 
 const FAL_API_KEY = import.meta.env.VITE_FAL_API_KEY;
 
@@ -155,13 +156,45 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
 
     // Add reference image(s) if provided
     if (referenceImage) {
+      // Optimize images before sending to reduce payload size
+      let optimizedImages;
       if (Array.isArray(referenceImage)) {
+        // Check if optimization is needed for any image
+        const needsOpt = referenceImage.some(img => 
+          typeof img === 'string' && img.startsWith('data:') && needsOptimization(img, 300)
+        );
+        
+        if (needsOpt) {
+          console.log(`🔄 Optimizing ${referenceImage.length} images before sending to fal.ai...`);
+          optimizedImages = await optimizeImages(referenceImage, {
+            maxWidth: 2048,
+            maxHeight: 2048,
+            quality: 0.85,
+            format: 'jpeg'
+          });
+        } else {
+          optimizedImages = referenceImage;
+        }
+        
         // Multiple images for multi model
-        requestBody.image_urls = referenceImage;
-        console.log(`📸 Using ${referenceImage.length} reference images for multi-image generation`);
+        requestBody.image_urls = optimizedImages;
+        console.log(`📸 Using ${optimizedImages.length} reference images for multi-image generation`);
       } else {
+        // Single image - optimize if needed
+        if (typeof referenceImage === 'string' && referenceImage.startsWith('data:') && needsOptimization(referenceImage, 300)) {
+          console.log('🔄 Optimizing image before sending to fal.ai...');
+          optimizedImages = await optimizeImages(referenceImage, {
+            maxWidth: 2048,
+            maxHeight: 2048,
+            quality: 0.85,
+            format: 'jpeg'
+          });
+        } else {
+          optimizedImages = referenceImage;
+        }
+        
         // Single image for max model
-        requestBody.image_url = referenceImage;
+        requestBody.image_url = optimizedImages;
         console.log('📸 Using single reference image for image-to-image generation');
       }
     } else {
