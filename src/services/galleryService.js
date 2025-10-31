@@ -13,8 +13,10 @@ export const addGeneration = async (walletAddress, generationData) => {
       throw new Error('API URL not configured');
     }
 
-    // Normalize wallet address to lowercase for consistency
-    const normalizedAddress = walletAddress?.toLowerCase();
+    // Normalize wallet address (only lowercase EVM addresses, Solana addresses stay as-is)
+    const normalizedAddress = walletAddress?.startsWith('0x') 
+      ? walletAddress.toLowerCase() 
+      : walletAddress;
 
     console.log('📤 Calling /api/generations/add', {
       walletAddress: normalizedAddress,

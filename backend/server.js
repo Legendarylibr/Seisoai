@@ -2611,6 +2611,16 @@ app.post('/api/generations/add', async (req, res) => {
     // Use atomic update to do BOTH credit deduction AND add generation in one operation
     // This prevents race conditions and ensures credits are always deducted
     // DO NOT call user.save() after this - it would overwrite the atomic update!
+    console.log('🔧 [GENERATION ADD] Executing atomic update with:', {
+      walletAddress: normalizedWalletAddress,
+      creditsToDeduct,
+      hasGeneration: !!generation,
+      updateOperation: {
+        $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct },
+        $push: { generationHistory: generation, gallery: generation }
+      }
+    });
+    
     const updateResult = await User.findOneAndUpdate(
       { walletAddress: normalizedWalletAddress },
       {
@@ -2626,9 +2636,25 @@ app.post('/api/generations/add', async (req, res) => {
       { new: true }
     );
     
+    console.log('🔧 [GENERATION ADD] Atomic update result:', {
+      found: !!updateResult,
+      returnedCredits: updateResult?.credits,
+      returnedTotalSpent: updateResult?.totalCreditsSpent,
+      generationHistoryLength: updateResult?.generationHistory?.length,
+      galleryLength: updateResult?.gallery?.length
+    });
+    
     if (!updateResult) {
       console.error('❌ [GENERATION ADD] Failed to update user - user not found:', normalizedWalletAddress);
-      throw new Error('Failed to update user credits');
+      // Try to find the user to see if it exists
+      const checkUser = await User.findOne({ walletAddress: normalizedWalletAddress });
+      console.error('❌ [GENERATION ADD] User check:', {
+        exists: !!checkUser,
+        foundWalletAddress: checkUser?.walletAddress,
+        searchedFor: normalizedWalletAddress,
+        match: checkUser?.walletAddress === normalizedWalletAddress
+      });
+      throw new Error(`Failed to update user credits. User ${normalizedWalletAddress} not found in database.`);
     }
     
     // Ensure credits don't go negative (shouldn't happen due to effectiveCredits check, but safety)
