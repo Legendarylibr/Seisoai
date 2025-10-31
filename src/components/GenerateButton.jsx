@@ -37,7 +37,8 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     credits,
     isLoading: walletLoading,
     isNFTHolder,
-    refreshCredits
+    refreshCredits,
+    setCreditsManually
   } = useSimpleWallet();
   
   // Credits already uses Math.max internally, so use directly
@@ -156,28 +157,49 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       setCurrentStep('Complete!');
       setProgress(100); // Complete the progress bar
       
-      // Save generation to backend and deduct credits AFTER successful generation
+      // Save generation to backend and deduct credits IMMEDIATELY after image is returned
+      // This happens automatically - no manual trigger needed
+      console.log('💾 [AUTO] Saving generation and deducting credits automatically...', { 
+        address, 
+        imageUrl: imageUrl?.substring(0, 50),
+        currentCredits: credits 
+      });
+      
+      let deductionResult = null;
       try {
-        console.log('💾 Saving generation and deducting credits...', { address, imageUrl: imageUrl?.substring(0, 50) });
-        const result = await addGeneration(address, {
+        deductionResult = await addGeneration(address, {
           prompt: customPrompt || (selectedStyle ? selectedStyle.prompt : 'No style selected'),
           style: selectedStyle ? selectedStyle.name : 'No Style',
           imageUrl,
-          creditsUsed: 1 // Assuming 1 credit per generation
+          creditsUsed: 1 // 1 credit per generation
         });
-        console.log('✅ Generation saved and credits deducted:', result);
-        logger.info('Generation saved and credits deducted', { result, address });
+        console.log('✅ [AUTO] Generation saved and credits deducted:', {
+          success: deductionResult.success,
+          remainingCredits: deductionResult.remainingCredits,
+          creditsDeducted: deductionResult.creditsDeducted
+        });
+        logger.info('Generation saved and credits deducted', { result: deductionResult, address });
         
-        // Refresh credits immediately (skip cache) to show updated balance
-        if (refreshCredits) {
+        // Update UI immediately with the remaining credits from the response
+        if (deductionResult.remainingCredits !== undefined && setCreditsManually) {
+          console.log('📊 [AUTO] Updating UI credits immediately to:', deductionResult.remainingCredits);
+          setCreditsManually(deductionResult.remainingCredits);
+        }
+        
+        // Force immediate credit refresh to ensure UI is in sync with backend
+        console.log('🔄 [AUTO] Refreshing credits from backend to verify...');
+        if (refreshCredits && address) {
           await refreshCredits();
-          logger.info('Credits refreshed after generation');
+          console.log('✅ [AUTO] Credits refreshed in UI from backend');
+          logger.info('Credits refreshed after generation', { address });
+        } else {
+          console.warn('⚠️ [AUTO] Cannot refresh credits - missing refreshCredits or address');
         }
       } catch (error) {
-        console.error('❌ Error saving generation:', error);
+        console.error('❌ [AUTO] Error saving generation:', error);
         logger.error('Error saving generation', { error: error.message, address, imageUrl });
-        // Show error but still display the image
         setError(`Image generated but failed to save to history. Credits not deducted. Error: ${error.message}`);
+        // Still show the image even if saving failed
       }
       
       // Wait a moment to show completion, then set the image and stop loading

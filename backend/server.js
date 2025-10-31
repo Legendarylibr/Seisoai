@@ -2572,8 +2572,7 @@ app.post('/api/generations/add', async (req, res) => {
       });
     }
 
-    // Deduct credits from the credits field (current balance)
-    // Use the old working approach: direct mutation which Mongoose tracks better
+    // Deduct credits using atomic update to ensure it works reliably
     const previousCredits = user.credits || 0;
     const previousTotalSpent = user.totalCreditsSpent || 0;
     
@@ -2584,19 +2583,40 @@ app.post('/api/generations/add', async (req, res) => {
       effectiveCredits
     });
     
-    // Use -= and += like the old working version (Mongoose tracks these better)
-    user.credits = (user.credits || 0) - creditsToDeduct;
-    if (user.credits < 0) user.credits = 0; // Prevent negative credits
-    user.totalCreditsSpent = (user.totalCreditsSpent || 0) + creditsToDeduct;
+    // Use atomic update with $inc to ensure credits are deducted properly
+    const updateResult = await User.findOneAndUpdate(
+      { walletAddress: user.walletAddress },
+      {
+        $inc: { 
+          credits: -creditsToDeduct,
+          totalCreditsSpent: creditsToDeduct
+        }
+      },
+      { new: true }
+    );
     
-    // Mark fields as modified to ensure Mongoose saves them
-    user.markModified('credits');
-    user.markModified('totalCreditsSpent');
+    if (!updateResult) {
+      throw new Error('Failed to update user credits');
+    }
     
-    console.log('💰 [GENERATION ADD] After deduction (before save):', {
+    // Ensure credits don't go negative
+    if (updateResult.credits < 0) {
+      await User.findOneAndUpdate(
+        { walletAddress: user.walletAddress },
+        { $set: { credits: 0 } },
+        { new: true }
+      );
+      updateResult.credits = 0;
+    }
+    
+    // Update the user object for the rest of the code
+    user.credits = updateResult.credits;
+    user.totalCreditsSpent = updateResult.totalCreditsSpent;
+    
+    console.log('💰 [GENERATION ADD] After atomic deduction:', {
       newCredits: user.credits,
       newTotalSpent: user.totalCreditsSpent,
-      isModified: user.isModified('credits')
+      updateResultCredits: updateResult.credits
     });
     
     // Add generation to history
@@ -2613,9 +2633,9 @@ app.post('/api/generations/add', async (req, res) => {
     user.generationHistory.push(generation);
     user.gallery.push(generation);
     
-    console.log('💾 [GENERATION ADD] Saving user to database...');
+    console.log('💾 [GENERATION ADD] Saving user with generation history...');
     await user.save();
-    console.log('✅ [GENERATION ADD] User saved successfully');
+    console.log('✅ [GENERATION ADD] User saved successfully with generation');
     
     // Refetch to verify the save
     const savedUser = await User.findOne({ walletAddress: user.walletAddress });
