@@ -2710,8 +2710,64 @@ app.post('/api/generations/add', async (req, res) => {
       message: `Generation added to history. ${creditsToDeduct} credit(s) deducted. Remaining: ${finalCredits} credits.`
     });
   } catch (error) {
+    console.error('❌ [GENERATION ADD] ERROR:', error);
+    console.error('❌ [GENERATION ADD] Error stack:', error.stack);
     logger.error('Error adding generation:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * TEST ENDPOINT: Manually deduct credits for testing
+ */
+app.post('/api/test/deduct-credits', async (req, res) => {
+  try {
+    const { walletAddress, creditsToDeduct = 1 } = req.body;
+    
+    if (!walletAddress) {
+      return res.status(400).json({ success: false, error: 'walletAddress required' });
+    }
+    
+    const isSolanaAddress = !walletAddress.startsWith('0x');
+    const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    
+    console.log('🧪 [TEST] Manual credit deduction test:', {
+      original: walletAddress,
+      normalized: normalizedWalletAddress,
+      creditsToDeduct
+    });
+    
+    const user = await User.findOne({ walletAddress: normalizedWalletAddress });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    const beforeCredits = user.credits || 0;
+    
+    const updateResult = await User.findOneAndUpdate(
+      { walletAddress: normalizedWalletAddress },
+      {
+        $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct }
+      },
+      { new: true }
+    );
+    
+    const afterCredits = updateResult?.credits || 0;
+    
+    const savedUser = await User.findOne({ walletAddress: normalizedWalletAddress });
+    
+    return res.json({
+      success: true,
+      beforeCredits,
+      afterCredits,
+      savedCredits: savedUser?.credits,
+      creditsDeducted: creditsToDeduct,
+      matched: afterCredits === savedUser?.credits,
+      message: `Test deduction: ${beforeCredits} -> ${afterCredits} (saved: ${savedUser?.credits})`
+    });
+  } catch (error) {
+    console.error('❌ [TEST] Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
