@@ -2576,8 +2576,22 @@ app.post('/api/generations/add', async (req, res) => {
     // If credits is lower than totalCreditsEarned, we still deduct from credits
     // and it will naturally show the lower balance
     const previousCredits = user.credits || 0;
+    const previousTotalSpent = user.totalCreditsSpent || 0;
+    
+    console.log('💰 [GENERATION ADD] Before deduction:', {
+      previousCredits,
+      previousTotalSpent,
+      creditsToDeduct,
+      effectiveCredits
+    });
+    
     user.credits = Math.max(0, previousCredits - creditsToDeduct);
-    user.totalCreditsSpent = (user.totalCreditsSpent || 0) + creditsToDeduct;
+    user.totalCreditsSpent = previousTotalSpent + creditsToDeduct;
+    
+    console.log('💰 [GENERATION ADD] After deduction (before save):', {
+      newCredits: user.credits,
+      newTotalSpent: user.totalCreditsSpent
+    });
     
     // Add generation to history
     const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -2593,7 +2607,16 @@ app.post('/api/generations/add', async (req, res) => {
     user.generationHistory.push(generation);
     user.gallery.push(generation);
     
+    console.log('💾 [GENERATION ADD] Saving user to database...');
     await user.save();
+    console.log('✅ [GENERATION ADD] User saved successfully');
+    
+    // Refetch to verify the save
+    const savedUser = await User.findOne({ walletAddress: user.walletAddress });
+    console.log('✅ [GENERATION ADD] Verified saved credits:', {
+      savedCredits: savedUser?.credits,
+      savedTotalSpent: savedUser?.totalCreditsSpent
+    });
     
     logger.info('Generation added to history and credits deducted', {
       walletAddress: walletAddress.toLowerCase(),
@@ -2601,6 +2624,7 @@ app.post('/api/generations/add', async (req, res) => {
       creditsUsed: creditsToDeduct,
       previousCredits,
       newCredits: user.credits,
+      savedCredits: savedUser?.credits,
       totalCreditsSpent: user.totalCreditsSpent
     });
     
