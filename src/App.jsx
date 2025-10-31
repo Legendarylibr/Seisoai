@@ -10,12 +10,12 @@ import TokenPaymentModal from './components/TokenPaymentModal';
 // import StripePaymentModal from './components/StripePaymentModal'; // DISABLED - Stripe disabled, crypto only
 import AuthGuard from './components/AuthGuard';
 import ImageGallery from './components/ImageGallery';
-import VideoGeneration from './components/VideoGeneration';
 // Batch and Templates removed from UI
 // Settings removed from UI
+// Video functionality removed
 // import LegalDisclaimer from './components/LegalDisclaimer'; // DISABLED - Legal/terms removed from main screen
 import GenerateButton from './components/GenerateButton';
-import { Grid, Sparkles, Wallet, ArrowRight, Image, Video } from 'lucide-react';
+import { Grid, Sparkles, Wallet, ArrowRight, Image } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
@@ -24,7 +24,6 @@ function App() {
 
   const tabs = [
     { id: 'generate', name: 'Generate', icon: Sparkles },
-    { id: 'video', name: 'Video', icon: Video },
     { id: 'gallery', name: 'Gallery', icon: Grid }
   ];
 
@@ -81,11 +80,11 @@ function AppContent({ activeTab, onShowTokenPayment }) {
   // Show main content if wallet is connected (AuthGuard will handle credit requirements)
   return (
     <>
-      <AuthGuard requireCredits={activeTab === 'generate' || activeTab === 'video'}>
+      <AuthGuard requireCredits={activeTab === 'generate'}>
         {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} />}
-        {activeTab === 'video' && <VideoTab onShowTokenPayment={onShowTokenPayment} />}
         {activeTab === 'gallery' && <GalleryTab />}
         {/* Settings route removed */}
+        {/* Video tab removed */}
       </AuthGuard>
     </>
   );
@@ -368,12 +367,8 @@ function GalleryTab() {
   return <ImageGallery />;
 }
 
-function VideoTab({ onShowTokenPayment }) {
-  return <VideoGeneration onShowTokenPayment={onShowTokenPayment} />;
-}
-
 // TemplatesTab and BatchTab removed
-
+// VideoTab removed
 // SettingsTab removed
 
 export default App;

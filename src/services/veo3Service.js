@@ -138,30 +138,95 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
     // Poll for completion
     let attempts = 0;
     const maxAttempts = 120; // 2 minutes max
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 5; // Stop after 5 consecutive errors
     
     while (attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
       
-      const statusResponse = await fetch(`${backendBase}/api/veo3/status/${request_id}`, {
-        method: 'GET'
-      });
+      let statusResponse;
+      try {
+        statusResponse = await fetch(`${backendBase}/api/veo3/status/${request_id}`, {
+          method: 'GET'
+        });
+      } catch (fetchError) {
+        consecutiveErrors++;
+        console.warn(`⚠️ Status check failed (attempt ${attempts + 1}):`, fetchError.message);
+        
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          throw new Error(`Failed to check status after ${maxConsecutiveErrors} attempts: ${fetchError.message}`);
+        }
+        attempts++;
+        continue; // Retry on network errors
+      }
 
-      const status = await statusResponse.json();
+      let status;
+      try {
+        if (!statusResponse.ok) {
+          // If status is 404, the request ID might be invalid or expired
+          if (statusResponse.status === 404) {
+            throw new Error('Request ID not found. The video generation request may have expired.');
+          }
+          
+          const errorData = await statusResponse.json().catch(() => ({ 
+            error: `HTTP ${statusResponse.status}` 
+          }));
+          throw new Error(errorData.error || `Status check failed with status ${statusResponse.status}`);
+        }
+        
+        const responseData = await statusResponse.json();
+        
+        // Check if the backend returned an error
+        if (!responseData.success) {
+          throw new Error(responseData.error || 'Status check returned an error');
+        }
+        
+        status = responseData;
+        consecutiveErrors = 0; // Reset error counter on success
+      } catch (parseError) {
+        consecutiveErrors++;
+        console.warn(`⚠️ Status response parse error (attempt ${attempts + 1}):`, parseError.message);
+        
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          throw new Error(`Failed to parse status after ${maxConsecutiveErrors} attempts: ${parseError.message}`);
+        }
+        attempts++;
+        continue;
+      }
+
       console.log('📊 Status:', status.status);
 
       if (status.status === 'COMPLETED') {
         // Get the result
-        const resultResponse = await fetch(`${backendBase}/api/veo3/result/${request_id}`, {
-          method: 'GET'
-        });
+        let resultResponse;
+        try {
+          resultResponse = await fetch(`${backendBase}/api/veo3/result/${request_id}`, {
+            method: 'GET'
+          });
 
-        const result = await resultResponse.json();
-        
-        if (result.video && result.video.url) {
-          console.log('✅ Video generated successfully:', result.video.url);
-          return result.video.url;
-        } else {
-          throw new Error('No video URL in response');
+          if (!resultResponse.ok) {
+            const errorData = await resultResponse.json().catch(() => ({ 
+              error: `HTTP ${resultResponse.status}` 
+            }));
+            throw new Error(errorData.error || `Failed to get result: ${resultResponse.status}`);
+          }
+
+          const resultData = await resultResponse.json();
+          
+          if (!resultData.success) {
+            throw new Error(resultData.error || 'Result check returned an error');
+          }
+          
+          const result = resultData;
+          
+          if (result.video && result.video.url) {
+            console.log('✅ Video generated successfully:', result.video.url);
+            return result.video.url;
+          } else {
+            throw new Error('No video URL in response');
+          }
+        } catch (resultError) {
+          throw new Error(`Failed to retrieve video result: ${resultError.message}`);
         }
       } else if (status.status === 'FAILED') {
         throw new Error(status.error || 'Video generation failed');

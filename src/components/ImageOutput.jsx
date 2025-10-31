@@ -3,8 +3,7 @@ import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateImage } from '../services/smartImageService';
 import GenerateButton from './GenerateButton';
-import VideoGeneration from './VideoGeneration';
-import { X, Video } from 'lucide-react';
+import { X } from 'lucide-react';
 
 const ImageOutput = () => {
   const { 
@@ -33,7 +32,6 @@ const ImageOutput = () => {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [newPrompt, setNewPrompt] = useState('');
-  const [showVideoGenerator, setShowVideoGenerator] = useState(false);
 
   const handleDownload = async () => {
     if (!generatedImage || isDownloading) return;
@@ -320,18 +318,7 @@ const ImageOutput = () => {
               <span className="text-lg">✨</span>
               New Prompt
             </button>
-            <button
-              onClick={() => setShowVideoGenerator(true)}
-              disabled={!isConnected || credits < 10}
-              className="btn-primary flex items-center gap-2 text-sm px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed bg-purple-600 hover:bg-purple-700"
-            >
-              <Video className="w-4 h-4" />
-              Generate Video (10 credits)
-            </button>
           </div>
-          {credits < 10 && (
-            <p className="text-xs text-yellow-400 mt-2">⚠️ You need 10 credits to generate video. You have {credits} credits</p>
-          )}
         </div>
       </div>
 
@@ -406,37 +393,6 @@ const ImageOutput = () => {
         </div>
       )}
 
-      {/* Video Generator Modal */}
-      {showVideoGenerator && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-start justify-center z-50 overflow-y-auto p-4">
-          <div className="glass-effect rounded-xl p-6 max-w-4xl w-full my-8 relative">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <Video className="w-6 h-6 text-purple-400" />
-                Generate Video from Image
-              </h2>
-              <button
-                onClick={() => setShowVideoGenerator(false)}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="mb-4 p-4 bg-white/5 rounded-lg border border-white/10">
-              <p className="text-sm text-gray-300 mb-2">Using current generated image as reference:</p>
-              <img src={generatedImage} alt="Reference" className="w-full max-w-md mx-auto rounded-lg max-h-48 object-contain" />
-            </div>
-            <VideoGeneration
-              initialImage={generatedImage}
-              initialPrompt={currentGeneration?.prompt || ''}
-              onShowTokenPayment={() => {
-                setShowVideoGenerator(false);
-                // You might want to show token payment modal here
-              }}
-            />
-          </div>
-        </div>
-      )}
 
     </div>
   );

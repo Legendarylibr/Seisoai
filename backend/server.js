@@ -495,14 +495,75 @@ app.get('/api/veo3/status/:requestId', async (req, res) => {
     }
     const { requestId } = req.params;
     const url = `https://queue.fal.run/fal-ai/veo3/fast/image-to-video/requests/${requestId}/status`;
-    const response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
-    const data = await response.json();
+    
+    let response;
+    try {
+      response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
+    } catch (fetchError) {
+      logger.error('Veo3 status proxy fetch error', { 
+        requestId, 
+        error: fetchError.message, 
+        stack: fetchError.stack 
+      });
+      return res.status(500).json({ success: false, error: `Network error: ${fetchError.message}` });
+    }
+
+    let data;
+    let responseText = '';
+    try {
+      responseText = await response.text();
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (parseError) {
+      logger.error('Veo3 status proxy parse error', { 
+        requestId,
+        status: response.status,
+        responseText: responseText.substring(0, 200),
+        error: parseError.message 
+      });
+      return res.status(response.status || 500).json({ 
+        success: false, 
+        error: `Invalid response from Veo3 API: ${parseError.message}` 
+      });
+    }
+
     if (!response.ok) {
+      // If 404, the request ID might be invalid or expired
+      if (response.status === 404) {
+        logger.warn('Veo3 status request not found', { 
+          requestId,
+          status: response.status,
+          message: 'Request ID may be invalid or expired'
+        });
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Request ID not found. The video generation request may have expired or does not exist.',
+          ...data 
+        });
+      }
+      
+      logger.warn('Veo3 status API error', { 
+        requestId,
+        status: response.status, 
+        data 
+      });
       return res.status(response.status).json({ success: false, ...data });
     }
+    
+    // Validate that we have status data
+    if (!data || typeof data.status === 'undefined') {
+      logger.warn('Veo3 status response missing status field', { 
+        requestId,
+        data 
+      });
+    }
+    
     res.json({ success: true, ...data });
   } catch (error) {
-    logger.error('Veo3 status proxy error', { error: error.message });
+    logger.error('Veo3 status proxy error', { 
+      requestId: req.params.requestId,
+      error: error.message, 
+      stack: error.stack 
+    });
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -514,14 +575,67 @@ app.get('/api/veo3/result/:requestId', async (req, res) => {
     }
     const { requestId } = req.params;
     const url = `https://queue.fal.run/fal-ai/veo3/fast/image-to-video/requests/${requestId}/result`;
-    const response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
-    const data = await response.json();
+    
+    let response;
+    try {
+      response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
+    } catch (fetchError) {
+      logger.error('Veo3 result proxy fetch error', { 
+        requestId, 
+        error: fetchError.message, 
+        stack: fetchError.stack 
+      });
+      return res.status(500).json({ success: false, error: `Network error: ${fetchError.message}` });
+    }
+
+    let data;
+    let responseText = '';
+    try {
+      responseText = await response.text();
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (parseError) {
+      logger.error('Veo3 result proxy parse error', { 
+        requestId,
+        status: response.status,
+        responseText: responseText.substring(0, 200),
+        error: parseError.message 
+      });
+      return res.status(response.status || 500).json({ 
+        success: false, 
+        error: `Invalid response from Veo3 API: ${parseError.message}` 
+      });
+    }
+
     if (!response.ok) {
+      // If 404, the request ID might be invalid or expired
+      if (response.status === 404) {
+        logger.warn('Veo3 result request not found', { 
+          requestId,
+          status: response.status,
+          message: 'Request ID may be invalid or expired'
+        });
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Request ID not found. The video generation request may have expired or does not exist.',
+          ...data 
+        });
+      }
+      
+      logger.warn('Veo3 result API error', { 
+        requestId,
+        status: response.status, 
+        data 
+      });
       return res.status(response.status).json({ success: false, ...data });
     }
+    
     res.json({ success: true, ...data });
   } catch (error) {
-    logger.error('Veo3 result proxy error', { error: error.message });
+    logger.error('Veo3 result proxy error', { 
+      requestId: req.params.requestId,
+      error: error.message, 
+      stack: error.stack 
+    });
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -855,6 +969,18 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
       return Promise.allSettled(
         chainCollections.map(async (collection) => {
           try {
+            // Validate collection address before attempting to check
+            if (collection.type === 'erc721' || collection.type === 'erc20') {
+              if (!ethers.isAddress(collection.address)) {
+                logger.debug(`Skipping invalid collection address: ${collection.address}`, { 
+                  collectionName: collection.name,
+                  chainId: collection.chainId,
+                  type: collection.type
+                });
+                return null;
+              }
+            }
+            
             logger.debug('Checking collection', { 
               address: collection.address, 
               chainId: collection.chainId, 
@@ -869,43 +995,78 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
                 return null;
               }
               
-              // Validate addresses (use normalized address)
-              if (!ethers.isAddress(collection.address) || !ethers.isAddress(normalizedWalletAddress)) {
-                throw new Error(`Invalid address format - collection: ${collection.address}, wallet: ${normalizedWalletAddress}`);
+              // Validate wallet address
+              if (!ethers.isAddress(normalizedWalletAddress)) {
+                throw new Error(`Invalid wallet address format: ${normalizedWalletAddress}`);
               }
               
-              // NFT contract check with timeout
-              const nftContract = new ethers.Contract(
-                collection.address,
-                ['function balanceOf(address owner) view returns (uint256)'],
-                provider
-              );
+              // Use Alchemy NFT API - simple and reliable
+              const apiKey = getAlchemyApiKey(collection.chainId);
+              const apiBase = ALCHEMY_API_BASES[collection.chainId];
               
-              logger.debug('Calling balanceOf', { 
-                collection: collection.address, 
+              if (!apiKey || !apiBase) {
+                logger.warn('Alchemy API key not configured for chain', { chainId: collection.chainId });
+                // Fallback to ethers contract call
+                const nftContract = new ethers.Contract(
+                  collection.address,
+                  ['function balanceOf(address owner) view returns (uint256)'],
+                  provider
+                );
+                const balance = await nftContract.balanceOf(normalizedWalletAddress);
+                const balanceNumber = Number(balance);
+                if (balanceNumber > 0) {
+                  return {
+                    contractAddress: collection.address,
+                    chainId: collection.chainId,
+                    name: collection.name,
+                    type: collection.type,
+                    balance: balance.toString(),
+                    tokenIds: [],
+                    lastChecked: new Date()
+                  };
+                }
+                return null;
+              }
+              
+              // Simple Alchemy API call: Get NFTs for wallet and filter by collection
+              const alchemyUrl = `${apiBase}/v2/${apiKey}/getNFTs?owner=${normalizedWalletAddress}&contractAddresses[]=${collection.address}&withMetadata=false`;
+              
+              logger.info('Checking NFT via Alchemy API', { 
+                url: `${apiBase}/v2/${apiKey}/getNFTs?owner=...&contractAddresses[]=${collection.address}`,
+                collection: collection.address,
                 wallet: normalizedWalletAddress,
-                chainId: collection.chainId 
+                chainId: collection.chainId
               });
               
-              const balance = await Promise.race([
-                nftContract.balanceOf(normalizedWalletAddress),
-                new Promise((_, reject) => 
-                  setTimeout(() => reject(new Error('Contract call timeout')), 3000)
-                )
-              ]);
+              const response = await fetch(alchemyUrl, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                signal: AbortSignal.timeout(10000)
+              });
               
-              logger.debug('NFT balance check result', { 
-                address: collection.address, 
-                walletAddress: normalizedWalletAddress, 
-                balance: balance.toString(),
-                balanceAsNumber: Number(balance)
+              if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Alchemy API error: ${response.status} - ${errorText}`);
+              }
+              
+              const data = await response.json();
+              const nfts = data.ownedNfts || [];
+              const balance = nfts.length;
+              
+              logger.info('Alchemy API response', { 
+                collection: collection.address,
+                wallet: normalizedWalletAddress,
+                balance,
+                nftCount: nfts.length
               });
               
               if (balance > 0) {
-                logger.info('NFT found!', { 
+                logger.info('✅ NFT FOUND via Alchemy! User is a holder', { 
                   address: collection.address, 
                   name: collection.name, 
-                  balance: balance.toString() 
+                  balance,
+                  chainId: collection.chainId,
+                  walletAddress: normalizedWalletAddress
                 });
                 return {
                   contractAddress: collection.address,
@@ -913,10 +1074,11 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
                   name: collection.name,
                   type: collection.type,
                   balance: balance.toString(),
-                  tokenIds: [],
+                  tokenIds: nfts.map(nft => nft.id?.tokenId || nft.tokenId).filter(Boolean),
                   lastChecked: new Date()
                 };
               }
+              
               return null;
             } else if (collection.type === 'erc20') {
               // Skip EVM token checks for Solana addresses
@@ -925,9 +1087,9 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
                 return null;
               }
               
-              // Validate addresses (use normalized address)
-              if (!ethers.isAddress(collection.address) || !ethers.isAddress(normalizedWalletAddress)) {
-                throw new Error(`Invalid address format - collection: ${collection.address}, wallet: ${normalizedWalletAddress}`);
+              // Validate wallet address (collection address already validated above)
+              if (!ethers.isAddress(normalizedWalletAddress)) {
+                throw new Error(`Invalid wallet address format: ${normalizedWalletAddress}`);
               }
               
               // Token contract check with timeout
@@ -946,28 +1108,34 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
               const [balance, decimals] = await Promise.race([
                 Promise.all([tokenContract.balanceOf(normalizedWalletAddress), tokenContract.decimals()]),
                 new Promise((_, reject) => 
-                  setTimeout(() => reject(new Error('Contract call timeout')), 3000)
+                  setTimeout(() => reject(new Error('Contract call timeout')), 10000)
                 )
               ]);
               
               const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
               const minBalance = parseFloat(collection.minBalance);
+              const meetsMinimum = formattedBalance >= minBalance;
               
-              logger.debug('Token balance check result', { 
+              logger.info('Token balance check result', { 
                 address: collection.address, 
-                walletAddress: normalizedWalletAddress, 
+                walletAddress: normalizedWalletAddress,
+                chainId: collection.chainId,
+                collectionName: collection.name,
                 balance: formattedBalance,
+                balanceRaw: balance.toString(),
                 minBalance,
                 decimals,
-                meetsMinimum: formattedBalance >= minBalance
+                meetsMinimum
               });
               
-              if (formattedBalance >= minBalance) {
-                logger.info('Token balance sufficient!', { 
+              if (meetsMinimum) {
+                logger.info('✅ TOKEN BALANCE SUFFICIENT! User is a holder', { 
                   address: collection.address, 
                   name: collection.name, 
                   balance: formattedBalance,
-                  minBalance 
+                  minBalance,
+                  chainId: collection.chainId,
+                  walletAddress: normalizedWalletAddress
                 });
                 return {
                   contractAddress: collection.address,
@@ -978,20 +1146,45 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
                   minBalance: collection.minBalance,
                   lastChecked: new Date()
                 };
+              } else {
+                logger.debug('Token balance insufficient', {
+                  address: collection.address,
+                  name: collection.name,
+                  balance: formattedBalance,
+                  minBalance,
+                  walletAddress: normalizedWalletAddress
+                });
               }
               return null;
             }
           } catch (error) {
-            logger.warn(`Error checking collection ${collection.address}:`, {
-              error: error.message,
-              errorStack: error.stack,
+            // Log detailed error information for debugging
+            const errorDetails = {
+              collectionAddress: collection.address,
               chainId: collection.chainId,
-              name: collection.name,
-              type: collection.type,
+              collectionName: collection.name,
+              collectionType: collection.type,
               walletAddress: normalizedWalletAddress,
-              originalWalletAddress: walletAddress
-            });
-            return null; // Return null instead of throwing to continue processing
+              errorMessage: error.message,
+              errorName: error.name,
+              errorCode: error.code,
+              // Only include stack trace in development or for critical errors
+              ...(process.env.NODE_ENV === 'development' && { errorStack: error.stack?.substring(0, 500) })
+            };
+            
+            // Categorize common errors
+            if (error.message?.includes('timeout') || error.message?.includes('Contract call timeout')) {
+              logger.debug(`Collection check timeout (will retry on next check): ${collection.address}`, errorDetails);
+            } else if (error.message?.includes('network') || error.message?.includes('ECONNREFUSED') || error.message?.includes('fetch failed')) {
+              logger.debug(`Network error checking collection (will retry on next check): ${collection.address}`, errorDetails);
+            } else if (error.code === 'CALL_EXCEPTION' || error.message?.includes('call exception')) {
+              logger.debug(`Contract call exception (contract may not exist or be incompatible): ${collection.address}`, errorDetails);
+            } else {
+              // Unknown errors - log as warning for investigation
+              logger.warn(`Error checking collection ${collection.address}:`, errorDetails);
+            }
+            
+            return null; // Return null instead of throwing to continue processing other collections
           }
         })
       );
@@ -999,22 +1192,58 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
   );
   
   // Flatten results and filter out nulls
+  let totalChecked = 0;
+  let successfulChecks = 0;
+  let failedChecks = 0;
+  
   for (const chainResult of chainResults) {
     if (chainResult.status === 'fulfilled') {
       for (const collectionResult of chainResult.value) {
-        if (collectionResult.status === 'fulfilled' && collectionResult.value) {
-          ownedCollections.push(collectionResult.value);
+        totalChecked++;
+        if (collectionResult.status === 'fulfilled') {
+          if (collectionResult.value) {
+            ownedCollections.push(collectionResult.value);
+            successfulChecks++;
+            logger.info(`✅ Collection check successful: ${collectionResult.value.name}`, {
+              address: collectionResult.value.contractAddress,
+              balance: collectionResult.value.balance,
+              chainId: collectionResult.value.chainId
+            });
+          } else {
+            // Result was null (no balance or other reason)
+            failedChecks++;
+          }
+        } else {
+          // Promise was rejected
+          failedChecks++;
+          logger.warn('Collection check failed (promise rejected):', {
+            reason: collectionResult.reason?.message || collectionResult.reason,
+            error: collectionResult.reason
+          });
         }
       }
+    } else {
+      // Chain-level failure
+      logger.warn('Chain check failed:', {
+        chainId: chainResult.reason?.chainId || 'unknown',
+        error: chainResult.reason?.message || chainResult.reason
+      });
     }
   }
   
   // Only consider wallet as NFT holder if they actually have NFTs (balance > 0)
   // Handle both integer balances (ERC721) and decimal balances (ERC20)
   const isHolder = ownedCollections.some(collection => {
-    if (!collection.balance || collection.error) return false;
+    if (!collection.balance || collection.error) {
+      logger.debug('Skipping collection with invalid balance', { collection });
+      return false;
+    }
     const balance = parseFloat(collection.balance);
-    return !isNaN(balance) && balance > 0;
+    const isValid = !isNaN(balance) && balance > 0;
+    if (isValid) {
+      logger.info(`NFT Holder detected! Collection: ${collection.name}, Balance: ${balance}`);
+    }
+    return isValid;
   });
   
   logger.info('NFT check completed', { 
@@ -1022,10 +1251,28 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
     originalWalletAddress: walletAddress,
     isHolder,
     ownedCollectionsCount: ownedCollections.length,
-    collections: ownedCollections.map(c => ({ name: c.name, balance: c.balance, chainId: c.chainId }))
+    totalChecked,
+    successfulChecks,
+    failedChecks,
+    collections: ownedCollections.map(c => ({ name: c.name, balance: c.balance, chainId: c.chainId, type: c.type })),
+    // Include details about failed checks for debugging
+    ...(failedChecks > 0 && {
+      warning: `${failedChecks} collection checks failed - check logs for details`
+    })
   });
   
   return { ownedCollections, isHolder };
+};
+
+// Alchemy API Key (extract from RPC URL or use dedicated env var)
+const getAlchemyApiKey = (chainId) => {
+  const apiKey = process.env.ALCHEMY_API_KEY;
+  if (apiKey) return apiKey;
+  
+  // Try to extract from RPC URL
+  const rpcUrl = RPC_ENDPOINTS[chainId] || '';
+  const match = rpcUrl.match(/\/v2\/([^\/\?]+)/);
+  return match ? match[1] : null;
 };
 
 // RPC endpoints with fallback to public endpoints
@@ -1035,6 +1282,15 @@ const RPC_ENDPOINTS = {
   '137': process.env.POLYGON_RPC_URL || 'https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
   '42161': process.env.ARBITRUM_RPC_URL || 'https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
   '10': process.env.OPTIMISM_RPC_URL || 'https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
+};
+
+// Alchemy API base URLs by chain
+const ALCHEMY_API_BASES = {
+  '1': 'https://eth-mainnet.g.alchemy.com',
+  '8453': 'https://base-mainnet.g.alchemy.com',
+  '137': 'https://polygon-mainnet.g.alchemy.com',
+  '42161': 'https://arb-mainnet.g.alchemy.com',
+  '10': 'https://opt-mainnet.g.alchemy.com'
 };
 
 // ERC-20 ABI
