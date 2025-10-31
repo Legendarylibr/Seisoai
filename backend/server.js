@@ -2539,12 +2539,23 @@ app.post('/api/generations/add', async (req, res) => {
       });
     }
 
-    console.log('🔍 [GENERATION ADD] Getting user:', walletAddress);
-    const user = await getOrCreateUser(walletAddress);
+    // Normalize wallet address to match database storage
+    const isSolanaAddress = !walletAddress.startsWith('0x');
+    const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    
+    console.log('🔍 [GENERATION ADD] Getting user:', {
+      originalWalletAddress: walletAddress,
+      normalizedWalletAddress: normalizedWalletAddress,
+      isSolana: isSolanaAddress
+    });
+    
+    const user = await getOrCreateUser(normalizedWalletAddress);
     console.log('👤 [GENERATION ADD] User found:', {
       walletAddress: user.walletAddress,
       credits: user.credits,
-      totalCreditsEarned: user.totalCreditsEarned
+      totalCreditsEarned: user.totalCreditsEarned,
+      totalCreditsSpent: user.totalCreditsSpent,
+      matchesNormalized: user.walletAddress === normalizedWalletAddress
     });
     
     // Use effective credits (max of credits and totalCreditsEarned) to handle granted credits
@@ -2552,7 +2563,7 @@ app.post('/api/generations/add', async (req, res) => {
     const creditsToDeduct = creditsUsed || 1; // Default to 1 credit if not specified
     
     logger.debug('Checking credits for generation', {
-      walletAddress: walletAddress.toLowerCase(),
+      walletAddress: normalizedWalletAddress,
       credits: user.credits,
       totalCreditsEarned: user.totalCreditsEarned,
       effectiveCredits,
@@ -2562,9 +2573,11 @@ app.post('/api/generations/add', async (req, res) => {
     // Check if user has enough credits
     if (effectiveCredits < creditsToDeduct) {
       logger.warn('Insufficient credits for generation', {
-        walletAddress: walletAddress.toLowerCase(),
+        walletAddress: normalizedWalletAddress,
         effectiveCredits,
-        creditsToDeduct
+        creditsToDeduct,
+        rawCredits: user.credits,
+        rawTotalEarned: user.totalCreditsEarned
       });
       return res.status(400).json({
         success: false,
@@ -2572,7 +2585,7 @@ app.post('/api/generations/add', async (req, res) => {
       });
     }
 
-    // Deduct credits using atomic update to ensure it works reliably
+    // Deduct credits and add generation in a SINGLE atomic operation to prevent conflicts
     const previousCredits = user.credits || 0;
     const previousTotalSpent = user.totalCreditsSpent || 0;
     
@@ -2580,46 +2593,11 @@ app.post('/api/generations/add', async (req, res) => {
       previousCredits,
       previousTotalSpent,
       creditsToDeduct,
-      effectiveCredits
+      effectiveCredits,
+      userWalletAddress: user.walletAddress
     });
     
-    // Use atomic update with $inc to ensure credits are deducted properly
-    const updateResult = await User.findOneAndUpdate(
-      { walletAddress: user.walletAddress },
-      {
-        $inc: { 
-          credits: -creditsToDeduct,
-          totalCreditsSpent: creditsToDeduct
-        }
-      },
-      { new: true }
-    );
-    
-    if (!updateResult) {
-      throw new Error('Failed to update user credits');
-    }
-    
-    // Ensure credits don't go negative
-    if (updateResult.credits < 0) {
-      await User.findOneAndUpdate(
-        { walletAddress: user.walletAddress },
-        { $set: { credits: 0 } },
-        { new: true }
-      );
-      updateResult.credits = 0;
-    }
-    
-    // Update the user object for the rest of the code
-    user.credits = updateResult.credits;
-    user.totalCreditsSpent = updateResult.totalCreditsSpent;
-    
-    console.log('💰 [GENERATION ADD] After atomic deduction:', {
-      newCredits: user.credits,
-      newTotalSpent: user.totalCreditsSpent,
-      updateResultCredits: updateResult.credits
-    });
-    
-    // Add generation to history
+    // Create generation object
     const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const generation = {
       id: generationId,
@@ -2630,37 +2608,80 @@ app.post('/api/generations/add', async (req, res) => {
       timestamp: new Date()
     };
     
-    user.generationHistory.push(generation);
-    user.gallery.push(generation);
+    // Use atomic update to do BOTH credit deduction AND add generation in one operation
+    // This prevents race conditions and ensures credits are always deducted
+    // DO NOT call user.save() after this - it would overwrite the atomic update!
+    const updateResult = await User.findOneAndUpdate(
+      { walletAddress: normalizedWalletAddress },
+      {
+        $inc: { 
+          credits: -creditsToDeduct,
+          totalCreditsSpent: creditsToDeduct
+        },
+        $push: {
+          generationHistory: generation,
+          gallery: generation
+        }
+      },
+      { new: true }
+    );
     
-    console.log('💾 [GENERATION ADD] Saving user with generation history...');
-    await user.save();
-    console.log('✅ [GENERATION ADD] User saved successfully with generation');
+    if (!updateResult) {
+      console.error('❌ [GENERATION ADD] Failed to update user - user not found:', normalizedWalletAddress);
+      throw new Error('Failed to update user credits');
+    }
     
-    // Refetch to verify the save
-    const savedUser = await User.findOne({ walletAddress: user.walletAddress });
+    // Ensure credits don't go negative (shouldn't happen due to effectiveCredits check, but safety)
+    if (updateResult.credits < 0) {
+      console.warn('⚠️ [GENERATION ADD] Credits went negative, correcting to 0');
+      await User.findOneAndUpdate(
+        { walletAddress: normalizedWalletAddress },
+        { $set: { credits: 0 } },
+        { new: true }
+      );
+      updateResult.credits = 0;
+    }
+    
+    console.log('✅ [GENERATION ADD] Atomic update completed:', {
+      newCredits: updateResult.credits,
+      newTotalSpent: updateResult.totalCreditsSpent,
+      generationId,
+      previousCredits,
+      creditsDeducted: creditsToDeduct
+    });
+    
+    // Refetch to verify everything saved correctly
+    const savedUser = await User.findOne({ walletAddress: normalizedWalletAddress });
     console.log('✅ [GENERATION ADD] Verified saved credits:', {
       savedCredits: savedUser?.credits,
       savedTotalSpent: savedUser?.totalCreditsSpent,
-      matchExpected: savedUser?.credits === user.credits
+      generationHistoryCount: savedUser?.generationHistory?.length,
+      galleryCount: savedUser?.gallery?.length,
+      matchExpected: savedUser?.credits === updateResult.credits,
+      creditsActuallyDeducted: previousCredits - (savedUser?.credits || 0)
     });
+    
+    // Use updateResult for response
+    const finalCredits = updateResult.credits;
     
     logger.info('Generation added to history and credits deducted', {
       walletAddress: walletAddress.toLowerCase(),
       generationId,
       creditsUsed: creditsToDeduct,
       previousCredits,
-      newCredits: user.credits,
+      newCredits: finalCredits,
       savedCredits: savedUser?.credits,
-      totalCreditsSpent: user.totalCreditsSpent
+      totalCreditsSpent: updateResult.totalCreditsSpent,
+      creditsActuallyDeducted: previousCredits - finalCredits
     });
     
     res.json({
       success: true,
       generationId,
-      remainingCredits: user.credits,
+      remainingCredits: finalCredits,
       creditsDeducted: creditsToDeduct,
-      message: `Generation added to history. ${creditsToDeduct} credit(s) deducted.`
+      previousCredits: previousCredits,
+      message: `Generation added to history. ${creditsToDeduct} credit(s) deducted. Remaining: ${finalCredits} credits.`
     });
   } catch (error) {
     logger.error('Error adding generation:', error);
