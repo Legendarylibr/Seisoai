@@ -24,9 +24,10 @@ export const checkNFTHoldings = async (walletAddress) => {
       return { isHolder: false, collections: [] };
     }
 
-    // Normalize wallet address (lowercase for EVM addresses)
-    const normalizedAddress = walletAddress.toLowerCase();
-    console.log('🔍 Checking NFT holdings for:', normalizedAddress, 'API URL:', API_URL);
+    // Normalize wallet address (lowercase for EVM addresses, unchanged for Solana)
+    const isSolanaAddress = !walletAddress.startsWith('0x');
+    const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    console.log('🔍 Checking NFT holdings for:', normalizedAddress, 'API URL:', API_URL, 'isSolana:', isSolanaAddress);
     
     // Add timeout to prevent hanging
     const controller = new AbortController();

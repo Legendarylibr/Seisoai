@@ -270,6 +270,9 @@ export const SimpleWalletProvider = ({ children }) => {
 
   // Connect wallet with wallet type support
   const connectWallet = async (walletType = 'metamask') => {
+    // Declare timeout outside try block so it's accessible in catch
+    let connectionTimeout = null;
+    
     try {
       setIsLoading(true);
       setError(null);
@@ -279,7 +282,7 @@ export const SimpleWalletProvider = ({ children }) => {
 
       // Add timeout to prevent infinite loading
       let timeoutTriggered = false;
-      const connectionTimeout = setTimeout(() => {
+      connectionTimeout = setTimeout(() => {
         if (!timeoutTriggered) {
           timeoutTriggered = true;
           setIsLoading(false);
@@ -290,184 +293,216 @@ export const SimpleWalletProvider = ({ children }) => {
       // Handle different wallet types
       switch (walletType) {
         case 'metamask':
-          if (!window.ethereum) {
-            throw new Error('MetaMask not found. Please install MetaMask extension.');
-          }
-          // Find MetaMask provider specifically
-          if (window.ethereum.providers?.length > 0) {
-            // Multiple wallets installed, find MetaMask
-            provider = window.ethereum.providers.find(p => p.isMetaMask && !p.isRabby);
-            if (!provider) {
-              throw new Error('MetaMask not found. Please make sure MetaMask is installed and enabled.');
+          try {
+            if (!window.ethereum) {
+              throw new Error('MetaMask not found. Please install MetaMask extension.');
             }
-          } else if (window.ethereum.isMetaMask) {
-            // Only MetaMask is installed (or it's the default)
-            provider = window.ethereum;
-          } else {
-            throw new Error('MetaMask not found. Please install MetaMask extension.');
+            // Find MetaMask provider specifically
+            if (window.ethereum.providers?.length > 0) {
+              // Multiple wallets installed, find MetaMask
+              provider = window.ethereum.providers.find(p => p.isMetaMask && !p.isRabby);
+              if (!provider) {
+                throw new Error('MetaMask not found. Please make sure MetaMask is installed and enabled.');
+              }
+            } else if (window.ethereum.isMetaMask) {
+              // Only MetaMask is installed (or it's the default)
+              provider = window.ethereum;
+            } else {
+              throw new Error('MetaMask not found. Please install MetaMask extension.');
+            }
+            
+            // Skip wallet_requestPermissions for speed - go straight to eth_requestAccounts
+            const accounts = await provider.request({ 
+              method: 'eth_requestAccounts' 
+            });
+            if (!accounts || accounts.length === 0) {
+              throw new Error('No accounts found. Please unlock MetaMask and try again.');
+            }
+            address = accounts[0];
+            setWalletType('evm');
+            console.log('✅ MetaMask connected successfully:', address);
+          } catch (metamaskError) {
+            // Ensure timeout is cleared before rethrowing
+            if (connectionTimeout) clearTimeout(connectionTimeout);
+            throw metamaskError;
           }
-          
-          // Skip wallet_requestPermissions for speed - go straight to eth_requestAccounts
-          const accounts = await provider.request({ 
-            method: 'eth_requestAccounts' 
-          });
-          if (!accounts || accounts.length === 0) {
-            throw new Error('No accounts found. Please unlock MetaMask and try again.');
-          }
-        address = accounts[0];
-        setWalletType('evm');
-        console.log('✅ MetaMask connected successfully:', address);
         break;
 
       case 'rabby':
-          // Fast check - no waiting for injection
-          if (!window.ethereum) {
-            throw new Error('No wallet found. Please install Rabby Wallet extension.');
+          try {
+            // Fast check - no waiting for injection
+            if (!window.ethereum) {
+              throw new Error('No wallet found. Please install Rabby Wallet extension.');
+            }
+            
+            // Fast detection - try providers first, then primary
+            if (window.ethereum.providers?.length > 0) {
+              provider = window.ethereum.providers.find(p => p.isRabby);
+            }
+            
+            if (!provider && window.ethereum.isRabby) {
+              provider = window.ethereum;
+            }
+            
+            if (!provider) {
+              provider = window.ethereum;
+            }
+            
+            if (!provider?.request) {
+              throw new Error('Rabby wallet provider not ready. Please try again.');
+            }
+            
+            // Skip wallet_requestPermissions for speed - go straight to eth_requestAccounts
+            const rabbyAccounts = await Promise.race([
+              provider.request({ 
+                method: 'eth_requestAccounts' 
+              }),
+              new Promise((_, reject) => setTimeout(() => {
+                reject(new Error('Connection timeout. Please ensure your wallet is unlocked and try again.'));
+              }, 20000)) // Reduced to 20 seconds
+            ]);
+            
+            if (!rabbyAccounts || rabbyAccounts.length === 0) {
+              throw new Error('No accounts found. Please unlock your wallet and try again.');
+            }
+            address = rabbyAccounts[0];
+            setWalletType('evm');
+            console.log('✅ Rabby connected successfully:', address);
+          } catch (rabbyError) {
+            // Ensure timeout is cleared before rethrowing
+            if (connectionTimeout) clearTimeout(connectionTimeout);
+            throw rabbyError;
           }
-          
-          // Fast detection - try providers first, then primary
-          if (window.ethereum.providers?.length > 0) {
-            provider = window.ethereum.providers.find(p => p.isRabby);
-          }
-          
-          if (!provider && window.ethereum.isRabby) {
-            provider = window.ethereum;
-          }
-          
-          if (!provider) {
-            provider = window.ethereum;
-          }
-          
-          if (!provider?.request) {
-            throw new Error('Rabby wallet provider not ready. Please try again.');
-          }
-          
-          // Skip wallet_requestPermissions for speed - go straight to eth_requestAccounts
-          const rabbyAccounts = await Promise.race([
-            provider.request({ 
-              method: 'eth_requestAccounts' 
-            }),
-            new Promise((_, reject) => setTimeout(() => {
-              reject(new Error('Connection timeout. Please ensure your wallet is unlocked and try again.'));
-            }, 20000)) // Reduced to 20 seconds
-          ]);
-          
-          if (!rabbyAccounts || rabbyAccounts.length === 0) {
-            throw new Error('No accounts found. Please unlock your wallet and try again.');
-          }
-        address = rabbyAccounts[0];
-        setWalletType('evm');
-        console.log('✅ Rabby connected successfully:', address);
         break;
 
       case 'coinbase':
-          if (!window.ethereum) {
-            throw new Error('Coinbase Wallet not found. Please install Coinbase Wallet extension.');
-          }
-          // Find Coinbase Wallet provider specifically
-          if (window.ethereum.providers?.length > 0) {
-            // Multiple wallets installed, find Coinbase Wallet
-            provider = window.ethereum.providers.find(p => p.isCoinbaseWallet);
-            if (!provider) {
-              throw new Error('Coinbase Wallet not found. Please make sure Coinbase Wallet is installed and enabled.');
+          try {
+            if (!window.ethereum) {
+              throw new Error('Coinbase Wallet not found. Please install Coinbase Wallet extension.');
             }
-          } else if (window.ethereum.isCoinbaseWallet) {
-            // Only Coinbase Wallet is installed
-            provider = window.ethereum;
-          } else {
-            throw new Error('Coinbase Wallet not found. Please install Coinbase Wallet extension.');
+            // Find Coinbase Wallet provider specifically
+            if (window.ethereum.providers?.length > 0) {
+              // Multiple wallets installed, find Coinbase Wallet
+              provider = window.ethereum.providers.find(p => p.isCoinbaseWallet);
+              if (!provider) {
+                throw new Error('Coinbase Wallet not found. Please make sure Coinbase Wallet is installed and enabled.');
+              }
+            } else if (window.ethereum.isCoinbaseWallet) {
+              // Only Coinbase Wallet is installed
+              provider = window.ethereum;
+            } else {
+              throw new Error('Coinbase Wallet not found. Please install Coinbase Wallet extension.');
+            }
+            
+            // Skip wallet_requestPermissions for speed - go straight to eth_requestAccounts
+            const coinbaseAccounts = await provider.request({ 
+              method: 'eth_requestAccounts' 
+            });
+            if (!coinbaseAccounts || coinbaseAccounts.length === 0) {
+              throw new Error('No accounts found. Please unlock Coinbase Wallet and try again.');
+            }
+            address = coinbaseAccounts[0];
+            setWalletType('evm');
+            console.log('✅ Coinbase Wallet connected successfully:', address);
+          } catch (coinbaseError) {
+            // Ensure timeout is cleared before rethrowing
+            if (connectionTimeout) clearTimeout(connectionTimeout);
+            throw coinbaseError;
           }
-          
-          // Skip wallet_requestPermissions for speed - go straight to eth_requestAccounts
-          const coinbaseAccounts = await provider.request({ 
-            method: 'eth_requestAccounts' 
-          });
-          if (!coinbaseAccounts || coinbaseAccounts.length === 0) {
-            throw new Error('No accounts found. Please unlock Coinbase Wallet and try again.');
-          }
-        address = coinbaseAccounts[0];
-        setWalletType('evm');
-        console.log('✅ Coinbase Wallet connected successfully:', address);
         break;
 
       case 'phantom':
-          if (!window.solana || !window.solana.isPhantom) {
-            throw new Error('Phantom Wallet not found. Please install Phantom extension.');
-          }
-          provider = window.solana;
-          
-          // Add connection timeout for Solana
-          let phantomTimeoutTriggered = false;
-          const phantomTimeout = setTimeout(() => {
-            if (!phantomTimeoutTriggered) {
-              phantomTimeoutTriggered = true;
-              throw new Error('Phantom connection timeout. Please try again.');
-            }
-          }, 15000); // 15 second timeout for Phantom
-          
           try {
-            // This will prompt user to unlock Phantom if locked and connect
-            const resp = await Promise.race([
-              provider.connect(),
-              new Promise((_, reject) => setTimeout(() => {
-                if (!phantomTimeoutTriggered) {
-                  phantomTimeoutTriggered = true;
-                  reject(new Error('Phantom connection timeout. Please try again.'));
-                }
-              }, 15000))
-            ]);
-            clearTimeout(phantomTimeout);
-            
-            if (!resp || !resp.publicKey) {
-              throw new Error('Failed to connect. Please unlock Phantom and try again.');
+            if (!window.solana || !window.solana.isPhantom) {
+              throw new Error('Phantom Wallet not found. Please install Phantom extension.');
             }
-            address = resp.publicKey.toString();
-            setWalletType('solana');
-            console.log('✅ Phantom connected successfully:', address);
-          } catch (phantomError) {
-            clearTimeout(phantomTimeout);
-            console.error('❌ Phantom connection failed:', phantomError);
-            throw new Error(`Phantom connection failed: ${phantomError.message}`);
+            provider = window.solana;
+            
+            // Add connection timeout for Solana
+            let phantomTimeoutTriggered = false;
+            const phantomTimeout = setTimeout(() => {
+              if (!phantomTimeoutTriggered) {
+                phantomTimeoutTriggered = true;
+                throw new Error('Phantom connection timeout. Please try again.');
+              }
+            }, 15000); // 15 second timeout for Phantom
+            
+            try {
+              // This will prompt user to unlock Phantom if locked and connect
+              const resp = await Promise.race([
+                provider.connect(),
+                new Promise((_, reject) => setTimeout(() => {
+                  if (!phantomTimeoutTriggered) {
+                    phantomTimeoutTriggered = true;
+                    reject(new Error('Phantom connection timeout. Please try again.'));
+                  }
+                }, 15000))
+              ]);
+              clearTimeout(phantomTimeout);
+              
+              if (!resp || !resp.publicKey) {
+                throw new Error('Failed to connect. Please unlock Phantom and try again.');
+              }
+              address = resp.publicKey.toString();
+              setWalletType('solana');
+              console.log('✅ Phantom connected successfully:', address);
+            } catch (phantomError) {
+              clearTimeout(phantomTimeout);
+              if (connectionTimeout) clearTimeout(connectionTimeout);
+              console.error('❌ Phantom connection failed:', phantomError);
+              throw new Error(`Phantom connection failed: ${phantomError.message}`);
+            }
+          } catch (phantomOuterError) {
+            // Ensure timeout is cleared before rethrowing
+            if (connectionTimeout) clearTimeout(connectionTimeout);
+            throw phantomOuterError;
           }
         break;
 
       case 'solflare':
-          if (!window.solflare) {
-            throw new Error('Solflare Wallet not found. Please install Solflare extension.');
-          }
-          provider = window.solflare;
-          
-          // Add connection timeout for Solflare
-          let solflareTimeoutTriggered = false;
-          const solflareTimeout = setTimeout(() => {
-            if (!solflareTimeoutTriggered) {
-              solflareTimeoutTriggered = true;
-            }
-          }, 15000); // 15 second timeout for Solflare
-          
           try {
-            // This will prompt user to unlock Solflare if locked
-            await Promise.race([
-              provider.connect(),
-              new Promise((_, reject) => setTimeout(() => {
-                if (!solflareTimeoutTriggered) {
-                  solflareTimeoutTriggered = true;
-                  reject(new Error('Solflare connection timeout. Please try again.'));
-                }
-              }, 15000))
-            ]);
-            clearTimeout(solflareTimeout);
-            
-            if (!provider.publicKey) {
-              throw new Error('Failed to connect. Please unlock Solflare and try again.');
+            if (!window.solflare) {
+              throw new Error('Solflare Wallet not found. Please install Solflare extension.');
             }
-            address = provider.publicKey.toString();
-            setWalletType('solana');
-            console.log('✅ Solflare connected successfully:', address);
-          } catch (solflareError) {
-            clearTimeout(solflareTimeout);
-            console.error('❌ Solflare connection failed:', solflareError);
-            throw new Error(`Solflare connection failed: ${solflareError.message}`);
+            provider = window.solflare;
+            
+            // Add connection timeout for Solflare
+            let solflareTimeoutTriggered = false;
+            const solflareTimeout = setTimeout(() => {
+              if (!solflareTimeoutTriggered) {
+                solflareTimeoutTriggered = true;
+              }
+            }, 15000); // 15 second timeout for Solflare
+            
+            try {
+              // This will prompt user to unlock Solflare if locked
+              await Promise.race([
+                provider.connect(),
+                new Promise((_, reject) => setTimeout(() => {
+                  if (!solflareTimeoutTriggered) {
+                    solflareTimeoutTriggered = true;
+                    reject(new Error('Solflare connection timeout. Please try again.'));
+                  }
+                }, 15000))
+              ]);
+              clearTimeout(solflareTimeout);
+              
+              if (!provider.publicKey) {
+                throw new Error('Failed to connect. Please unlock Solflare and try again.');
+              }
+              address = provider.publicKey.toString();
+              setWalletType('solana');
+              console.log('✅ Solflare connected successfully:', address);
+            } catch (solflareError) {
+              clearTimeout(solflareTimeout);
+              if (connectionTimeout) clearTimeout(connectionTimeout);
+              console.error('❌ Solflare connection failed:', solflareError);
+              throw new Error(`Solflare connection failed: ${solflareError.message}`);
+            }
+          } catch (solflareOuterError) {
+            // Ensure timeout is cleared before rethrowing
+            if (connectionTimeout) clearTimeout(connectionTimeout);
+            throw solflareOuterError;
           }
         break;
 

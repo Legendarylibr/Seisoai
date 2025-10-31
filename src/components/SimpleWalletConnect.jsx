@@ -11,7 +11,8 @@ const SimpleWalletConnect = () => {
     error,
     connectWallet,
     disconnectWallet,
-    fetchCredits
+    fetchCredits,
+    isNFTHolder
   } = useSimpleWallet();
 
   const formatAddress = (addr) => {
@@ -94,8 +95,13 @@ const SimpleWalletConnect = () => {
         <div className="text-xs text-gray-400">
           <div className="flex items-center justify-between">
             <span>Pricing:</span>
-            <span className="text-yellow-400">$0.15/credit</span>
+            <span className="text-yellow-400">${isNFTHolder ? '0.06' : '0.15'}/credit</span>
           </div>
+          {isNFTHolder && (
+            <div className="text-xs text-purple-400 mt-1">
+              NFT Holder Discount Applied
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -683,6 +683,17 @@ const addCreditsToUser = async (user, {
 const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING_NFT_COLLECTIONS) => {
   const ownedCollections = [];
   
+  // Normalize wallet address (EVM addresses should be lowercase, Solana stays as-is)
+  const isSolanaAddress = !walletAddress.startsWith('0x');
+  const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+  
+  logger.info('Starting NFT check for wallet', { 
+    original: walletAddress,
+    normalized: normalizedWalletAddress,
+    isSolana: isSolanaAddress,
+    collectionCount: collections.length 
+  });
+  
   // Group collections by chain for parallel processing
   const collectionsByChain = {};
   for (const collection of collections) {
@@ -722,14 +733,14 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
             
             if (collection.type === 'erc721') {
               // Skip EVM NFT checks for Solana addresses
-              if (!walletAddress.startsWith('0x')) {
-                logger.debug('Skipping EVM NFT check for Solana address', { walletAddress, collection: collection.name });
+              if (!normalizedWalletAddress.startsWith('0x')) {
+                logger.debug('Skipping EVM NFT check for Solana address', { walletAddress: normalizedWalletAddress, collection: collection.name });
                 return null;
               }
               
-              // Validate addresses
-              if (!ethers.isAddress(collection.address) || !ethers.isAddress(walletAddress)) {
-                throw new Error(`Invalid address format`);
+              // Validate addresses (use normalized address)
+              if (!ethers.isAddress(collection.address) || !ethers.isAddress(normalizedWalletAddress)) {
+                throw new Error(`Invalid address format - collection: ${collection.address}, wallet: ${normalizedWalletAddress}`);
               }
               
               // NFT contract check with timeout
@@ -739,8 +750,14 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
                 provider
               );
               
+              logger.debug('Calling balanceOf', { 
+                collection: collection.address, 
+                wallet: normalizedWalletAddress,
+                chainId: collection.chainId 
+              });
+              
               const balance = await Promise.race([
-                nftContract.balanceOf(walletAddress),
+                nftContract.balanceOf(normalizedWalletAddress),
                 new Promise((_, reject) => 
                   setTimeout(() => reject(new Error('Contract call timeout')), 3000)
                 )
@@ -748,8 +765,9 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
               
               logger.debug('NFT balance check result', { 
                 address: collection.address, 
-                walletAddress, 
-                balance: balance.toString() 
+                walletAddress: normalizedWalletAddress, 
+                balance: balance.toString(),
+                balanceAsNumber: Number(balance)
               });
               
               if (balance > 0) {
@@ -771,14 +789,14 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
               return null;
             } else if (collection.type === 'erc20') {
               // Skip EVM token checks for Solana addresses
-              if (!walletAddress.startsWith('0x')) {
-                logger.debug('Skipping EVM token check for Solana address', { walletAddress, collection: collection.name });
+              if (!normalizedWalletAddress.startsWith('0x')) {
+                logger.debug('Skipping EVM token check for Solana address', { walletAddress: normalizedWalletAddress, collection: collection.name });
                 return null;
               }
               
-              // Validate addresses
-              if (!ethers.isAddress(collection.address) || !ethers.isAddress(walletAddress)) {
-                throw new Error(`Invalid address format`);
+              // Validate addresses (use normalized address)
+              if (!ethers.isAddress(collection.address) || !ethers.isAddress(normalizedWalletAddress)) {
+                throw new Error(`Invalid address format - collection: ${collection.address}, wallet: ${normalizedWalletAddress}`);
               }
               
               // Token contract check with timeout
@@ -788,8 +806,14 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
                 provider
               );
               
+              logger.debug('Calling token balanceOf', { 
+                collection: collection.address, 
+                wallet: normalizedWalletAddress,
+                chainId: collection.chainId 
+              });
+              
               const [balance, decimals] = await Promise.race([
-                Promise.all([tokenContract.balanceOf(walletAddress), tokenContract.decimals()]),
+                Promise.all([tokenContract.balanceOf(normalizedWalletAddress), tokenContract.decimals()]),
                 new Promise((_, reject) => 
                   setTimeout(() => reject(new Error('Contract call timeout')), 3000)
                 )
@@ -800,10 +824,11 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
               
               logger.debug('Token balance check result', { 
                 address: collection.address, 
-                walletAddress, 
+                walletAddress: normalizedWalletAddress, 
                 balance: formattedBalance,
                 minBalance,
-                decimals 
+                decimals,
+                meetsMinimum: formattedBalance >= minBalance
               });
               
               if (formattedBalance >= minBalance) {
@@ -828,10 +853,12 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
           } catch (error) {
             logger.warn(`Error checking collection ${collection.address}:`, {
               error: error.message,
+              errorStack: error.stack,
               chainId: collection.chainId,
               name: collection.name,
               type: collection.type,
-              walletAddress: walletAddress
+              walletAddress: normalizedWalletAddress,
+              originalWalletAddress: walletAddress
             });
             return null; // Return null instead of throwing to continue processing
           }
@@ -852,9 +879,20 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
   }
   
   // Only consider wallet as NFT holder if they actually have NFTs (balance > 0)
-  const isHolder = ownedCollections.some(collection => 
-    collection.balance && parseInt(collection.balance) > 0 && !collection.error
-  );
+  // Handle both integer balances (ERC721) and decimal balances (ERC20)
+  const isHolder = ownedCollections.some(collection => {
+    if (!collection.balance || collection.error) return false;
+    const balance = parseFloat(collection.balance);
+    return !isNaN(balance) && balance > 0;
+  });
+  
+  logger.info('NFT check completed', { 
+    walletAddress: normalizedWalletAddress,
+    originalWalletAddress: walletAddress,
+    isHolder,
+    ownedCollectionsCount: ownedCollections.length,
+    collections: ownedCollections.map(c => ({ name: c.name, balance: c.balance, chainId: c.chainId }))
+  });
   
   return { ownedCollections, isHolder };
 };
@@ -1162,54 +1200,130 @@ app.get('/api/users/:walletAddress', async (req, res) => {
     const { walletAddress } = req.params;
     const { refreshNFTs, skipNFTs } = req.query; // Allow forcing NFT refresh or skipping NFT checks
     
-    // Get actual user data from database
-    const user = await getOrCreateUser(walletAddress);
-    
-    // Refresh NFT holdings from blockchain if requested or if user has no NFT data
-    let isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-    
-    // Skip NFT checks if skipNFTs=true (for faster credits fetching)
-    if (skipNFTs !== 'true' && (refreshNFTs === 'true' || !isNFTHolder)) {
-      try {
-        // Use shared helper function to check NFT holdings
-        const { ownedCollections, isHolder: nftCheckResult } = await checkNFTHoldingsForWallet(walletAddress);
-        
-        // Update user's NFT collections in database (atomically to preserve credits)
-        if (ownedCollections.length > 0) {
-          await User.findOneAndUpdate(
-            { walletAddress: user.walletAddress },
-            { $set: { nftCollections: ownedCollections } },
-            { new: true }
-          );
-          isNFTHolder = true;
-          logger.info('✅ Updated NFT collections for user', { 
-            walletAddress, 
-            collectionCount: ownedCollections.length,
-            collections: ownedCollections.map(c => ({ name: c.name, balance: c.balance, chainId: c.chainId }))
-          });
-        } else {
-          logger.info('No NFTs found for user', { walletAddress, refreshNFTs });
-          // Clear old NFT data if refresh was forced (atomically)
-          if (refreshNFTs === 'true') {
-            await User.findOneAndUpdate(
-              { walletAddress: user.walletAddress },
-              { $set: { nftCollections: [] } },
-              { new: true }
-            );
-          }
-        }
-      } catch (nftError) {
-        logger.warn('Error refreshing NFT holdings', { error: nftError.message });
-        // Continue with existing data
-      }
-    }
-    
-    // Always refetch user from database to ensure we have the latest credits
-    // This is critical to ensure granted credits are always returned correctly
-    // Normalize the address to ensure we query with the correct case (lowercase for EVM)
+    // Normalize address once at the start
     const isSolanaAddress = !walletAddress.startsWith('0x');
     const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
     
+    // When skipNFTs=true, optimize for speed - single query, no NFT checks
+    if (skipNFTs === 'true') {
+      // Single optimized query - just get user data, no NFT checking
+      const user = await User.findOneAndUpdate(
+        { walletAddress: normalizedAddress },
+        { $set: { lastActive: new Date() } },
+        {
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert: {
+            walletAddress: normalizedAddress,
+            credits: 0,
+            totalCreditsEarned: 0,
+            totalCreditsSpent: 0,
+            nftCollections: [],
+            paymentHistory: [],
+            generationHistory: [],
+            gallery: [],
+            settings: {
+              preferredStyle: null,
+              defaultImageSize: '1024x1024',
+              enableNotifications: true
+            }
+          }
+        }
+      );
+      
+      // Ensure totalCreditsEarned field exists
+      if (user.totalCreditsEarned == null) {
+        user.totalCreditsEarned = user.credits || 0;
+        if (user.totalCreditsSpent == null) {
+          user.totalCreditsSpent = 0;
+        }
+        await user.save();
+      }
+      
+      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      const userCredits = user.credits != null ? user.credits : 0;
+      const userTotalCreditsEarned = user.totalCreditsEarned != null ? user.totalCreditsEarned : 0;
+      const userTotalCreditsSpent = user.totalCreditsSpent != null ? user.totalCreditsSpent : 0;
+      
+      // Fast response for skipNFTs mode
+      return res.json({
+        success: true,
+        user: {
+          walletAddress: user.walletAddress,
+          credits: userCredits,
+          totalCreditsEarned: userTotalCreditsEarned,
+          totalCreditsSpent: userTotalCreditsSpent,
+          nftCollections: user.nftCollections || [],
+          paymentHistory: user.paymentHistory || [],
+          generationHistory: user.generationHistory || [],
+          gallery: user.gallery || [],
+          settings: user.settings || {
+            preferredStyle: null,
+            defaultImageSize: '1024x1024',
+            enableNotifications: true
+          },
+          lastActive: user.lastActive || new Date(),
+          isNFTHolder: isNFTHolder,
+          pricing: {
+            costPerCredit: isNFTHolder ? 0.06 : 0.15,
+            creditsPerUSDC: isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC
+          }
+        }
+      });
+    }
+    
+    // Normal flow with NFT checking
+    // Get actual user data from database
+    const user = await getOrCreateUser(walletAddress);
+    
+    // Always check NFT holdings from blockchain when not explicitly skipped
+    // This ensures NFT detection works reliably without conditional conflicts
+    let isNFTHolder = false;
+    try {
+      // Normalize wallet address for NFT checking (lowercase for EVM, unchanged for Solana)
+      const normalizedWalletForNFT = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+      
+      logger.debug('Checking NFT holdings', { 
+        originalAddress: walletAddress, 
+        normalizedAddress: normalizedWalletForNFT,
+        isSolana: isSolanaAddress,
+        refreshRequested: refreshNFTs === 'true'
+      });
+      
+      // Use shared helper function to check NFT holdings directly from blockchain
+      const { ownedCollections, isHolder: nftCheckResult } = await checkNFTHoldingsForWallet(normalizedWalletForNFT);
+      
+      // Update user's NFT collections in database based on actual blockchain data
+      // Always update to reflect current blockchain state
+      if (ownedCollections.length > 0) {
+        await User.findOneAndUpdate(
+          { walletAddress: user.walletAddress },
+          { $set: { nftCollections: ownedCollections } },
+          { new: true }
+        );
+        isNFTHolder = true;
+        logger.info('✅ Updated NFT collections for user', { 
+          walletAddress, 
+          collectionCount: ownedCollections.length,
+          collections: ownedCollections.map(c => ({ name: c.name, balance: c.balance, chainId: c.chainId }))
+        });
+      } else {
+        // Clear NFT data if none found - always reflect current blockchain state
+        await User.findOneAndUpdate(
+          { walletAddress: user.walletAddress },
+          { $set: { nftCollections: [] } },
+          { new: true }
+        );
+        isNFTHolder = false;
+        logger.info('No NFTs found for user', { walletAddress });
+      }
+    } catch (nftError) {
+      logger.warn('Error checking NFT holdings', { error: nftError.message, walletAddress });
+      // Fall back to database state if blockchain check fails
+      isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    }
+    
+    // Refetch user from database to ensure we have the latest credits
     const latestUser = await User.findOne({ walletAddress: normalizedAddress });
     if (!latestUser) {
       logger.error('User not found after refetch', { 
@@ -1286,8 +1400,8 @@ app.get('/api/users/:walletAddress', async (req, res) => {
         lastActive: latestUser.lastActive || new Date(),
         isNFTHolder: isNFTHolder,
         pricing: {
-          costPerCredit: 0.15,
-          creditsPerUSDC: STANDARD_CREDITS_PER_USDC
+          costPerCredit: isNFTHolder ? 0.06 : 0.15,
+          creditsPerUSDC: isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC
         }
       }
     });
@@ -1321,10 +1435,10 @@ app.post('/api/nft/check-credits', async (req, res) => {
       totalCreditsEarned: user.totalCreditsEarned || 0,
       totalCreditsSpent: user.totalCreditsSpent || 0,
       isNFTHolder: isNFTHolder,
-      pricing: {
-        costPerCredit: isNFTHolder ? 0.08 : 0.15,
-        creditsPerUSDC: isNFTHolder ? 12.5 : STANDARD_CREDITS_PER_USDC
-      }
+        pricing: {
+          costPerCredit: isNFTHolder ? 0.06 : 0.15,
+          creditsPerUSDC: isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC
+        }
     });
   } catch (error) {
     logger.error('Error checking credits:', error);
@@ -1346,10 +1460,18 @@ app.post('/api/nft/check-holdings', async (req, res) => {
       });
     }
 
-    logger.info('Checking NFT holdings', { walletAddress });
+    // Normalize wallet address for NFT checking (lowercase for EVM, unchanged for Solana)
+    const isSolanaAddress = !walletAddress.startsWith('0x');
+    const normalizedWalletForNFT = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    
+    logger.info('Checking NFT holdings', { 
+      originalAddress: walletAddress, 
+      normalizedAddress: normalizedWalletForNFT,
+      isSolana: isSolanaAddress 
+    });
     
     // Use shared helper function to check NFT holdings (works without database)
-    const { ownedCollections, isHolder } = await checkNFTHoldingsForWallet(walletAddress);
+    const { ownedCollections, isHolder } = await checkNFTHoldingsForWallet(normalizedWalletForNFT);
     
     logger.info('NFT check completed', { walletAddress, isHolder, collectionCount: ownedCollections.length });
     
@@ -1361,8 +1483,8 @@ app.post('/api/nft/check-holdings', async (req, res) => {
         ? 'Qualifying NFTs found! You have access to free generation.' 
         : 'No qualifying NFTs found. Purchase credits to generate images.',
       pricing: {
-        costPerCredit: isHolder ? 0.08 : 0.15,
-        creditsPerUSDC: isHolder ? 12.5 : STANDARD_CREDITS_PER_USDC
+        costPerCredit: isHolder ? 0.06 : 0.15,
+        creditsPerUSDC: isHolder ? 16.67 : STANDARD_CREDITS_PER_USDC
       },
       freeCredits: isHolder ? 10 : 0
     });
@@ -1823,8 +1945,12 @@ app.post('/api/payment/check-payment', async (req, res) => {
         });
       }
       
+      // Check if user is NFT holder for pricing
+      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
+      
       // Calculate credits
-      const creditsToAdd = calculateCreditsFromAmount(payment.amount);
+      const creditsToAdd = calculateCreditsFromAmount(payment.amount, creditsPerUSDC);
       
       console.log(`[CREDIT] Adding ${creditsToAdd} credits to user ${senderAddress}`);
       console.log(`[CREDIT] Previous balance: ${user.credits} credits`);
@@ -1914,14 +2040,19 @@ app.post('/api/payments/credit', async (req, res) => {
       });
     }
 
+    // Check if user is NFT holder for pricing
+    const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
+    
     // Credit immediately based on signature (no verification)
-    const creditsToAdd = calculateCreditsFromAmount(amount);
+    const creditsToAdd = calculateCreditsFromAmount(amount, creditsPerUSDC);
     
     console.log('💰 [PAYMENT CREDIT] Calculating credits', {
       walletAddress: user.walletAddress,
       walletType: walletType || 'evm',
       amount: parseFloat(amount),
-      creditsPerUSDC: STANDARD_CREDITS_PER_USDC,
+      creditsPerUSDC: creditsPerUSDC,
+      isNFTHolder: isNFTHolder,
       creditsToAdd
     });
     
@@ -1995,12 +2126,17 @@ app.post('/api/payments/verify', async (req, res) => {
       });
     }
 
+    // Check if user is NFT holder for pricing
+    const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
+
     let verification;
     if (walletType === 'solana') {
-      // Simplified Solana verification
+      // Calculate credits based on NFT holder status
+      const credits = calculateCreditsFromAmount(parseFloat(amount), creditsPerUSDC);
       verification = {
         success: true,
-        credits: Math.floor(parseFloat(amount) * 100),
+        credits: credits,
         actualAmount: parseFloat(amount),
         txHash
       };
@@ -2008,6 +2144,17 @@ app.post('/api/payments/verify', async (req, res) => {
       console.log('💰 [PAYMENT VERIFY] Calling verifyEVMPayment...');
       verification = await verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chainId);
       console.log('💰 [PAYMENT VERIFY] Verification result:', verification);
+      
+      // Recalculate credits based on NFT holder status if verification succeeded
+      if (verification.success && verification.actualAmount) {
+        verification.credits = calculateCreditsFromAmount(verification.actualAmount, creditsPerUSDC);
+        console.log('💰 [PAYMENT VERIFY] Recalculated credits for NFT holder:', {
+          isNFTHolder,
+          creditsPerUSDC,
+          actualAmount: verification.actualAmount,
+          credits: verification.credits
+        });
+      }
     }
 
     if (verification.success) {
@@ -2290,8 +2437,12 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
           });
         }
         
+        // Check if user is NFT holder for pricing
+        const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+        const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
+        
         // Calculate credits
-        const creditsToAdd = calculateCreditsFromAmount(quickPayment.amount);
+        const creditsToAdd = calculateCreditsFromAmount(quickPayment.amount, creditsPerUSDC);
         
         // Add credits using helper function
         await addCreditsToUser(user, {

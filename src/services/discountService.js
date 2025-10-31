@@ -5,7 +5,7 @@ import { discountLogger as log } from '../utils/logger.js';
 
 // Base cost configuration - dynamic pricing
 const BASE_COST_PER_CREDIT = 0.15; // $0.15 per credit for regular users
-const NFT_HOLDER_COST_PER_CREDIT = 0.08; // $0.08 per credit for NFT collection holders
+const NFT_HOLDER_COST_PER_CREDIT = 0.06; // $0.06 per credit for NFT collection holders
 const CREDITS_PER_GENERATION = 1; // 1 credit per image generation
 
 // Cache configuration
