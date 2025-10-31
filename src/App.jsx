@@ -35,21 +35,30 @@ function App() {
             activeTab={activeTab} 
             setActiveTab={setActiveTab}
             tabs={tabs}
-            onShowTokenPayment={() => setShowTokenPaymentModal(true)}
+            onShowTokenPayment={() => {
+              console.log('🔵 App: onShowTokenPayment called, setting showTokenPaymentModal to true');
+              setShowTokenPaymentModal(true);
+            }}
             // onShowStripePayment={() => setShowStripePaymentModal(true)} // DISABLED - Stripe
           />
           
           <main className="container mx-auto px-2 md:px-6 lg:px-8 py-4 md:py-8">
             <AppContent 
               activeTab={activeTab} 
-              onShowTokenPayment={() => setShowTokenPaymentModal(true)}
+              onShowTokenPayment={() => {
+              console.log('🔵 App: onShowTokenPayment called, setting showTokenPaymentModal to true');
+              setShowTokenPaymentModal(true);
+            }}
               // onShowStripePayment={() => setShowStripePaymentModal(true)} // DISABLED - Stripe
             />
           </main>
           
           <TokenPaymentModal 
             isOpen={showTokenPaymentModal} 
-            onClose={() => setShowTokenPaymentModal(false)} 
+            onClose={() => {
+              console.log('🔴 TokenPaymentModal: onClose called');
+              setShowTokenPaymentModal(false);
+            }} 
           />
           
           {/* STRIPE DISABLED - Stripe disabled, crypto payments only

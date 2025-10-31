@@ -2332,18 +2332,44 @@ app.post('/api/payment/check-payment', async (req, res) => {
         });
       }
       
-      // Check if user is NFT holder for pricing
-      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      // Refresh NFT holder status in real-time before calculating credits
+      const normalizedAddressForNFT = senderAddress.toLowerCase();
+      let isNFTHolder = false;
+      let updatedUser = user;
+      try {
+        const { ownedCollections, isHolder } = await checkNFTHoldingsForWallet(normalizedAddressForNFT);
+        if (ownedCollections.length > 0) {
+          updatedUser = await User.findOneAndUpdate(
+            { walletAddress: user.walletAddress },
+            { $set: { nftCollections: ownedCollections } },
+            { new: true }
+          );
+          isNFTHolder = true;
+          console.log(`[NFT] User ${senderAddress} is NFT holder - applying 16.67 credits/USDC rate`);
+        } else {
+          updatedUser = await User.findOneAndUpdate(
+            { walletAddress: user.walletAddress },
+            { $set: { nftCollections: [] } },
+            { new: true }
+          );
+          isNFTHolder = false;
+          console.log(`[NFT] User ${senderAddress} is not NFT holder - applying standard 6.67 credits/USDC rate`);
+        }
+      } catch (nftError) {
+        console.warn(`[NFT] Error checking NFT holdings for ${senderAddress}, using database state:`, nftError.message);
+        isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      }
+      
       const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
       
       // Calculate credits
       const creditsToAdd = calculateCreditsFromAmount(payment.amount, creditsPerUSDC);
       
       console.log(`[CREDIT] Adding ${creditsToAdd} credits to user ${senderAddress}`);
-      console.log(`[CREDIT] Previous balance: ${user.credits} credits`);
+      console.log(`[CREDIT] Previous balance: ${updatedUser.credits} credits`);
       
-      // Add credits to user using helper function
-      await addCreditsToUser(user, {
+      // Add credits to user using helper function (use updated user object)
+      await addCreditsToUser(updatedUser, {
         txHash: payment.txHash,
         tokenSymbol: payment.token || 'USDC',
         amount: payment.amount,
@@ -2353,7 +2379,9 @@ app.post('/api/payment/check-payment', async (req, res) => {
         timestamp: new Date(payment.timestamp * 1000)
       });
       
-      console.log(`[SUCCESS] New balance: ${user.credits} credits`);
+      // Refetch user to get latest credits
+      const finalUser = await User.findOne({ walletAddress: user.walletAddress });
+      console.log(`[SUCCESS] New balance: ${finalUser.credits} credits`);
       console.log('='.repeat(80));
       
       return res.json({
@@ -2427,15 +2455,41 @@ app.post('/api/payments/credit', async (req, res) => {
       });
     }
 
-    // Check if user is NFT holder for pricing
-    const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    // Refresh NFT holder status in real-time before calculating credits
+    const normalizedAddressForNFT = walletAddress.toLowerCase();
+    let isNFTHolder = false;
+    let updatedUser = user;
+    try {
+      const { ownedCollections, isHolder } = await checkNFTHoldingsForWallet(normalizedAddressForNFT);
+      if (ownedCollections.length > 0) {
+        updatedUser = await User.findOneAndUpdate(
+          { walletAddress: user.walletAddress },
+          { $set: { nftCollections: ownedCollections } },
+          { new: true }
+        );
+        isNFTHolder = true;
+        console.log('💰 [PAYMENT CREDIT] User is NFT holder - applying 16.67 credits/USDC rate');
+      } else {
+        updatedUser = await User.findOneAndUpdate(
+          { walletAddress: user.walletAddress },
+          { $set: { nftCollections: [] } },
+          { new: true }
+        );
+        isNFTHolder = false;
+        console.log('💰 [PAYMENT CREDIT] User is not NFT holder - applying standard 6.67 credits/USDC rate');
+      }
+    } catch (nftError) {
+      console.warn('💰 [PAYMENT CREDIT] Error checking NFT holdings, using database state:', nftError.message);
+      isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    }
+
     const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
     
     // Credit immediately based on signature (no verification)
     const creditsToAdd = calculateCreditsFromAmount(amount, creditsPerUSDC);
     
     console.log('💰 [PAYMENT CREDIT] Calculating credits', {
-      walletAddress: user.walletAddress,
+      walletAddress: updatedUser.walletAddress,
       walletType: walletType || 'evm',
       amount: parseFloat(amount),
       creditsPerUSDC: creditsPerUSDC,
@@ -2443,8 +2497,8 @@ app.post('/api/payments/credit', async (req, res) => {
       creditsToAdd
     });
     
-    // Add credits using helper function
-    await addCreditsToUser(user, {
+    // Add credits using helper function (use updated user object)
+    await addCreditsToUser(updatedUser, {
       txHash,
       tokenSymbol: tokenSymbol || 'USDC',
       amount,
@@ -2453,10 +2507,12 @@ app.post('/api/payments/credit', async (req, res) => {
       walletType: walletType || 'evm'
     });
     
+    // Refetch user to get latest credits
+    const finalUser = await User.findOne({ walletAddress: walletAddress });
     console.log('💰 [PAYMENT CREDIT] Credits added successfully', {
-      walletAddress: user.walletAddress,
+      walletAddress: finalUser.walletAddress,
       credits: creditsToAdd,
-      totalCredits: user.credits,
+      totalCredits: finalUser.credits,
       txHash
     });
     
@@ -2513,8 +2569,34 @@ app.post('/api/payments/verify', async (req, res) => {
       });
     }
 
-    // Check if user is NFT holder for pricing
-    const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    // Refresh NFT holder status in real-time before calculating credits
+    const normalizedAddressForNFT = walletAddress.toLowerCase();
+    let isNFTHolder = false;
+    let updatedUser = user;
+    try {
+      const { ownedCollections, isHolder } = await checkNFTHoldingsForWallet(normalizedAddressForNFT);
+      if (ownedCollections.length > 0) {
+        updatedUser = await User.findOneAndUpdate(
+          { walletAddress: user.walletAddress },
+          { $set: { nftCollections: ownedCollections } },
+          { new: true }
+        );
+        isNFTHolder = true;
+        console.log('💰 [PAYMENT VERIFY] User is NFT holder - applying 16.67 credits/USDC rate');
+      } else {
+        updatedUser = await User.findOneAndUpdate(
+          { walletAddress: user.walletAddress },
+          { $set: { nftCollections: [] } },
+          { new: true }
+        );
+        isNFTHolder = false;
+        console.log('💰 [PAYMENT VERIFY] User is not NFT holder - applying standard 6.67 credits/USDC rate');
+      }
+    } catch (nftError) {
+      console.warn('💰 [PAYMENT VERIFY] Error checking NFT holdings, using database state:', nftError.message);
+      isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    }
+
     const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
 
     let verification;
@@ -2545,8 +2627,8 @@ app.post('/api/payments/verify', async (req, res) => {
     }
 
     if (verification.success) {
-      // Add credits using helper function
-      await addCreditsToUser(user, {
+      // Add credits using helper function (use updated user object)
+      await addCreditsToUser(updatedUser, {
         txHash,
         tokenSymbol,
         amount: verification.actualAmount,
@@ -2554,6 +2636,9 @@ app.post('/api/payments/verify', async (req, res) => {
         chainId,
         walletType
       });
+      
+      // Refetch user to get latest credits
+      const finalUser = await User.findOne({ walletAddress: walletAddress });
       
       logger.info('Payment verified successfully', {
         walletAddress: walletAddress.toLowerCase(),
@@ -2564,7 +2649,7 @@ app.post('/api/payments/verify', async (req, res) => {
       res.json({
         success: true,
         credits: verification.credits,
-        totalCredits: user.credits,
+        totalCredits: finalUser.credits,
         message: `Payment verified! ${verification.credits} credits added to your account.`
       });
     } else {

@@ -1081,13 +1081,25 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     return tokenBalances[tokenSymbol]?.formattedBalance || '0';
   };
 
-  if (!isOpen) return null;
+  // Debug logging
+  useEffect(() => {
+    if (isOpen) {
+      console.log('🎯 TokenPaymentModal: isOpen changed to true', { isOpen, address, walletType });
+    }
+  }, [isOpen, address, walletType]);
+
+  if (!isOpen) {
+    console.log('🚫 TokenPaymentModal: Not rendering - isOpen is false');
+    return null;
+  }
+
+  console.log('✅ TokenPaymentModal: Rendering modal with portal');
 
   const modalContent = (
     <div 
-      className="fixed inset-0 bg-black/50 flex items-center justify-center p-2" 
+      className="fixed inset-0 flex items-center justify-center p-2" 
       style={{ 
-        zIndex: 10000,
+        zIndex: 99999,
         position: 'fixed',
         top: 0,
         left: 0,
@@ -1097,18 +1109,31 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         height: '100vh',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        pointerEvents: 'auto',
+        overflow: 'visible'
       }}
       onClick={(e) => {
         // Close modal when clicking backdrop
+        console.log('🎯 Modal backdrop clicked', { target: e.target, currentTarget: e.currentTarget });
         if (e.target === e.currentTarget) {
+          console.log('✅ Closing modal via backdrop click');
           onClose();
         }
       }}
     >
       <div 
         className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-sm max-h-[90vh] overflow-y-auto relative"
-        onClick={(e) => e.stopPropagation()}
+        style={{
+          zIndex: 100000,
+          position: 'relative',
+          pointerEvents: 'auto'
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          console.log('🛑 Modal content clicked - preventing close');
+        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/10">
@@ -1366,9 +1391,38 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   );
 
   // Use portal to render modal at document body level (avoids z-index/overflow issues)
-  return typeof document !== 'undefined' 
-    ? createPortal(modalContent, document.body)
-    : modalContent;
+  if (typeof document === 'undefined') {
+    console.warn('⚠️ TokenPaymentModal: document is undefined, cannot use portal');
+    return modalContent;
+  }
+
+  const portalTarget = document.body;
+  
+  // Force modal to be visible - add a test element to verify rendering
+  useEffect(() => {
+    if (isOpen) {
+      console.log('🔍 TokenPaymentModal: Verifying portal target', {
+        bodyExists: !!portalTarget,
+        bodyTag: portalTarget?.tagName,
+        bodyChildren: portalTarget?.children?.length,
+        bodyStyle: window.getComputedStyle(portalTarget)
+      });
+      
+      // Log after a brief delay to see if portal rendered
+      const timeout = setTimeout(() => {
+        const portalElement = document.querySelector('[style*="z-index: 99999"]');
+        console.log('🔍 TokenPaymentModal: Checking if portal element exists in DOM', {
+          found: !!portalElement,
+          element: portalElement
+        });
+      }, 100);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [isOpen, portalTarget]);
+
+  const portalResult = createPortal(modalContent, portalTarget);
+  return portalResult;
 };
 
 export default TokenPaymentModal;
