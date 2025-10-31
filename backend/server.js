@@ -2573,8 +2573,7 @@ app.post('/api/generations/add', async (req, res) => {
     }
 
     // Deduct credits from the credits field (current balance)
-    // If credits is lower than totalCreditsEarned, we still deduct from credits
-    // and it will naturally show the lower balance
+    // Use the old working approach: direct mutation which Mongoose tracks better
     const previousCredits = user.credits || 0;
     const previousTotalSpent = user.totalCreditsSpent || 0;
     
@@ -2585,12 +2584,19 @@ app.post('/api/generations/add', async (req, res) => {
       effectiveCredits
     });
     
-    user.credits = Math.max(0, previousCredits - creditsToDeduct);
-    user.totalCreditsSpent = previousTotalSpent + creditsToDeduct;
+    // Use -= and += like the old working version (Mongoose tracks these better)
+    user.credits = (user.credits || 0) - creditsToDeduct;
+    if (user.credits < 0) user.credits = 0; // Prevent negative credits
+    user.totalCreditsSpent = (user.totalCreditsSpent || 0) + creditsToDeduct;
+    
+    // Mark fields as modified to ensure Mongoose saves them
+    user.markModified('credits');
+    user.markModified('totalCreditsSpent');
     
     console.log('💰 [GENERATION ADD] After deduction (before save):', {
       newCredits: user.credits,
-      newTotalSpent: user.totalCreditsSpent
+      newTotalSpent: user.totalCreditsSpent,
+      isModified: user.isModified('credits')
     });
     
     // Add generation to history
@@ -2615,7 +2621,8 @@ app.post('/api/generations/add', async (req, res) => {
     const savedUser = await User.findOne({ walletAddress: user.walletAddress });
     console.log('✅ [GENERATION ADD] Verified saved credits:', {
       savedCredits: savedUser?.credits,
-      savedTotalSpent: savedUser?.totalCreditsSpent
+      savedTotalSpent: savedUser?.totalCreditsSpent,
+      matchExpected: savedUser?.credits === user.credits
     });
     
     logger.info('Generation added to history and credits deducted', {
