@@ -10,8 +10,8 @@ if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
 }
 
 /**
- * Convert image to data URI or ensure it's a valid URL
- * Optimizes the image if it's a data URI and needs optimization
+ * Upload image to backend and get URL, or return existing URL
+ * This prevents sending huge base64 data URIs in JSON payloads
  */
 const prepareImageUrl = async (image) => {
   if (!image) return null;
@@ -21,25 +21,53 @@ const prepareImageUrl = async (image) => {
     return image;
   }
   
-  // If it's a data URI, check if it needs optimization
+  // If it's a data URI, upload it first to get a URL
   if (typeof image === 'string' && image.startsWith('data:')) {
-    // Optimize large images to reduce payload size
-    if (needsOptimization(image, 300)) { // Optimize if > 300KB
-      console.log('🔄 Optimizing image before sending to fal.ai...');
+    // Optimize first if it's large
+    let optimizedImage = image;
+    if (needsOptimization(image, 200)) { // Optimize if > 200KB
+      console.log('🔄 Optimizing image before upload...');
       try {
-        const optimized = await optimizeImage(image, {
+        optimizedImage = await optimizeImage(image, {
           maxWidth: 2048,
           maxHeight: 2048,
           quality: 0.85,
           format: 'jpeg'
         });
-        return optimized;
       } catch (error) {
         console.warn('Image optimization failed, using original:', error);
-        return image;
       }
     }
-    return image;
+    
+    // Upload to backend which will upload to fal storage
+    console.log('📤 Uploading image to fal storage...');
+    try {
+      const backendBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const uploadResponse = await fetch(`${backendBase}/api/veo3/upload-image`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageDataUri: optimizedImage })
+      });
+      
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(errorData.error || 'Failed to upload image');
+      }
+      
+      const { imageUrl } = await uploadResponse.json();
+      if (!imageUrl) {
+        throw new Error('No image URL returned from upload');
+      }
+      
+      console.log('✅ Image uploaded successfully:', imageUrl);
+      return imageUrl;
+    } catch (error) {
+      console.error('❌ Failed to upload image, falling back to data URI:', error);
+      // Fallback to optimized data URI if upload fails
+      return optimizedImage;
+    }
   }
   
   // Otherwise assume it's base64 and return as data URI
@@ -73,7 +101,14 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
       generate_audio: options.generateAudio !== false
     };
 
-    console.log('🎬 Generating video with Veo 3 Fast Image-to-Video:', { prompt, hasImage: !!input.image_url, aspect_ratio: input.aspect_ratio, duration: input.duration });
+    console.log('🎬 Generating video with Veo 3 Fast Image-to-Video:', { 
+      prompt, 
+      hasImage: !!input.image_url, 
+      imageUrl: input.image_url?.substring(0, 50) + '...',
+      isDataUri: input.image_url?.startsWith('data:'),
+      aspect_ratio: input.aspect_ratio, 
+      duration: input.duration 
+    });
 
     // Submit via backend proxy to avoid CORS
     // Use VITE_API_URL for consistency with other services

@@ -322,7 +322,8 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
 });
 
 // Body parsing middleware - AFTER webhook route
-app.use(express.json({ limit: '10mb' }));
+// Increase JSON limit for image data URIs (can be large even after optimization)
+app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static files from parent dist directory (frontend build)
@@ -332,6 +333,88 @@ app.use(express.static(distPath));
 // Proxy Veo3 Fast Image-to-Video to bypass browser CORS
 const FAL_API_KEY = process.env.FAL_API_KEY || process.env.VITE_FAL_API_KEY;
 
+/**
+ * Upload image to fal.ai storage and return URL
+ * Converts data URI to buffer and uploads via fal storage API
+ * Uses multipart/form-data for file upload
+ * Note: This endpoint should be placed BEFORE express.json() or use a larger limit
+ */
+app.post('/api/veo3/upload-image', async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+
+    const { imageDataUri } = req.body;
+    
+    if (!imageDataUri || !imageDataUri.startsWith('data:')) {
+      return res.status(400).json({ success: false, error: 'Invalid image data URI' });
+    }
+
+    // Convert data URI to buffer
+    const base64Data = imageDataUri.split(',')[1];
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Determine MIME type from data URI
+    const mimeMatch = imageDataUri.match(/data:([^;]+)/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const extension = mimeType.includes('png') ? 'png' : 'jpg';
+    
+    // Create multipart/form-data manually for Node.js
+    const boundary = `----formdata-${Date.now()}`;
+    const CRLF = '\r\n';
+    
+    let formDataBody = '';
+    formDataBody += `--${boundary}${CRLF}`;
+    formDataBody += `Content-Disposition: form-data; name="file"; filename="image.${extension}"${CRLF}`;
+    formDataBody += `Content-Type: ${mimeType}${CRLF}${CRLF}`;
+    
+    const formDataBuffer = Buffer.concat([
+      Buffer.from(formDataBody, 'utf8'),
+      buffer,
+      Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8')
+    ]);
+    
+    // Upload to fal.ai storage API
+    // Using the fal.ai file storage endpoint
+    // According to docs, we can upload files and get URLs back
+    const uploadResponse = await fetch('https://fal.ai/files', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body: formDataBuffer
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: errorText.substring(0, 200) };
+      }
+      logger.error('FAL storage upload error', { status: uploadResponse.status, error: errorData });
+      return res.status(uploadResponse.status).json({ success: false, error: errorData });
+    }
+
+    const uploadData = await uploadResponse.json();
+    const imageUrl = uploadData.url || uploadData.file?.url || uploadData.data?.url;
+    
+    if (!imageUrl) {
+      logger.error('No URL in fal storage response', { response: uploadData });
+      return res.status(500).json({ success: false, error: 'Failed to get image URL from upload' });
+    }
+
+    logger.info('Image uploaded to fal storage', { imageUrl, size: buffer.length });
+    res.json({ success: true, imageUrl });
+  } catch (error) {
+    logger.error('Image upload error', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.post('/api/veo3/submit', async (req, res) => {
   try {
     if (!FAL_API_KEY) {
@@ -339,16 +422,27 @@ app.post('/api/veo3/submit', async (req, res) => {
     }
     const input = req.body?.input || req.body;
     
+    // If image_url is a data URI, we should have uploaded it first
+    // But if it somehow got here, log it and proceed (API might handle it)
+    const imageUrl = input?.image_url || '';
+    const isDataUri = imageUrl.startsWith('data:');
+    
+    if (isDataUri) {
+      logger.warn('Data URI sent to veo3/submit - consider using upload-image endpoint first', {
+        imageSizeKB: (imageUrl.length / 1024).toFixed(2)
+      });
+    }
+    
     // Log payload size for debugging
     const payload = JSON.stringify({ input });
     const payloadSizeKB = (payload.length / 1024).toFixed(2);
-    const imageUrl = input?.image_url || '';
-    const imageSizeKB = imageUrl.startsWith('data:') ? (imageUrl.length / 1024).toFixed(2) : 'N/A (URL)';
+    const imageSizeKB = isDataUri ? (imageUrl.length / 1024).toFixed(2) : 'N/A (URL)';
     
     logger.info('Veo3 submit request', {
       payloadSizeKB,
       imageSizeKB,
       hasImage: !!imageUrl,
+      isDataUri,
       promptLength: input?.prompt?.length || 0
     });
     
@@ -360,13 +454,36 @@ app.post('/api/veo3/submit', async (req, res) => {
       },
       body: payload
     });
-    const data = await response.json();
+    
+    // Handle response text first to avoid JSON parse errors
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      logger.error('Failed to parse veo3 response', { 
+        status: response.status, 
+        statusText: response.statusText,
+        responseText: responseText.substring(0, 500)
+      });
+      return res.status(response.status).json({ 
+        success: false, 
+        error: `API response parse error: ${responseText.substring(0, 200)}` 
+      });
+    }
+    
     if (!response.ok) {
+      logger.error('Veo3 API error', { 
+        status: response.status, 
+        data,
+        responseText: responseText.substring(0, 500)
+      });
       return res.status(response.status).json({ success: false, ...data });
     }
+    
     res.json({ success: true, ...data });
   } catch (error) {
-    logger.error('Veo3 submit proxy error', { error: error.message });
+    logger.error('Veo3 submit proxy error', { error: error.message, stack: error.stack });
     res.status(500).json({ success: false, error: error.message });
   }
 });
