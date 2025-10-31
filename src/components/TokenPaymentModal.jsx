@@ -1083,7 +1083,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-2" style={{ zIndex: 100 }}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-2" style={{ zIndex: 9999, position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh' }}>
       <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-sm max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/10">

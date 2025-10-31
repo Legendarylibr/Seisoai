@@ -2455,7 +2455,8 @@ app.post('/api/payments/credit', async (req, res) => {
       });
     }
 
-    // Refresh NFT holder status in real-time before calculating credits
+    // CRITICAL: Refresh NFT holder status in real-time before calculating credits
+    // This ensures NFT holders get 16.67 credits/USDC instead of 6.67 credits/USDC
     const normalizedAddressForNFT = walletAddress.toLowerCase();
     let isNFTHolder = false;
     let updatedUser = user;
@@ -2468,7 +2469,7 @@ app.post('/api/payments/credit', async (req, res) => {
           { new: true }
         );
         isNFTHolder = true;
-        console.log('💰 [PAYMENT CREDIT] User is NFT holder - applying 16.67 credits/USDC rate');
+        console.log('💰 [PAYMENT CREDIT] ✅ NFT HOLDER DETECTED - applying 16.67 credits/USDC rate (NFT holder discount)');
       } else {
         updatedUser = await User.findOneAndUpdate(
           { walletAddress: user.walletAddress },
@@ -2476,11 +2477,14 @@ app.post('/api/payments/credit', async (req, res) => {
           { new: true }
         );
         isNFTHolder = false;
-        console.log('💰 [PAYMENT CREDIT] User is not NFT holder - applying standard 6.67 credits/USDC rate');
+        console.log('💰 [PAYMENT CREDIT] ❌ Not NFT holder - applying standard 6.67 credits/USDC rate');
       }
     } catch (nftError) {
-      console.warn('💰 [PAYMENT CREDIT] Error checking NFT holdings, using database state:', nftError.message);
+      console.warn('💰 [PAYMENT CREDIT] ⚠️ Error checking NFT holdings, using database state:', nftError.message);
       isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      if (isNFTHolder) {
+        console.log('💰 [PAYMENT CREDIT] Using cached NFT holder status - applying 16.67 credits/USDC rate');
+      }
     }
 
     const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
@@ -2494,7 +2498,8 @@ app.post('/api/payments/credit', async (req, res) => {
       amount: parseFloat(amount),
       creditsPerUSDC: creditsPerUSDC,
       isNFTHolder: isNFTHolder,
-      creditsToAdd
+      creditsToAdd,
+      expectedCredits: parseFloat(amount) * creditsPerUSDC
     });
     
     // Add credits using helper function (use updated user object)
@@ -2519,7 +2524,7 @@ app.post('/api/payments/credit', async (req, res) => {
     res.json({
       success: true,
       credits: creditsToAdd,
-      totalCredits: user.credits,
+      totalCredits: finalUser.credits,
       message: `Payment credited! ${creditsToAdd} credits added to your account.`
     });
 
