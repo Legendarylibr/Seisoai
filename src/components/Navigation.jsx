@@ -153,20 +153,11 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                           
                           <button
                             onClick={() => {
-                              console.log('🖱️ Desktop: Buy Credits with USDC button clicked', { 
-                                hasHandler: !!onShowTokenPayment,
-                                handlerType: typeof onShowTokenPayment
-                              });
                               setShowCreditsDropdown(false);
-                              // Small delay to ensure dropdown closes before modal opens (avoids z-index conflicts)
-                              setTimeout(() => {
-                                if (onShowTokenPayment) {
-                                  console.log('✅ Desktop: Calling onShowTokenPayment');
-                                  onShowTokenPayment();
-                                } else {
-                                  console.error('❌ Desktop: onShowTokenPayment is undefined!');
-                                }
-                              }, 50);
+                              // Immediate close and open - React will handle re-render
+                              if (onShowTokenPayment) {
+                                onShowTokenPayment();
+                              }
                             }}
                             className="w-full flex items-center gap-3 p-3 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 transition-colors"
                           >
