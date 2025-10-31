@@ -10,16 +10,26 @@ if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
   console.error('⚠️ VITE_FAL_API_KEY is not set. Please add your FAL API key to .env file from https://fal.ai');
 }
 
-// FLUX.1 Kontext endpoints
+/**
+ * Get the correct FLUX Kontext endpoint based on image count
+ * @param {boolean} hasReferenceImage - True if any reference images are provided
+ * @param {boolean} isMultipleImages - True if 2+ images (false for 0 or 1 images)
+ * @returns {string} The endpoint URL
+ * 
+ * Model selection logic:
+ * - 0 images → text-to-image (pro model)
+ * - 1 image → image-to-image (max model)  
+ * - 2+ images → multi-image (multi model)
+ */
 const getFluxEndpoint = (hasReferenceImage = false, isMultipleImages = false) => {
   if (!hasReferenceImage) {
-    // No reference image - text-to-image
+    // 0 images - text-to-image
     return 'https://fal.run/fal-ai/flux-pro/kontext/text-to-image';
   } else if (isMultipleImages) {
-    // Multiple images - use multi model
+    // 2+ images - multi model
     return 'https://fal.run/fal-ai/flux-pro/kontext/max/multi';
   } else {
-    // Single image - use max model
+    // 1 image - max model
     return 'https://fal.run/fal-ai/flux-pro/kontext/max';
   }
 };
@@ -124,19 +134,61 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     
     console.log('🎯 Final prompt being sent to API:', basePrompt);
     
-    // Choose the right endpoint based on reference image type
-    const hasRefImage = !!referenceImage;
-    const isMultipleImages = Array.isArray(referenceImage);
+    // Determine image count and type for model selection
+    // 0 images: text-to-image
+    // 1 image: image-to-image (single)
+    // 2+ images: multi-image
+    let imageCount = 0;
+    let isMultipleImages = false;
+    
+    if (referenceImage) {
+      if (Array.isArray(referenceImage)) {
+        // Filter out empty/null values
+        const validImages = referenceImage.filter(img => img && (typeof img === 'string' && img.trim().length > 0));
+        imageCount = validImages.length;
+        isMultipleImages = imageCount >= 2;
+        
+        // If array becomes empty after filtering, treat as no images
+        if (imageCount === 0) {
+          referenceImage = null;
+        }
+      } else if (typeof referenceImage === 'string' && referenceImage.trim().length > 0) {
+        // Single string image (non-empty)
+        imageCount = 1;
+        isMultipleImages = false;
+      } else {
+        // Invalid reference image, treat as no images
+        referenceImage = null;
+        imageCount = 0;
+        isMultipleImages = false;
+      }
+    }
+    
+    // Choose the right endpoint based on image count
+    const hasRefImage = imageCount > 0;
     const fluxEndpoint = getFluxEndpoint(hasRefImage, isMultipleImages);
     
-    const modeDesc = hasRefImage 
-      ? (isMultipleImages ? 'Kontext [multi] multi-image' : 'Kontext [max] image-to-image')
-      : 'Kontext [pro] text-to-image';
+    // Determine mode description
+    let modeDesc;
+    if (imageCount === 0) {
+      modeDesc = 'Kontext [pro] text-to-image';
+    } else if (isMultipleImages) {
+      modeDesc = `Kontext [multi] multi-image (${imageCount} images)`;
+    } else {
+      modeDesc = 'Kontext [max] image-to-image (1 image)';
+    }
       
     logger.info(`Using ${modeDesc} generation`, {
       endpoint: fluxEndpoint,
+      imageCount,
       hasReferenceImage: hasRefImage,
       isMultipleImages: isMultipleImages
+    });
+    
+    console.log(`🎯 Model Selection: ${imageCount} image(s) → ${modeDesc}`, {
+      imageCount,
+      isMultipleImages,
+      endpoint: fluxEndpoint
     });
     
     // Generate random seed each time
@@ -154,52 +206,75 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       seed: randomSeed // Randomized seed every time
     };
 
-    // Add reference image(s) if provided
-    if (referenceImage) {
+    // Add reference image(s) if provided based on image count
+    if (hasRefImage && referenceImage) {
       // Optimize images before sending to reduce payload size
       let optimizedImages;
-      if (Array.isArray(referenceImage)) {
+      
+      if (isMultipleImages && Array.isArray(referenceImage)) {
+        // Multiple images (2+) - use multi model
+        // Filter out any invalid images
+        const validImages = referenceImage.filter(img => img && (typeof img === 'string' && img.trim().length > 0));
+        
         // Check if optimization is needed for any image
-        const needsOpt = referenceImage.some(img => 
+        const needsOpt = validImages.some(img => 
           typeof img === 'string' && img.startsWith('data:') && needsOptimization(img, 300)
         );
         
         if (needsOpt) {
-          console.log(`🔄 Optimizing ${referenceImage.length} images before sending to fal.ai...`);
-          optimizedImages = await optimizeImages(referenceImage, {
+          console.log(`🔄 Optimizing ${validImages.length} images before sending to fal.ai...`);
+          optimizedImages = await optimizeImages(validImages, {
             maxWidth: 2048,
             maxHeight: 2048,
             quality: 0.85,
             format: 'jpeg'
           });
         } else {
-          optimizedImages = referenceImage;
+          optimizedImages = validImages;
         }
         
-        // Multiple images for multi model
+        // Multiple images for multi model - use image_urls
         requestBody.image_urls = optimizedImages;
-        console.log(`📸 Using ${optimizedImages.length} reference images for multi-image generation`);
-      } else {
-        // Single image - optimize if needed
-        if (typeof referenceImage === 'string' && referenceImage.startsWith('data:') && needsOptimization(referenceImage, 300)) {
-          console.log('🔄 Optimizing image before sending to fal.ai...');
-          optimizedImages = await optimizeImages(referenceImage, {
+        console.log(`📸 Using ${optimizedImages.length} reference images for multi-image generation (multi model)`);
+        
+        // Ensure image_url is not set when using image_urls
+        delete requestBody.image_url;
+      } else if (imageCount === 1) {
+        // Single image - use max model
+        let singleImage = referenceImage;
+        
+        // If it's an array with one element, extract it
+        if (Array.isArray(referenceImage) && referenceImage.length >= 1) {
+          singleImage = referenceImage.find(img => img && (typeof img === 'string' && img.trim().length > 0));
+        }
+        
+        // Optimize if needed
+        if (typeof singleImage === 'string' && singleImage.startsWith('data:') && needsOptimization(singleImage, 300)) {
+          console.log('🔄 Optimizing single image before sending to fal.ai...');
+          optimizedImages = await optimizeImages(singleImage, {
             maxWidth: 2048,
             maxHeight: 2048,
             quality: 0.85,
             format: 'jpeg'
           });
         } else {
-          optimizedImages = referenceImage;
+          optimizedImages = singleImage;
         }
         
-        // Single image for max model
+        // Single image for max model - use image_url
         requestBody.image_url = optimizedImages;
-        console.log('📸 Using single reference image for image-to-image generation');
+        console.log('📸 Using single reference image for image-to-image generation (max model)');
+        
+        // Ensure image_urls is not set when using image_url
+        delete requestBody.image_urls;
       }
     } else {
-      // No reference image - using text-to-image mode
-      console.log('📝 No reference image - using text-to-image generation');
+      // No reference image (0 images) - using text-to-image mode
+      console.log('📝 No reference image - using text-to-image generation (pro model)');
+      
+      // Ensure no image fields are set for text-to-image
+      delete requestBody.image_url;
+      delete requestBody.image_urls;
     }
 
     // Add aspect ratio based on the selected size
@@ -225,9 +300,12 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       prompt: requestBody.prompt,
       hasImage: !!requestBody.image_url,
       hasImages: !!requestBody.image_urls,
-      imageCount: requestBody.image_urls?.length || 0,
+      referenceImageCount: imageCount,
+      imageUrlsCount: requestBody.image_urls?.length || 0,
       numImages: requestBody.num_images,
-      aspectRatio: requestBody.aspect_ratio
+      aspectRatio: requestBody.aspect_ratio,
+      endpoint: fluxEndpoint,
+      mode: modeDesc
     });
     
     console.log('🎯 [PROMPT CHECK] Request details:', {
