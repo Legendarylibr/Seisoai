@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { ethers } from 'ethers';
 import { 
@@ -1081,77 +1080,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     return tokenBalances[tokenSymbol]?.formattedBalance || '0';
   };
 
-  // Debug logging
-  useEffect(() => {
-    if (isOpen) {
-      console.log('🎯 TokenPaymentModal: isOpen changed to true', { isOpen, address, walletType });
-    }
-  }, [isOpen, address, walletType]);
+  if (!isOpen) return null;
 
-  // Portal verification useEffect - must be before any early returns
-  useEffect(() => {
-    if (isOpen && typeof document !== 'undefined') {
-      console.log('🔍 TokenPaymentModal: Verifying portal target', {
-        bodyExists: !!document.body,
-        bodyTag: document.body?.tagName,
-        bodyChildren: document.body?.children?.length
-      });
-      
-      const timeout = setTimeout(() => {
-        const portalElement = document.querySelector('[style*="z-index: 99999"]');
-        console.log('🔍 TokenPaymentModal: Checking if portal element exists in DOM', {
-          found: !!portalElement
-        });
-      }, 100);
-      
-      return () => clearTimeout(timeout);
-    }
-  }, [isOpen]);
-
-  if (!isOpen) {
-    return null;
-  }
-
-  const modalContent = (
-    <div 
-      className="fixed inset-0 flex items-center justify-center p-2" 
-      style={{ 
-        zIndex: 99999,
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        width: '100vw',
-        height: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-        pointerEvents: 'auto',
-        overflow: 'visible'
-      }}
-      onClick={(e) => {
-        // Close modal when clicking backdrop
-        console.log('🎯 Modal backdrop clicked', { target: e.target, currentTarget: e.currentTarget });
-        if (e.target === e.currentTarget) {
-          console.log('✅ Closing modal via backdrop click');
-          onClose();
-        }
-      }}
-    >
-      <div 
-        className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-sm max-h-[90vh] overflow-y-auto relative"
-        style={{
-          zIndex: 100000,
-          position: 'relative',
-          pointerEvents: 'auto'
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          console.log('🛑 Modal content clicked - preventing close');
-        }}
-      >
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-2" style={{ zIndex: 100 }}>
+      <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-sm max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/10">
           <div className="flex items-center gap-3">
@@ -1406,13 +1339,6 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       </div>
     </div>
   );
-
-  // Use portal to render modal at document body level (avoids z-index/overflow issues)
-  if (typeof document === 'undefined') {
-    return modalContent;
-  }
-
-  return createPortal(modalContent, document.body);
 };
 
 export default TokenPaymentModal;
