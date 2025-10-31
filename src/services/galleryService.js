@@ -25,10 +25,14 @@ export const addGeneration = async (walletAddress, generationData) => {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to add generation');
+      const errorData = await response.json().catch(() => ({ error: 'Failed to add generation' }));
+      throw new Error(errorData.error || `Failed to add generation: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to add generation');
+    }
     return data;
   } catch (error) {
     console.error('Error adding generation:', error);

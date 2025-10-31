@@ -2524,33 +2524,55 @@ app.post('/api/generations/add', async (req, res) => {
       creditsUsed 
     } = req.body;
 
+    if (!walletAddress || !imageUrl) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: walletAddress and imageUrl are required'
+      });
+    }
+
     const user = await getOrCreateUser(walletAddress);
     
     // Use effective credits (max of credits and totalCreditsEarned) to handle granted credits
     const effectiveCredits = Math.max(user.credits || 0, user.totalCreditsEarned || 0);
+    const creditsToDeduct = creditsUsed || 1; // Default to 1 credit if not specified
+    
+    logger.debug('Checking credits for generation', {
+      walletAddress: walletAddress.toLowerCase(),
+      credits: user.credits,
+      totalCreditsEarned: user.totalCreditsEarned,
+      effectiveCredits,
+      creditsToDeduct
+    });
     
     // Check if user has enough credits
-    if (effectiveCredits < creditsUsed) {
+    if (effectiveCredits < creditsToDeduct) {
+      logger.warn('Insufficient credits for generation', {
+        walletAddress: walletAddress.toLowerCase(),
+        effectiveCredits,
+        creditsToDeduct
+      });
       return res.status(400).json({
         success: false,
-        error: 'Insufficient credits'
+        error: `Insufficient credits. You have ${effectiveCredits} credits but need ${creditsToDeduct}`
       });
     }
 
     // Deduct credits from the credits field (current balance)
     // If credits is lower than totalCreditsEarned, we still deduct from credits
     // and it will naturally show the lower balance
-    user.credits = Math.max(0, (user.credits || 0) - creditsUsed);
-    user.totalCreditsSpent = (user.totalCreditsSpent || 0) + creditsUsed;
+    const previousCredits = user.credits || 0;
+    user.credits = Math.max(0, previousCredits - creditsToDeduct);
+    user.totalCreditsSpent = (user.totalCreditsSpent || 0) + creditsToDeduct;
     
     // Add generation to history
     const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const generation = {
       id: generationId,
-      prompt,
-      style,
+      prompt: prompt || 'No prompt',
+      style: style || 'No Style',
       imageUrl,
-      creditsUsed,
+      creditsUsed: creditsToDeduct,
       timestamp: new Date()
     };
     
@@ -2559,17 +2581,21 @@ app.post('/api/generations/add', async (req, res) => {
     
     await user.save();
     
-    logger.info('Generation added to history', {
+    logger.info('Generation added to history and credits deducted', {
       walletAddress: walletAddress.toLowerCase(),
       generationId,
-      creditsUsed
+      creditsUsed: creditsToDeduct,
+      previousCredits,
+      newCredits: user.credits,
+      totalCreditsSpent: user.totalCreditsSpent
     });
     
     res.json({
       success: true,
       generationId,
       remainingCredits: user.credits,
-      message: 'Generation added to history'
+      creditsDeducted: creditsToDeduct,
+      message: `Generation added to history. ${creditsToDeduct} credit(s) deducted.`
     });
   } catch (error) {
     logger.error('Error adding generation:', error);
