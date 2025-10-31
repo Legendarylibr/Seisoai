@@ -58,6 +58,15 @@ jspm_packages/
 
 # dotenv environment variables file
 .env
+.env.local
+seiso.env
+production.env
+backend.env
+docker.env
+*.env
+!*.env.example
+!env.example
+!railway.env.example
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
