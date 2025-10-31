@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateImage } from '../services/smartImageService';
+import { addGeneration } from '../services/galleryService';
 import GenerateButton from './GenerateButton';
 import { X } from 'lucide-react';
+import logger from '../utils/logger.js';
 
 const ImageOutput = () => {
   const { 
@@ -26,7 +28,14 @@ const ImageOutput = () => {
     controlNetImage
   } = useImageGenerator();
 
-  const { isConnected, address, credits, isNFTHolder } = useSimpleWallet();
+  const { 
+    isConnected, 
+    address, 
+    credits, 
+    isNFTHolder,
+    refreshCredits,
+    setCreditsManually
+  } = useSimpleWallet();
   
   const [isDownloading, setIsDownloading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -163,7 +172,20 @@ const ImageOutput = () => {
   };
 
   const handleRegenerateWithPrompt = async () => {
-    if (!currentGeneration || isRegenerating || !isConnected || !newPrompt.trim()) return;
+    // Check if wallet is connected
+    if (!isConnected || !address) {
+      setError('Please connect your wallet first');
+      return;
+    }
+
+    // Check if user has credits
+    const availableCredits = credits || 0;
+    if (availableCredits <= 0) {
+      setError('Insufficient credits. Please buy credits to generate.');
+      return;
+    }
+
+    if (!currentGeneration || isRegenerating || !newPrompt.trim()) return;
     
     setIsRegenerating(true);
     setError(null);
@@ -179,15 +201,68 @@ const ImageOutput = () => {
         numImages: currentGeneration.numImages || numImages,
         enableSafetyChecker: currentGeneration.enableSafetyChecker || enableSafetyChecker,
         generationMode: currentGeneration.generationMode || generationMode,
-        isNFTHolder: isNFTHolder || false
+        walletAddress: address, // Pass wallet address for safety logging
+        isNFTHolder: isNFTHolder || false,
+        referenceImageDimensions: currentGeneration.referenceImageDimensions
       };
       
+      logger.info('Starting regeneration with new prompt');
       const result = await generateImage(
         currentGeneration.style,
         newPrompt.trim(),
         advancedSettings,
         generatedImage // Use current output as reference image
       );
+      
+      // Ensure we have a valid image URL
+      if (!result || typeof result !== 'string') {
+        throw new Error('No image URL returned from generation service');
+      }
+
+      logger.info('Regeneration with new prompt completed successfully', { hasImageUrl: !!result });
+      
+      // Save generation to backend and deduct credits IMMEDIATELY after image is returned
+      console.log('💾 [AUTO] Saving generation and deducting credits automatically...', { 
+        imageUrl: result?.substring(0, 50),
+        currentCredits: credits 
+      });
+      
+      let deductionResult = null;
+      try {
+        deductionResult = await addGeneration(address, {
+          prompt: newPrompt.trim(),
+          style: currentGeneration.style ? currentGeneration.style.name : 'No Style',
+          imageUrl: result,
+          creditsUsed: 1 // 1 credit per generation
+        });
+        console.log('✅ [AUTO] Generation saved and credits deducted:', {
+          success: deductionResult.success,
+          remainingCredits: deductionResult.remainingCredits,
+          creditsDeducted: deductionResult.creditsDeducted
+        });
+        logger.info('Generation saved and credits deducted', { result: deductionResult, address });
+        
+        // Update UI immediately with the remaining credits from the response
+        if (deductionResult.remainingCredits !== undefined && setCreditsManually) {
+          console.log('📊 [AUTO] Updating UI credits immediately to:', deductionResult.remainingCredits);
+          setCreditsManually(deductionResult.remainingCredits);
+        }
+        
+        // Force immediate credit refresh to ensure UI is in sync with backend
+        console.log('🔄 [AUTO] Refreshing credits from backend to verify...');
+        if (refreshCredits && address) {
+          await refreshCredits();
+          console.log('✅ [AUTO] Credits refreshed in UI from backend');
+          logger.info('Credits refreshed after generation', { address });
+        } else {
+          console.warn('⚠️ [AUTO] Cannot refresh credits - missing refreshCredits or address');
+        }
+      } catch (error) {
+        console.error('Error saving generation:', error);
+        logger.error('Error saving generation', { error: error.message, address, imageUrl: result });
+        setError(`Image generated but failed to save to history. Credits not deducted. Error: ${error.message}`);
+        // Still show the image even if saving failed
+      }
       
       setGeneratedImage(result);
       
@@ -204,6 +279,7 @@ const ImageOutput = () => {
       
     } catch (error) {
       console.error('Regeneration with prompt failed:', error);
+      logger.error('Regeneration with prompt failed', { error: error.message });
       setError(error.message || 'Failed to regenerate image. Please try again.');
     } finally {
       setIsRegenerating(false);
