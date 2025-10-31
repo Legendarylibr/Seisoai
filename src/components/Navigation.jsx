@@ -31,7 +31,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
   if (!tabs || !Array.isArray(tabs)) {
     console.error('Navigation: tabs prop is missing or not an array', { tabs, activeTab, setActiveTab });
     return (
-      <header className="bg-black/20 backdrop-blur-md border-b border-white/10 sticky top-0 z-50">
+      <header className="bg-black/20 backdrop-blur-md border-b border-white/10 sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -50,7 +50,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
   }
 
   return (
-    <header className="bg-black/20 backdrop-blur-md border-b border-white/10 sticky top-0 z-50">
+    <header className="bg-black/20 backdrop-blur-md border-b border-white/10 sticky top-0 z-40">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
@@ -130,7 +130,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
                   {/* Dropdown Menu */}
                   {showCreditsDropdown && (
-                    <div className="absolute right-0 mt-2 w-64 bg-black/90 backdrop-blur-md border border-white/20 rounded-lg shadow-xl z-50">
+                    <div className="absolute right-0 mt-2 w-64 bg-black/90 backdrop-blur-md border border-white/20 rounded-lg shadow-xl z-40">
                       <div className="p-4">
                         <h3 className="text-sm font-semibold text-white mb-3">Purchase Credits</h3>
                         
@@ -243,7 +243,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
                   {/* Mobile Dropdown Menu */}
                   {showCreditsDropdown && (
-                    <div className="absolute right-0 mt-2 w-56 bg-black/90 backdrop-blur-md border border-white/20 rounded-lg shadow-xl z-50">
+                    <div className="absolute right-0 mt-2 w-56 bg-black/90 backdrop-blur-md border border-white/20 rounded-lg shadow-xl z-40">
                       <div className="p-3">
                         <h3 className="text-xs font-semibold text-white mb-2">Purchase Credits</h3>
                         
