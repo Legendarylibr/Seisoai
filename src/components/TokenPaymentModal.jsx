@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { ethers } from 'ethers';
 import { 
@@ -1082,9 +1083,33 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-2" style={{ zIndex: 100 }}>
-      <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-sm max-h-[90vh] overflow-y-auto">
+  const modalContent = (
+    <div 
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-2" 
+      style={{ 
+        zIndex: 10000,
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
+      onClick={(e) => {
+        // Close modal when clicking backdrop
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div 
+        className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-sm max-h-[90vh] overflow-y-auto relative"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/10">
           <div className="flex items-center gap-3">
@@ -1339,6 +1364,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       </div>
     </div>
   );
+
+  // Use portal to render modal at document body level (avoids z-index/overflow issues)
+  return typeof document !== 'undefined' 
+    ? createPortal(modalContent, document.body)
+    : modalContent;
 };
 
 export default TokenPaymentModal;
