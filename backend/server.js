@@ -614,6 +614,251 @@ const TOKEN_CONFIGS = {
   }
 };
 
+// Credit calculation constants
+const STANDARD_CREDITS_PER_USDC = 6.67; // $0.15 per credit
+
+// Qualifying NFT collections and token contracts for discount/benefits
+const QUALIFYING_NFT_COLLECTIONS = [
+  // Your NFT Collections
+  { chainId: '1', address: '0x8e84dcaf616c3e04ed45d3e0912b81e7283a48da', name: 'Your NFT Collection 1', type: 'erc721' },
+  { chainId: '1', address: '0xd7d1431f43767a47bf7f5c6a651d24398e537729', name: 'Your NFT Collection 2', type: 'erc721' },
+  { chainId: '8453', address: '0x1e71ea45fb939c92045ff32239a8922395eeb31b', name: 'Your Base NFT Collection', type: 'erc721' },
+  // Token Holdings
+  { chainId: '1', address: '0x0000000000c5dc95539589fbD24BE07c6C14eCa4', name: '$CULT Holders', type: 'erc20', minBalance: '500000' }
+];
+
+// Helper function to check if payment already processed
+const isPaymentAlreadyProcessed = (user, txHash, paymentIntentId = null) => {
+  if (paymentIntentId) {
+    return user.paymentHistory.some(p => p.paymentIntentId === paymentIntentId);
+  }
+  return user.paymentHistory.some(p => p.txHash === txHash);
+};
+
+// Helper function to calculate credits from USDC amount
+const calculateCreditsFromAmount = (amount, creditsPerUSDC = STANDARD_CREDITS_PER_USDC) => {
+  return Math.floor(parseFloat(amount) * creditsPerUSDC);
+};
+
+// Helper function to add credits and payment history to user
+const addCreditsToUser = async (user, {
+  txHash,
+  tokenSymbol,
+  amount,
+  credits,
+  chainId,
+  walletType,
+  timestamp = new Date(),
+  paymentIntentId = null
+}) => {
+  user.credits += credits;
+  user.totalCreditsEarned += credits;
+  
+  const paymentEntry = {
+    txHash: paymentIntentId || txHash,
+    tokenSymbol: tokenSymbol || 'USDC',
+    amount: parseFloat(amount),
+    credits,
+    chainId: chainId || 'unknown',
+    walletType: walletType || 'evm',
+    timestamp
+  };
+  
+  if (paymentIntentId) {
+    paymentEntry.paymentIntentId = paymentIntentId;
+  }
+  
+  user.paymentHistory.push(paymentEntry);
+  await user.save();
+  
+  return paymentEntry;
+};
+
+/**
+ * Shared helper function to check NFT holdings for a wallet
+ * @param {string} walletAddress - The wallet address to check
+ * @param {Array} collections - Optional collections to check (defaults to QUALIFYING_NFT_COLLECTIONS)
+ * @returns {Promise<{ownedCollections: Array, isHolder: boolean}>}
+ */
+const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING_NFT_COLLECTIONS) => {
+  const ownedCollections = [];
+  
+  // Group collections by chain for parallel processing
+  const collectionsByChain = {};
+  for (const collection of collections) {
+    if (!collectionsByChain[collection.chainId]) {
+      collectionsByChain[collection.chainId] = [];
+    }
+    collectionsByChain[collection.chainId].push(collection);
+  }
+  
+  // Process each chain in parallel
+  const chainResults = await Promise.allSettled(
+    Object.entries(collectionsByChain).map(async ([chainId, chainCollections]) => {
+      const rpcUrl = RPC_ENDPOINTS[chainId];
+      if (!rpcUrl) {
+        logger.warn('No RPC URL for chain', { chainId });
+        return [];
+      }
+      
+      logger.debug('Processing chain collections', { chainId, count: chainCollections.length });
+      const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
+        polling: false,
+        batchMaxCount: 10,
+        batchMaxWait: 100,
+        staticNetwork: { chainId: parseInt(chainId), name: chainId === '1' ? 'mainnet' : 'base' }
+      });
+      
+      // Process collections in parallel within each chain
+      return Promise.allSettled(
+        chainCollections.map(async (collection) => {
+          try {
+            logger.debug('Checking collection', { 
+              address: collection.address, 
+              chainId: collection.chainId, 
+              name: collection.name,
+              type: collection.type 
+            });
+            
+            if (collection.type === 'erc721') {
+              // Skip EVM NFT checks for Solana addresses
+              if (!walletAddress.startsWith('0x')) {
+                logger.debug('Skipping EVM NFT check for Solana address', { walletAddress, collection: collection.name });
+                return null;
+              }
+              
+              // Validate addresses
+              if (!ethers.isAddress(collection.address) || !ethers.isAddress(walletAddress)) {
+                throw new Error(`Invalid address format`);
+              }
+              
+              // NFT contract check with timeout
+              const nftContract = new ethers.Contract(
+                collection.address,
+                ['function balanceOf(address owner) view returns (uint256)'],
+                provider
+              );
+              
+              const balance = await Promise.race([
+                nftContract.balanceOf(walletAddress),
+                new Promise((_, reject) => 
+                  setTimeout(() => reject(new Error('Contract call timeout')), 3000)
+                )
+              ]);
+              
+              logger.debug('NFT balance check result', { 
+                address: collection.address, 
+                walletAddress, 
+                balance: balance.toString() 
+              });
+              
+              if (balance > 0) {
+                logger.info('NFT found!', { 
+                  address: collection.address, 
+                  name: collection.name, 
+                  balance: balance.toString() 
+                });
+                return {
+                  contractAddress: collection.address,
+                  chainId: collection.chainId,
+                  name: collection.name,
+                  type: collection.type,
+                  balance: balance.toString(),
+                  tokenIds: [],
+                  lastChecked: new Date()
+                };
+              }
+              return null;
+            } else if (collection.type === 'erc20') {
+              // Skip EVM token checks for Solana addresses
+              if (!walletAddress.startsWith('0x')) {
+                logger.debug('Skipping EVM token check for Solana address', { walletAddress, collection: collection.name });
+                return null;
+              }
+              
+              // Validate addresses
+              if (!ethers.isAddress(collection.address) || !ethers.isAddress(walletAddress)) {
+                throw new Error(`Invalid address format`);
+              }
+              
+              // Token contract check with timeout
+              const tokenContract = new ethers.Contract(
+                collection.address,
+                ['function balanceOf(address owner) view returns (uint256)', 'function decimals() view returns (uint8)'],
+                provider
+              );
+              
+              const [balance, decimals] = await Promise.race([
+                Promise.all([tokenContract.balanceOf(walletAddress), tokenContract.decimals()]),
+                new Promise((_, reject) => 
+                  setTimeout(() => reject(new Error('Contract call timeout')), 3000)
+                )
+              ]);
+              
+              const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
+              const minBalance = parseFloat(collection.minBalance);
+              
+              logger.debug('Token balance check result', { 
+                address: collection.address, 
+                walletAddress, 
+                balance: formattedBalance,
+                minBalance,
+                decimals 
+              });
+              
+              if (formattedBalance >= minBalance) {
+                logger.info('Token balance sufficient!', { 
+                  address: collection.address, 
+                  name: collection.name, 
+                  balance: formattedBalance,
+                  minBalance 
+                });
+                return {
+                  contractAddress: collection.address,
+                  chainId: collection.chainId,
+                  name: collection.name,
+                  type: collection.type,
+                  balance: formattedBalance.toString(),
+                  minBalance: collection.minBalance,
+                  lastChecked: new Date()
+                };
+              }
+              return null;
+            }
+          } catch (error) {
+            logger.warn(`Error checking collection ${collection.address}:`, {
+              error: error.message,
+              chainId: collection.chainId,
+              name: collection.name,
+              type: collection.type,
+              walletAddress: walletAddress
+            });
+            return null; // Return null instead of throwing to continue processing
+          }
+        })
+      );
+    })
+  );
+  
+  // Flatten results and filter out nulls
+  for (const chainResult of chainResults) {
+    if (chainResult.status === 'fulfilled') {
+      for (const collectionResult of chainResult.value) {
+        if (collectionResult.status === 'fulfilled' && collectionResult.value) {
+          ownedCollections.push(collectionResult.value);
+        }
+      }
+    }
+  }
+  
+  // Only consider wallet as NFT holder if they actually have NFTs (balance > 0)
+  const isHolder = ownedCollections.some(collection => 
+    collection.balance && parseInt(collection.balance) > 0 && !collection.error
+  );
+  
+  return { ownedCollections, isHolder };
+};
+
 // RPC endpoints with fallback to public endpoints
 const RPC_ENDPOINTS = {
   '1': process.env.ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
@@ -926,100 +1171,8 @@ app.get('/api/users/:walletAddress', async (req, res) => {
     // Skip NFT checks if skipNFTs=true (for faster credits fetching)
     if (skipNFTs !== 'true' && (refreshNFTs === 'true' || !isNFTHolder)) {
       try {
-        // Call NFT check internally to refresh holdings
-        const qualifyingCollections = [
-          { chainId: '1', address: '0x8e84dcaf616c3e04ed45d3e0912b81e7283a48da', name: 'Your NFT Collection 1', type: 'erc721' },
-          { chainId: '1', address: '0xd7d1431f43767a47bf7f5c6a651d24398e537729', name: 'Your NFT Collection 2', type: 'erc721' },
-          { chainId: '8453', address: '0x1e71ea45fb939c92045ff32239a8922395eeb31b', name: 'Your Base NFT Collection', type: 'erc721' },
-          { chainId: '1', address: '0x0000000000c5dc95539589fbD24BE07c6C14eCa4', name: '$CULT Holders', type: 'erc20', minBalance: '500000' }
-        ];
-        
-        const ownedCollections = [];
-        const collectionsByChain = {};
-        
-        for (const collection of qualifyingCollections) {
-          if (!collectionsByChain[collection.chainId]) {
-            collectionsByChain[collection.chainId] = [];
-          }
-          collectionsByChain[collection.chainId].push(collection);
-        }
-        
-        // Check each chain
-        for (const [chainId, collections] of Object.entries(collectionsByChain)) {
-          try {
-            const rpcUrl = RPC_ENDPOINTS[chainId] || RPC_ENDPOINTS['1'];
-            if (!rpcUrl) continue;
-            
-            const provider = new ethers.JsonRpcProvider(rpcUrl);
-            
-            for (const collection of collections) {
-              try {
-                if (collection.type === 'erc721' && walletAddress.startsWith('0x')) {
-                  const nftContract = new ethers.Contract(
-                    collection.address,
-                    ['function balanceOf(address owner) view returns (uint256)'],
-                    provider
-                  );
-                  
-                  const balance = await Promise.race([
-                    nftContract.balanceOf(walletAddress),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
-                  ]);
-                  
-                  if (balance > 0) {
-                    ownedCollections.push({
-                      contractAddress: collection.address,
-                      chainId: collection.chainId,
-                      name: collection.name,
-                      type: collection.type,
-                      balance: balance.toString(),
-                      tokenIds: [],
-                      lastChecked: new Date()
-                    });
-                  }
-                } else if (collection.type === 'erc20' && walletAddress.startsWith('0x')) {
-                  const tokenContract = new ethers.Contract(
-                    collection.address,
-                    ['function balanceOf(address owner) view returns (uint256)', 'function decimals() view returns (uint8)'],
-                    provider
-                  );
-                  
-                  const [balance, decimals] = await Promise.race([
-                    Promise.all([tokenContract.balanceOf(walletAddress), tokenContract.decimals()]),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
-                  ]);
-                  
-                  const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
-                  const minBalance = parseFloat(collection.minBalance);
-                  
-                  if (formattedBalance >= minBalance) {
-                    ownedCollections.push({
-                      contractAddress: collection.address,
-                      chainId: collection.chainId,
-                      name: collection.name,
-                      type: collection.type,
-                      balance: formattedBalance.toString(),
-                      minBalance: collection.minBalance,
-                      lastChecked: new Date()
-                    });
-                  }
-                }
-              } catch (error) {
-                logger.warn(`Error checking ${collection.name}:`, {
-                  error: error.message,
-                  chainId,
-                  collectionAddress: collection.address,
-                  walletAddress
-                });
-              }
-            }
-          } catch (error) {
-            logger.warn(`Error checking chain ${chainId}:`, {
-              error: error.message,
-              rpcUrl: RPC_ENDPOINTS[chainId]
-            });
-          }
-        }
+        // Use shared helper function to check NFT holdings
+        const { ownedCollections, isHolder: nftCheckResult } = await checkNFTHoldingsForWallet(walletAddress);
         
         // Update user's NFT collections in database (atomically to preserve credits)
         if (ownedCollections.length > 0) {
@@ -1134,7 +1287,7 @@ app.get('/api/users/:walletAddress', async (req, res) => {
         isNFTHolder: isNFTHolder,
         pricing: {
           costPerCredit: 0.15,
-          creditsPerUSDC: 6.67
+          creditsPerUSDC: STANDARD_CREDITS_PER_USDC
         }
       }
     });
@@ -1151,37 +1304,26 @@ app.post('/api/nft/check-credits', async (req, res) => {
   try {
     const { walletAddress } = req.body;
     
-    // Check NFT holdings to determine pricing
-    let isNFTHolder = false;
-    
-    try {
-      // Make internal call to NFT checking
-      const nftResponse = await fetch(`http://localhost:3001/api/nft/check-holdings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ walletAddress })
+    if (!walletAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Wallet address required'
       });
-      
-      if (nftResponse.ok) {
-        const nftData = await nftResponse.json();
-        isNFTHolder = nftData.isHolder;
-      }
-    } catch (nftError) {
-      logger.warn('Failed to check NFT status for credits', { error: nftError.message });
     }
     
-    // Base credits (no NFT holder bonus)
-    const baseCredits = 0;
+    // Get user from database to check NFT status
+    const user = await getOrCreateUser(walletAddress);
+    const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
     
     res.json({
       success: true,
-      totalCredits: baseCredits,
-      totalCreditsEarned: baseCredits,
-      totalCreditsSpent: 0,
+      totalCredits: user.credits || 0,
+      totalCreditsEarned: user.totalCreditsEarned || 0,
+      totalCreditsSpent: user.totalCreditsSpent || 0,
       isNFTHolder: isNFTHolder,
       pricing: {
-        costPerCredit: 0.15,
-        creditsPerUSDC: 6.67
+        costPerCredit: isNFTHolder ? 0.08 : 0.15,
+        creditsPerUSDC: isNFTHolder ? 12.5 : STANDARD_CREDITS_PER_USDC
       }
     });
   } catch (error) {
@@ -1206,195 +1348,9 @@ app.post('/api/nft/check-holdings', async (req, res) => {
 
     logger.info('Checking NFT holdings', { walletAddress });
     
-    // Skip user operations if MongoDB not available - NFT checking can work without database
-    logger.info('Checking NFT holdings without database dependency', { walletAddress });
+    // Use shared helper function to check NFT holdings (works without database)
+    const { ownedCollections, isHolder } = await checkNFTHoldingsForWallet(walletAddress);
     
-    // Use backend-defined collections (ignore frontend collections parameter)
-    // Qualifying NFT collections and token contracts
-    const qualifyingCollections = [
-      // Your NFT Collections
-      { chainId: '1', address: '0x8e84dcaf616c3e04ed45d3e0912b81e7283a48da', name: 'Your NFT Collection 1', type: 'erc721' },
-      { chainId: '1', address: '0xd7d1431f43767a47bf7f5c6a651d24398e537729', name: 'Your NFT Collection 2', type: 'erc721' },
-      { chainId: '8453', address: '0x1e71ea45fb939c92045ff32239a8922395eeb31b', name: 'Your Base NFT Collection', type: 'erc721' },
-      // Token Holdings
-      { chainId: '1', address: '0x0000000000c5dc95539589fbD24BE07c6C14eCa4', name: '$CULT Holders', type: 'erc20', minBalance: '500000' }
-    ];
-    
-    const ownedCollections = [];
-    
-    // Group collections by chain for parallel processing
-    const collectionsByChain = {};
-    for (const collection of qualifyingCollections) {
-      if (!collectionsByChain[collection.chainId]) {
-        collectionsByChain[collection.chainId] = [];
-      }
-      collectionsByChain[collection.chainId].push(collection);
-    }
-    
-    // Process each chain in parallel
-    const chainResults = await Promise.allSettled(
-      Object.entries(collectionsByChain).map(async ([chainId, collections]) => {
-        const rpcUrl = RPC_ENDPOINTS[chainId];
-        if (!rpcUrl) {
-          logger.warn('No RPC URL for chain', { chainId });
-          return [];
-        }
-        
-        logger.debug('Processing chain collections', { chainId, count: collections.length });
-        const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
-          polling: false,
-          batchMaxCount: 10,
-          batchMaxWait: 100,
-          staticNetwork: { chainId: parseInt(chainId), name: chainId === '1' ? 'mainnet' : 'base' }
-        });
-        
-        // Process collections in parallel within each chain
-        return Promise.allSettled(
-          collections.map(async (collection) => {
-            try {
-              logger.debug('Checking collection', { 
-                address: collection.address, 
-                chainId: collection.chainId, 
-                name: collection.name,
-                type: collection.type 
-              });
-              
-              if (collection.type === 'erc721') {
-                // Skip EVM NFT checks for Solana addresses
-                if (!walletAddress.startsWith('0x')) {
-                  logger.debug('Skipping EVM NFT check for Solana address', { walletAddress, collection: collection.name });
-                  return null;
-                }
-                
-                // Validate addresses
-                if (!ethers.isAddress(collection.address) || !ethers.isAddress(walletAddress)) {
-                  throw new Error(`Invalid address format`);
-                }
-                
-                // NFT contract check with faster timeout
-                const nftContract = new ethers.Contract(
-                  collection.address,
-                  ['function balanceOf(address owner) view returns (uint256)'],
-                  provider
-                );
-                
-                // Reduced timeout for faster failure
-                const balance = await Promise.race([
-                  nftContract.balanceOf(walletAddress),
-                  new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Contract call timeout')), 3000) // Reduced from 10s to 3s
-                  )
-                ]);
-                
-                logger.debug('NFT balance check result', { 
-                  address: collection.address, 
-                  walletAddress, 
-                  balance: balance.toString() 
-                });
-                
-                if (balance > 0) {
-                  logger.info('NFT found!', { 
-                    address: collection.address, 
-                    name: collection.name, 
-                    balance: balance.toString() 
-                  });
-                  return {
-                    contractAddress: collection.address,
-                    chainId: collection.chainId,
-                    name: collection.name,
-                    type: collection.type,
-                    balance: balance.toString()
-                  };
-                }
-                return null;
-              } else if (collection.type === 'erc20') {
-                // Skip EVM token checks for Solana addresses
-                if (!walletAddress.startsWith('0x')) {
-                  logger.debug('Skipping EVM token check for Solana address', { walletAddress, collection: collection.name });
-                  return null;
-                }
-                
-                // Validate addresses
-                if (!ethers.isAddress(collection.address) || !ethers.isAddress(walletAddress)) {
-                  throw new Error(`Invalid address format`);
-                }
-                
-                // Token contract check with faster timeout
-                const tokenContract = new ethers.Contract(
-                  collection.address,
-                  ['function balanceOf(address owner) view returns (uint256)', 'function decimals() view returns (uint8)'],
-                  provider
-                );
-                
-                // Reduced timeout for faster failure
-                const [balance, decimals] = await Promise.race([
-                  Promise.all([tokenContract.balanceOf(walletAddress), tokenContract.decimals()]),
-                  new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Contract call timeout')), 3000) // Reduced from 10s to 3s
-                  )
-                ]);
-                
-                const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
-                const minBalance = parseFloat(collection.minBalance);
-                
-                logger.debug('Token balance check result', { 
-                  address: collection.address, 
-                  walletAddress, 
-                  balance: formattedBalance,
-                  minBalance,
-                  decimals 
-                });
-                
-                if (formattedBalance >= minBalance) {
-                  logger.info('Token balance sufficient!', { 
-                    address: collection.address, 
-                    name: collection.name, 
-                    balance: formattedBalance,
-                    minBalance 
-                  });
-                  return {
-                    contractAddress: collection.address,
-                    chainId: collection.chainId,
-                    name: collection.name,
-                    type: collection.type,
-                    balance: formattedBalance.toString(),
-                    minBalance: collection.minBalance
-                  };
-                }
-                return null;
-              }
-            } catch (error) {
-              logger.warn(`Error checking collection ${collection.address}:`, {
-                error: error.message,
-                chainId: collection.chainId,
-                name: collection.name,
-                type: collection.type,
-                walletAddress: walletAddress
-              });
-              return null; // Return null instead of throwing to continue processing
-            }
-          })
-        );
-      })
-    );
-    
-    // Flatten results and filter out nulls
-    for (const chainResult of chainResults) {
-      if (chainResult.status === 'fulfilled') {
-        for (const collectionResult of chainResult.value) {
-          if (collectionResult.status === 'fulfilled' && collectionResult.value) {
-            ownedCollections.push(collectionResult.value);
-          }
-        }
-      }
-    }
-    
-    // Only consider wallet as NFT holder if they actually have NFTs (balance > 0)
-    const isHolder = ownedCollections.some(collection => 
-      collection.balance && parseInt(collection.balance) > 0 && !collection.error
-    );
-    
-    // Skip database operations - NFT checking works without database
     logger.info('NFT check completed', { walletAddress, isHolder, collectionCount: ownedCollections.length });
     
     res.json({
@@ -1406,7 +1362,7 @@ app.post('/api/nft/check-holdings', async (req, res) => {
         : 'No qualifying NFTs found. Purchase credits to generate images.',
       pricing: {
         costPerCredit: isHolder ? 0.08 : 0.15,
-        creditsPerUSDC: isHolder ? 12.5 : 6.67
+        creditsPerUSDC: isHolder ? 12.5 : STANDARD_CREDITS_PER_USDC
       },
       freeCredits: isHolder ? 10 : 0
     });
@@ -1437,8 +1393,8 @@ app.post('/api/payment/get-address', async (req, res) => {
     }
     
     // Return dedicated payment addresses for different chains
-    const evmPaymentAddress = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
-    const solanaPaymentAddress = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || process.env.SOLANA_PAYMENT_WALLET || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA';
+    const evmPaymentAddress = EVM_PAYMENT_ADDRESS;
+    const solanaPaymentAddress = PAYMENT_WALLETS['solana'];
     
   res.json({
     success: true,
@@ -1796,8 +1752,8 @@ app.post('/api/payment/check-payment', async (req, res) => {
       });
     }
     
-    const evmPaymentAddress = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
-    const solanaPaymentAddress = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || process.env.SOLANA_PAYMENT_WALLET || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA';
+    const evmPaymentAddress = EVM_PAYMENT_ADDRESS;
+    const solanaPaymentAddress = PAYMENT_WALLETS['solana'];
     
     console.log(`[PAYMENT CHECK] Configuration:`);
     console.log(`  - User wallet: ${walletAddress}`);
@@ -1854,9 +1810,9 @@ app.post('/api/payment/check-payment', async (req, res) => {
       
       // Process payment for the actual sender
       const user = await getOrCreateUser(senderAddress);
-      const alreadyProcessed = user.paymentHistory.some(p => p.txHash === payment.txHash);
       
-      if (alreadyProcessed) {
+      // Middleware should have caught duplicates, but double-check for safety
+      if (isPaymentAlreadyProcessed(user, payment.txHash)) {
         console.log(`[INFO] Payment ${payment.txHash} already processed for ${senderAddress}`);
         console.log('='.repeat(80));
         return res.json({
@@ -1867,27 +1823,22 @@ app.post('/api/payment/check-payment', async (req, res) => {
         });
       }
       
-      // Calculate credits (standard pricing for all users)
-      const creditsPerUSDC = 6.67; // $0.15/credit
-      const creditsToAdd = Math.floor(parseFloat(payment.amount) * creditsPerUSDC);
+      // Calculate credits
+      const creditsToAdd = calculateCreditsFromAmount(payment.amount);
       
       console.log(`[CREDIT] Adding ${creditsToAdd} credits to user ${senderAddress}`);
       console.log(`[CREDIT] Previous balance: ${user.credits} credits`);
       
-      // Add credits to user
-      user.credits += creditsToAdd;
-      user.totalCreditsEarned += creditsToAdd;
-      user.paymentHistory.push({
+      // Add credits to user using helper function
+      await addCreditsToUser(user, {
         txHash: payment.txHash,
         tokenSymbol: payment.token || 'USDC',
-        amount: parseFloat(payment.amount),
+        amount: payment.amount,
         credits: creditsToAdd,
         chainId: payment.chain || 'unknown',
         walletType: 'unknown', // Can be enhanced with actual wallet type
         timestamp: new Date(payment.timestamp * 1000)
       });
-      
-      await user.save();
       
       console.log(`[SUCCESS] New balance: ${user.credits} credits`);
       console.log('='.repeat(80));
@@ -1950,11 +1901,10 @@ app.post('/api/payments/credit', async (req, res) => {
       });
     }
 
-    // Check if payment already processed
+    // Middleware should have caught duplicates, but double-check for safety
     const user = await getOrCreateUser(walletAddress);
-    const existingPayment = user.paymentHistory.find(p => p.txHash === txHash);
     
-    if (existingPayment) {
+    if (isPaymentAlreadyProcessed(user, txHash)) {
       console.log('💰 [PAYMENT CREDIT] Already processed');
       return res.json({
         success: true,
@@ -1965,33 +1915,25 @@ app.post('/api/payments/credit', async (req, res) => {
     }
 
     // Credit immediately based on signature (no verification)
-    const creditsPerUSDC = 6.67; // $0.15/credit
-    const creditsToAdd = Math.floor(parseFloat(amount) * creditsPerUSDC);
+    const creditsToAdd = calculateCreditsFromAmount(amount);
     
     console.log('💰 [PAYMENT CREDIT] Calculating credits', {
       walletAddress: user.walletAddress,
       walletType: walletType || 'evm',
       amount: parseFloat(amount),
-      creditsPerUSDC,
+      creditsPerUSDC: STANDARD_CREDITS_PER_USDC,
       creditsToAdd
     });
     
-    // Add credits
-    user.credits += creditsToAdd;
-    user.totalCreditsEarned += creditsToAdd;
-    
-    // Add to payment history
-    user.paymentHistory.push({
+    // Add credits using helper function
+    await addCreditsToUser(user, {
       txHash,
       tokenSymbol: tokenSymbol || 'USDC',
-      amount: parseFloat(amount),
+      amount,
       credits: creditsToAdd,
       chainId: chainId || 'unknown',
-      walletType: walletType || 'evm',
-      timestamp: new Date()
+      walletType: walletType || 'evm'
     });
-    
-    await user.save();
     
     console.log('💰 [PAYMENT CREDIT] Credits added successfully', {
       walletAddress: user.walletAddress,
@@ -2041,11 +1983,10 @@ app.post('/api/payments/verify', async (req, res) => {
       });
     }
 
-    // Check if payment already processed
+    // Middleware should have caught duplicates, but double-check for safety
     const user = await getOrCreateUser(walletAddress);
-    const existingPayment = user.paymentHistory.find(p => p.txHash === txHash);
     
-    if (existingPayment) {
+    if (isPaymentAlreadyProcessed(user, txHash)) {
       console.log('💰 [PAYMENT VERIFY] Already processed');
       return res.json({
         success: true,
@@ -2070,22 +2011,15 @@ app.post('/api/payments/verify', async (req, res) => {
     }
 
     if (verification.success) {
-      // Update user credits
-      user.credits += verification.credits;
-      user.totalCreditsEarned += verification.credits;
-      
-      // Add to payment history
-      user.paymentHistory.push({
+      // Add credits using helper function
+      await addCreditsToUser(user, {
         txHash,
         tokenSymbol,
         amount: verification.actualAmount,
         credits: verification.credits,
         chainId,
-        walletType,
-        timestamp: new Date()
+        walletType
       });
-      
-      await user.save();
       
       logger.info('Payment verified successfully', {
         walletAddress: walletAddress.toLowerCase(),
@@ -2218,9 +2152,8 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
 
     // Check if payment already processed
     const user = await getOrCreateUser(walletAddress);
-    const existingPayment = user.paymentHistory.find(p => p.paymentIntentId === paymentIntentId);
     
-    if (existingPayment) {
+    if (isPaymentAlreadyProcessed(user, null, paymentIntentId)) {
       return res.json({
         success: true,
         credits: 0,
@@ -2233,26 +2166,19 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
     const amount = paymentIntent.amount / 100; // Convert from cents
 
     // NFT holder check removed - standard pricing for all users
-
     // Use credits as-is (no NFT bonus)
     const finalCredits = credits;
 
-    // Update user credits
-    user.credits += finalCredits;
-    user.totalCreditsEarned += finalCredits;
-    
-    // Add to payment history
-      user.paymentHistory.push({
-        txHash: paymentIntentId,
-        tokenSymbol: 'USD',
-        amount: amount,
-        credits: finalCredits,
-        chainId: 'stripe',
-        walletType: 'card',
-        timestamp: new Date()
-      });
-    
-    await user.save();
+    // Add credits using helper function
+    await addCreditsToUser(user, {
+      txHash: paymentIntentId,
+      tokenSymbol: 'USD',
+      amount,
+      credits: finalCredits,
+      chainId: 'stripe',
+      walletType: 'card',
+      paymentIntentId
+    });
     
     logger.info('Stripe payment verified successfully', {
       walletAddress: walletAddress.toLowerCase(),
@@ -2288,7 +2214,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
     console.log(`[INSTANT CHECK] Starting instant payment check for ${walletAddress || 'any wallet'} on chain ${chainId}`);
     console.log(`[INSTANT CHECK] Expected amount: ${expectedAmount} USDC`);
     
-    const evmPaymentAddress = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
+    const evmPaymentAddress = EVM_PAYMENT_ADDRESS;
     
     // Map chainId to backend chain name
     const chainIdToChainName = {
@@ -2353,9 +2279,9 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         
         // Process payment for the sender
         const user = await getOrCreateUser(senderAddress);
-        const alreadyProcessed = user.paymentHistory.some(p => p.txHash === quickPayment.txHash);
         
-        if (alreadyProcessed) {
+        // Middleware should have caught duplicates, but double-check for safety
+        if (isPaymentAlreadyProcessed(user, quickPayment.txHash)) {
           return res.json({
             success: true,
             paymentDetected: true,
@@ -2364,24 +2290,19 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
           });
         }
         
-        // Calculate credits (standard pricing for all users)
-        const creditsPerUSDC = 6.67; // $0.15/credit
-        const creditsToAdd = Math.floor(parseFloat(quickPayment.amount) * creditsPerUSDC);
+        // Calculate credits
+        const creditsToAdd = calculateCreditsFromAmount(quickPayment.amount);
         
-        // Add credits instantly
-        user.credits += creditsToAdd;
-        user.totalCreditsEarned += creditsToAdd;
-        user.paymentHistory.push({
+        // Add credits using helper function
+        await addCreditsToUser(user, {
           txHash: quickPayment.txHash,
           tokenSymbol: quickPayment.token || 'USDC',
-          amount: parseFloat(quickPayment.amount),
+          amount: quickPayment.amount,
           credits: creditsToAdd,
           chainId: quickPayment.chain || 'unknown',
           walletType: 'unknown',
           timestamp: new Date(quickPayment.timestamp * 1000)
         });
-        
-        await user.save();
         
         console.log(`[INSTANT] Added ${creditsToAdd} credits to ${senderAddress}!`);
         
@@ -2449,9 +2370,9 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
       
       // Process payment for the sender
       const user = await getOrCreateUser(senderAddress);
-      const alreadyProcessed = user.paymentHistory.some(p => p.txHash === quickPayment.txHash);
       
-      if (alreadyProcessed) {
+      // Middleware should have caught duplicates, but double-check for safety
+      if (isPaymentAlreadyProcessed(user, quickPayment.txHash)) {
         return res.json({
           success: true,
           paymentDetected: true,
@@ -2460,24 +2381,19 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         });
       }
       
-      // Calculate credits (standard pricing for all users)
-      const creditsPerUSDC = 6.67; // $0.15/credit
-      const creditsToAdd = Math.floor(parseFloat(quickPayment.amount) * creditsPerUSDC);
+      // Calculate credits
+      const creditsToAdd = calculateCreditsFromAmount(quickPayment.amount);
       
-      // Add credits instantly
-      user.credits += creditsToAdd;
-      user.totalCreditsEarned += creditsToAdd;
-      user.paymentHistory.push({
+      // Add credits using helper function
+      await addCreditsToUser(user, {
         txHash: quickPayment.txHash,
         tokenSymbol: quickPayment.token || 'USDC',
-        amount: parseFloat(quickPayment.amount),
+        amount: quickPayment.amount,
         credits: creditsToAdd,
         chainId: quickPayment.chain || 'unknown',
         walletType: 'unknown',
         timestamp: new Date(quickPayment.timestamp * 1000)
       });
-      
-      await user.save();
       
       console.log(`[INSTANT] Added ${creditsToAdd} credits to ${senderAddress}!`);
       

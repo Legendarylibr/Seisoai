@@ -51,7 +51,8 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
     console.log('🎬 Generating video with Veo 3 Fast Image-to-Video:', { prompt, hasImage: !!input.image_url, aspect_ratio: input.aspect_ratio, duration: input.duration });
 
     // Submit via backend proxy to avoid CORS
-    const backendBase = import.meta.env.VITE_BACKEND_URL || '';
+    // Use VITE_API_URL for consistency with other services
+    const backendBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     const response = await fetch(`${backendBase}/api/veo3/submit`, {
       method: 'POST',
       headers: {
