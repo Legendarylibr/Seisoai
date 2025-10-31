@@ -1088,12 +1088,29 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     }
   }, [isOpen, address, walletType]);
 
+  // Portal verification useEffect - must be before any early returns
+  useEffect(() => {
+    if (isOpen && typeof document !== 'undefined') {
+      console.log('🔍 TokenPaymentModal: Verifying portal target', {
+        bodyExists: !!document.body,
+        bodyTag: document.body?.tagName,
+        bodyChildren: document.body?.children?.length
+      });
+      
+      const timeout = setTimeout(() => {
+        const portalElement = document.querySelector('[style*="z-index: 99999"]');
+        console.log('🔍 TokenPaymentModal: Checking if portal element exists in DOM', {
+          found: !!portalElement
+        });
+      }, 100);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [isOpen]);
+
   if (!isOpen) {
-    console.log('🚫 TokenPaymentModal: Not rendering - isOpen is false');
     return null;
   }
-
-  console.log('✅ TokenPaymentModal: Rendering modal with portal');
 
   const modalContent = (
     <div 
@@ -1392,37 +1409,10 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
 
   // Use portal to render modal at document body level (avoids z-index/overflow issues)
   if (typeof document === 'undefined') {
-    console.warn('⚠️ TokenPaymentModal: document is undefined, cannot use portal');
     return modalContent;
   }
 
-  const portalTarget = document.body;
-  
-  // Force modal to be visible - add a test element to verify rendering
-  useEffect(() => {
-    if (isOpen) {
-      console.log('🔍 TokenPaymentModal: Verifying portal target', {
-        bodyExists: !!portalTarget,
-        bodyTag: portalTarget?.tagName,
-        bodyChildren: portalTarget?.children?.length,
-        bodyStyle: window.getComputedStyle(portalTarget)
-      });
-      
-      // Log after a brief delay to see if portal rendered
-      const timeout = setTimeout(() => {
-        const portalElement = document.querySelector('[style*="z-index: 99999"]');
-        console.log('🔍 TokenPaymentModal: Checking if portal element exists in DOM', {
-          found: !!portalElement,
-          element: portalElement
-        });
-      }, 100);
-      
-      return () => clearTimeout(timeout);
-    }
-  }, [isOpen, portalTarget]);
-
-  const portalResult = createPortal(modalContent, portalTarget);
-  return portalResult;
+  return createPortal(modalContent, document.body);
 };
 
 export default TokenPaymentModal;
