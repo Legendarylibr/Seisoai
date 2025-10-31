@@ -158,23 +158,26 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       
       // Save generation to backend and deduct credits AFTER successful generation
       try {
-        await addGeneration(address, {
+        console.log('💾 Saving generation and deducting credits...', { address, imageUrl: imageUrl?.substring(0, 50) });
+        const result = await addGeneration(address, {
           prompt: customPrompt || (selectedStyle ? selectedStyle.prompt : 'No style selected'),
           style: selectedStyle ? selectedStyle.name : 'No Style',
           imageUrl,
           creditsUsed: 1 // Assuming 1 credit per generation
         });
-        logger.info('Generation saved and credits deducted');
+        console.log('✅ Generation saved and credits deducted:', result);
+        logger.info('Generation saved and credits deducted', { result, address });
         
-        // Refresh credits to show updated balance
+        // Refresh credits immediately (skip cache) to show updated balance
         if (refreshCredits) {
           await refreshCredits();
           logger.info('Credits refreshed after generation');
         }
       } catch (error) {
-        console.error('Error saving generation:', error);
+        console.error('❌ Error saving generation:', error);
+        logger.error('Error saving generation', { error: error.message, address, imageUrl });
         // Show error but still display the image
-        setError('Image generated but failed to save to history. Credits not deducted.');
+        setError(`Image generated but failed to save to history. Credits not deducted. Error: ${error.message}`);
       }
       
       // Wait a moment to show completion, then set the image and stop loading

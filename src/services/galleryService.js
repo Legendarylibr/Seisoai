@@ -13,29 +13,50 @@ export const addGeneration = async (walletAddress, generationData) => {
       throw new Error('API URL not configured');
     }
 
+    // Normalize wallet address to lowercase for consistency
+    const normalizedAddress = walletAddress?.toLowerCase();
+
+    console.log('📤 Calling /api/generations/add', {
+      walletAddress: normalizedAddress,
+      creditsUsed: generationData.creditsUsed,
+      hasImageUrl: !!generationData.imageUrl
+    });
+
     const response = await fetch(`${API_URL}/api/generations/add`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        walletAddress,
+        walletAddress: normalizedAddress,
         ...generationData
       })
     });
 
+    const responseText = await response.text();
+    console.log('📥 Response from /api/generations/add:', response.status, responseText);
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Failed to add generation' }));
+      let errorData;
+      try {
+        errorData = JSON.parse(responseText);
+      } catch {
+        errorData = { error: responseText || 'Failed to add generation' };
+      }
+      console.error('❌ Backend error:', errorData);
       throw new Error(errorData.error || `Failed to add generation: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = JSON.parse(responseText);
     if (!data.success) {
+      console.error('❌ Backend returned success=false:', data);
       throw new Error(data.error || 'Failed to add generation');
     }
+    
+    console.log('✅ Generation added successfully:', data);
     return data;
   } catch (error) {
-    console.error('Error adding generation:', error);
+    console.error('❌ Error adding generation:', error);
     throw error;
   }
 };

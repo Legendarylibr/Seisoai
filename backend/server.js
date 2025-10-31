@@ -2516,6 +2516,13 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
  */
 app.post('/api/generations/add', async (req, res) => {
   try {
+    console.log('📥 [GENERATION ADD] Request received:', {
+      body: req.body,
+      walletAddress: req.body?.walletAddress,
+      hasImageUrl: !!req.body?.imageUrl,
+      creditsUsed: req.body?.creditsUsed
+    });
+
     const { 
       walletAddress, 
       prompt, 
@@ -2525,13 +2532,20 @@ app.post('/api/generations/add', async (req, res) => {
     } = req.body;
 
     if (!walletAddress || !imageUrl) {
+      console.error('❌ [GENERATION ADD] Missing required fields:', { walletAddress: !!walletAddress, imageUrl: !!imageUrl });
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: walletAddress and imageUrl are required'
       });
     }
 
+    console.log('🔍 [GENERATION ADD] Getting user:', walletAddress);
     const user = await getOrCreateUser(walletAddress);
+    console.log('👤 [GENERATION ADD] User found:', {
+      walletAddress: user.walletAddress,
+      credits: user.credits,
+      totalCreditsEarned: user.totalCreditsEarned
+    });
     
     // Use effective credits (max of credits and totalCreditsEarned) to handle granted credits
     const effectiveCredits = Math.max(user.credits || 0, user.totalCreditsEarned || 0);
