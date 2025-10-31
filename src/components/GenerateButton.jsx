@@ -41,7 +41,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     setCreditsManually
   } = useSimpleWallet();
   
-  // Credits already uses Math.max internally, so use directly
+  // Use actual credits for spending validation
   const availableCredits = credits || 0;
 
   const [progress, setProgress] = useState(0);

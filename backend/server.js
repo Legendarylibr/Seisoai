@@ -2004,7 +2004,6 @@ app.post('/api/payments/credit', async (req, res) => {
       success: true,
       credits: creditsToAdd,
       totalCredits: user.credits,
-      credits: creditsToAdd, // Duplicate for compatibility
       message: `Payment credited! ${creditsToAdd} credits added to your account.`
     });
 
@@ -2558,30 +2557,30 @@ app.post('/api/generations/add', async (req, res) => {
       matchesNormalized: user.walletAddress === normalizedWalletAddress
     });
     
-    // Use effective credits (max of credits and totalCreditsEarned) to handle granted credits
-    const effectiveCredits = Math.max(user.credits || 0, user.totalCreditsEarned || 0);
+    // Check credits directly - credits is the spendable balance
+    // totalCreditsEarned is a lifetime total for tracking, not for spending
+    const availableCredits = user.credits || 0;
     const creditsToDeduct = creditsUsed || 1; // Default to 1 credit if not specified
     
     logger.debug('Checking credits for generation', {
       walletAddress: normalizedWalletAddress,
       credits: user.credits,
       totalCreditsEarned: user.totalCreditsEarned,
-      effectiveCredits,
+      availableCredits,
       creditsToDeduct
     });
     
     // Check if user has enough credits
-    if (effectiveCredits < creditsToDeduct) {
+    if (availableCredits < creditsToDeduct) {
       logger.warn('Insufficient credits for generation', {
         walletAddress: normalizedWalletAddress,
-        effectiveCredits,
+        availableCredits,
         creditsToDeduct,
-        rawCredits: user.credits,
-        rawTotalEarned: user.totalCreditsEarned
+        totalCreditsEarned: user.totalCreditsEarned
       });
       return res.status(400).json({
         success: false,
-        error: `Insufficient credits. You have ${effectiveCredits} credits but need ${creditsToDeduct}`
+        error: `Insufficient credits. You have ${availableCredits} credits but need ${creditsToDeduct}`
       });
     }
 
@@ -2593,7 +2592,7 @@ app.post('/api/generations/add', async (req, res) => {
       previousCredits,
       previousTotalSpent,
       creditsToDeduct,
-      effectiveCredits,
+      availableCredits,
       userWalletAddress: user.walletAddress
     });
     
@@ -2657,7 +2656,7 @@ app.post('/api/generations/add', async (req, res) => {
       throw new Error(`Failed to update user credits. User ${normalizedWalletAddress} not found in database.`);
     }
     
-    // Ensure credits don't go negative (shouldn't happen due to effectiveCredits check, but safety)
+    // Ensure credits don't go negative (shouldn't happen due to availableCredits check, but safety)
     if (updateResult.credits < 0) {
       console.warn('⚠️ [GENERATION ADD] Credits went negative, correcting to 0');
       await User.findOneAndUpdate(

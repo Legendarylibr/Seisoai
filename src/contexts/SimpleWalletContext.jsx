@@ -119,24 +119,22 @@ export const SimpleWalletProvider = ({ children }) => {
             console.warn('⚠️ totalCreditsEarned not found in API response. Response structure:', data);
           }
           
-          // Store both values separately - credits (current balance) and totalCreditsEarned (rewarded amount)
-          // Use totalCreditsEarned if it's higher than credits (for granted credits that might not be in credits field yet)
-          // Both are available for display and validation
-          const effectiveCredits = Math.max(currentCredits, rewardedAmount);
-          
-          setCredits(effectiveCredits);
+          // Store both values separately - credits (current spendable balance) and totalCreditsEarned (lifetime total)
+          // Use actual credits for spending - totalCreditsEarned is for tracking only
+          // Credits and totalCreditsEarned are always kept in sync when credits are added
+          setCredits(currentCredits);
           setTotalCreditsEarned(rewardedAmount);
           
-          console.log(`✅ Credits loaded - Current Balance: ${currentCredits}, Total Rewarded: ${rewardedAmount}, Effective Credits (for use): ${effectiveCredits}, for wallet: ${normalizedAddress}`);
+          console.log(`✅ Credits loaded - Current Balance: ${currentCredits}, Total Rewarded: ${rewardedAmount}, for wallet: ${normalizedAddress}`);
           console.log(`📊 Full API response data:`, JSON.stringify(data, null, 2));
           if (skipCache) {
             console.log('🔄 Fresh credits fetched (cache bypassed)');
           }
           
-          // Cache the result (cache effective credits for faster access)
+          // Cache the result (cache actual credits for faster access)
           try {
             sessionStorage.setItem(cacheKey, JSON.stringify({
-              data: { credits: effectiveCredits, totalCreditsEarned: rewardedAmount, rawCredits: currentCredits },
+              data: { credits: currentCredits, totalCreditsEarned: rewardedAmount, rawCredits: currentCredits },
               timestamp: Date.now()
             }));
           } catch (storageError) {
@@ -144,12 +142,11 @@ export const SimpleWalletProvider = ({ children }) => {
           }
           
           logger.info('Credits loaded successfully', { 
-            rawCredits: currentCredits, 
+            credits: currentCredits, 
             totalCreditsEarned: rewardedAmount, 
-            effectiveCredits: effectiveCredits,
             walletAddress: normalizedAddress 
           });
-          return effectiveCredits; // Return effective credits (max of current and rewarded) for testing/verification
+          return currentCredits; // Return actual credits for spending validation
         } else {
           const errorText = await response.text();
           console.error(`❌ Credits fetch failed (${response.status}):`, errorText);
@@ -576,7 +573,7 @@ export const SimpleWalletProvider = ({ children }) => {
   const value = {
     isConnected,
     address,
-    credits, // Current spendable balance (uses Math.max of credits and totalCreditsEarned internally)
+    credits, // Current spendable balance (actual credits field from backend)
     isLoading,
     error,
     isNFTHolder,
