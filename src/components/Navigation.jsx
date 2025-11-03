@@ -32,7 +32,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
   return (
     <header className="bg-black/30 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[999997] shadow-lg" style={{ position: 'sticky' }}>
-      <div className="container mx-auto px-4 py-4">
+      <div className="container mx-auto px-4 py-2">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3 group">

@@ -42,7 +42,7 @@ function App() {
             // onShowStripePayment={() => setShowStripePaymentModal(true)} // DISABLED - Stripe
           />
           
-          <main className="container mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-10">
+          <main className="container mx-auto px-4 md:px-6 lg:px-8 py-1 md:py-2">
             <div className="fade-in">
               <AppContent 
                 activeTab={activeTab} 
@@ -299,14 +299,19 @@ function GenerateTab({ onShowTokenPayment }) {
   return (
     <div className="section-spacing fade-in">
       {/* Professional Header */}
-      <div className="text-center py-4 mb-6">
-        <h1 className="text-3xl md:text-4xl font-bold gradient-text mb-2">Seiso AI</h1>
+      <div className="text-center py-1 mb-2">
+        <h1 className="text-3xl md:text-4xl font-bold gradient-text mb-1">Seiso AI</h1>
         <p className="text-gray-400 text-base md:text-lg">Create and edit stunning AI-generated images</p>
+      </div>
+
+      {/* Wallet Connection - Enhanced */}
+      <div className="glass-card rounded-xl p-2.5 mb-2 slide-up">
+        <SimpleWalletConnect />
       </div>
 
       {/* Credits Status Banner */}
       {credits <= 0 && (
-        <div className="glass-card bg-yellow-500/10 border-yellow-500/30 p-4 mb-6 animate-pulse">
+        <div className="glass-card bg-yellow-500/10 border-yellow-500/30 p-4 mb-3 animate-pulse">
           <div className="flex items-center gap-3 text-center justify-center">
             <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></div>
             <span className="text-yellow-300 text-sm md:text-base font-medium">
@@ -318,38 +323,34 @@ function GenerateTab({ onShowTokenPayment }) {
 
       {/* Main Content - Improved Layout */}
       <div className="section-spacing">
-        {/* Wallet Connection - Enhanced */}
-        <div className="glass-card rounded-xl p-4 mb-4 slide-up">
-          <SimpleWalletConnect />
-        </div>
 
         {/* Main Generation Area - Prioritized */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
           {/* Input Image Section - Enhanced */}
-          <div className="space-y-4 md:space-y-5 slide-up" style={{ animationDelay: '100ms' }}>
-            <div className="glass-card rounded-xl p-4 md:p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-purple-500/20 rounded-lg">
-                  <Image className="w-5 h-5 md:w-6 md:h-6 text-purple-400" />
+          <div className="space-y-3 md:space-y-4 slide-up" style={{ animationDelay: '100ms' }}>
+            <div className="glass-card rounded-xl p-3 md:p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 bg-purple-500/20 rounded-lg">
+                  <Image className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg md:text-xl font-semibold text-white">Reference Image</h2>
-                  <p className="text-xs md:text-sm text-gray-400 mt-1">
-                    0 images: text-to-image • 1 image: edit from reference • 2+ images: blend
+                  <h2 className="text-base md:text-lg font-semibold text-white">Reference Image</h2>
+                  <p className="text-xs text-gray-400">
+                    0 images: text-to-image • 1 image: edit • 2+ images: blend
                   </p>
                 </div>
               </div>
-              <div className="min-h-[250px] md:min-h-[300px]">
+              <div className="min-h-[180px] md:min-h-[200px]">
                 <ReferenceImageInput />
               </div>
             </div>
 
             {/* Prompt and Style Combined */}
-            <div className="glass-card rounded-xl p-4 md:p-6 space-y-4">
+            <div className="glass-card rounded-xl p-3 md:p-4 space-y-3">
               {/* Custom Prompt */}
               <div>
-                <label className="flex items-center gap-2 mb-3">
-                  <span className="text-base md:text-lg font-semibold text-white">
+                <label className="flex items-center gap-2 mb-2">
+                  <span className="text-sm md:text-base font-semibold text-white">
                     {hasReferenceImages ? 'Describe Changes' : 'Prompt'}
                   </span>
                 </label>
@@ -357,8 +358,8 @@ function GenerateTab({ onShowTokenPayment }) {
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
                   placeholder={hasReferenceImages ? "Describe changes to make... (optional)" : "Enter your prompt... (optional)"}
-                  className="w-full p-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none text-sm md:text-base transition-all duration-300 focus:bg-white/8"
-                  rows={3}
+                  className="w-full p-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none text-sm transition-all duration-300 focus:bg-white/8"
+                  rows={2}
                 />
               </div>
 
@@ -370,7 +371,7 @@ function GenerateTab({ onShowTokenPayment }) {
 
             {/* Generate Button - Mobile */}
             <div className="lg:hidden">
-              <div className="glass-card rounded-xl p-4">
+              <div className="glass-card rounded-xl p-3">
                 <GenerateButton 
                   customPrompt={customPrompt}
                   onShowTokenPayment={onShowTokenPayment}
@@ -380,15 +381,15 @@ function GenerateTab({ onShowTokenPayment }) {
           </div>
 
           {/* Generated Image Output - Enhanced */}
-          <div className="space-y-4 md:space-y-5 slide-up" style={{ animationDelay: '200ms' }}>
-            <div className="glass-card rounded-xl p-4 md:p-6 h-full">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-purple-500/20 rounded-lg">
-                  <Sparkles className="w-5 h-5 md:w-6 md:h-6 text-purple-400" />
+          <div className="space-y-3 md:space-y-4 slide-up" style={{ animationDelay: '200ms' }}>
+            <div className="glass-card rounded-xl p-3 md:p-4 h-full">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 bg-purple-500/20 rounded-lg">
+                  <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
                 </div>
-                <h2 className="text-lg md:text-xl font-semibold text-white">Generated Image</h2>
+                <h2 className="text-base md:text-lg font-semibold text-white">Generated Image</h2>
               </div>
-              <div className="min-h-[250px] md:min-h-[300px]">
+              <div className="min-h-[180px] md:min-h-[200px]">
                 <ImageOutput />
               </div>
             </div>
