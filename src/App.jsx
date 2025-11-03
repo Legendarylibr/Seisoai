@@ -297,24 +297,24 @@ function GenerateTab({ onShowTokenPayment }) {
   const hasReferenceImages = !!controlNetImage;
 
   return (
-    <div className="section-spacing fade-in">
+    <div className="fade-in">
       {/* Professional Header */}
-      <div className="text-center py-1 mb-2">
-        <h1 className="text-3xl md:text-4xl font-bold gradient-text mb-1">Seiso AI</h1>
+      <div className="text-center py-0.5 mb-1">
+        <h1 className="text-3xl md:text-4xl font-bold gradient-text mb-0.5">Seiso AI</h1>
         <p className="text-gray-400 text-base md:text-lg">Create and edit stunning AI-generated images</p>
       </div>
 
       {/* Wallet Connection - Enhanced */}
-      <div className="glass-card rounded-xl p-2.5 mb-2 slide-up">
+      <div className="glass-card rounded-xl rounded-b-none p-2.5 mb-0 slide-up">
         <SimpleWalletConnect />
       </div>
 
       {/* Credits Status Banner */}
       {credits <= 0 && (
-        <div className="glass-card bg-yellow-500/10 border-yellow-500/30 p-4 mb-3 animate-pulse">
-          <div className="flex items-center gap-3 text-center justify-center">
-            <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></div>
-            <span className="text-yellow-300 text-sm md:text-base font-medium">
+        <div className="glass-card bg-yellow-500/10 border-yellow-500/30 rounded-t-none rounded-b-none p-2.5 mb-0 animate-pulse">
+          <div className="flex items-center gap-2 text-center justify-center">
+            <div className="w-2.5 h-2.5 bg-yellow-400 rounded-full animate-pulse"></div>
+            <span className="text-yellow-300 text-xs md:text-sm font-medium">
               No credits available - Click "Buy Credits" in the top right to purchase credits
             </span>
           </div>
@@ -322,35 +322,35 @@ function GenerateTab({ onShowTokenPayment }) {
       )}
 
       {/* Main Content - Improved Layout */}
-      <div className="section-spacing">
+      <div>
 
         {/* Main Generation Area - Prioritized */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
           {/* Input Image Section - Enhanced */}
-          <div className="space-y-3 md:space-y-4 slide-up" style={{ animationDelay: '100ms' }}>
-            <div className="glass-card rounded-xl p-3 md:p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-1.5 bg-purple-500/20 rounded-lg">
-                  <Image className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
+          <div className="slide-up" style={{ animationDelay: '100ms' }}>
+            <div className="glass-card rounded-none lg:rounded-l-xl lg:rounded-tr-none p-2.5 md:p-3">
+              <div className="flex items-center gap-2 mb-1.5">
+                <div className="p-1 bg-purple-500/20 rounded-lg">
+                  <Image className="w-3.5 h-3.5 md:w-4 md:h-4 text-purple-400" />
                 </div>
                 <div>
-                  <h2 className="text-base md:text-lg font-semibold text-white">Reference Image</h2>
+                  <h2 className="text-sm md:text-base font-semibold text-white">Reference Image</h2>
                   <p className="text-xs text-gray-400">
                     0 images: text-to-image • 1 image: edit • 2+ images: blend
                   </p>
                 </div>
               </div>
-              <div className="min-h-[180px] md:min-h-[200px]">
+              <div className="min-h-[120px] md:min-h-[140px]">
                 <ReferenceImageInput />
               </div>
             </div>
 
             {/* Prompt and Style Combined */}
-            <div className="glass-card rounded-xl p-3 md:p-4 space-y-3">
+            <div className="glass-card rounded-none lg:rounded-bl-xl p-2.5 md:p-3 space-y-2">
               {/* Custom Prompt */}
               <div>
-                <label className="flex items-center gap-2 mb-2">
-                  <span className="text-sm md:text-base font-semibold text-white">
+                <label className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-xs md:text-sm font-semibold text-white">
                     {hasReferenceImages ? 'Describe Changes' : 'Prompt'}
                   </span>
                 </label>
@@ -358,7 +358,7 @@ function GenerateTab({ onShowTokenPayment }) {
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
                   placeholder={hasReferenceImages ? "Describe changes to make... (optional)" : "Enter your prompt... (optional)"}
-                  className="w-full p-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none text-sm transition-all duration-300 focus:bg-white/8"
+                  className="w-full p-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none text-sm transition-all duration-300 focus:bg-white/8"
                   rows={2}
                 />
               </div>
@@ -371,7 +371,7 @@ function GenerateTab({ onShowTokenPayment }) {
 
             {/* Generate Button - Mobile */}
             <div className="lg:hidden">
-              <div className="glass-card rounded-xl p-3">
+              <div className="glass-card rounded-none p-2">
                 <GenerateButton 
                   customPrompt={customPrompt}
                   onShowTokenPayment={onShowTokenPayment}
@@ -381,15 +381,15 @@ function GenerateTab({ onShowTokenPayment }) {
           </div>
 
           {/* Generated Image Output - Enhanced */}
-          <div className="space-y-3 md:space-y-4 slide-up" style={{ animationDelay: '200ms' }}>
-            <div className="glass-card rounded-xl p-3 md:p-4 h-full">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-1.5 bg-purple-500/20 rounded-lg">
-                  <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
+          <div className="slide-up" style={{ animationDelay: '200ms' }}>
+            <div className="glass-card rounded-none lg:rounded-r-xl lg:rounded-tl-none p-2.5 md:p-3 h-full">
+              <div className="flex items-center gap-2 mb-1.5">
+                <div className="p-1 bg-purple-500/20 rounded-lg">
+                  <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 text-purple-400" />
                 </div>
-                <h2 className="text-base md:text-lg font-semibold text-white">Generated Image</h2>
+                <h2 className="text-sm md:text-base font-semibold text-white">Generated Image</h2>
               </div>
-              <div className="min-h-[180px] md:min-h-[200px]">
+              <div className="min-h-[120px] md:min-h-[140px]">
                 <ImageOutput />
               </div>
             </div>
@@ -397,8 +397,8 @@ function GenerateTab({ onShowTokenPayment }) {
         </div>
 
         {/* Generate Button - Desktop */}
-        <div className="hidden lg:flex justify-center my-6">
-          <div className="glass-card rounded-xl p-5 w-full max-w-lg slide-up" style={{ animationDelay: '300ms' }}>
+        <div className="hidden lg:flex justify-center mt-0">
+          <div className="glass-card rounded-none rounded-b-xl p-3 w-full max-w-lg slide-up" style={{ animationDelay: '300ms' }}>
             <GenerateButton 
               customPrompt={customPrompt}
               onShowTokenPayment={onShowTokenPayment}
