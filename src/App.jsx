@@ -166,15 +166,6 @@ function WalletPrompt({ onConnect }) {
 
         {/* Wallet Connection */}
         <div className="space-y-6">
-          <div className="glass-card p-6 mb-6">
-            <h2 className="text-2xl md:text-3xl font-semibold text-white mb-2">
-              Connect Your Wallet
-            </h2>
-            <p className="text-gray-400 text-sm md:text-base">
-              Choose your preferred blockchain to continue
-            </p>
-          </div>
-          
           {/* STRIPE DISABLED - Stripe button removed, crypto only
           <button
             onClick={onShowStripePayment}
