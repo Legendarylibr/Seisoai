@@ -3,7 +3,6 @@ import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
-import GenerateButton from './GenerateButton';
 import { X, Sparkles } from 'lucide-react';
 import logger from '../utils/logger.js';
 
@@ -353,84 +352,59 @@ const ImageOutput = () => {
   }
 
   return (
-    <div className="w-full space-y-4">
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <h3 className="text-lg sm:text-xl md:text-2xl font-semibold gradient-text">Generated Image</h3>
-        <div className="flex gap-2 flex-wrap">
+    <div className="w-full space-y-2">
+      <div className="flex items-center justify-end mb-2 flex-wrap gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
           <button
             onClick={handleDownload}
             disabled={isDownloading}
-            className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm px-4 py-2.5 hover:scale-105 transition-all duration-300"
+            className="btn-secondary flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-xs px-2.5 py-1.5 hover:scale-105 transition-all duration-300"
           >
-            <span className="text-lg">{isDownloading ? '⏳' : '💾'}</span>
-            <span className="hidden sm:inline">{isDownloading ? 'Downloading...' : 'Download'}</span>
+            <span className="text-sm">{isDownloading ? '⏳' : '💾'}</span>
+            <span className="hidden sm:inline text-xs">{isDownloading ? 'Downloading...' : 'Download'}</span>
           </button>
           <button
             onClick={handleRegenerate}
             disabled={isRegenerating || !isConnected || !currentGeneration}
-            className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm px-4 py-2.5 hover:scale-105 transition-all duration-300"
+            className="btn-secondary flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-xs px-2.5 py-1.5 hover:scale-105 transition-all duration-300"
           >
-            <span className="text-lg">{isRegenerating ? '⏳' : '🔄'}</span>
-            <span className="hidden sm:inline">{isRegenerating ? 'Regenerating...' : 'Regenerate'}</span>
+            <span className="text-sm">{isRegenerating ? '⏳' : '🔄'}</span>
+            <span className="hidden sm:inline text-xs">{isRegenerating ? 'Regenerating...' : 'Regenerate'}</span>
           </button>
           <button
             onClick={clearGeneration}
-            className="btn-secondary flex items-center gap-2 text-sm px-4 py-2.5 hover:scale-105 transition-all duration-300"
+            className="btn-secondary flex items-center gap-1.5 text-xs px-2.5 py-1.5 hover:scale-105 transition-all duration-300"
           >
-            <span className="text-lg">🗑️</span>
-            <span className="hidden sm:inline">Clear</span>
+            <span className="text-sm">🗑️</span>
+            <span className="hidden sm:inline text-xs">Clear</span>
           </button>
         </div>
       </div>
       
-      <div className="glass-card rounded-2xl overflow-hidden mb-4 p-2">
+      <div className="glass-card rounded-xl overflow-hidden mb-3 p-1.5">
         <img
           src={generatedImage}
           alt="Generated AI image"
-          className="w-full h-auto max-h-[300px] sm:max-h-96 md:max-h-[600px] lg:max-h-[700px] object-contain rounded-xl"
+          className="w-full h-auto max-h-[200px] sm:max-h-[250px] md:max-h-[350px] lg:max-h-[400px] object-contain rounded-lg"
           style={{ maxWidth: '100%', height: 'auto' }}
         />
       </div>
 
       {/* Quick Actions */}
-      <div className="glass-card rounded-xl p-4 mb-4">
-        <h4 className="text-base md:text-lg font-semibold text-white mb-3 flex items-center gap-2">
-          <span className="text-xl">✨</span>
+      <div className="glass-card rounded-lg p-2 mb-2">
+        <h4 className="text-xs font-semibold text-white mb-1.5 flex items-center gap-1">
+          <span className="text-sm">✨</span>
           Quick Actions
         </h4>
-        <div className="flex gap-3 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap">
           <button
             onClick={() => setShowPromptModal(true)}
             disabled={isRegenerating || !isConnected || !currentGeneration}
-            className="btn-primary flex items-center gap-2 text-sm px-5 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary flex items-center gap-1.5 text-xs px-2.5 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Sparkles className="w-4 h-4" />
-            New Prompt
+            <Sparkles className="w-3 h-3" />
+            <span className="text-xs">New Prompt</span>
           </button>
-        </div>
-      </div>
-
-      {/* Generate New Image Section */}
-      <div className="glass-card rounded-xl p-6 md:p-8">
-        <div className="text-center mb-6">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg shadow-purple-500/30">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <h4 className="text-2xl font-bold text-white">Create New Image</h4>
-          </div>
-          <p className="text-gray-400 text-base">Ready to generate your next masterpiece?</p>
-        </div>
-        
-        <div className="mb-6">
-          <GenerateButton />
-        </div>
-        
-        <div className="text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/5 rounded-full border border-white/10">
-            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-            <span className="text-sm text-gray-400">⏱️ Takes 10-30 seconds</span>
-          </div>
         </div>
       </div>
 
