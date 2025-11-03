@@ -60,7 +60,7 @@ if (missingVars.length > 0) {
   console.warn('⚠️ Please check your .env file and ensure all required variables are set.');
   console.warn('⚠️ The app will continue to run but some features may not work correctly.');
   
-  // Show user-friendly error in the UI
+  // Show user-friendly error in the UI using safe DOM methods (prevents XSS)
   const errorDiv = document.createElement('div');
   errorDiv.style.cssText = `
     position: fixed;
@@ -78,11 +78,35 @@ if (missingVars.length > 0) {
     max-width: 500px;
     text-align: center;
   `;
-  errorDiv.innerHTML = `
-    <strong>⚠️ Configuration Required</strong><br>
-    Missing FAL API key. Please add VITE_FAL_API_KEY to your .env file.<br>
-    <small>Get your API key from <a href="https://fal.ai" target="_blank" style="color: #fff; text-decoration: underline;">fal.ai</a></small>
-  `;
+  
+  // Use textContent for safe text rendering (prevents XSS)
+  const strong = document.createElement('strong');
+  strong.textContent = '⚠️ Configuration Required';
+  errorDiv.appendChild(strong);
+  
+  const br1 = document.createElement('br');
+  errorDiv.appendChild(br1);
+  
+  const text1 = document.createTextNode('Missing FAL API key. Please add VITE_FAL_API_KEY to your .env file.');
+  errorDiv.appendChild(text1);
+  
+  const br2 = document.createElement('br');
+  errorDiv.appendChild(br2);
+  
+  const small = document.createElement('small');
+  const text2 = document.createTextNode('Get your API key from ');
+  small.appendChild(text2);
+  
+  const link = document.createElement('a');
+  link.href = 'https://fal.ai';
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.style.color = '#fff';
+  link.style.textDecoration = 'underline';
+  link.textContent = 'fal.ai';
+  small.appendChild(link);
+  
+  errorDiv.appendChild(small);
   document.body.appendChild(errorDiv);
   
   // Auto-hide after 10 seconds

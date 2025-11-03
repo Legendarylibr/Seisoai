@@ -107,6 +107,17 @@ const validateInput = (req, res, next) => {
 
 app.use(validateInput);
 
+// Helper function to sanitize error messages for client responses
+const getSafeErrorMessage = (error, defaultMessage = 'An error occurred') => {
+  if (process.env.NODE_ENV === 'production') {
+    // In production, return generic messages only
+    // Log actual error details server-side
+    return defaultMessage;
+  }
+  // In development, show actual error for debugging
+  return error?.message || defaultMessage;
+};
+
 // Transaction deduplication cache with LRU behavior
 class LRUCache {
   constructor(maxSize = 1000) {
@@ -252,21 +263,26 @@ const corsOptions = {
       ? process.env.ALLOWED_ORIGINS.split(',').includes(origin)
       : false;
     
-    // Always allow localhost in development
-    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
+    // In production, only allow whitelisted origins
+    if (process.env.NODE_ENV === 'production') {
+      if (isAllowedOrigin) {
+        return callback(null, true);
+      }
+      // Reject unauthorized origin in production
+      return callback(new Error('Not allowed by CORS'));
+    }
+    
+    // In development, allow localhost only (more secure than allowing all)
+    if (process.env.NODE_ENV !== 'production') {
       if (isLocalhost) {
         return callback(null, true);
       }
-    }
-    
-    // Allow specific origins
-    if (isAllowedOrigin) {
-      return callback(null, true);
-    }
-    
-    // For development, be more permissive
-    if (process.env.NODE_ENV !== 'production') {
-      return callback(null, true);
+      // Also allow explicitly whitelisted origins in development
+      if (isAllowedOrigin) {
+        return callback(null, true);
+      }
+      // Reject non-localhost, non-whitelisted origins even in development
+      return callback(new Error('Not allowed by CORS. Development mode only allows localhost and whitelisted origins.'));
     }
     
     // Log the rejected origin for debugging
@@ -276,6 +292,7 @@ const corsOptions = {
       nodeEnv: process.env.NODE_ENV 
     });
     
+    // Fallback: if we get here, reject for safety
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -411,7 +428,7 @@ app.post('/api/veo3/upload-image', async (req, res) => {
     res.json({ success: true, imageUrl });
   } catch (error) {
     logger.error('Image upload error', { error: error.message, stack: error.stack });
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to upload image') });
   }
 });
 
@@ -484,7 +501,7 @@ app.post('/api/veo3/submit', async (req, res) => {
     res.json({ success: true, ...data });
   } catch (error) {
     logger.error('Veo3 submit proxy error', { error: error.message, stack: error.stack });
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to submit video generation request') });
   }
 });
 
@@ -564,7 +581,7 @@ app.get('/api/veo3/status/:requestId', async (req, res) => {
       error: error.message, 
       stack: error.stack 
     });
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to check video generation status') });
   }
 });
 
@@ -636,7 +653,7 @@ app.get('/api/veo3/result/:requestId', async (req, res) => {
       error: error.message, 
       stack: error.stack 
     });
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to retrieve video generation result') });
   }
 });
 
@@ -1275,14 +1292,26 @@ const getAlchemyApiKey = (chainId) => {
   return match ? match[1] : null;
 };
 
-// RPC endpoints with fallback to public endpoints
+// RPC endpoints - REQUIRED environment variables (no hardcoded fallbacks)
 const RPC_ENDPOINTS = {
-  '1': process.env.ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-  '8453': process.env.BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-  '137': process.env.POLYGON_RPC_URL || 'https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-  '42161': process.env.ARBITRUM_RPC_URL || 'https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-  '10': process.env.OPTIMISM_RPC_URL || 'https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
+  '1': process.env.ETH_RPC_URL,
+  '8453': process.env.BASE_RPC_URL,
+  '137': process.env.POLYGON_RPC_URL,
+  '42161': process.env.ARBITRUM_RPC_URL,
+  '10': process.env.OPTIMISM_RPC_URL
 };
+
+// Validate RPC endpoints are configured
+const missingRpcEndpoints = Object.entries(RPC_ENDPOINTS)
+  .filter(([chainId, url]) => !url)
+  .map(([chainId]) => chainId);
+
+if (missingRpcEndpoints.length > 0) {
+  logger.warn('Missing RPC endpoints for chains:', missingRpcEndpoints);
+  if (process.env.NODE_ENV === 'production') {
+    logger.error('RPC endpoints are required in production. Missing:', missingRpcEndpoints);
+  }
+}
 
 // Alchemy API base URLs by chain
 const ALCHEMY_API_BASES = {
@@ -1504,7 +1533,7 @@ app.get('/api/health', async (req, res) => {
     logger.error('Health check error:', error);
     res.status(500).json({
       status: 'unhealthy',
-      error: error.message,
+      error: getSafeErrorMessage(error, 'Health check failed'),
       timestamp: new Date().toISOString()
     });
   }
@@ -1794,7 +1823,7 @@ app.get('/api/users/:walletAddress', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error fetching user data:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to fetch user data') });
   }
 });
 
@@ -1829,7 +1858,7 @@ app.post('/api/nft/check-credits', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error checking credits:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to check credits') });
   }
 });
 
@@ -1880,7 +1909,7 @@ app.post('/api/nft/check-holdings', async (req, res) => {
     logger.error('Error checking NFT holdings:', error);
     res.status(500).json({ 
       success: false, 
-      error: error.message,
+      error: getSafeErrorMessage(error, 'Failed to check NFT holdings'),
       isHolder: false,
       collections: []
     });
@@ -1959,13 +1988,18 @@ function getProvider(chain = 'ethereum') {
     return providerCache.get(chain);
   }
 
-  // Use public RPC endpoints with better fallbacks
+  // Use RPC endpoints from environment (required, no hardcoded fallbacks)
   const rpcUrls = {
-    ethereum: process.env.ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-    base: process.env.BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
+    ethereum: process.env.ETH_RPC_URL,
+    base: process.env.BASE_RPC_URL
   };
   
-  const provider = new ethers.JsonRpcProvider(rpcUrls[chain] || rpcUrls.ethereum, undefined, {
+  const rpcUrl = rpcUrls[chain] || rpcUrls.ethereum;
+  if (!rpcUrl) {
+    throw new Error(`RPC URL not configured for chain: ${chain}. Please set ${chain === 'base' ? 'BASE_RPC_URL' : 'ETH_RPC_URL'} environment variable.`);
+  }
+  
+  const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
     polling: false, // Disable automatic polling
     batchMaxCount: 10, // Batch requests
     batchMaxWait: 100 // Wait max 100ms for batching
@@ -2530,9 +2564,10 @@ app.post('/api/payments/credit', async (req, res) => {
 
   } catch (error) {
     console.error('💰 [PAYMENT CREDIT] Error:', error);
+    logger.error('Payment credit error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: getSafeErrorMessage(error, 'Failed to credit payment')
     });
   }
 });
@@ -2668,7 +2703,7 @@ app.post('/api/payments/verify', async (req, res) => {
     logger.error('Payment verification error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: getSafeErrorMessage(error, 'Failed to verify payment')
     });
   }
 });
@@ -2734,7 +2769,7 @@ app.post('/api/stripe/create-payment-intent', async (req, res) => {
     logger.error('Stripe payment intent creation error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: getSafeErrorMessage(error, 'Failed to create payment intent')
     });
   }
 });
@@ -2821,7 +2856,7 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
     logger.error('Stripe payment verification error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: getSafeErrorMessage(error, 'Failed to verify payment')
     });
   }
 });
@@ -3256,14 +3291,24 @@ app.post('/api/generations/add', async (req, res) => {
     console.error('❌ [GENERATION ADD] ERROR:', error);
     console.error('❌ [GENERATION ADD] Error stack:', error.stack);
     logger.error('Error adding generation:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to add generation') });
   }
 });
 
 /**
  * TEST ENDPOINT: Manually deduct credits for testing
+ * SECURITY: Only available in development mode
  */
 app.post('/api/test/deduct-credits', async (req, res) => {
+  // Disable in production for security
+  if (process.env.NODE_ENV === 'production') {
+    logger.warn('Test endpoint accessed in production', { ip: req.ip, path: req.path });
+    return res.status(403).json({ 
+      success: false, 
+      error: 'Test endpoints are disabled in production' 
+    });
+  }
+  
   try {
     const { walletAddress, creditsToDeduct = 1 } = req.body;
     
@@ -3310,7 +3355,8 @@ app.post('/api/test/deduct-credits', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [TEST] Error:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    logger.error('Test endpoint error:', error);
+    return res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Test operation failed') });
   }
 });
 
@@ -3332,7 +3378,7 @@ app.post('/api/safety/violation', async (req, res) => {
     res.json({ success: true, message: 'Violation logged' });
   } catch (error) {
     logger.error('Error logging safety violation:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to log safety violation') });
   }
 });
 
@@ -3368,7 +3414,7 @@ app.get('/api/gallery/:walletAddress', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error fetching gallery:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to fetch gallery') });
   }
 });
 
@@ -3391,7 +3437,7 @@ app.put('/api/users/:walletAddress/settings', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error updating settings:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to update settings') });
   }
 });
 
@@ -3424,7 +3470,7 @@ app.get('/api/gallery/:walletAddress/stats', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error fetching gallery stats:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to fetch gallery statistics') });
   }
 });
 
@@ -3445,7 +3491,7 @@ app.delete('/api/gallery/:walletAddress/:generationId', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error deleting generation:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to delete generation') });
   }
 });
 

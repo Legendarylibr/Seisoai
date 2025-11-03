@@ -454,20 +454,29 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     }
   };
 
-  // Get RPC URL for different networks
+  // Get RPC URL for different networks - requires environment variables (no hardcoded fallbacks)
   const getRPCUrl = (chainId) => {
     if (!chainId) {
-      return 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY';
+      const defaultRpc = import.meta.env.VITE_ETH_RPC_URL;
+      if (!defaultRpc) {
+        throw new Error('VITE_ETH_RPC_URL environment variable is required. Please configure it in your .env file.');
+      }
+      return defaultRpc;
     }
     
     const rpcUrls = {
-      1: import.meta.env.VITE_ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-      137: import.meta.env.VITE_POLYGON_RPC_URL || 'https://polygon-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-      42161: import.meta.env.VITE_ARBITRUM_RPC_URL || 'https://arb-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-      10: import.meta.env.VITE_OPTIMISM_RPC_URL || 'https://opt-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY',
-      8453: import.meta.env.VITE_BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'
+      1: import.meta.env.VITE_ETH_RPC_URL,
+      137: import.meta.env.VITE_POLYGON_RPC_URL,
+      42161: import.meta.env.VITE_ARBITRUM_RPC_URL,
+      10: import.meta.env.VITE_OPTIMISM_RPC_URL,
+      8453: import.meta.env.VITE_BASE_RPC_URL
     };
-    return rpcUrls[chainId] || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY';
+    
+    const rpcUrl = rpcUrls[chainId] || import.meta.env.VITE_ETH_RPC_URL;
+    if (!rpcUrl) {
+      throw new Error(`RPC URL not configured for chain ${chainId}. Please set the corresponding VITE_*_RPC_URL environment variable.`);
+    }
+    return rpcUrl;
   };
 
   // Switch to a specific network
@@ -513,21 +522,26 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         chainId: '0x1',
         chainName: 'Ethereum Mainnet',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [import.meta.env.VITE_ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
+        rpcUrls: [import.meta.env.VITE_ETH_RPC_URL].filter(Boolean), // Filter out undefined values
         blockExplorerUrls: ['https://etherscan.io']
       },
       8453: {
         chainId: '0x2105',
         chainName: 'Base',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [import.meta.env.VITE_BASE_RPC_URL || 'https://base-mainnet.g.alchemy.com/v2/REDACTED_ALCHEMY_KEY'],
+        rpcUrls: [import.meta.env.VITE_BASE_RPC_URL].filter(Boolean), // Filter out undefined values
         blockExplorerUrls: ['https://basescan.org']
       }
     };
-
+    
+    // Validate RPC URL is configured
     const config = networkConfigs[chainId];
     if (!config) {
       throw new Error(`Network configuration not found for chain ID ${chainId}`);
+    }
+    if (config.rpcUrls.length === 0) {
+      const envVar = chainId === 1 ? 'VITE_ETH_RPC_URL' : 'VITE_BASE_RPC_URL';
+      throw new Error(`${envVar} environment variable is required. Please configure it in your .env file.`);
     }
 
     await window.ethereum.request({

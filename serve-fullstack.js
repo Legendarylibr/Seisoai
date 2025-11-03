@@ -13,16 +13,71 @@ console.log('Environment variables:');
 console.log('PORT:', process.env.PORT);
 console.log('NODE_ENV:', process.env.NODE_ENV);
 
-// Basic CORS middleware
+// Secure CORS middleware - prevents CSRF attacks
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
+  const origin = req.headers.origin;
+  
+  // Check if origin is localhost (development only)
+  const isLocalhost = origin && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'));
+  
+  // Check if origin is in allowed list
+  const allowedOrigins = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : [];
+  
+  // In production, require origin and validate against allowed list
+  if (process.env.NODE_ENV === 'production') {
+    if (!origin) {
+      // In production, reject requests without origin for security
+      return res.status(403).json({ error: 'Origin header required' });
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+      }
+      return next();
+    } else {
+      // Reject unauthorized origin in production
+      return res.status(403).json({ error: 'Not allowed by CORS' });
+    }
   }
+  
+  // In development, allow localhost only (more secure than allowing all)
+  if (process.env.NODE_ENV !== 'production') {
+    if (!origin) {
+      // For development, allow requests without origin (e.g., Postman, curl)
+      res.header('Access-Control-Allow-Origin', '*');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+      }
+      return next();
+    }
+    
+    // In development, only allow localhost origins (not all origins)
+    if (isLocalhost) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+      }
+      return next();
+    } else {
+      // In development, reject non-localhost origins for security
+      console.warn('CORS: Rejected non-localhost origin in development:', origin);
+      return res.status(403).json({ error: 'Not allowed by CORS. Development mode only allows localhost.' });
+    }
+  }
+  
+  next();
 });
 
 // Body parsing middleware
