@@ -10,26 +10,191 @@
   body {
     @apply bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
   }
 }
 
 @layer components {
+  /* Enhanced Glass Effect */
   .glass-effect {
-    @apply bg-white/10 backdrop-blur-md border border-white/20;
+    @apply bg-white/10 backdrop-blur-xl border border-white/20;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-effect:hover {
+    @apply bg-white/15 border-white/30;
+    box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.25);
+    transform: translateY(-2px);
+  }
+
+  /* Premium Glass Card */
+  .glass-card {
+    @apply backdrop-blur-2xl border border-white/15 rounded-2xl;
+    background-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 
+      0 8px 32px 0 rgba(31, 38, 135, 0.15),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-card:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    @apply border-white/25;
+    box-shadow: 
+      0 16px 48px 0 rgba(31, 38, 135, 0.25),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.3);
+    transform: translateY(-4px) scale(1.01);
   }
   
+  /* Enhanced Gradient Text */
   .gradient-text {
-    @apply bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent;
+    background-size: 200% auto;
+    animation: gradient-shift 3s ease infinite;
   }
-  
+
+  @keyframes gradient-shift {
+    0%, 100% {
+      background-position: 0% center;
+    }
+    50% {
+      background-position: 100% center;
+    }
+  }
+
+  /* Premium Button Styles */
   .btn-primary {
-    @apply bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25;
+    @apply relative bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300;
     @apply text-sm md:text-base md:py-3 md:px-6;
+    box-shadow: 
+      0 4px 15px rgba(168, 85, 247, 0.3),
+      0 0 0 0 rgba(168, 85, 247, 0);
+    transform: translateY(0);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 
+      0 8px 25px rgba(168, 85, 247, 0.4),
+      0 0 20px rgba(168, 85, 247, 0.2);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0) scale(0.98);
+  }
+
+  .btn-primary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+    transform: none;
+    box-shadow: none;
   }
   
   .btn-secondary {
     @apply glass-effect hover:bg-white/20 text-white font-medium py-2 px-4 rounded-lg transition-all duration-300;
     @apply text-sm md:text-base;
+  }
+
+  .btn-secondary:hover {
+    transform: translateY(-1px);
+  }
+
+  /* Animated Background Elements */
+  .animated-bg {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .animated-bg::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(168, 85, 247, 0.1) 0%, transparent 70%);
+    animation: rotate 20s linear infinite;
+    pointer-events: none;
+  }
+
+  @keyframes rotate {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Smooth Fade In */
+  .fade-in {
+    animation: fadeIn 0.6s ease-out forwards;
+    opacity: 0;
+  }
+
+  @keyframes fadeIn {
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Slide Up Animation */
+  .slide-up {
+    animation: slideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  @keyframes slideUp {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Pulse Animation for Interactive Elements */
+  .pulse-glow {
+    animation: pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 40px rgba(168, 85, 247, 0.6);
+    }
+  }
+
+  /* Enhanced Focus States */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 focus:ring-offset-transparent;
+  }
+
+  /* Professional Section Spacing */
+  .section-spacing {
+    @apply space-y-6 md:space-y-8;
+  }
+
+  /* Card Hover Effect */
+  .card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Smooth Transition Utility */
+  .transition-smooth {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
@@ -42,31 +207,32 @@
   
   /* Make containers full width on mobile */
   .container {
-    @apply px-3;
+    @apply px-4;
   }
   
   /* Adjust modal sizes for mobile */
   .modal-content {
-    @apply max-w-full mx-2;
+    @apply max-w-full mx-4;
   }
   
   /* Better touch targets */
   button, .btn {
-    @apply min-h-[44px];
+    @apply min-h-[48px];
   }
   
   /* Stack layout for inputs on mobile */
   .input-group {
-    @apply flex-col gap-2;
+    @apply flex-col gap-3;
+  }
+
+  /* Improved spacing on mobile */
+  .section-spacing {
+    @apply space-y-4;
   }
 }
 
 /* Desktop-only optimizations */
 @media (min-width: 768px) {
-  .btn-primary:hover {
-    transform: scale(1.05);
-  }
-
   /* Wider containers on desktop */
   .container {
     max-width: 1400px;
@@ -75,11 +241,12 @@
   /* Optimize grids for desktop */
   .grid-optimized {
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
   }
 
   /* Better hover states */
   .hover-effect:hover {
-    @apply bg-white/20 transition-all duration-200;
+    @apply bg-white/20 transition-all duration-300;
   }
 
   /* Side-by-side layouts */
@@ -93,6 +260,11 @@
   .desktop-preview {
     min-height: 500px;
   }
+
+  /* Enhanced glass effect on desktop */
+  .glass-effect:hover {
+    transform: translateY(-3px) scale(1.01);
+  }
 }
 
 /* Large desktop optimizations */
@@ -104,5 +276,17 @@
   /* Larger images on large screens */
   .desktop-preview {
     min-height: 600px;
+  }
+
+  /* Enhanced spacing on large screens */
+  .section-spacing {
+    @apply space-y-10;
+  }
+}
+
+/* Extra large screens */
+@media (min-width: 1536px) {
+  .container {
+    max-width: 1800px;
   }
 }

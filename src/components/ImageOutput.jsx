@@ -4,7 +4,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
 import GenerateButton from './GenerateButton';
-import { X } from 'lucide-react';
+import { X, Sparkles } from 'lucide-react';
 import logger from '../utils/logger.js';
 
 const ImageOutput = () => {
@@ -290,31 +290,40 @@ const ImageOutput = () => {
 
   if (isGenerating) {
     return (
-      <div className="h-full flex flex-col items-center justify-center">
-        <div className="animate-spin w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full mb-6"></div>
-        <p className="text-lg text-gray-300 mb-2">Creating your masterpiece...</p>
-        <p className="text-sm text-gray-500">This may take a few moments</p>
+      <div className="h-full flex flex-col items-center justify-center p-8">
+        <div className="glass-card p-8 rounded-2xl text-center slide-up">
+          <div className="relative w-20 h-20 mx-auto mb-6">
+            <div className="animate-spin w-full h-full border-4 border-purple-500/30 border-t-purple-500 rounded-full"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Sparkles className="w-8 h-8 text-purple-400 animate-pulse" />
+            </div>
+          </div>
+          <p className="text-xl text-white mb-2 font-semibold">Creating your masterpiece...</p>
+          <p className="text-sm text-gray-400">This may take a few moments</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="h-full flex flex-col items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 text-red-400 text-4xl mb-4">❌</div>
-          <h4 className="text-lg font-semibold text-red-400 mb-2">Something went wrong</h4>
-          <p className="text-gray-300 mb-6 max-w-sm">{error}</p>
+      <div className="h-full flex flex-col items-center justify-center p-8">
+        <div className="glass-card p-8 rounded-2xl text-center max-w-md slide-up">
+          <div className="w-20 h-20 mx-auto mb-6 flex items-center justify-center bg-red-500/20 rounded-full">
+            <div className="text-4xl">❌</div>
+          </div>
+          <h4 className="text-xl font-semibold text-red-400 mb-3">Something went wrong</h4>
+          <p className="text-gray-300 mb-6">{error}</p>
           <div className="flex gap-3 justify-center">
             <button
               onClick={clearGeneration}
-              className="btn-secondary px-4 py-2"
+              className="btn-secondary px-5 py-2.5"
             >
               Try Again
             </button>
             <button
               onClick={clearAll}
-              className="btn-secondary px-4 py-2"
+              className="btn-secondary px-5 py-2.5"
             >
               Start Over
             </button>
@@ -326,96 +335,99 @@ const ImageOutput = () => {
 
   if (!generatedImage) {
     return (
-      <div className="h-full flex flex-col items-center justify-center">
-        <div className="w-24 h-24 mx-auto mb-6 opacity-50">
-          <svg viewBox="0 0 24 24" fill="none" className="w-full h-full text-gray-400">
-            <path
-              d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
-              fill="currentColor"
-            />
-          </svg>
+      <div className="h-full flex flex-col items-center justify-center p-8">
+        <div className="glass-card p-12 rounded-2xl text-center max-w-md slide-up">
+          <div className="w-28 h-28 mx-auto mb-6 opacity-60">
+            <svg viewBox="0 0 24 24" fill="none" className="w-full h-full text-gray-400">
+              <path
+                d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
+                fill="currentColor"
+              />
+            </svg>
+          </div>
+          <p className="text-lg text-gray-300 mb-2 font-medium">Your generated image will appear here</p>
+          <p className="text-sm text-gray-500">Select a style and click generate to create your image</p>
         </div>
-        <p className="text-lg text-gray-400 mb-2">Your generated image will appear here</p>
-        <p className="text-sm text-gray-500">Select a style and click generate to create your image</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full">
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h3 className="text-base sm:text-lg md:text-xl font-semibold gradient-text">Generated Image</h3>
+    <div className="w-full space-y-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <h3 className="text-lg sm:text-xl md:text-2xl font-semibold gradient-text">Generated Image</h3>
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={handleDownload}
             disabled={isDownloading}
-            className="btn-secondary flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm px-2 sm:px-4 py-2"
+            className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm px-4 py-2.5 hover:scale-105 transition-all duration-300"
           >
-            <span className="text-base">{isDownloading ? '⏳' : '💾'}</span>
+            <span className="text-lg">{isDownloading ? '⏳' : '💾'}</span>
             <span className="hidden sm:inline">{isDownloading ? 'Downloading...' : 'Download'}</span>
           </button>
           <button
             onClick={handleRegenerate}
             disabled={isRegenerating || !isConnected || !currentGeneration}
-            className="btn-secondary flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm px-2 sm:px-4 py-2"
+            className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm px-4 py-2.5 hover:scale-105 transition-all duration-300"
           >
-            <span className="text-base">{isRegenerating ? '⏳' : '🔄'}</span>
+            <span className="text-lg">{isRegenerating ? '⏳' : '🔄'}</span>
             <span className="hidden sm:inline">{isRegenerating ? 'Regenerating...' : 'Regenerate'}</span>
           </button>
           <button
             onClick={clearGeneration}
-            className="btn-secondary flex items-center gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2"
+            className="btn-secondary flex items-center gap-2 text-sm px-4 py-2.5 hover:scale-105 transition-all duration-300"
           >
-            <span className="text-base">🗑️</span>
+            <span className="text-lg">🗑️</span>
             <span className="hidden sm:inline">Clear</span>
           </button>
         </div>
       </div>
       
-      <div className="glass-effect rounded-xl overflow-hidden mb-4">
+      <div className="glass-card rounded-2xl overflow-hidden mb-4 p-2">
         <img
           src={generatedImage}
           alt="Generated AI image"
-          className="w-full h-auto max-h-[300px] sm:max-h-96 md:max-h-[600px] lg:max-h-[700px] object-contain"
+          className="w-full h-auto max-h-[300px] sm:max-h-96 md:max-h-[600px] lg:max-h-[700px] object-contain rounded-xl"
           style={{ maxWidth: '100%', height: 'auto' }}
         />
       </div>
 
-      {/* Generate Button Section */}
-      <div className="mb-4">
-        <div className="glass-effect rounded-lg p-4">
-          <h4 className="text-sm md:text-base font-semibold text-gray-300 mb-3">Quick Actions</h4>
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => setShowPromptModal(true)}
-              disabled={isRegenerating || !isConnected || !currentGeneration}
-              className="btn-primary flex items-center gap-2 text-sm px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="text-lg">✨</span>
-              New Prompt
-            </button>
-          </div>
+      {/* Quick Actions */}
+      <div className="glass-card rounded-xl p-4 mb-4">
+        <h4 className="text-base md:text-lg font-semibold text-white mb-3 flex items-center gap-2">
+          <span className="text-xl">✨</span>
+          Quick Actions
+        </h4>
+        <div className="flex gap-3 flex-wrap">
+          <button
+            onClick={() => setShowPromptModal(true)}
+            disabled={isRegenerating || !isConnected || !currentGeneration}
+            className="btn-primary flex items-center gap-2 text-sm px-5 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Sparkles className="w-4 h-4" />
+            New Prompt
+          </button>
         </div>
       </div>
 
-      {/* Generate Button Section */}
-      <div className="glass-effect rounded-lg p-6">
-        <div className="text-center mb-4">
-          <div className="flex items-center justify-center gap-3 mb-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-              <span className="text-lg">✨</span>
+      {/* Generate New Image Section */}
+      <div className="glass-card rounded-xl p-6 md:p-8">
+        <div className="text-center mb-6">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg shadow-purple-500/30">
+              <Sparkles className="w-6 h-6 text-white" />
             </div>
-            <h4 className="text-xl font-bold text-white">Create New Image</h4>
+            <h4 className="text-2xl font-bold text-white">Create New Image</h4>
           </div>
-          <p className="text-gray-400">Ready to generate your next masterpiece?</p>
+          <p className="text-gray-400 text-base">Ready to generate your next masterpiece?</p>
         </div>
         
-        <div className="mb-4">
+        <div className="mb-6">
           <GenerateButton />
         </div>
         
         <div className="text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/10">
+          <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/5 rounded-full border border-white/10">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
             <span className="text-sm text-gray-400">⏱️ Takes 10-30 seconds</span>
           </div>
@@ -424,18 +436,23 @@ const ImageOutput = () => {
 
       {/* Prompt Modal for New Prompt Regeneration */}
       {showPromptModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="glass-effect rounded-xl p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">New Prompt Regeneration</h3>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="glass-card rounded-2xl p-6 md:p-8 max-w-md w-full mx-4 slide-up">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-500/20 rounded-lg">
+                  <Sparkles className="w-5 h-5 text-purple-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-white">New Prompt Regeneration</h3>
+              </div>
               <button
                 onClick={() => {
                   setShowPromptModal(false);
                   setNewPrompt('');
                 }}
-                className="text-gray-400 hover:text-white"
+                className="p-2 rounded-lg hover:bg-white/20 transition-all duration-300 hover:scale-110"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-gray-400 hover:text-white" />
               </button>
             </div>
             <p className="text-gray-300 text-sm mb-4">
@@ -445,9 +462,9 @@ const ImageOutput = () => {
               value={newPrompt}
               onChange={(e) => setNewPrompt(e.target.value)}
               placeholder="Enter your new prompt here..."
-              className="w-full h-24 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              className="w-full h-32 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none transition-all duration-300 focus:bg-white/8"
             />
-            <div className="flex gap-3 mt-4">
+            <div className="flex gap-3 mt-6">
               <button
                 onClick={handleRegenerateWithPrompt}
                 disabled={!newPrompt.trim() || isRegenerating}
@@ -460,7 +477,7 @@ const ImageOutput = () => {
                   setShowPromptModal(false);
                   setNewPrompt('');
                 }}
-                className="btn-secondary px-4"
+                className="btn-secondary px-5"
               >
                 Cancel
               </button>

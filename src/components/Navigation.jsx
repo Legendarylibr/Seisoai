@@ -31,19 +31,21 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
   }
 
   return (
-    <header className="bg-black/20 backdrop-blur-md border-b border-white/10 sticky top-0 z-[999997]" style={{ position: 'sticky' }}>
+    <header className="bg-black/30 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[999997] shadow-lg" style={{ position: 'sticky' }}>
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center gap-3">
-            <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-10 h-10 rounded-xl object-cover" />
+          <div className="flex items-center gap-3 group">
+            <div className="p-1.5 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl group-hover:from-purple-500/30 group-hover:to-pink-500/30 transition-all duration-300">
+              <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-8 h-8 rounded-lg object-cover" />
+            </div>
             <div>
               <h1 className="text-xl font-bold gradient-text">Seiso AI</h1>
             </div>
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-1">
+          <nav className="hidden md:flex items-center space-x-2">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               return (
@@ -51,15 +53,15 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`
-                    flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200
+                    flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-300 group
                     ${activeTab === tab.id 
-                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' 
-                      : 'text-gray-300 hover:text-white hover:bg-white/10'
+                      ? 'bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-purple-200 border border-purple-500/40 shadow-lg shadow-purple-500/20' 
+                      : 'text-gray-300 hover:text-white hover:bg-white/10 hover:scale-105'
                     }
                   `}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span className="font-medium">{tab.name}</span>
+                  <Icon className={`w-4 h-4 transition-transform duration-300 ${activeTab === tab.id ? 'scale-110' : 'group-hover:scale-110'}`} />
+                  <span className="font-semibold">{tab.name}</span>
                 </button>
               );
             })}
@@ -80,9 +82,9 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
           {/* Credits Dropdown */}
           {isConnected && (
-            <div className="hidden md:flex items-center space-x-4">
+            <div className="hidden md:flex items-center space-x-3">
               {/* Wallet Address Display */}
-              <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
+              <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300">
                 <Wallet className="w-4 h-4 text-blue-400" />
                 <span className="text-xs font-mono text-gray-300">
                   {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : ''}
@@ -91,14 +93,14 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
               {/* Credits Display */}
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 px-3 py-2 bg-white/5 rounded-lg border border-white/10">
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20">
                   <Coins className="w-4 h-4 text-purple-400" />
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm font-semibold text-white">
                     {credits} credits
                   </span>
                 </div>
                 
-                {/* Buy Credits Button - Direct like Generate button */}
+                {/* Buy Credits Button */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -106,22 +108,22 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                       onShowTokenPayment();
                     }
                   }}
-                  className="flex items-center gap-2 px-3 py-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg border border-purple-500/30 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/30 to-pink-500/30 hover:from-purple-500/40 hover:to-pink-500/40 rounded-lg border border-purple-500/40 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25"
                   style={{ position: 'relative', zIndex: 999998 }}
                 >
-                  <Coins className="w-4 h-4 text-purple-400" />
-                  <span className="text-sm font-medium text-white">Buy Credits</span>
+                  <Coins className="w-4 h-4 text-purple-300" />
+                  <span className="text-sm font-semibold text-white">Buy Credits</span>
                 </button>
               </div>
 
               {/* Disconnect Button */}
               <button
                 onClick={disconnectWallet}
-                className="flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg border border-red-500/30 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg border border-red-500/30 transition-all duration-300 hover:scale-105"
                 title="Disconnect Wallet"
               >
                 <LogOut className="w-4 h-4 text-red-400" />
-                <span className="text-sm font-medium text-red-300">Disconnect</span>
+                <span className="text-sm font-medium text-red-300 hidden lg:inline">Disconnect</span>
               </button>
             </div>
           )}
@@ -193,7 +195,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
         {/* Mobile Navigation Menu */}
         {showMobileMenu && (
-          <div className="md:hidden border-t border-white/10 pt-4 mt-4 px-4 pb-4">
+          <div className="md:hidden border-t border-white/10 pt-4 mt-4 px-4 pb-4 slide-up">
             <nav className="flex flex-col space-y-2">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
@@ -205,15 +207,15 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                       setShowMobileMenu(false);
                     }}
                     className={`
-                      flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200
+                      flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300
                       ${activeTab === tab.id 
-                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' 
+                        ? 'bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-purple-200 border border-purple-500/40 shadow-lg shadow-purple-500/20' 
                         : 'text-gray-300 hover:text-white hover:bg-white/10'
                       }
                     `}
                   >
                     <Icon className="w-5 h-5" />
-                    <span className="font-medium">{tab.name}</span>
+                    <span className="font-semibold">{tab.name}</span>
                   </button>
                 );
               })}

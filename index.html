@@ -32,72 +32,37 @@
         
         // GRACEFUL defineProperty override - silently handle redefinition attempts
         Object.defineProperty = function(obj, prop, descriptor) {
-          // Handle ethereum property redefinition gracefully
+          // Handle ethereum property redefinition gracefully - ALWAYS prevent errors
           if (prop === 'ethereum' && obj === window) {
-            // If ethereum already exists, silently return it (don't redefine)
-            // This prevents errors from evmAsk.js and other wallet extensions
+            // If ethereum already exists, NEVER try to redefine - just return it
+            // This completely prevents errors from evmAsk.js and other wallet extensions
             if (window.ethereum) {
-              // Modern wallets consolidate via providers array, so check if we can enhance
-              const existingEthereum = window.ethereum;
-              const newValue = descriptor.value;
-              
-              // If new value is a provider and existing doesn't have providers array yet
-              if (newValue && typeof newValue === 'object' && newValue.request && 
-                  existingEthereum && !existingEthereum.providers && 
-                  (newValue.isMetaMask || newValue.isRabby || newValue.isCoinbaseWallet)) {
-                try {
-                  // Try to set up providers array if possible
-                  if (descriptor.configurable !== false && existingEthereum !== newValue) {
-                    const providers = [existingEthereum];
-                    if (!providers.some(p => (p.isMetaMask && newValue.isMetaMask) || 
-                                              (p.isRabby && newValue.isRabby) || 
-                                              (p.isCoinbaseWallet && newValue.isCoinbaseWallet))) {
-                      providers.push(newValue);
-                    }
-                    
-                    // Only update if we have multiple providers
-                    if (providers.length > 1) {
-                      Object.defineProperty(window, 'ethereum', {
-                        value: {
-                          providers: providers,
-                          request: function(...args) {
-                            return providers[0].request(...args);
-                          },
-                          on: function(...args) {
-                            providers.forEach(p => p.on?.(...args));
-                          },
-                          removeListener: function(...args) {
-                            providers.forEach(p => p.removeListener?.(...args));
-                          },
-                          addListener: function(...args) {
-                            providers.forEach(p => p.addListener?.(...args));
-                          }
-                        },
-                        configurable: true,
-                        enumerable: true,
-                        writable: true
-                      });
-                      return window.ethereum;
-                    }
-                  }
-                } catch (e) {
-                  // Silent fail - just use existing
-                }
-              }
-              
-              // Return existing without error (silent success)
-              return existingEthereum;
+              // Always return existing ethereum object - never throw
+              return window.ethereum;
             }
             
-            // First definition - allow it
+            // First definition - allow it, but catch any errors
             try {
               return originalDefineProperty.call(this, obj, prop, descriptor);
             } catch (error) {
-              // If it fails, check if ethereum was set another way
+              // If it fails for any reason, check if ethereum was set another way
               if (window.ethereum) {
                 return window.ethereum;
               }
-              throw error;
+              // If still no ethereum, try with a more permissive descriptor
+              try {
+                const permissiveDescriptor = {
+                  ...descriptor,
+                  configurable: true,
+                  enumerable: true,
+                  writable: true
+                };
+                return originalDefineProperty.call(this, obj, prop, permissiveDescriptor);
+              } catch (e2) {
+                // Last resort: set it directly and return
+                window.ethereum = descriptor.value || {};
+                return window.ethereum;
+              }
             }
           }
           
@@ -120,11 +85,34 @@
           try {
             return originalDefineProperty.call(this, obj, prop, descriptor);
           } catch (error) {
-            // If it's a redefinition error, just return the existing property
-            if (error.message.includes('Cannot redefine property')) {
-              console.warn('🛡️ Property redefinition prevented:', prop);
-              return obj[prop];
+            // If it's a redefinition error, silently return the existing property
+            if (error.message && (
+                error.message.includes('Cannot redefine property') ||
+                error.message.includes('Cannot define property') ||
+                error.name === 'TypeError'
+              )) {
+              // Silently return existing property - no console warning
+              if (obj[prop] !== undefined) {
+                return obj[prop];
+              }
+              // If property doesn't exist but we got an error, try with permissive settings
+              try {
+                const permissiveDescriptor = {
+                  ...descriptor,
+                  configurable: true,
+                  enumerable: true,
+                  writable: true
+                };
+                return originalDefineProperty.call(this, obj, prop, permissiveDescriptor);
+              } catch (e2) {
+                // Final fallback: assign directly if possible
+                if (descriptor.value !== undefined) {
+                  obj[prop] = descriptor.value;
+                  return obj;
+                }
+              }
             }
+            // Only throw if it's not a redefinition error
             throw error;
           }
         };
@@ -146,19 +134,27 @@
         
         // Handle uncaught errors - silently catch wallet redefinition errors
         window.addEventListener('error', function(event) {
-          const error = event.error;
-          const message = error?.message || '';
-          const stack = error?.stack || '';
-          const filename = event.filename || '';
+          const error = event.error || event;
+          const message = (error?.message || event.message || '').toString();
+          const stack = (error?.stack || event.error?.stack || '').toString();
+          const filename = (event.filename || '').toString();
           
-          // Silently catch ethereum property redefinition errors (harmless)
-          if (message.includes('Cannot redefine property: ethereum') ||
-              (message.includes('Cannot redefine property') && message.includes('ethereum')) ||
-              (filename && filename.includes('evmAsk.js') && message.includes('defineProperty'))) {
+          // Silently catch ALL ethereum property redefinition errors (harmless)
+          if (message.includes('Cannot redefine property') && 
+              (message.includes('ethereum') || filename.includes('evmAsk') || stack.includes('evmAsk'))) {
             event.preventDefault();
             event.stopPropagation();
             event.stopImmediatePropagation();
             // Silent - don't log to avoid console noise
+            return false;
+          }
+          
+          // Also catch any defineProperty errors from evmAsk.js
+          if ((filename.includes('evmAsk') || stack.includes('evmAsk')) && 
+              (message.includes('defineProperty') || message.includes('TypeError'))) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
             return false;
           }
         }, true); // Use capture phase to catch earlier
@@ -170,33 +166,54 @@
         
         // Filter out harmless wallet redefinition errors from console
         console.error = function(...args) {
-          const message = args[0]?.toString?.() || '';
-          if (message.includes('Cannot redefine property: ethereum') ||
-              (message.includes('evmAsk.js') && message.includes('defineProperty'))) {
-            // Silent - these are harmless
-            return;
+          const message = (args[0]?.toString?.() || '').toString();
+          const fullMessage = args.map(a => a?.toString?.() || '').join(' ');
+          
+          // Filter ALL ethereum redefinition errors
+          if (message.includes('Cannot redefine property') && 
+              (message.includes('ethereum') || fullMessage.includes('evmAsk'))) {
+            return; // Silent - these are harmless
           }
+          
+          // Filter defineProperty errors from evmAsk
+          if ((message.includes('evmAsk') || fullMessage.includes('evmAsk')) && 
+              (message.includes('defineProperty') || message.includes('TypeError'))) {
+            return; // Silent
+          }
+          
           return originalConsoleError.apply(this, args);
         };
         
         // Filter out wallet conflict warnings
         console.warn = function(...args) {
-          const message = args[0]?.toString?.() || '';
-          if (message.includes('Cannot redefine property: ethereum')) {
+          const message = (args[0]?.toString?.() || '').toString();
+          
+          // Filter ethereum redefinition warnings
+          if (message.includes('Cannot redefine property') && message.includes('ethereum')) {
             return; // Silent
           }
+          
           return originalConsoleWarn.apply(this, args);
         };
         
         // Override the global error handler - silently catch wallet redefinition errors
         window.onerror = function(message, source, lineno, colno, error) {
-          if (message && (
-              message.includes('Cannot redefine property: ethereum') ||
-              ((source && source.includes('evmAsk')) && message.includes('defineProperty'))
-            )) {
-            // Silent - return true to prevent default error handling
+          const msgStr = (message || '').toString();
+          const srcStr = (source || '').toString();
+          const errMsg = (error?.message || '').toString();
+          
+          // Catch ALL variations of ethereum redefinition errors
+          if (msgStr.includes('Cannot redefine property') && 
+              (msgStr.includes('ethereum') || srcStr.includes('evmAsk') || errMsg.includes('ethereum'))) {
+            return true; // Prevent default error handling
+          }
+          
+          // Catch defineProperty errors from evmAsk
+          if ((srcStr.includes('evmAsk') || errMsg.includes('evmAsk')) && 
+              (msgStr.includes('defineProperty') || msgStr.includes('TypeError'))) {
             return true;
           }
+          
           if (originalOnError) {
             return originalOnError.call(this, message, source, lineno, colno, error);
           }
@@ -206,18 +223,20 @@
         // Handle unhandled promise rejections - silently catch wallet redefinition errors
         window.addEventListener('unhandledrejection', function(event) {
           const reason = event.reason;
-          const message = reason?.message || '';
-          const stack = reason?.stack || '';
+          const message = (reason?.message || '').toString();
+          const stack = (reason?.stack || '').toString();
           
-          // Silently prevent wallet-related promise rejections from redefinition
-          if (message.includes('Cannot redefine property: ethereum') ||
-              (message.includes('evmAsk.js') && message.includes('defineProperty'))) {
+          // Silently prevent ALL wallet-related promise rejections from redefinition
+          if ((message.includes('Cannot redefine property') && message.includes('ethereum')) ||
+              (message.includes('evmAsk') && (message.includes('defineProperty') || message.includes('TypeError'))) ||
+              (stack.includes('evmAsk') && message.includes('defineProperty'))) {
             event.preventDefault();
             event.stopPropagation();
+            event.stopImmediatePropagation();
             // Silent - don't log
             return false;
           }
-        });
+        }, true); // Use capture phase
         
         // Note: We no longer aggressively block script injection - we handle redefinition gracefully
         
