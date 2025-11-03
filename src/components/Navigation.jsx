@@ -6,26 +6,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
   const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment }) => {
     // onShowStripePayment prop removed - Stripe disabled
   const { isConnected, address, credits, disconnectWallet } = useSimpleWallet();
-  const [showCreditsDropdown, setShowCreditsDropdown] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const dropdownRef = useRef(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowCreditsDropdown(false);
-      }
-    };
-
-    if (showCreditsDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showCreditsDropdown]);
 
   // Safety check to prevent the error
   if (!tabs || !Array.isArray(tabs)) {
@@ -50,7 +31,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
   }
 
   return (
-    <header className="bg-black/20 backdrop-blur-md border-b border-white/10 sticky top-0 z-40">
+    <header className="bg-black/20 backdrop-blur-md border-b border-white/10 sticky top-0 z-[999997]" style={{ position: 'sticky' }}>
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
@@ -117,71 +98,20 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                   </span>
                 </div>
                 
-                {/* Credits Dropdown */}
-                <div className="relative" ref={dropdownRef}>
-                    <button
-                    onClick={() => setShowCreditsDropdown(!showCreditsDropdown)}
-                    className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors"
-                  >
-                    <Coins className="w-4 h-4 text-purple-400" />
-                    <span className="text-sm font-medium text-white">Buy Credits</span>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCreditsDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {/* Dropdown Menu */}
-                  {showCreditsDropdown && (
-                    <div className="absolute right-0 mt-2 w-64 bg-black/90 backdrop-blur-md border border-white/20 rounded-lg shadow-xl z-40">
-                      <div className="p-4">
-                        <h3 className="text-sm font-semibold text-white mb-3">Purchase Credits</h3>
-                        
-                        <div className="space-y-2">
-                          {/* STRIPE DISABLED - Card payment option removed
-                          <button
-                            onClick={() => {
-                              setShowCreditsDropdown(false);
-                              onShowStripePayment && onShowStripePayment();
-                            }}
-                            className="w-full flex items-center gap-3 p-3 rounded-lg bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 transition-colors"
-                          >
-                            <span>💳</span>
-                            <div className="text-left">
-                              <div className="text-sm font-medium text-white">Pay with Card</div>
-                              <div className="text-xs text-gray-400">Visa, Mastercard, etc.</div>
-                            </div>
-                          </button>
-                          */}
-                          
-                          <button
-                            onClick={() => {
-                              setShowCreditsDropdown(false);
-                              // Immediate close and open - React will handle re-render
-                              if (onShowTokenPayment) {
-                                onShowTokenPayment();
-                              }
-                            }}
-                            className="w-full flex items-center gap-3 p-3 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 transition-colors"
-                          >
-                            <Coins className="w-5 h-5 text-purple-400" />
-                            <div className="text-left">
-                              <div className="text-sm font-medium text-white">Pay with USDC</div>
-                              <div className="text-xs text-gray-400">Automatic credit on payment</div>
-                            </div>
-                          </button>
-                        </div>
-
-                        {/* Current Status */}
-                        <div className="mt-4 pt-3 border-t border-white/10">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-400">Current Credits:</span>
-                            <span className="text-purple-400 font-semibold">
-                              {credits}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                {/* Buy Credits Button - Direct like Generate button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onShowTokenPayment) {
+                      onShowTokenPayment();
+                    }
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg border border-purple-500/30 transition-colors"
+                  style={{ position: 'relative', zIndex: 999998 }}
+                >
+                  <Coins className="w-4 h-4 text-purple-400" />
+                  <span className="text-sm font-medium text-white">Buy Credits</span>
+                </button>
               </div>
 
               {/* Disconnect Button */}
@@ -234,55 +164,20 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                   </span>
                 </div>
                 
-                {/* Mobile Buy Credits Dropdown */}
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setShowCreditsDropdown(!showCreditsDropdown)}
-                    className="p-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg border border-purple-500/30 transition-colors"
-                    title="Buy Credits"
-                  >
-                    <Coins className="w-4 h-4 text-purple-400" />
-                  </button>
-
-                  {/* Mobile Dropdown Menu */}
-                  {showCreditsDropdown && (
-                    <div className="absolute right-0 mt-2 w-56 bg-black/90 backdrop-blur-md border border-white/20 rounded-lg shadow-xl z-40">
-                      <div className="p-3">
-                        <h3 className="text-xs font-semibold text-white mb-2">Purchase Credits</h3>
-                        
-                        <div className="space-y-2">
-                          {/* STRIPE DISABLED - Mobile card payment option removed
-                          <button
-                            onClick={() => {
-                              setShowCreditsDropdown(false);
-                              onShowStripePayment && onShowStripePayment();
-                            }}
-                            className="w-full flex items-center gap-2 p-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 transition-colors"
-                          >
-                            <span>💳</span>
-                            <div className="text-left">
-                              <div className="text-xs font-medium text-white">Pay with Card</div>
-                            </div>
-                          </button>
-                          */}
-                          
-                          <button
-                            onClick={() => {
-                              setShowCreditsDropdown(false);
-                              onShowTokenPayment && onShowTokenPayment();
-                            }}
-                            className="w-full flex items-center gap-2 p-2 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 transition-colors"
-                          >
-                            <Coins className="w-4 h-4 text-purple-400" />
-                            <div className="text-left">
-                              <div className="text-xs font-medium text-white">Pay with USDC</div>
-                            </div>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                {/* Mobile Buy Credits Button - Direct */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onShowTokenPayment) {
+                      onShowTokenPayment();
+                    }
+                  }}
+                  className="p-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg border border-purple-500/30 transition-colors"
+                  title="Buy Credits"
+                  style={{ position: 'relative', zIndex: 999998 }}
+                >
+                  <Coins className="w-4 h-4 text-purple-400" />
+                </button>
                 
                 <button
                   onClick={disconnectWallet}

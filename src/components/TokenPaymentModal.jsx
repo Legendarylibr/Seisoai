@@ -323,6 +323,17 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   // Load available tokens and payment address when modal opens
   useEffect(() => {
     if (isOpen) {
+      // Reset state when modal opens
+      setAmount('');
+      setError('');
+      setPaymentStatus('');
+      setCheckingPayment(false);
+      setIsProcessing(false);
+      
+      // Lock body scroll when modal is open
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = 'hidden';
+      
       // Only show USDC token - no native tokens
       const usdcToken = {
         symbol: 'USDC',
@@ -335,6 +346,10 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       setAvailableTokens([usdcToken]);
       setSelectedToken(usdcToken);
       
+      // Cleanup: restore body scroll when modal closes
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
     }
   }, [isOpen]);
 
@@ -1083,65 +1098,65 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-2 md:p-0" style={{ zIndex: 99999 }}>
-      <div className="bg-gray-900 rounded-xl md:rounded-none border border-white/20 w-full max-w-sm md:max-w-none md:w-full md:h-full md:max-h-none overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-              <Coins className="w-5 h-5 text-white" />
+    <div 
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-[999999] p-4"
+      onClick={(e) => {
+        // Close on backdrop click
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div 
+        className="bg-gray-900 border border-white/20 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Compact Header */}
+        <div className="flex items-center justify-between p-3 border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+              <Coins className="w-4 h-4 text-white" />
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-white">Buy Credits</h2>
-              <p className="text-sm text-gray-400">Purchase credits with tokens</p>
-            </div>
+            <h2 className="text-base font-semibold text-white">Buy Credits</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
           >
-            <X className="w-5 h-5 text-gray-400" />
+            <X className="w-4 h-4 text-gray-400" />
           </button>
         </div>
 
-        <div className="p-4 space-y-4">
-          {/* Current Credits */}
-          <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+        <div className="p-4 space-y-3 overflow-y-auto flex-1">
+          {/* Current Credits - Compact */}
+          <div className="p-2.5 bg-purple-500/10 border border-purple-500/20 rounded-lg">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-300">Current Credits:</span>
-              <span className="text-lg font-semibold text-purple-400">
+              <span className="text-xs text-gray-300">Current Credits:</span>
+              <span className="text-base font-semibold text-purple-400">
                 {credits}
               </span>
             </div>
           </div>
 
-
-
-          {/* Payment Method - USDC Only */}
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-gray-300">
-              Payment Method
-            </label>
-            
-            <div className="w-full flex items-center justify-between p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                  $
-                </div>
-                <div className="text-left">
-                  <div className="font-semibold text-white">Pay with USDC</div>
-                  <div className="text-xs text-blue-300">USD Coin on {walletType === 'solana' ? 'Solana' : 'EVM Chains'}</div>
-                </div>
+          {/* Payment Method - Compact */}
+          <div className="w-full flex items-center justify-between p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/30">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                $
               </div>
-              <div className="px-3 py-1 bg-green-500/20 text-green-400 text-xs font-semibold rounded-full">
-                Active
+              <div className="text-left">
+                <div className="text-xs font-semibold text-white">Pay with USDC</div>
+                <div className="text-[10px] text-blue-300">{walletType === 'solana' ? 'Solana' : 'EVM Chains'}</div>
               </div>
+            </div>
+            <div className="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-semibold rounded-full">
+              Active
             </div>
           </div>
 
-          {/* Amount Input */}
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-gray-300">
+          {/* Amount Input - Compact */}
+          <div>
+            <label className="block text-xs font-medium text-gray-300 mb-1.5">
               Amount (USDC)
             </label>
             <div className="relative">
@@ -1149,160 +1164,126 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 type="number"
                 value={amount}
                 onChange={(e) => handleAmountChange(e.target.value)}
-                placeholder="Enter USDC amount"
-                className="w-full p-3 pr-16 rounded-lg bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                placeholder="Enter amount"
+                className="w-full p-2.5 pr-14 rounded-lg bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm"
                 step="0.1"
                 min="1"
                 id="token-amount-input"
                 name="token-amount"
               />
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm font-semibold text-blue-400">
+              <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-xs font-semibold text-blue-400">
                 USDC
               </div>
             </div>
-            <div className="text-xs text-gray-400">
+            <div className="text-[10px] text-gray-400 mt-1">
               Minimum: 1 USDC
             </div>
           </div>
 
-          {/* Credits Preview */}
-          <div className="p-4 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-300">You'll receive:</span>
-              <span className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+          {/* Credits Preview - Compact */}
+          <div className="p-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-300">You'll receive:</span>
+              <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                 {getCreditsPreview()} Credits
               </span>
             </div>
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center justify-between text-[10px]">
               <span className="text-gray-400">Rate:</span>
               <span className="text-purple-400 font-semibold">
                 1 USDC = {isNFTHolder ? '16.67' : '6.67'} Credits
-                {isNFTHolder && <span className="text-green-400 ml-1">(NFT Holder)</span>}
+                {isNFTHolder && <span className="text-green-400 ml-1">(NFT)</span>}
               </span>
-            </div>
-            {isNFTHolder && (
-              <div className="text-xs text-purple-300 mt-1">
-                $0.06 per credit (NFT Holder Discount)
-              </div>
-            )}
-          </div>
-
-          {/* Clear Instructions */}
-          <div className="p-2 rounded border border-white/10 bg-black/20">
-            <div className="text-xs text-white font-semibold mb-2">📋 How to Pay:</div>
-            <div className="text-xs text-gray-300 space-y-1">
-              <p><strong>1.</strong> Enter amount and click "Send USDC" below</p>
-              <p><strong>2.</strong> Confirm the transaction in your wallet</p>
-              <p><strong>3.</strong> Credits added automatically after confirmation!</p>
-              <p className="text-green-300"><strong>⚡ Automatic:</strong> No manual checking needed</p>
             </div>
           </div>
           
-          {/* Payment Status */}
+          {/* Payment Status - Compact */}
           {paymentStatus && (
-            <div className={`p-2 rounded text-xs ${
+            <div className={`p-1.5 rounded text-[10px] ${
               paymentStatus === 'confirmed' 
                 ? 'bg-green-500/20 text-green-400' 
                 : 'bg-yellow-500/20 text-yellow-400'
             }`}>
-              {paymentStatus === 'pending' && '⏳ Monitoring for payment...'}
-              {paymentStatus === 'detected' && '👀 Payment detected! Confirming...'}
-              {paymentStatus === 'confirmed' && '✅ Payment confirmed! Credits added.'}
+              {paymentStatus === 'pending' && '⏳ Monitoring...'}
+              {paymentStatus === 'detected' && '👀 Detected! Confirming...'}
+              {paymentStatus === 'confirmed' && '✅ Confirmed! Credits added.'}
             </div>
           )}
 
-          {/* Network Switching Options */}
+          {/* Network Switching Options - Compact */}
           {networksWithUSDC.length > 0 && currentNetworkBalance === 0 && (
-            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm">💡</span>
-                </div>
-                <h3 className="text-blue-400 font-semibold">Switch Network to Use Your USDC</h3>
+            <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-xs">💡</span>
+                <h3 className="text-blue-400 font-semibold text-xs">Switch Network</h3>
               </div>
-              
-              <div className="space-y-2">
-                <p className="text-sm text-gray-300 mb-3">
-                  You have USDC on other networks. Switch to use your existing balance:
-                </p>
-                
-                <div className="grid grid-cols-1 gap-2">
-                  {networksWithUSDC.map((network) => (
-                    <button
-                      key={network.chainId}
-                      onClick={() => switchToNetwork(network.chainId)}
-                      className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 border border-white/20 rounded-lg transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                          <span className="text-white text-xs font-bold">
-                            {network.chainId === 1 ? '⟠' : 
-                             network.chainId === 137 ? '⬟' :
-                             network.chainId === 42161 ? '🔷' :
-                             network.chainId === 10 ? '🔴' : '🔵'}
-                          </span>
-                        </div>
-                        <div className="text-left">
-                          <div className="text-white font-semibold">{network.name}</div>
-                          <div className="text-xs text-gray-400">Chain ID: {network.chainId}</div>
-                        </div>
+              <div className="space-y-1.5">
+                {networksWithUSDC.map((network) => (
+                  <button
+                    key={network.chainId}
+                    onClick={() => switchToNetwork(network.chainId)}
+                    className="w-full flex items-center justify-between p-2 bg-white/5 hover:bg-white/10 border border-white/20 rounded-lg transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs">
+                        {network.chainId === 1 ? '⟠' : 
+                         network.chainId === 137 ? '⬟' :
+                         network.chainId === 42161 ? '🔷' :
+                         network.chainId === 10 ? '🔴' : '🔵'}
+                      </span>
+                      <div>
+                        <div className="text-xs font-semibold text-white">{network.name}</div>
+                        <div className="text-[10px] text-gray-400">{network.balance.toFixed(2)} USDC</div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-green-400 font-semibold">{network.balance.toFixed(2)} USDC</div>
-                        <div className="text-xs text-gray-400">Click to switch</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                
-                <div className="text-xs text-gray-400 mt-2">
-                  💡 Switching networks will automatically refresh your USDC balance
-                </div>
+                    </div>
+                    <span className="text-[10px] text-gray-400">→</span>
+                  </button>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Current Network Balance */}
+          {/* Current Network Balance - Compact */}
           {currentNetworkBalance > 0 && (
-            <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+            <div className="p-2.5 bg-green-500/10 border border-green-500/20 rounded-lg">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-green-400 font-semibold">Current Network USDC Balance:</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-bold text-green-400">{currentNetworkBalance.toFixed(2)} USDC</span>
+                <span className="text-xs text-green-400 font-semibold">Balance:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-bold text-green-400">{currentNetworkBalance.toFixed(2)} USDC</span>
                   <button
                     onClick={() => checkUSDCBalanceAcrossNetworks()}
-                    className="p-1 hover:bg-white/10 rounded transition-colors"
-                    title="Refresh balance"
+                    className="p-0.5 hover:bg-white/10 rounded transition-colors"
+                    title="Refresh"
                   >
-                    <RefreshCw className="w-4 h-4 text-green-400" />
+                    <RefreshCw className="w-3 h-3 text-green-400" />
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Error Message */}
+          {/* Error Message - Compact */}
           {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
+            <div className="p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400">
               {error}
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-3">
+          {/* Action Buttons - Compact */}
+          <div className="flex gap-2 pt-2">
             {paymentStatus === 'pending' ? (
               <>
                 <button
                   onClick={stopMonitoring}
-                  className="flex-1 btn-secondary py-3"
+                  className="flex-1 btn-secondary py-2 text-sm"
                 >
-                  Stop Monitoring
+                  Stop
                 </button>
                 <button
                   disabled
-                  className="flex-1 btn-primary py-3 flex items-center justify-center gap-2 opacity-90"
+                  className="flex-1 btn-primary py-2 flex items-center justify-center gap-1.5 text-sm opacity-90"
                 >
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                   <span>Checking...</span>
                 </button>
               </>
@@ -1310,9 +1291,9 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               <>
                 <button
                   onClick={onClose}
-                  className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
+                  className="flex-1 btn-primary py-2 flex items-center justify-center gap-1.5 text-sm"
                 >
-                  <Check className="w-4 h-4" />
+                  <Check className="w-3.5 h-3.5" />
                   <span>Done</span>
                 </button>
               </>
@@ -1320,17 +1301,17 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               <>
                 <button
                   onClick={onClose}
-                  className="flex-1 btn-secondary py-3"
+                  className="flex-1 btn-secondary py-2 text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handlePayment}
                   disabled={!amount || parseFloat(amount) < 1 || isProcessing}
-                  className="flex-1 btn-primary py-3 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 btn-primary py-2 flex items-center justify-center gap-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Coins className="w-4 h-4" />
-                  <span>{isProcessing ? 'Sending USDC...' : 'Send USDC'}</span>
+                  <Coins className="w-3.5 h-3.5" />
+                  <span>{isProcessing ? 'Sending...' : 'Send USDC'}</span>
                 </button>
               </>
             )}
