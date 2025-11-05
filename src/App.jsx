@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ImageGeneratorProvider, useImageGenerator } from './contexts/ImageGeneratorContext';
 import { SimpleWalletProvider, useSimpleWallet } from './contexts/SimpleWalletContext';
 import { EmailAuthProvider, useEmailAuth } from './contexts/EmailAuthContext';
@@ -10,6 +10,7 @@ import ReferenceImageInput from './components/ReferenceImageInput';
 import TokenPaymentModal from './components/TokenPaymentModal';
 import StripePaymentModal from './components/StripePaymentModal';
 import EmailSignIn from './components/EmailSignIn';
+import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import ImageGallery from './components/ImageGallery';
 // Batch and Templates removed from UI
@@ -86,12 +87,25 @@ function App() {
 
 function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   const { isConnected } = useSimpleWallet();
-  const { isAuthenticated } = useEmailAuth();
+  const { isAuthenticated, credits: emailCredits } = useEmailAuth();
+  const [hasShownStripeModal, setHasShownStripeModal] = useState(false);
 
   // Show auth prompt if not authenticated
   if (!isConnected && !isAuthenticated) {
     return <AuthPrompt onSwitchToWallet={() => {}} />;
   }
+
+  // For email users with no credits, automatically show Stripe modal once after sign-in
+  useEffect(() => {
+    if (isAuthenticated && !isConnected && (emailCredits === 0 || emailCredits === null || emailCredits === undefined) && !hasShownStripeModal && onShowStripePayment) {
+      setHasShownStripeModal(true);
+      // Small delay to ensure modal can render after component mounts
+      const timer = setTimeout(() => {
+        onShowStripePayment();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, isConnected, emailCredits, hasShownStripeModal, onShowStripePayment]);
 
   // Show main content if authenticated (AuthGuard will handle credit requirements)
   return (
@@ -321,11 +335,16 @@ function WalletPrompt({ onBack }) {
 
 function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
   const [customPrompt, setCustomPrompt] = useState('');
-  const { credits } = useSimpleWallet();
+  const walletContext = useSimpleWallet();
+  const emailContext = useEmailAuth();
   const { controlNetImage } = useImageGenerator();
   
   // Determine if user has reference images
   const hasReferenceImages = !!controlNetImage;
+  
+  // Use email auth if available, otherwise wallet
+  const isEmailAuth = emailContext.isAuthenticated;
+  const credits = isEmailAuth ? emailContext.credits : walletContext.credits;
 
   return (
     <div className="fade-in">
@@ -335,13 +354,17 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
         <p className="text-gray-400 text-base md:text-lg">Create and edit stunning AI-generated images</p>
       </div>
 
-      {/* Wallet Connection - Enhanced */}
+      {/* User Info - Email or Wallet */}
       <div className="glass-card rounded-xl rounded-b-none p-2.5 mb-0 slide-up">
-        <SimpleWalletConnect />
+        {isEmailAuth ? (
+          <EmailUserInfo onShowStripePayment={onShowStripePayment} />
+        ) : (
+          <SimpleWalletConnect />
+        )}
       </div>
 
-      {/* Credits Status Banner */}
-      {credits <= 0 && (
+      {/* Credits Status Banner - Only for wallet users */}
+      {credits <= 0 && !isEmailAuth && (
         <div className="glass-card bg-yellow-500/10 border-yellow-500/30 rounded-t-none rounded-b-none p-2.5 mb-0 animate-pulse">
           <div className="flex items-center gap-2 text-center justify-center">
             <div className="w-2.5 h-2.5 bg-yellow-400 rounded-full animate-pulse"></div>

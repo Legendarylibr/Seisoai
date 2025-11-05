@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard } from 'lucide-react';
+import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard, Mail } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 
@@ -101,8 +101,9 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
               )}
               
               {/* Email Display (for email users) */}
-              {isEmailAuth && !address && (
+              {isEmailAuth && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300">
+                  <Mail className="w-4 h-4 text-blue-400" />
                   <span className="text-xs text-gray-300">
                     {emailContext.email}
                   </span>
