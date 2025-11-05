@@ -8,7 +8,106 @@ import {
   calculateCreditsFromUSD,
   getCreditPackages 
 } from '../services/stripeService';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { X, CreditCard, Coins, RefreshCw, Check, Star, Zap } from 'lucide-react';
+
+// Inner component that uses Stripe hooks
+const PaymentForm = ({ 
+  clientSecret,
+  amount,
+  address, 
+  userId, 
+  onSuccess, 
+  onError,
+  fetchCredits 
+}) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!stripe || !elements || !clientSecret) {
+      return;
+    }
+
+    setIsProcessing(true);
+    setError('');
+
+    try {
+      // Confirm payment with Stripe using the existing client secret
+      const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        clientSecret,
+        confirmParams: {
+          return_url: window.location.origin,
+        },
+        redirect: 'if_required'
+      });
+
+      if (confirmError) {
+        throw new Error(confirmError.message || 'Payment failed');
+      }
+
+      if (paymentIntent && paymentIntent.status === 'succeeded') {
+        // Verify payment on backend
+        const verificationResponse = await verifyStripePayment(
+          paymentIntent.id, 
+          address, 
+          userId
+        );
+        
+        if (verificationResponse.success) {
+          await fetchCredits();
+          onSuccess();
+        } else {
+          throw new Error('Payment verification failed');
+        }
+      } else {
+        throw new Error('Payment not completed');
+      }
+    } catch (err) {
+      console.error('Payment error:', err);
+      const errorMessage = err.message || 'Payment failed. Please try again.';
+      setError(errorMessage);
+      onError(errorMessage);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="p-4 bg-white/5 rounded-lg border border-white/20">
+        <PaymentElement />
+      </div>
+      {error && (
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
+          {error}
+        </div>
+      )}
+      <button
+        type="submit"
+        disabled={isProcessing || !stripe || !elements}
+        className="w-full btn-primary py-3 flex items-center justify-center gap-2"
+      >
+        {isProcessing ? (
+          <>
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            <span>Processing...</span>
+          </>
+        ) : (
+          <>
+            <CreditCard className="w-4 h-4" />
+            <span>Pay ${amount.toFixed(2)}</span>
+          </>
+        )}
+      </button>
+    </form>
+  );
+};
 
 const StripePaymentModal = ({ isOpen, onClose }) => {
   const walletContext = useSimpleWallet();
@@ -24,12 +123,11 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
 
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [customAmount, setCustomAmount] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [stripe, setStripe] = useState(null);
-  const [elements, setElements] = useState(null);
-  const [paymentIntent, setPaymentIntent] = useState(null);
+  const [clientSecret, setClientSecret] = useState(null);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
 
   const packages = getCreditPackages();
 
@@ -37,6 +135,10 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen) {
       initializeStripe();
+      setShowPaymentForm(false);
+      setClientSecret(null);
+      setSuccess(false);
+      setError('');
     }
   }, [isOpen]);
 
@@ -116,19 +218,17 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
     return true;
   };
 
-  const handlePayment = async () => {
-    if (!stripe) return;
-
+  const handleContinueToPayment = async () => {
     if (!validatePayment()) return;
 
-    setIsProcessing(true);
     setError('');
-
+    setShowPaymentForm(true);
+    
+    // Pre-create payment intent to get client secret
     try {
       const amount = getPrice();
       const creditsToPurchase = getCreditsPreview();
 
-      // Create payment intent - use userId for email users, address for wallet users
       const intentResponse = await createPaymentIntent(
         address, 
         amount, 
@@ -137,42 +237,32 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
         userId
       );
       
-      if (!intentResponse.success) {
+      if (!intentResponse.success || !intentResponse.clientSecret) {
         throw new Error('Failed to create payment intent');
       }
 
-      // For this demo, we'll simulate a successful payment
-      // In a real implementation, you would use Stripe Elements here
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate payment processing
-
-      // Verify payment
-      const verificationResponse = await verifyStripePayment(
-        intentResponse.paymentIntentId, 
-        address, 
-        userId
-      );
-      
-      if (verificationResponse.success) {
-        setSuccess(true);
-        await fetchCredits();
-        
-        // Close modal after a short delay
-        setTimeout(() => {
-          onClose();
-          setSuccess(false);
-          setSelectedPackage(null);
-          setCustomAmount('');
-        }, 2000);
-      } else {
-        throw new Error('Payment verification failed');
-      }
-
+      setClientSecret(intentResponse.clientSecret);
     } catch (error) {
-      console.error('Payment error:', error);
-      setError(error.message || 'Payment failed');
-    } finally {
-      setIsProcessing(false);
+      console.error('Error creating payment intent:', error);
+      setError(error.message || 'Failed to initialize payment');
+      setShowPaymentForm(false);
     }
+  };
+
+  const handlePaymentSuccess = () => {
+    setSuccess(true);
+    setTimeout(() => {
+      onClose();
+      setSuccess(false);
+      setSelectedPackage(null);
+      setCustomAmount('');
+      setShowPaymentForm(false);
+      setClientSecret(null);
+    }, 2000);
+  };
+
+  const handlePaymentError = (errorMessage) => {
+    setError(errorMessage);
   };
 
   if (!isOpen) return null;
@@ -365,32 +455,54 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="flex-1 btn-secondary py-3"
+          {/* Payment Form or Continue Button */}
+          {showPaymentForm && stripe && clientSecret ? (
+            <Elements
+              stripe={stripe}
+              options={{
+                clientSecret,
+                appearance: {
+                  theme: 'night',
+                  variables: {
+                    colorPrimary: '#a855f7',
+                    colorBackground: '#1f2937',
+                    colorText: '#ffffff',
+                    colorDanger: '#ef4444',
+                    fontFamily: 'system-ui, sans-serif',
+                    spacingUnit: '4px',
+                    borderRadius: '8px',
+                  },
+                },
+              }}
             >
-              Cancel
-            </button>
-            <button
-              onClick={handlePayment}
-              disabled={isProcessing || getCreditsPreview() === 0}
-              className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
-            >
-              {isProcessing ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Processing...</span>
-                </>
-              ) : (
-                <>
-                  <CreditCard className="w-4 h-4" />
-                  <span>Pay ${getPrice()}</span>
-                </>
-              )}
-            </button>
-          </div>
+              <PaymentForm
+                clientSecret={clientSecret}
+                amount={getPrice()}
+                address={address}
+                userId={userId}
+                onSuccess={handlePaymentSuccess}
+                onError={handlePaymentError}
+                fetchCredits={fetchCredits}
+              />
+            </Elements>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 btn-secondary py-3"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleContinueToPayment}
+                disabled={getCreditsPreview() === 0 || !stripe}
+                className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>Continue to Payment</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
