@@ -529,7 +529,7 @@ export const SimpleWalletProvider = ({ children }) => {
           logger.info('Credits fetch completed', { credits, address });
           return credits;
         }).catch(error => {
-          logger.error('Credits fetch failed', { error: error.message, error, address });
+          logger.error('Credits fetch failed', { error: error.message, errorStack: error.stack, address });
           console.error('❌ Credits fetch failed:', error);
           // Still show 0 credits so user knows it failed
           setCredits(0);

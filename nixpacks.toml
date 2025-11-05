@@ -4,7 +4,7 @@ providers = ["node"]
 nixPkgs = ['nodejs']
 
 [phases.install]
-cmds = ['npm install']
+cmds = ['npm install', 'cd backend && npm install']
 
 [phases.build]
 cmds = ['npm run build']

@@ -12,7 +12,8 @@
     "build:start": "npm run build && npm start",
     "build:frontend": "npm run build && npm run start:frontend",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "cd backend && npm install"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
