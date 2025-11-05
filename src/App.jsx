@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ImageGeneratorProvider, useImageGenerator } from './contexts/ImageGeneratorContext';
 import { SimpleWalletProvider, useSimpleWallet } from './contexts/SimpleWalletContext';
 import { EmailAuthProvider, useEmailAuth } from './contexts/EmailAuthContext';
@@ -32,6 +32,16 @@ function App() {
 
   const [showStripePaymentModal, setShowStripePaymentModal] = useState(false);
 
+  // Memoize callbacks to prevent unnecessary re-renders
+  const handleShowTokenPayment = useCallback(() => {
+    console.log('🔵 App: onShowTokenPayment called, setting showTokenPaymentModal to true');
+    setShowTokenPaymentModal(true);
+  }, []);
+
+  const handleShowStripePayment = useCallback(() => {
+    setShowStripePaymentModal(true);
+  }, []);
+
   return (
     <SimpleWalletProvider>
       <EmailAuthProvider>
@@ -41,22 +51,16 @@ function App() {
               activeTab={activeTab} 
               setActiveTab={setActiveTab}
               tabs={tabs}
-              onShowTokenPayment={() => {
-                console.log('🔵 App: onShowTokenPayment called, setting showTokenPaymentModal to true');
-                setShowTokenPaymentModal(true);
-              }}
-              onShowStripePayment={() => setShowStripePaymentModal(true)}
+              onShowTokenPayment={handleShowTokenPayment}
+              onShowStripePayment={handleShowStripePayment}
             />
             
             <main className="container mx-auto px-4 md:px-6 lg:px-8 py-1 md:py-2">
               <div className="fade-in">
                 <AppContent 
                   activeTab={activeTab} 
-                  onShowTokenPayment={() => {
-                  console.log('🔵 App: onShowTokenPayment called, setting showTokenPaymentModal to true');
-                  setShowTokenPaymentModal(true);
-                }}
-                  onShowStripePayment={() => setShowStripePaymentModal(true)}
+                  onShowTokenPayment={handleShowTokenPayment}
+                  onShowStripePayment={handleShowStripePayment}
                 />
               </div>
             </main>
@@ -90,12 +94,8 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   const { isAuthenticated, credits: emailCredits } = useEmailAuth();
   const [hasShownStripeModal, setHasShownStripeModal] = useState(false);
 
-  // Show auth prompt if not authenticated
-  if (!isConnected && !isAuthenticated) {
-    return <AuthPrompt onSwitchToWallet={() => {}} />;
-  }
-
   // For email users with no credits, automatically show Stripe modal once after sign-in
+  // NOTE: This useEffect must be called before any early returns to follow React hooks rules
   useEffect(() => {
     if (isAuthenticated && !isConnected && (emailCredits === 0 || emailCredits === null || emailCredits === undefined) && !hasShownStripeModal && onShowStripePayment) {
       setHasShownStripeModal(true);
@@ -106,6 +106,11 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
       return () => clearTimeout(timer);
     }
   }, [isAuthenticated, isConnected, emailCredits, hasShownStripeModal, onShowStripePayment]);
+
+  // Show auth prompt if not authenticated
+  if (!isConnected && !isAuthenticated) {
+    return <AuthPrompt onSwitchToWallet={() => {}} />;
+  }
 
   // Show main content if authenticated (AuthGuard will handle credit requirements)
   return (
