@@ -279,7 +279,12 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
                       </span>
                       {isNFTHolder && (
                         <span className="text-green-400 text-xs">
-                          (+{Math.floor(pkg.price * 0.2)} bonus)
+                          (+20% NFT bonus)
+                        </span>
+                      )}
+                      {pkg.savings && (
+                        <span className="text-blue-400 text-xs">
+                          ({pkg.savings}% bulk discount)
                         </span>
                       )}
                     </div>
@@ -319,7 +324,15 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
                 </span>
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                ${getPrice()} USD • {isNFTHolder ? '1.2x rate (NFT bonus)' : '1x rate'}
+                ${getPrice()} USD • {(() => {
+                  const amount = getPrice();
+                  let rate = '5 credits/$';
+                  if (amount >= 100) rate = '6.5 credits/$ (30% bonus)';
+                  else if (amount >= 50) rate = '6 credits/$ (20% bonus)';
+                  else if (amount >= 25) rate = '5.5 credits/$ (10% bonus)';
+                  else if (amount >= 10) rate = '5.25 credits/$ (5% bonus)';
+                  return rate + (isNFTHolder ? ' + NFT bonus' : '');
+                })()}
               </div>
             </div>
           )}

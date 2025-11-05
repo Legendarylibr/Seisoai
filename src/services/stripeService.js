@@ -173,15 +173,33 @@ export const getStripe = async () => {
 };
 
 /**
- * Calculate credits for USD amount
+ * Calculate credits for USD amount with subscription scaling
  * @param {number} amount - The amount in USD
  * @param {boolean} isNFTHolder - Whether user owns NFT collections
  * @returns {number} - Number of credits
  */
 export const calculateCreditsFromUSD = (amount, isNFTHolder = false) => {
-  const baseRate = 1; // 1 USD = 1 credit
-  const nftMultiplier = isNFTHolder ? 1.2 : 1; // 20% bonus for NFT holders
-  return Math.floor(amount * baseRate * nftMultiplier);
+  // Base rate: 5 credits per dollar
+  const baseRate = 5;
+  
+  // Subscription scaling based on amount
+  let scalingMultiplier = 1.0;
+  if (amount >= 100) {
+    scalingMultiplier = 1.3; // 30% bonus for $100+ (6.5 credits/dollar)
+  } else if (amount >= 50) {
+    scalingMultiplier = 1.2; // 20% bonus for $50-99 (6 credits/dollar)
+  } else if (amount >= 25) {
+    scalingMultiplier = 1.1; // 10% bonus for $25-49 (5.5 credits/dollar)
+  } else if (amount >= 10) {
+    scalingMultiplier = 1.05; // 5% bonus for $10-24 (5.25 credits/dollar)
+  }
+  // $1-9: 5 credits/dollar (no bonus)
+  
+  // NFT holder bonus (additional 20% on top of subscription scaling)
+  const nftMultiplier = isNFTHolder ? 1.2 : 1;
+  
+  const credits = amount * baseRate * scalingMultiplier * nftMultiplier;
+  return Math.floor(credits);
 };
 
 /**
@@ -189,11 +207,11 @@ export const calculateCreditsFromUSD = (amount, isNFTHolder = false) => {
  * @returns {Array} - Array of credit packages
  */
 export const getCreditPackages = () => {
-  return [
+  // Base rate: 5 credits per dollar, with scaling for larger purchases
+  const packages = [
     {
       id: 'small',
       name: 'Starter Pack',
-      credits: 10,
       price: 10,
       description: 'Perfect for trying out Seiso AI',
       popular: false
@@ -201,29 +219,37 @@ export const getCreditPackages = () => {
     {
       id: 'medium',
       name: 'Creator Pack',
-      credits: 50,
-      price: 45,
+      price: 25,
       description: 'Great for regular creators',
-      popular: true,
-      savings: 10
+      popular: true
     },
     {
       id: 'large',
       name: 'Pro Pack',
-      credits: 100,
-      price: 80,
+      price: 50,
       description: 'Best value for power users',
-      popular: false,
-      savings: 20
+      popular: false
     },
     {
       id: 'xlarge',
       name: 'Studio Pack',
-      credits: 250,
-      price: 180,
+      price: 100,
       description: 'For professional studios',
-      popular: false,
-      savings: 28
+      popular: false
     }
   ];
+  
+  // Calculate credits for each package (without NFT bonus for display)
+  return packages.map(pkg => {
+    const baseCredits = calculateCreditsFromUSD(pkg.price, false);
+    const maxCredits = calculateCreditsFromUSD(pkg.price, true); // With NFT bonus
+    const savings = pkg.price >= 100 ? 30 : pkg.price >= 50 ? 20 : pkg.price >= 25 ? 10 : 0;
+    
+    return {
+      ...pkg,
+      credits: baseCredits,
+      maxCredits: maxCredits,
+      savings: savings > 0 ? savings : undefined
+    };
+  });
 };

@@ -3358,13 +3358,36 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
       });
     }
 
-    // Extract credits from metadata
-    const credits = parseInt(paymentIntent.metadata.credits);
+    // Calculate credits using same formula as frontend (5 credits per dollar with scaling)
     const amount = paymentIntent.amount / 100; // Convert from cents
-
-    // NFT holder check removed - standard pricing for all users
-    // Use credits as-is (no NFT bonus)
-    const finalCredits = credits;
+    
+    // Base rate: 5 credits per dollar
+    const baseRate = 5;
+    
+    // Subscription scaling based on amount
+    let scalingMultiplier = 1.0;
+    if (amount >= 100) {
+      scalingMultiplier = 1.3; // 30% bonus for $100+ (6.5 credits/dollar)
+    } else if (amount >= 50) {
+      scalingMultiplier = 1.2; // 20% bonus for $50-99 (6 credits/dollar)
+    } else if (amount >= 25) {
+      scalingMultiplier = 1.1; // 10% bonus for $25-49 (5.5 credits/dollar)
+    } else if (amount >= 10) {
+      scalingMultiplier = 1.05; // 5% bonus for $10-24 (5.25 credits/dollar)
+    }
+    // $1-9: 5 credits/dollar (no bonus)
+    
+    // Check if user is NFT holder (if wallet is linked)
+    let isNFTHolder = false;
+    if (user.walletAddress) {
+      isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    }
+    
+    // NFT holder bonus (additional 20% on top of subscription scaling)
+    const nftMultiplier = isNFTHolder ? 1.2 : 1;
+    
+    // Calculate final credits
+    const finalCredits = Math.floor(amount * baseRate * scalingMultiplier * nftMultiplier);
 
     // Add credits using helper function
     await addCreditsToUser(user, {
