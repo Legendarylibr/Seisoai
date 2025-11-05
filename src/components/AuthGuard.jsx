@@ -45,8 +45,16 @@ const AuthGuard = ({ children, requireCredits = true, fallback = null }) => {
     );
   }
 
-  // Check if wallet is connected
-  if (!isConnected || !address) {
+  // Check if authenticated - support both email and wallet
+  const isEmailAuth = emailContext.isAuthenticated;
+  
+  if (!isConnected || (!address && !isEmailAuth)) {
+    // For email users, show different message
+    if (isEmailAuth) {
+      return fallback || children; // Email users should pass through
+    }
+    
+    // For wallet users, show wallet connection prompt
     return fallback || (
       <div className="flex items-center justify-center p-8">
         <div className="text-center max-w-md">

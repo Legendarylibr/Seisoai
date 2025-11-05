@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
 import logger from '../utils/logger.js';
@@ -41,8 +42,11 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     setCreditsManually
   } = useSimpleWallet();
   
-  // Use actual credits for spending validation
-  const availableCredits = credits || 0;
+  const emailContext = useEmailAuth();
+  const isEmailAuth = emailContext.isAuthenticated;
+  
+  // Use credits from email auth if available, otherwise wallet
+  const availableCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
 
   const [progress, setProgress] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -105,9 +109,16 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   }, [isGenerating, isLoading, generationStartTime, generationMode]);
 
   const handleGenerate = async () => {
-    // Check if wallet is connected
-    if (!isConnected || !address) {
-      setError('Please connect your wallet first');
+    // Check if authenticated (email or wallet)
+    const isAuthenticated = isConnected || isEmailAuth;
+    const hasAddress = address || emailContext.linkedWalletAddress;
+    
+    if (!isAuthenticated || !hasAddress) {
+      if (isEmailAuth) {
+        setError('Please sign in with your email account');
+      } else {
+        setError('Please connect your wallet first');
+      }
       return;
     }
 
@@ -233,12 +244,12 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     }
   };
 
-  const isDisabled = isGenerating || walletLoading || !isConnected;
+  const isDisabled = isGenerating || walletLoading || (!isConnected && !isEmailAuth);
   
   const getButtonText = () => {
     if (isGenerating) return 'Generating...';
     if (walletLoading) return 'Loading...';
-    if (!isConnected) return 'Connect Wallet First';
+    if (!isConnected && !isEmailAuth) return 'Connect Wallet or Sign In First';
     if (credits <= 0) return 'Buy Credits to Generate';
     return 'Generate Image';
   };

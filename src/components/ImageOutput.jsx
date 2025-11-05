@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
 import { X, Sparkles } from 'lucide-react';
@@ -170,15 +171,27 @@ const ImageOutput = () => {
     }
   };
 
+  const emailContext = useEmailAuth();
+  const isEmailAuth = emailContext.isAuthenticated;
+  
+  // Use credits from email auth if available, otherwise wallet
+  const availableCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
+
   const handleRegenerateWithPrompt = async () => {
-    // Check if wallet is connected
-    if (!isConnected || !address) {
-      setError('Please connect your wallet first');
+    // Check if authenticated (email or wallet)
+    const isAuthenticated = isConnected || isEmailAuth;
+    const hasAddress = address || emailContext.linkedWalletAddress;
+    
+    if (!isAuthenticated || !hasAddress) {
+      if (isEmailAuth) {
+        setError('Please sign in with your email account');
+      } else {
+        setError('Please connect your wallet first');
+      }
       return;
     }
 
     // Check if user has credits
-    const availableCredits = credits || 0;
     if (availableCredits <= 0) {
       setError('Insufficient credits. Please buy credits to generate.');
       return;
