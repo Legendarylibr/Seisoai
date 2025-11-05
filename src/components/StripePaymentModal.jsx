@@ -51,7 +51,50 @@ const PaymentForm = ({
         throw new Error(confirmError.message || 'Payment failed');
       }
 
-      if (paymentIntent && paymentIntent.status === 'succeeded') {
+      // Handle different payment intent statuses
+      if (!paymentIntent) {
+        throw new Error('Payment intent not returned. Please try again.');
+      }
+
+      const status = paymentIntent.status;
+      
+      // If payment requires additional action (3D Secure), handle it
+      if (status === 'requires_action' || status === 'requires_source_action') {
+        // Stripe will handle the redirect or show the challenge
+        // The payment will be completed after the action
+        throw new Error('Payment requires additional authentication. Please complete the verification.');
+      }
+
+      // If payment is processing, wait a bit and check again
+      if (status === 'processing') {
+        // Wait a moment for processing to complete, then retry verification
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Try to verify on backend - it will check the status again
+        try {
+          const verificationResponse = await verifyStripePayment(
+            paymentIntent.id, 
+            address, 
+            userId
+          );
+          
+          if (verificationResponse.success) {
+            await fetchCredits();
+            onSuccess();
+            return;
+          } else {
+            // If still not succeeded, inform user to wait
+            throw new Error('Payment is still processing. Credits will be added automatically once payment completes. Please refresh in a moment.');
+          }
+        } catch (verifyError) {
+          // If verification fails, payment might still be processing
+          // Inform user that they should wait or the payment may need manual review
+          throw new Error('Payment is processing. Please wait a moment and refresh your credits. If credits do not appear within a few minutes, please contact support.');
+        }
+      }
+
+      // Payment succeeded
+      if (status === 'succeeded') {
         // Verify payment on backend
         const verificationResponse = await verifyStripePayment(
           paymentIntent.id, 
@@ -66,7 +109,8 @@ const PaymentForm = ({
           throw new Error('Payment verification failed');
         }
       } else {
-        throw new Error('Payment not completed');
+        // Other statuses (requires_payment_method, canceled, etc.)
+        throw new Error(`Payment ${status}. Please try again.`);
       }
     } catch (err) {
       console.error('Payment error:', err);

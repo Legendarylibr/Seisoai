@@ -3321,10 +3321,19 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
     // Retrieve payment intent from Stripe
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
+    logger.info('Stripe payment verification', {
+      paymentIntentId,
+      status: paymentIntent.status,
+      userId: userId || null,
+      walletAddress: walletAddress || null,
+      amount: paymentIntent.amount,
+      metadata: paymentIntent.metadata
+    });
+
     if (paymentIntent.status !== 'succeeded') {
       return res.status(400).json({
         success: false,
-        error: 'Payment not completed'
+        error: `Payment not completed. Status: ${paymentIntent.status}. Please wait for payment to process or try again.`
       });
     }
 
