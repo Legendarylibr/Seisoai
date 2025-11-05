@@ -10,6 +10,9 @@ import compression from 'compression';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import logger from './utils/logger.js';
 
 // ES module setup
@@ -296,10 +299,55 @@ const corsOptions = {
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200
 };
 
+// Apply CORS middleware - MUST be before routes
 app.use(cors(corsOptions));
+
+// Handle preflight requests explicitly for all routes
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  
+  // Use same origin validation logic as corsOptions
+  let allowOrigin = false;
+  if (!origin) {
+    allowOrigin = true; // Allow requests with no origin
+  } else {
+    const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+    const isAllowedOrigin = process.env.ALLOWED_ORIGINS 
+      ? process.env.ALLOWED_ORIGINS.split(',').includes(origin)
+      : false;
+    
+    if (process.env.NODE_ENV === 'production') {
+      allowOrigin = isAllowedOrigin;
+    } else {
+      allowOrigin = isLocalhost || isAllowedOrigin;
+    }
+  }
+  
+  if (allowOrigin) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
+    res.sendStatus(200);
+  } else {
+    res.status(403).json({ error: 'Not allowed by CORS' });
+  }
+});
+
+// Log CORS configuration on startup
+logger.info('CORS configuration', {
+  nodeEnv: process.env.NODE_ENV || 'development',
+  allowedOrigins: process.env.ALLOWED_ORIGINS || 'localhost (any port)',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  credentials: true
+});
 
 // Stripe webhook needs raw body - MUST be before express.json()
 app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
@@ -771,18 +819,32 @@ process.on('unhandledRejection', (reason, promise) => {
 const userSchema = new mongoose.Schema({
   walletAddress: { 
     type: String, 
-    required: false,  // Allow for Stripe-only users
+    required: false,  // Allow for email-only users
     unique: true, 
     sparse: true,  // Allow multiple docs without walletAddress
     lowercase: true,
     index: true
   },
-  userId: {  // NEW: For Stripe-only users
+  email: {
+    type: String,
+    required: false,  // Allow for wallet-only users
+    unique: true,
+    sparse: true,  // Allow multiple docs without email
+    lowercase: true,
+    index: true,
+    match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
+  },
+  password: {
+    type: String,
+    required: false,  // Only required for email users
+    select: false  // Don't return password by default
+  },
+  userId: {  // For email-based users (auto-generated)
     type: String,
     unique: true,
     sparse: true,
     index: true,
-    required: false  // Optional, only for Stripe users
+    required: false
   },
   credits: { type: Number, default: 0 },
   totalCreditsEarned: { type: Number, default: 0 },
@@ -834,11 +896,99 @@ const userSchema = new mongoose.Schema({
 
 // Add indexes for performance
 userSchema.index({ walletAddress: 1 });
+userSchema.index({ email: 1 });
+userSchema.index({ userId: 1 });
 userSchema.index({ createdAt: 1 });
 userSchema.index({ expiresAt: 1 });
 userSchema.index({ 'gallery.timestamp': 1 });
 
+// Generate unique userId for email users
+userSchema.pre('save', async function(next) {
+  if (this.isNew && this.email && !this.userId) {
+    // Generate userId from email hash
+    const hash = crypto.createHash('sha256').update(this.email).digest('hex').substring(0, 16);
+    this.userId = `email_${hash}`;
+  }
+  next();
+});
+
 const User = mongoose.model('User', userSchema);
+
+// JWT Secret - use from env or default for development
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-here-32-chars-minimum-change-in-production';
+
+// JWT Authentication Middleware
+const authenticateToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Find user by userId or email
+    const user = await User.findOne({
+      $or: [
+        { userId: decoded.userId },
+        { email: decoded.email }
+      ]
+    }).select('-password'); // Don't return password
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    logger.error('JWT authentication error:', error);
+    return res.status(403).json({
+      success: false,
+      error: 'Invalid or expired token'
+    });
+  }
+};
+
+// Helper function to get or create user by email or wallet
+async function getOrCreateUserByIdentifier(identifier, type = 'wallet') {
+  let user;
+  
+  if (type === 'email') {
+    user = await User.findOne({ email: identifier.toLowerCase() });
+    if (!user) {
+      user = new User({
+        email: identifier.toLowerCase(),
+        credits: 0,
+        totalCreditsEarned: 0,
+        totalCreditsSpent: 0,
+        nftCollections: [],
+        paymentHistory: [],
+        generationHistory: [],
+        gallery: [],
+        settings: {
+          preferredStyle: null,
+          defaultImageSize: '1024x1024',
+          enableNotifications: true
+        }
+      });
+      await user.save();
+    }
+  } else {
+    // Wallet address (existing logic)
+    return await getOrCreateUser(identifier);
+  }
+  
+  return user;
+}
 
 // Payment wallet addresses - use single EVM address for all EVM chains
 const EVM_PAYMENT_ADDRESS = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
@@ -1606,6 +1756,352 @@ app.get('/', (req, res) => {
     environment: process.env.NODE_ENV || 'development',
     port: process.env.PORT || 3001
   });
+});
+
+/**
+ * Email Authentication Routes
+ */
+
+/**
+ * Sign up with email and password
+ */
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid email format'
+      });
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password must be at least 6 characters'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email already registered'
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const user = new User({
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      credits: 0,
+      totalCreditsEarned: 0,
+      totalCreditsSpent: 0,
+      nftCollections: [],
+      paymentHistory: [],
+      generationHistory: [],
+      gallery: [],
+      settings: {
+        preferredStyle: null,
+        defaultImageSize: '1024x1024',
+        enableNotifications: true
+      }
+    });
+
+    await user.save();
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user.userId, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    logger.info('New user signed up', { email: user.email, userId: user.userId });
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        userId: user.userId,
+        email: user.email,
+        credits: user.credits,
+        totalCreditsEarned: user.totalCreditsEarned,
+        walletAddress: user.walletAddress || null
+      }
+    });
+
+  } catch (error) {
+    logger.error('Sign up error:', error);
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to create account')
+    });
+  }
+});
+
+/**
+ * Sign in with email and password
+ */
+app.post('/api/auth/signin', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required'
+      });
+    }
+
+    // Find user and include password for comparison
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password'
+      });
+    }
+
+    // Check password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password'
+      });
+    }
+
+    // Update last active
+    user.lastActive = new Date();
+    await user.save();
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user.userId, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    logger.info('User signed in', { email: user.email, userId: user.userId });
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        userId: user.userId,
+        email: user.email,
+        credits: user.credits,
+        totalCreditsEarned: user.totalCreditsEarned,
+        walletAddress: user.walletAddress || null,
+        isNFTHolder: user.nftCollections && user.nftCollections.length > 0
+      }
+    });
+
+  } catch (error) {
+    logger.error('Sign in error:', error);
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to sign in')
+    });
+  }
+});
+
+/**
+ * Verify JWT token
+ */
+app.get('/api/auth/verify', authenticateToken, async (req, res) => {
+  try {
+    const user = req.user;
+    
+    // Check NFT status if wallet is linked
+    let isNFTHolder = false;
+    if (user.walletAddress) {
+      isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    }
+
+    res.json({
+      success: true,
+      user: {
+        userId: user.userId,
+        email: user.email,
+        credits: user.credits,
+        totalCreditsEarned: user.totalCreditsEarned,
+        walletAddress: user.walletAddress || null,
+        isNFTHolder
+      }
+    });
+
+  } catch (error) {
+    logger.error('Token verification error:', error);
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to verify token')
+    });
+  }
+});
+
+/**
+ * Get current user data (protected route)
+ */
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const user = req.user;
+    
+    // Check NFT status if wallet is linked
+    let isNFTHolder = false;
+    if (user.walletAddress) {
+      isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    }
+
+    res.json({
+      success: true,
+      user: {
+        userId: user.userId,
+        email: user.email,
+        credits: user.credits,
+        totalCreditsEarned: user.totalCreditsEarned,
+        walletAddress: user.walletAddress || null,
+        isNFTHolder
+      }
+    });
+
+  } catch (error) {
+    logger.error('Get user data error:', error);
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to get user data')
+    });
+  }
+});
+
+/**
+ * Link wallet to email account
+ */
+app.post('/api/auth/link-wallet', authenticateToken, async (req, res) => {
+  try {
+    const { walletAddress } = req.body;
+    const user = req.user;
+
+    if (!walletAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Wallet address is required'
+      });
+    }
+
+    // Validate wallet address
+    if (!isValidWalletAddress(walletAddress)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid wallet address'
+      });
+    }
+
+    // Normalize wallet address
+    const isSolanaAddress = !walletAddress.startsWith('0x');
+    const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+
+    // Check if wallet is already linked to another account
+    const existingWalletUser = await User.findOne({ walletAddress: normalizedAddress });
+    if (existingWalletUser && existingWalletUser.userId !== user.userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Wallet is already linked to another account'
+      });
+    }
+
+    // Link wallet to user
+    user.walletAddress = normalizedAddress;
+    await user.save();
+
+    // Check NFT holdings
+    let isNFTHolder = false;
+    try {
+      const nftCheckResponse = await fetch(`${req.protocol}://${req.get('host')}/api/nft/check-holdings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress: normalizedAddress })
+      });
+      if (nftCheckResponse.ok) {
+        const nftData = await nftCheckResponse.json();
+        isNFTHolder = nftData.isNFTHolder || false;
+      }
+    } catch (nftError) {
+      logger.warn('Failed to check NFT holdings during wallet link', { error: nftError.message });
+    }
+
+    logger.info('Wallet linked to email account', { email: user.email, walletAddress: normalizedAddress });
+
+    res.json({
+      success: true,
+      user: {
+        userId: user.userId,
+        email: user.email,
+        credits: user.credits,
+        totalCreditsEarned: user.totalCreditsEarned,
+        walletAddress: user.walletAddress,
+        isNFTHolder
+      }
+    });
+
+  } catch (error) {
+    logger.error('Link wallet error:', error);
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to link wallet')
+    });
+  }
+});
+
+/**
+ * Unlink wallet from email account
+ */
+app.post('/api/auth/unlink-wallet', authenticateToken, async (req, res) => {
+  try {
+    const user = req.user;
+
+    // Unlink wallet
+    user.walletAddress = undefined;
+    user.nftCollections = [];
+    await user.save();
+
+    logger.info('Wallet unlinked from email account', { email: user.email });
+
+    res.json({
+      success: true,
+      user: {
+        userId: user.userId,
+        email: user.email,
+        credits: user.credits,
+        totalCreditsEarned: user.totalCreditsEarned,
+        walletAddress: null,
+        isNFTHolder: false
+      }
+    });
+
+  } catch (error) {
+    logger.error('Unlink wallet error:', error);
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to unlink wallet')
+    });
+  }
 });
 
 /**
@@ -2723,29 +3219,49 @@ app.post('/api/stripe/create-payment-intent', async (req, res) => {
 
     const { 
       walletAddress, 
+      userId,  // For email users
       amount, 
       currency = 'usd',
       credits 
     } = req.body;
 
-    if (!walletAddress || !amount || !credits) {
+    if (!amount || !credits) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields'
+        error: 'Missing required fields: amount and credits'
       });
     }
 
-    // Verify user exists
-    const user = await getOrCreateUser(walletAddress);
+    // Verify user exists - support both wallet and email auth
+    let user;
+    if (userId) {
+      // Email user
+      user = await User.findOne({ userId });
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+      }
+    } else if (walletAddress) {
+      // Wallet user
+      user = await getOrCreateUser(walletAddress);
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Either walletAddress or userId is required'
+      });
+    }
 
     // Create payment intent
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // Convert to cents
       currency: currency.toLowerCase(),
       metadata: {
-        walletAddress: walletAddress.toLowerCase(),
-        credits: credits.toString(),
-        userId: user._id.toString()
+        userId: user._id.toString(),
+        walletAddress: user.walletAddress ? user.walletAddress.toLowerCase() : '',
+        email: user.email || '',
+        credits: credits.toString()
       },
       automatic_payment_methods: {
         enabled: true,
@@ -2753,7 +3269,9 @@ app.post('/api/stripe/create-payment-intent', async (req, res) => {
     });
 
     logger.info('Stripe payment intent created', {
-      walletAddress: walletAddress.toLowerCase(),
+      userId: user.userId,
+      email: user.email || null,
+      walletAddress: user.walletAddress || null,
       amount,
       credits,
       paymentIntentId: paymentIntent.id
@@ -2789,13 +3307,14 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
 
     const { 
       paymentIntentId, 
-      walletAddress 
+      walletAddress,
+      userId  // For email users
     } = req.body;
 
-    if (!paymentIntentId || !walletAddress) {
+    if (!paymentIntentId) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields'
+        error: 'Missing required field: paymentIntentId'
       });
     }
 
@@ -2809,8 +3328,27 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
       });
     }
 
-    // Check if payment already processed
-    const user = await getOrCreateUser(walletAddress);
+    // Get user from metadata or provided identifier
+    let user;
+    if (paymentIntent.metadata.userId) {
+      user = await User.findById(paymentIntent.metadata.userId);
+    } else if (userId) {
+      user = await User.findOne({ userId });
+    } else if (walletAddress) {
+      user = await getOrCreateUser(walletAddress);
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Unable to identify user. Please provide userId or walletAddress.'
+      });
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
     
     if (isPaymentAlreadyProcessed(user, null, paymentIntentId)) {
       return res.json({

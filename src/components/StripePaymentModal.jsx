@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { 
   createPaymentIntent, 
   verifyStripePayment, 
@@ -10,12 +11,16 @@ import {
 import { X, CreditCard, Coins, RefreshCw, Check, Star, Zap } from 'lucide-react';
 
 const StripePaymentModal = ({ isOpen, onClose }) => {
-  const { 
-    address, 
-    credits, 
-    fetchCredits,
-    isNFTHolder = false // This would come from your wallet context
-  } = useSimpleWallet();
+  const walletContext = useSimpleWallet();
+  const emailContext = useEmailAuth();
+  
+  // Use email auth if available, otherwise fall back to wallet
+  const isEmailAuth = emailContext.isAuthenticated;
+  const address = isEmailAuth ? emailContext.linkedWalletAddress : walletContext.address;
+  const credits = isEmailAuth ? emailContext.credits : walletContext.credits;
+  const userId = isEmailAuth ? emailContext.userId : null;
+  const isNFTHolder = isEmailAuth ? emailContext.isNFTHolder : (walletContext.isNFTHolder || false);
+  const fetchCredits = isEmailAuth ? emailContext.refreshCredits : walletContext.fetchCredits;
 
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [customAmount, setCustomAmount] = useState('');
@@ -112,7 +117,7 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
   };
 
   const handlePayment = async () => {
-    if (!address || !stripe) return;
+    if (!stripe) return;
 
     if (!validatePayment()) return;
 
@@ -123,8 +128,14 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
       const amount = getPrice();
       const creditsToPurchase = getCreditsPreview();
 
-      // Create payment intent
-      const intentResponse = await createPaymentIntent(address, amount, creditsToPurchase);
+      // Create payment intent - use userId for email users, address for wallet users
+      const intentResponse = await createPaymentIntent(
+        address, 
+        amount, 
+        creditsToPurchase, 
+        'usd', 
+        userId
+      );
       
       if (!intentResponse.success) {
         throw new Error('Failed to create payment intent');
@@ -135,11 +146,15 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
       await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate payment processing
 
       // Verify payment
-      const verificationResponse = await verifyStripePayment(intentResponse.paymentIntentId, address);
+      const verificationResponse = await verifyStripePayment(
+        intentResponse.paymentIntentId, 
+        address, 
+        userId
+      );
       
       if (verificationResponse.success) {
         setSuccess(true);
-        await fetchCredits(address);
+        await fetchCredits();
         
         // Close modal after a short delay
         setTimeout(() => {
@@ -161,6 +176,24 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
   };
 
   if (!isOpen) return null;
+
+  // Check if user is authenticated (either email or wallet)
+  if (!isEmailAuth && !walletContext.isConnected) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-md p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">Authentication Required</h2>
+          <p className="text-gray-400 mb-4">Please sign in with email or connect your wallet to purchase credits.</p>
+          <button
+            onClick={onClose}
+            className="w-full btn-primary py-2"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

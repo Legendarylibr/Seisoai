@@ -1,15 +1,18 @@
 import React from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { Wallet, CreditCard, AlertCircle } from 'lucide-react';
 
 const AuthGuard = ({ children, requireCredits = true, fallback = null }) => {
-  const { 
-    isConnected, 
-    address, 
-    credits, 
-    isLoading,
-    error 
-  } = useSimpleWallet();
+  const walletContext = useSimpleWallet();
+  const emailContext = useEmailAuth();
+  
+  // Check if authenticated via either method
+  const isConnected = walletContext.isConnected || emailContext.isAuthenticated;
+  const address = walletContext.address || emailContext.linkedWalletAddress;
+  const credits = walletContext.credits || emailContext.credits;
+  const isLoading = walletContext.isLoading || emailContext.isLoading;
+  const error = walletContext.error || emailContext.error;
 
   // Show loading state
   if (isLoading) {

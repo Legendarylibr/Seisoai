@@ -1,11 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut } from 'lucide-react';
-// import { CreditCard } from 'lucide-react'; // DISABLED - Stripe disabled
+import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { useEmailAuth } from '../contexts/EmailAuthContext';
 
-  const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment }) => {
-    // onShowStripePayment prop removed - Stripe disabled
-  const { isConnected, address, credits, disconnectWallet } = useSimpleWallet();
+  const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment, onShowStripePayment }) => {
+  const walletContext = useSimpleWallet();
+  const emailContext = useEmailAuth();
+  
+  // Support both auth methods
+  const isConnected = walletContext.isConnected || emailContext.isAuthenticated;
+  const isEmailAuth = emailContext.isAuthenticated;
+  const address = walletContext.address || emailContext.linkedWalletAddress;
+  const credits = walletContext.credits || emailContext.credits;
+  const disconnectWallet = walletContext.disconnectWallet;
+  const signOut = emailContext.signOut;
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   // Safety check to prevent the error
@@ -67,29 +75,39 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
             })}
           </nav>
 
-          {/* STRIPE DISABLED - Stripe button removed, crypto only
-          {!isConnected && (
+          {/* Stripe button for email users or when not connected */}
+          {(!isConnected || isEmailAuth) && onShowStripePayment && (
             <button
               onClick={onShowStripePayment}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium rounded-lg transition-all duration-200 hover:scale-105 shadow-lg"
             >
-              <span>💳</span>
+              <CreditCard className="w-4 h-4" />
               <span className="hidden sm:inline">Buy Credits with Card</span>
               <span className="sm:hidden">Card</span>
             </button>
           )}
-          */}
 
           {/* Credits Dropdown */}
           {isConnected && (
             <div className="hidden md:flex items-center space-x-3">
-              {/* Wallet Address Display */}
-              <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300">
-                <Wallet className="w-4 h-4 text-blue-400" />
-                <span className="text-xs font-mono text-gray-300">
-                  {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : ''}
-                </span>
-              </div>
+              {/* Wallet Address Display (only if wallet is connected) */}
+              {address && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300">
+                  <Wallet className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs font-mono text-gray-300">
+                    {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : ''}
+                  </span>
+                </div>
+              )}
+              
+              {/* Email Display (for email users) */}
+              {isEmailAuth && !address && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300">
+                  <span className="text-xs text-gray-300">
+                    {emailContext.email}
+                  </span>
+                </div>
+              )}
 
               {/* Credits Display */}
               <div className="flex items-center gap-2">
@@ -100,30 +118,48 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                   </span>
                 </div>
                 
-                {/* Buy Credits Button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onShowTokenPayment) {
-                      onShowTokenPayment();
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/30 to-pink-500/30 hover:from-purple-500/40 hover:to-pink-500/40 rounded-lg border border-purple-500/40 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25"
-                  style={{ position: 'relative', zIndex: 999998 }}
-                >
-                  <Coins className="w-4 h-4 text-purple-300" />
-                  <span className="text-sm font-semibold text-white">Buy Credits</span>
-                </button>
+                {/* Buy Credits Button - Show Stripe for email users, Token for wallet users */}
+                {isEmailAuth && onShowStripePayment ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onShowStripePayment) {
+                        onShowStripePayment();
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500/30 to-cyan-500/30 hover:from-blue-500/40 hover:to-cyan-500/40 rounded-lg border border-blue-500/40 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25"
+                    style={{ position: 'relative', zIndex: 999998 }}
+                  >
+                    <CreditCard className="w-4 h-4 text-blue-300" />
+                    <span className="text-sm font-semibold text-white">Buy Credits</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onShowTokenPayment) {
+                        onShowTokenPayment();
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/30 to-pink-500/30 hover:from-purple-500/40 hover:to-pink-500/40 rounded-lg border border-purple-500/40 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25"
+                    style={{ position: 'relative', zIndex: 999998 }}
+                  >
+                    <Coins className="w-4 h-4 text-purple-300" />
+                    <span className="text-sm font-semibold text-white">Buy Credits</span>
+                  </button>
+                )}
               </div>
 
-              {/* Disconnect Button */}
+              {/* Sign Out / Disconnect Button */}
               <button
-                onClick={disconnectWallet}
+                onClick={isEmailAuth ? signOut : disconnectWallet}
                 className="flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg border border-red-500/30 transition-all duration-300 hover:scale-105"
-                title="Disconnect Wallet"
+                title={isEmailAuth ? "Sign Out" : "Disconnect Wallet"}
               >
                 <LogOut className="w-4 h-4 text-red-400" />
-                <span className="text-sm font-medium text-red-300 hidden lg:inline">Disconnect</span>
+                <span className="text-sm font-medium text-red-300 hidden lg:inline">
+                  {isEmailAuth ? 'Sign Out' : 'Disconnect'}
+                </span>
               </button>
             </div>
           )}
@@ -144,8 +180,8 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 
           {/* Mobile Credits & Menu */}
           <div className="md:hidden flex items-center gap-2">
-            {/* STRIPE DISABLED - Mobile stripe button removed
-            {!isConnected && (
+            {/* Stripe button for email users or when not connected */}
+            {(!isConnected || isEmailAuth) && onShowStripePayment && (
               <button
                 onClick={onShowStripePayment}
                 className="flex items-center gap-1 px-3 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium rounded-lg transition-all duration-200"
@@ -154,7 +190,6 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                 <span className="text-xs">Card</span>
               </button>
             )}
-            */}
 
             {/* Mobile Credits Display */}
             {isConnected && (
@@ -166,25 +201,41 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
                   </span>
                 </div>
                 
-                {/* Mobile Buy Credits Button - Direct */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onShowTokenPayment) {
-                      onShowTokenPayment();
-                    }
-                  }}
-                  className="p-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg border border-purple-500/30 transition-colors"
-                  title="Buy Credits"
-                  style={{ position: 'relative', zIndex: 999998 }}
-                >
-                  <Coins className="w-4 h-4 text-purple-400" />
-                </button>
+                {/* Mobile Buy Credits Button - Show Stripe for email users, Token for wallet users */}
+                {isEmailAuth && onShowStripePayment ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onShowStripePayment) {
+                        onShowStripePayment();
+                      }
+                    }}
+                    className="p-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg border border-blue-500/30 transition-colors"
+                    title="Buy Credits"
+                    style={{ position: 'relative', zIndex: 999998 }}
+                  >
+                    <CreditCard className="w-4 h-4 text-blue-400" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onShowTokenPayment) {
+                        onShowTokenPayment();
+                      }
+                    }}
+                    className="p-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg border border-purple-500/30 transition-colors"
+                    title="Buy Credits"
+                    style={{ position: 'relative', zIndex: 999998 }}
+                  >
+                    <Coins className="w-4 h-4 text-purple-400" />
+                  </button>
+                )}
                 
                 <button
-                  onClick={disconnectWallet}
+                  onClick={isEmailAuth ? signOut : disconnectWallet}
                   className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg border border-red-500/30 transition-colors"
-                  title="Disconnect"
+                  title={isEmailAuth ? "Sign Out" : "Disconnect"}
                 >
                   <LogOut className="w-4 h-4 text-red-400" />
                 </button>

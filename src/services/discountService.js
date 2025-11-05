@@ -42,12 +42,12 @@ const DISCOUNT_CONFIG = {
     {
       id: 'your-nft-holders-2',
       name: 'Your NFT Collection 2',
-      description: '40% discount for NFT holders',
-      contractAddress: '0x1E71eA45FB939C92045FF32239a8922395eeb31B',
+      description: '50% discount for NFT holders',
+      contractAddress: '0x1e71ea45fb939c92045ff32239a8922395eeb31b',
       chainId: '8453',
       type: 'erc721',
       discountType: 'percentage',
-      discountValue: 40,
+      discountValue: 50,
       minBalance: 1,
       appliesTo: ['image_generation', 'batch_processing']
     }

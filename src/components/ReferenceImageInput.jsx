@@ -92,7 +92,7 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
         {!controlNetImage ? (
           <div
             onClick={handleClickUpload}
-            className="flex-1 border-2 border-dashed border-white/20 rounded-lg p-8 text-center cursor-pointer hover:border-purple-400/50 hover:bg-white/5 transition-all duration-200 flex flex-col items-center justify-center"
+            className="flex-1 border-2 border-dashed border-white/20 rounded-lg p-4 text-center cursor-pointer hover:border-purple-400/50 hover:bg-white/5 transition-all duration-200 flex flex-col items-center justify-center"
             role="button"
             tabIndex={0}
             aria-label="Upload reference image"
@@ -103,17 +103,14 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
               }
             }}
           >
-          <Upload className="w-12 h-12 text-gray-400 mb-4" />
-          <p className="text-lg text-gray-300 mb-2">
-            Click to upload {singleImageOnly ? 'reference image' : 'reference image(s)'}
+          <Upload className="w-8 h-8 text-gray-400 mb-2" />
+          <p className="text-sm text-gray-300 mb-1">
+            Click to upload {singleImageOnly ? 'reference image' : 'image(s)'}
           </p>
-          <p className="text-sm text-gray-500">JPG, PNG, WebP up to 10MB each</p>
+          <p className="text-xs text-gray-500">JPG, PNG, WebP up to 10MB</p>
           {!singleImageOnly && (
-            <p className="text-xs text-purple-400 mt-1">Hold Ctrl/Cmd for multiple</p>
+            <p className="text-xs text-purple-400 mt-1">Ctrl/Cmd for multiple</p>
           )}
-          <div className="mt-4 text-xs text-gray-600 bg-white/5 px-3 py-2 rounded">
-            💡 Upload {singleImageOnly ? 'an image' : '1+ images'} to guide the AI generation
-          </div>
         </div>
       ) : (
         <div className="flex-1 flex flex-col">
@@ -139,7 +136,7 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
               ))}
             </div>
           ) : (
-            <div className="relative flex-1 rounded-lg overflow-hidden bg-white/5 min-h-[200px] md:min-h-[300px]">
+            <div className="relative flex-1 rounded-lg overflow-hidden bg-white/5 min-h-[150px] md:min-h-[180px]">
               <img
                 src={controlNetImage}
                 alt="Reference"
@@ -168,18 +165,18 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
             </div>
           )}
           
-          <div className="mt-3 flex items-center justify-between">
+          <div className="mt-2 flex items-center justify-between">
             <span className="text-xs text-gray-400">
               {Array.isArray(controlNetImage) 
-                ? `${controlNetImage.length} images uploaded` 
-                : 'Reference image uploaded'}
+                ? `${controlNetImage.length} image${controlNetImage.length > 1 ? 's' : ''}` 
+                : '1 image'}
             </span>
             <button
               onClick={handleClickUpload}
-              className="btn-secondary text-xs px-3 py-1.5"
+              className="btn-secondary text-xs px-2 py-1"
               aria-label="Change reference image"
             >
-              Change Image(s)
+              Change
             </button>
           </div>
         </div>

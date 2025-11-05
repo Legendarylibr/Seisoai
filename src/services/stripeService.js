@@ -22,13 +22,14 @@ const stripePromise = (() => {
 
 /**
  * Create a payment intent for credit purchase
- * @param {string} walletAddress - The user's wallet address
+ * @param {string} walletAddress - The user's wallet address (optional for email users)
+ * @param {string} userId - The user's ID (for email users)
  * @param {number} amount - The amount in USD
  * @param {number} credits - The number of credits to purchase
  * @param {string} currency - The currency (default: 'usd')
  * @returns {Promise<Object>} - Payment intent response
  */
-export const createPaymentIntent = async (walletAddress, amount, credits, currency = 'usd') => {
+export const createPaymentIntent = async (walletAddress, amount, credits, currency = 'usd', userId = null) => {
   try {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     if (!apiUrl) {
@@ -40,17 +41,25 @@ export const createPaymentIntent = async (walletAddress, amount, credits, curren
       throw new Error('Stripe payment is not configured');
     }
 
+    const body = {
+      amount,
+      credits,
+      currency
+    };
+
+    // Add walletAddress or userId based on auth type
+    if (userId) {
+      body.userId = userId;
+    } else if (walletAddress) {
+      body.walletAddress = walletAddress;
+    }
+
     const response = await fetch(`${apiUrl}/api/stripe/create-payment-intent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        walletAddress,
-        amount,
-        credits,
-        currency
-      })
+      body: JSON.stringify(body)
     });
 
     if (!response.ok) {
@@ -73,14 +82,22 @@ export const createPaymentIntent = async (walletAddress, amount, credits, curren
 /**
  * Verify a completed Stripe payment
  * @param {string} paymentIntentId - The payment intent ID
- * @param {string} walletAddress - The user's wallet address
+ * @param {string} walletAddress - The user's wallet address (optional for email users)
+ * @param {string} userId - The user's ID (for email users)
  * @returns {Promise<Object>} - Verification result
  */
-export const verifyStripePayment = async (paymentIntentId, walletAddress) => {
+export const verifyStripePayment = async (paymentIntentId, walletAddress = null, userId = null) => {
   try {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     if (!apiUrl) {
       throw new Error('API URL not configured');
+    }
+
+    const body = { paymentIntentId };
+    if (userId) {
+      body.userId = userId;
+    } else if (walletAddress) {
+      body.walletAddress = walletAddress;
     }
 
     const response = await fetch(`${apiUrl}/api/stripe/verify-payment`, {
@@ -88,10 +105,7 @@ export const verifyStripePayment = async (paymentIntentId, walletAddress) => {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        paymentIntentId,
-        walletAddress
-      })
+      body: JSON.stringify(body)
     });
 
     if (!response.ok) {
