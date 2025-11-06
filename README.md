@@ -91,15 +91,17 @@ The built files will be in the `dist` directory.
    - Go to your Stripe Dashboard → Developers → API Keys
    - Copy your Publishable Key and Secret Key
 
-3. **Configure Environment Variables**:
+3. **Configure Environment Variables** (LIVE MODE):
    ```env
    # Frontend (.env)
-   VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key_here
+   VITE_STRIPE_PUBLISHABLE_KEY=pk_live_your_stripe_publishable_key_here
    
    # Backend (backend/.env)
-   STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
+   STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
    STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
    ```
+   
+   **Important**: Make sure to enable LIVE MODE in your Stripe dashboard and use live keys (`pk_live_...` and `sk_live_...`) for production. Test keys (`pk_test_...` and `sk_test_...`) are for development only.
 
 4. **Set up Webhooks** (for production):
    - In Stripe Dashboard → Developers → Webhooks

@@ -70,8 +70,8 @@ ENCRYPTION_KEY=your-32-character-encryption-key-here
 JWT_SECRET=your-super-secret-jwt-key-here
 SESSION_SECRET=your-session-secret-here
 
-# Stripe (Optional - for credit card payments)
-STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
+# Stripe (Optional - for credit card payments) - LIVE MODE
+STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
 ```
 

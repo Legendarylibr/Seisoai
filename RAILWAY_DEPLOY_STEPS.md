@@ -71,7 +71,7 @@ railway variables set VITE_ARBITRUM_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011
 railway variables set VITE_OPTIMISM_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a" --service frontend
 railway variables set VITE_BASE_PAYMENT_WALLET="0xa0aE05e2766A069923B2a51011F270aCadFf023a" --service frontend
 railway variables set VITE_SOLANA_PAYMENT_WALLET="BZ9LR3nnVP4oh477rZAKdhGFAbYqvazv3Ru1MDk9rk99" --service frontend
-railway variables set VITE_STRIPE_PUBLISHABLE_KEY="pk_test_your_stripe_publishable_key_here" --service frontend
+railway variables set VITE_STRIPE_PUBLISHABLE_KEY="pk_live_your_stripe_publishable_key_here" --service frontend
 ```
 
 ## Step 7: Update CORS Settings

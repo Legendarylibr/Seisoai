@@ -43,8 +43,9 @@ SESSION_SECRET=dev-session-secret-32-chars-minimum
 ENCRYPTION_KEY=dev-encryption-key-32-chars-min
 AUTHENTICATION_CODE=dev-auth-code-32-chars-min
 
-# Stripe Configuration (REQUIRED for card payments)
-STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
+# Stripe Configuration (REQUIRED for card payments) - LIVE MODE
+# Note: For development, you can use test keys (sk_test_...) instead
+STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
 
 # Rate Limiting Configuration
@@ -92,8 +93,9 @@ VITE_ENABLE_ANALYTICS=true
 VITE_ENABLE_ERROR_REPORTING=true
 VITE_ENABLE_PERFORMANCE_MONITORING=true
 
-# Stripe Configuration (REQUIRED for card payments)
-VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key_here
+# Stripe Configuration (REQUIRED for card payments) - LIVE MODE
+# Note: For development, you can use test keys (pk_test_...) instead
+VITE_STRIPE_PUBLISHABLE_KEY=pk_live_your_stripe_publishable_key_here
 EOF
 
 echo "✅ Environment files created successfully!"

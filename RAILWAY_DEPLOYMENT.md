@@ -50,8 +50,8 @@ ARBITRUM_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_API_KEY
 OPTIMISM_RPC_URL=https://opt-mainnet.g.alchemy.com/v2/YOUR_API_KEY
 BASE_RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY
 
-# Stripe Configuration
-STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
+# Stripe Configuration - LIVE MODE
+STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
 
 # Security (REQUIRED - generate secure keys)
@@ -77,7 +77,7 @@ For a complete deployment, you can also deploy the frontend:
    ```bash
    VITE_FAL_API_KEY=your_actual_fal_api_key
    VITE_API_URL=https://your-backend-app.up.railway.app
-   VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_key
+   VITE_STRIPE_PUBLISHABLE_KEY=pk_live_your_stripe_key
    ```
 
 ### Step 6: Configure Domain (Optional)

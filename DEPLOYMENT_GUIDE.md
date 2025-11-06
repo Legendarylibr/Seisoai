@@ -49,14 +49,14 @@
 ```bash
 VITE_FAL_API_KEY=your_actual_fal_api_key
 VITE_API_URL=https://your-domain.com
-VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_key
+VITE_STRIPE_PUBLISHABLE_KEY=pk_live_your_stripe_key
 # ... (see env.example for complete list)
 ```
 
 ### Backend (backend/.env)
 ```bash
 MONGODB_URI=mongodb://username:password@host:port/database
-STRIPE_SECRET_KEY=sk_test_your_stripe_secret
+STRIPE_SECRET_KEY=sk_live_your_stripe_secret
 ENCRYPTION_KEY=your-32-character-encryption-key
 # ... (see backend/env.example for complete list)
 ```

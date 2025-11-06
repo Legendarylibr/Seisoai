@@ -64,6 +64,9 @@ production.env
 backend.env
 docker.env
 *.env
+*.env.bak
+backend/.env
+backend/.env.bak
 !*.env.example
 !env.example
 !railway.env.example

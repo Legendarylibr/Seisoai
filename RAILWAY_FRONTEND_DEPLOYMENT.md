@@ -41,8 +41,8 @@ VITE_OPTIMISM_PAYMENT_WALLET=0x1234567890123456789012345678901234567890
 VITE_BASE_PAYMENT_WALLET=0x1234567890123456789012345678901234567890
 VITE_SOLANA_PAYMENT_WALLET=So11111111111111111111111111111111111111112
 
-# Stripe Configuration (for credit card payments)
-VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key_here
+# Stripe Configuration (for credit card payments) - LIVE MODE
+VITE_STRIPE_PUBLISHABLE_KEY=pk_live_your_stripe_publishable_key_here
 
 # Monitoring (optional)
 VITE_SENTRY_DSN=your_sentry_dsn_here

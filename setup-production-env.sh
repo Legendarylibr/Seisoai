@@ -51,8 +51,8 @@ SESSION_SECRET=${SESSION_SECRET}
 ENCRYPTION_KEY=${ENCRYPTION_KEY}
 AUTHENTICATION_CODE=${AUTHENTICATION_CODE}
 
-# Stripe Configuration (REQUIRED for card payments)
-STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
+# Stripe Configuration (REQUIRED for card payments) - LIVE MODE
+STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
 
 # Rate Limiting Configuration
