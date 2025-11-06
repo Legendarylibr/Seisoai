@@ -378,6 +378,69 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
         amount: paymentIntent.amount,
         metadata: paymentIntent.metadata
       });
+      
+      // Process credits via webhook (idempotent - will skip if already processed)
+      try {
+        // Get user from metadata
+        let user;
+        if (paymentIntent.metadata.userId) {
+          user = await User.findById(paymentIntent.metadata.userId);
+        } else if (paymentIntent.metadata.walletAddress) {
+          user = await getOrCreateUser(paymentIntent.metadata.walletAddress);
+        }
+        
+        if (user && !isPaymentAlreadyProcessed(user, null, paymentIntent.id)) {
+          // Calculate credits using same formula as verify-payment endpoint
+          const amount = paymentIntent.amount / 100; // Convert from cents
+          const baseRate = 5;
+          
+          // Subscription scaling based on amount
+          let scalingMultiplier = 1.0;
+          if (amount >= 100) {
+            scalingMultiplier = 1.3; // 30% bonus for $100+
+          } else if (amount >= 50) {
+            scalingMultiplier = 1.2; // 20% bonus for $50-99
+          } else if (amount >= 25) {
+            scalingMultiplier = 1.1; // 10% bonus for $25-49
+          } else if (amount >= 10) {
+            scalingMultiplier = 1.05; // 5% bonus for $10-24
+          }
+          
+          // Check if user is NFT holder
+          let isNFTHolder = false;
+          if (user.walletAddress) {
+            isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+          }
+          
+          const nftMultiplier = isNFTHolder ? 1.2 : 1;
+          const finalCredits = Math.floor(amount * baseRate * scalingMultiplier * nftMultiplier);
+          
+          // Add credits
+          await addCreditsToUser(user, {
+            txHash: paymentIntent.id,
+            tokenSymbol: 'USD',
+            amount,
+            credits: finalCredits,
+            chainId: 'stripe',
+            walletType: 'card',
+            paymentIntentId: paymentIntent.id
+          });
+          
+          logger.info('Credits added via webhook', {
+            paymentIntentId: paymentIntent.id,
+            userId: user.userId || null,
+            walletAddress: user.walletAddress || null,
+            credits: finalCredits
+          });
+        } else if (user && isPaymentAlreadyProcessed(user, null, paymentIntent.id)) {
+          logger.info('Payment already processed via webhook', {
+            paymentIntentId: paymentIntent.id
+          });
+        }
+      } catch (webhookError) {
+        // Log error but don't fail webhook - verify-payment endpoint can still handle it
+        logger.error('Error processing webhook payment:', webhookError);
+      }
       break;
     default:
       logger.info(`Unhandled event type ${event.type}`);
@@ -3409,16 +3472,21 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
       paymentIntentId
     });
     
+    // Refetch user to get latest credits
+    const finalUser = await User.findById(user._id);
+    
     logger.info('Stripe payment verified successfully', {
-      walletAddress: walletAddress.toLowerCase(),
+      walletAddress: walletAddress ? walletAddress.toLowerCase() : null,
+      userId: user.userId || null,
       credits: finalCredits,
-      paymentIntentId
+      paymentIntentId,
+      totalCredits: finalUser.credits
     });
     
     res.json({
       success: true,
       credits: finalCredits,
-      totalCredits: user.credits,
+      totalCredits: finalUser.credits,
       message: `Payment verified! ${finalCredits} credits added to your account.`
     });
 
