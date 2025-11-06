@@ -37,7 +37,15 @@ const PaymentForm = ({
     setError('');
 
     try {
-      // Confirm payment with Stripe using the existing client secret
+      // IMPORTANT: Submit elements first to validate the form
+      // This must be called before confirmPayment()
+      const { error: submitError } = await elements.submit();
+      
+      if (submitError) {
+        throw new Error(submitError.message || 'Payment form validation failed');
+      }
+
+      // Now confirm payment with Stripe using the existing client secret
       const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
         elements,
         clientSecret,
