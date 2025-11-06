@@ -1,14 +1,39 @@
 // Stripe service for payment processing
 import { loadStripe } from '@stripe/stripe-js';
 
-// Initialize Stripe with error handling
+// Initialize Stripe with error handling - only accepts live keys
 const getStripePublishableKey = () => {
   const key = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
   if (!key || key.includes('your_stripe_publishable_key_here')) {
     console.warn('Stripe publishable key not configured');
     return null;
   }
+  
+  // Validate that live key is being used
+  if (!key.startsWith('pk_live_')) {
+    console.error('❌ ERROR: VITE_STRIPE_PUBLISHABLE_KEY must be a live key (pk_live_...). Test keys are not supported.');
+    return null;
+  }
+  
   return key;
+};
+
+/**
+ * Get a helpful error message for payment errors
+ * @param {string} originalError - The original error message
+ * @returns {string} - Enhanced error message with instructions
+ */
+export const getEnhancedStripeError = (originalError) => {
+  if (!originalError) return originalError;
+  
+  const errorLower = originalError.toLowerCase();
+  
+  // Check for common errors
+  if (errorLower.includes('card was declined')) {
+    return `Card Declined: ${originalError}. Please check your card details or try a different payment method.`;
+  }
+  
+  return originalError;
 };
 
 // Initialize Stripe

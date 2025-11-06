@@ -6,7 +6,8 @@ import {
   verifyStripePayment, 
   getStripe, 
   calculateCreditsFromUSD,
-  getCreditPackages 
+  getCreditPackages,
+  getEnhancedStripeError
 } from '../services/stripeService';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { X, CreditCard, Coins, RefreshCw, Check, Star, Zap } from 'lucide-react';
@@ -122,7 +123,8 @@ const PaymentForm = ({
       }
     } catch (err) {
       console.error('Payment error:', err);
-      const errorMessage = err.message || 'Payment failed. Please try again.';
+      const originalMessage = err.message || 'Payment failed. Please try again.';
+      const errorMessage = getEnhancedStripeError(originalMessage);
       setError(errorMessage);
       onError(errorMessage);
     } finally {

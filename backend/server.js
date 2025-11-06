@@ -21,7 +21,21 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
-const stripe = process.env.STRIPE_SECRET_KEY ? (await import('stripe')).default(process.env.STRIPE_SECRET_KEY) : null;
+// Initialize Stripe - only accepts live keys
+let stripe = null;
+if (process.env.STRIPE_SECRET_KEY) {
+  const Stripe = (await import('stripe')).default;
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  
+  // Validate that live key is being used
+  if (!secretKey.startsWith('sk_live_')) {
+    logger.error('❌ ERROR: STRIPE_SECRET_KEY must be a live key (sk_live_...). Test keys are not supported.');
+    throw new Error('Invalid Stripe secret key. Must use live key (sk_live_...).');
+  }
+  
+  logger.info('✅ Stripe configured - ready to accept payments');
+  stripe = Stripe(secretKey);
+}
 
 const app = express();
 

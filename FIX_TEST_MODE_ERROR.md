@@ -1,14 +1,14 @@
-# Fix: "Your request was in test mode, but used a non test card"
+# ⚠️ DEPRECATED: Test Mode Not Supported
 
 ## 🚨 The Problem
 
-You're seeing this error because your application is configured with **Stripe Test Mode keys** (`pk_test_...` or `sk_test_...`) but you're trying to use a **real credit card**.
+**This application does not support Stripe test mode.** Test keys (`pk_test_...` or `sk_test_...`) are **not supported** and will cause the application to fail.
 
-Stripe Test Mode **only accepts test card numbers** - it will never process real payments.
+If you're seeing errors related to test mode, it means you're using test keys which are not allowed.
 
-## ✅ The Solution: Switch to Live Mode
+## ✅ The Solution: Use Live Keys Only
 
-To accept real credit cards and process real payments, you need to switch to **Stripe Live Mode keys**.
+The application **only accepts live Stripe keys**. You must use **Stripe Live Mode keys**.
 
 ### Step 1: Get Your Live Keys from Stripe
 

@@ -1,17 +1,4 @@
-# Stripe Setup - LIVE MODE
-
-## ⚠️ FIX: "Your request was in test mode, but used a non test card"
-
-**If you're seeing this error, you need to switch from test keys to live keys:**
-
-1. **Get your LIVE keys** from https://dashboard.stripe.com/apikeys (toggle to LIVE mode)
-2. **Update Frontend** (Railway): `VITE_STRIPE_PUBLISHABLE_KEY=pk_live_...`
-3. **Update Backend** (Railway): `STRIPE_SECRET_KEY=sk_live_...`
-4. **Redeploy** both services
-
-**See details below ↓**
-
----
+# Stripe Setup - Production Configuration
 
 ## ✅ Configuration
 
@@ -19,19 +6,21 @@
 - `VITE_STRIPE_PUBLISHABLE_KEY`: Set in Railway/deployment platform
 - Used by: src/services/stripeService.js
 - **MUST be a LIVE key** (`pk_live_...`)
+- **Test keys are not supported** - the application only accepts live keys
 
 ### Backend Environment Variable
 - `STRIPE_SECRET_KEY`: Set in Railway/deployment platform
 - **MUST be a LIVE key** (`sk_live_...`)
+- **Test keys are not supported** - the application will fail to start with test keys
 - `STRIPE_WEBHOOK_SECRET`: Webhook signing secret for payment verification
 
-## 🚀 Getting Your Live Stripe Keys
+## 🚀 Getting Your Stripe Keys
 
 1. Go to https://dashboard.stripe.com/apikeys
 2. **Important**: Make sure you're in **LIVE MODE** (toggle in top right)
 3. Copy your **Publishable key** (starts with `pk_live_...`)
-4. Click "Reveal test key" or "Reveal live key" to see your **Secret key** (starts with `sk_live_...`)
-5. Copy your **Webhook signing secret** from https://dashboard.stripe.com/webhooks
+4. Click "Reveal live key" to see your **Secret key** (starts with `sk_live_...`)
+5. Copy your **Webhook signing secret** from https://dashboard.stripe.com/webhooks (make sure LIVE mode is on)
 
 ## 📝 Setting Up Live Keys
 
@@ -64,16 +53,9 @@ Update your `.env` files:
 ## ⚠️ Important Notes
 
 1. **LIVE MODE = REAL MONEY**: Live keys will process actual payments and charge real credit cards
-2. **Test Mode**: If you need to test, use test keys (`pk_test_...` and `sk_test_...`) instead
+2. **Test keys are not supported**: The application will reject test keys (`pk_test_...` and `sk_test_...`)
 3. **Webhook Setup**: Make sure your webhook endpoint is configured in Stripe dashboard for production
 4. **Domain Verification**: Stripe may require domain verification for live mode
-
-## 🎯 Current Status
-
-- ✅ Configuration files updated to use live keys
-- ⏳ **Action Required**: Add your actual live keys from Stripe dashboard
-- ⏳ **Action Required**: Redeploy application after adding keys
-- ⏳ **Action Required**: Configure webhook endpoint in Stripe dashboard
 
 ## 🚀 Next Steps
 
@@ -81,5 +63,5 @@ Update your `.env` files:
 2. Add keys to your deployment platform (Railway, etc.)
 3. Configure webhook endpoint: `https://your-backend-domain.com/api/stripe/webhook`
 4. Redeploy the backend and frontend
-5. Test with a small real payment to verify everything works
+5. Test with a real payment to verify everything works
 

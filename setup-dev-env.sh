@@ -43,8 +43,8 @@ SESSION_SECRET=dev-session-secret-32-chars-minimum
 ENCRYPTION_KEY=dev-encryption-key-32-chars-min
 AUTHENTICATION_CODE=dev-auth-code-32-chars-min
 
-# Stripe Configuration (REQUIRED for card payments) - LIVE MODE
-# Note: For development, you can use test keys (sk_test_...) instead
+# Stripe Configuration (REQUIRED for card payments) - LIVE MODE ONLY
+# Note: Test keys are not supported - only live keys (sk_live_...) are accepted
 STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
 
@@ -93,8 +93,8 @@ VITE_ENABLE_ANALYTICS=true
 VITE_ENABLE_ERROR_REPORTING=true
 VITE_ENABLE_PERFORMANCE_MONITORING=true
 
-# Stripe Configuration (REQUIRED for card payments) - LIVE MODE
-# Note: For development, you can use test keys (pk_test_...) instead
+# Stripe Configuration (REQUIRED for card payments) - LIVE MODE ONLY
+# Note: Test keys are not supported - only live keys (pk_live_...) are accepted
 VITE_STRIPE_PUBLISHABLE_KEY=pk_live_your_stripe_publishable_key_here
 EOF
 
