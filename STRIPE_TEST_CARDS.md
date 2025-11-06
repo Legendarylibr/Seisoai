@@ -1,6 +1,40 @@
 # Stripe Test Cards Guide
 
-## Issue: "Your card was declined. Your request was in test mode, but used a non test card."
+## ⚠️ Issue: "Your card was declined. Your request was in test mode, but used a non test card."
+
+**This error means you're using Stripe Test Mode keys but trying to use a real credit card.**
+
+### 🚀 Quick Fix: Switch to Live Mode
+
+**To fix this error and accept real payments, you need to:**
+
+1. **Get Live Keys from Stripe:**
+   - Go to https://dashboard.stripe.com/apikeys
+   - **Toggle to LIVE MODE** (top right - must say "Live mode")
+   - Copy your **Live publishable key** (`pk_live_...`)
+   - Copy your **Live secret key** (`sk_live_...`)
+
+2. **Update Frontend Environment Variable:**
+   - In Railway (Frontend Service) or your `.env` file:
+   - Set: `VITE_STRIPE_PUBLISHABLE_KEY=pk_live_your_actual_live_key_here`
+
+3. **Update Backend Environment Variable:**
+   - In Railway (Backend Service) or `backend/.env`:
+   - Set: `STRIPE_SECRET_KEY=sk_live_your_actual_live_key_here`
+   - Set: `STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here`
+
+4. **Redeploy:**
+   - Railway will auto-redeploy when you update variables
+   - Or manually trigger a redeploy
+
+5. **Clear Browser Cache:**
+   - Hard refresh: `Ctrl+Shift+R` (Windows) or `Cmd+Shift+R` (Mac)
+
+**After this, you can use real credit cards and process real payments!**
+
+---
+
+### Why This Happens
 
 This error means you're using **Stripe Test Mode** (test keys: `pk_test_...` or `sk_test_...`) but trying to use a **real credit card**. 
 

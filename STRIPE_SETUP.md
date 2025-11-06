@@ -1,5 +1,18 @@
 # Stripe Setup - LIVE MODE
 
+## ⚠️ FIX: "Your request was in test mode, but used a non test card"
+
+**If you're seeing this error, you need to switch from test keys to live keys:**
+
+1. **Get your LIVE keys** from https://dashboard.stripe.com/apikeys (toggle to LIVE mode)
+2. **Update Frontend** (Railway): `VITE_STRIPE_PUBLISHABLE_KEY=pk_live_...`
+3. **Update Backend** (Railway): `STRIPE_SECRET_KEY=sk_live_...`
+4. **Redeploy** both services
+
+**See details below ↓**
+
+---
+
 ## ✅ Configuration
 
 ### Frontend Environment Variable
