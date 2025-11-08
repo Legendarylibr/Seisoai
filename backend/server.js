@@ -21,20 +21,36 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
-// Initialize Stripe - only accepts live keys
+// Initialize Stripe - optional, allows test keys in development
 let stripe = null;
 if (process.env.STRIPE_SECRET_KEY) {
   const Stripe = (await import('stripe')).default;
   const secretKey = process.env.STRIPE_SECRET_KEY;
   
-  // Validate that live key is being used
-  if (!secretKey.startsWith('sk_live_')) {
-    logger.error('❌ ERROR: STRIPE_SECRET_KEY must be a live key (sk_live_...). Test keys are not supported.');
-    throw new Error('Invalid Stripe secret key. Must use live key (sk_live_...).');
-  }
+  // Validate key format
+  const isLiveKey = secretKey.startsWith('sk_live_');
+  const isTestKey = secretKey.startsWith('sk_test_');
   
-  logger.info('✅ Stripe configured - ready to accept payments');
-  stripe = Stripe(secretKey);
+  if (!isLiveKey && !isTestKey) {
+    logger.error('❌ ERROR: STRIPE_SECRET_KEY has invalid format. Must start with sk_live_ or sk_test_');
+    logger.warn('⚠️  Stripe features will be disabled. Server will continue without Stripe.');
+  } else {
+    // In production, warn if using test key but don't fail
+    if (process.env.NODE_ENV === 'production' && isTestKey) {
+      logger.warn('⚠️  WARNING: Using Stripe test key in production mode. Live keys (sk_live_...) are required for real payments.');
+      logger.warn('⚠️  Stripe features will be disabled in production with test keys.');
+      // Don't initialize Stripe in production with test keys
+    } else {
+      if (isTestKey) {
+        logger.info('✅ Stripe configured with TEST key - ready for testing');
+      } else {
+        logger.info('✅ Stripe configured with LIVE key - ready to accept payments');
+      }
+      stripe = Stripe(secretKey);
+    }
+  }
+} else {
+  logger.warn('⚠️  STRIPE_SECRET_KEY not set - Stripe payment features will be disabled');
 }
 
 const app = express();
