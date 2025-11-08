@@ -1,5 +1,6 @@
 // NFT Verification Service
 // Checks if a wallet holds qualifying NFTs for discounts/free access
+import logger from '../utils/logger.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -20,14 +21,14 @@ const QUALIFYING_COLLECTIONS = [
 export const checkNFTHoldings = async (walletAddress) => {
   try {
     if (!walletAddress) {
-      console.warn('⚠️ No wallet address provided to checkNFTHoldings');
+      logger.warn('No wallet address provided to checkNFTHoldings');
       return { isHolder: false, collections: [] };
     }
 
     // Normalize wallet address (lowercase for EVM addresses, unchanged for Solana)
     const isSolanaAddress = !walletAddress.startsWith('0x');
     const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
-    console.log('🔍 Checking NFT holdings for:', normalizedAddress, 'API URL:', API_URL, 'isSolana:', isSolanaAddress);
+    logger.debug('Checking NFT holdings', { walletAddress: normalizedAddress, isSolana: isSolanaAddress });
     
     // Add timeout to prevent hanging
     const controller = new AbortController();
@@ -35,7 +36,7 @@ export const checkNFTHoldings = async (walletAddress) => {
     
     try {
       const apiEndpoint = `${API_URL}/api/nft/check-holdings`;
-      console.log('📡 Calling NFT endpoint:', apiEndpoint);
+      logger.debug('Calling NFT endpoint');
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
@@ -51,10 +52,9 @@ export const checkNFTHoldings = async (walletAddress) => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ NFT verification endpoint error', { 
+        logger.error('NFT verification endpoint error', { 
           status: response.status, 
           statusText: response.statusText,
-          error: errorText,
           walletAddress: normalizedAddress
         });
         return { isHolder: false, collections: [] };

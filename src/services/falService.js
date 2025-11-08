@@ -6,7 +6,7 @@ import { optimizeImages, needsOptimization } from '../utils/imageOptimizer.js';
 const FAL_API_KEY = import.meta.env.VITE_FAL_API_KEY;
 
 if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
-  console.error('⚠️ VITE_FAL_API_KEY is not set. Please add your FAL API key to .env file from https://fal.ai');
+  logger.error('VITE_FAL_API_KEY is not set');
 }
 
 /**
@@ -99,11 +99,8 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     // Build optimized prompt - avoid unnecessary concatenation
     let basePrompt = '';
     
-    console.log('🔍 Prompt building debug:', {
-      customPrompt,
-      customPromptType: typeof customPrompt,
-      customPromptLength: customPrompt?.length,
-      customPromptTrimmed: customPrompt?.trim(),
+    logger.debug('Building prompt', {
+      hasCustomPrompt: !!(customPrompt && customPrompt.trim().length > 0),
       hasStyle: !!style,
       styleId: style?.id
     });
@@ -111,27 +108,23 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     // If we have a custom prompt, use it as the base
     if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
       basePrompt = customPrompt.trim();
-      console.log('✅ Using custom prompt as base:', basePrompt);
       
       // Add style prompt only if we have a style and it adds value
       if (style && style.id) {
         const stylePrompt = getStylePrompt(style.id);
         if (stylePrompt && stylePrompt !== 'artistic colors and lighting') {
           basePrompt = `${basePrompt}, ${stylePrompt}`;
-          console.log('✅ Added style prompt:', basePrompt);
         }
       }
     } else if (style && style.id) {
       // If no custom prompt but we have a style, use the style prompt
       basePrompt = getStylePrompt(style.id);
-      console.log('✅ Using style prompt only:', basePrompt);
     } else {
       // If no prompt and no style, use a default
       basePrompt = 'artistic image, high quality, detailed';
-      console.log('✅ Using default prompt:', basePrompt);
     }
     
-    console.log('🎯 Final prompt being sent to API:', basePrompt);
+    logger.debug('Final prompt prepared', { promptLength: basePrompt.length });
     
     // Determine image count and type for model selection
     // 0 images: text-to-image
@@ -184,11 +177,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       isMultipleImages: isMultipleImages
     });
     
-    console.log(`🎯 Model Selection: ${imageCount} image(s) → ${modeDesc}`, {
-      imageCount,
-      isMultipleImages,
-      endpoint: fluxEndpoint
-    });
+    logger.debug('Model selection', { imageCount, isMultipleImages, mode: modeDesc });
     
     // Generate random seed each time
     const randomSeed = Math.floor(Math.random() * 2147483647);
@@ -221,7 +210,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
         );
         
         if (needsOpt) {
-          console.log(`🔄 Optimizing ${validImages.length} images before sending to fal.ai...`);
+          logger.debug('Optimizing images', { count: validImages.length });
           optimizedImages = await optimizeImages(validImages, {
             maxWidth: 2048,
             maxHeight: 2048,
@@ -234,7 +223,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
         
         // Multiple images for multi model - use image_urls
         requestBody.image_urls = optimizedImages;
-        console.log(`📸 Using ${optimizedImages.length} reference images for multi-image generation (multi model)`);
+        logger.debug('Using multiple reference images', { count: optimizedImages.length });
         
         // Ensure image_url is not set when using image_urls
         delete requestBody.image_url;
@@ -249,7 +238,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
         
         // Optimize if needed
         if (typeof singleImage === 'string' && singleImage.startsWith('data:') && needsOptimization(singleImage, 300)) {
-          console.log('🔄 Optimizing single image before sending to fal.ai...');
+          logger.debug('Optimizing single image');
           optimizedImages = await optimizeImages(singleImage, {
             maxWidth: 2048,
             maxHeight: 2048,
@@ -262,14 +251,14 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
         
         // Single image for max model - use image_url
         requestBody.image_url = optimizedImages;
-        console.log('📸 Using single reference image for image-to-image generation (max model)');
+        logger.debug('Using single reference image');
         
         // Ensure image_urls is not set when using image_url
         delete requestBody.image_urls;
       }
     } else {
       // No reference image (0 images) - using text-to-image mode
-      console.log('📝 No reference image - using text-to-image generation (pro model)');
+      logger.debug('Using text-to-image generation');
       
       // Ensure no image fields are set for text-to-image
       delete requestBody.image_url;
@@ -307,17 +296,14 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       mode: modeDesc
     });
     
-    console.log('🎯 [PROMPT CHECK] Request details:', {
+    logger.debug('Request details', {
       endpoint: fluxEndpoint,
       mode: modeDesc,
-      prompt: requestBody.prompt,
-      promptLength: requestBody.prompt.length,
+      promptLength: requestBody.prompt?.length || 0,
       hasImage_url: !!requestBody.image_url,
       hasImage_urls: !!requestBody.image_urls,
       imageUrlsCount: requestBody.image_urls?.length || 0,
-      guidance_scale: requestBody.guidance_scale,
-      seed: requestBody.seed,
-      aspect_ratio: requestBody.aspect_ratio
+      guidance_scale: requestBody.guidance_scale
     });
 
     const response = await fetch(fluxEndpoint, {
@@ -338,7 +324,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       let errorMessage = `HTTP error! status: ${response.status}`;
       try {
         const errorData = await response.json();
-        console.error('API Error Response:', errorData);
+        logger.error('API Error Response', { status: response.status, hasDetail: !!errorData.detail });
         
         // Handle different error response formats
         if (errorData.detail) {
@@ -360,9 +346,8 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
           errorMessage = JSON.stringify(errorData);
         }
       } catch (parseError) {
-        console.error('Failed to parse error response:', parseError);
+        logger.error('Failed to parse error response', { error: parseError.message });
         const errorText = await response.text();
-        console.error('Raw error response:', errorText);
         errorMessage = errorText || errorMessage;
       }
       throw new Error(errorMessage);
@@ -383,7 +368,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       throw new Error('No image generated');
     }
   } catch (error) {
-    console.error('FAL.ai API Error:', error);
+    logger.error('FAL.ai API Error', { error: error.message });
     throw new Error(`Failed to generate image: ${error.message}`);
   }
 };

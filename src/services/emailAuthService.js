@@ -1,4 +1,6 @@
 // Email authentication service
+import logger from '../utils/logger.js';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 /**
@@ -36,7 +38,7 @@ export const signUp = async (email, password) => {
       user: data.user
     };
   } catch (error) {
-    console.error('Sign up error:', error);
+    logger.error('Sign up error', { error: error.message });
     throw error;
   }
 };
@@ -76,7 +78,7 @@ export const signIn = async (email, password) => {
       user: data.user
     };
   } catch (error) {
-    console.error('Sign in error:', error);
+    logger.error('Sign in error', { error: error.message });
     throw error;
   }
 };
@@ -147,7 +149,7 @@ export const verifyToken = async () => {
       user: data.user
     };
   } catch (error) {
-    console.error('Token verification error:', error);
+    logger.error('Token verification error', { error: error.message });
     signOut();
     return null;
   }
@@ -185,7 +187,7 @@ export const linkWallet = async (walletAddress) => {
       user: data.user
     };
   } catch (error) {
-    console.error('Link wallet error:', error);
+    logger.error('Link wallet error', { error: error.message });
     throw error;
   }
 };

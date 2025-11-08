@@ -1,5 +1,6 @@
 // NFT verification service for contract address checking
 import { ethers } from 'ethers';
+import logger from '../utils/logger.js';
 
 // Standard ERC-721 ABI for NFT ownership checking
 const ERC721_ABI = [
@@ -47,7 +48,7 @@ export const checkNFTOwnership = async (walletAddress, contractAddress, chainId,
             const tokenId = await contract.tokenOfOwnerByIndex(walletAddress, i);
             tokenIds.push(tokenId.toString());
           } catch (error) {
-            console.warn(`Error getting token ${i}:`, error);
+            logger.warn('Error getting token', { index: i, error: error.message });
           }
         }
         

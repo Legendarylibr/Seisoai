@@ -17,12 +17,59 @@ class Logger {
     return this.levels[level] <= this.levels[this.logLevel];
   }
 
+  // Sanitize sensitive data from logs
+  sanitizeData(data) {
+    if (!data || typeof data !== 'object') return data;
+    
+    const sensitiveKeys = [
+      'address', 'walletAddress', 'wallet', 'userAddress', 'senderAddress',
+      'apiKey', 'api_key', 'apikey', 'secret', 'token', 'password', 'privateKey',
+      'txHash', 'transactionHash', 'signature', 'tx', 'transaction', 'txSignature',
+      'email', 'emailAddress', 'userEmail',
+      'rpcUrl', 'rpc_url', 'endpoint', 'url', 'rpc',
+      'paymentAddress', 'paymentWallet', 'payment_address', 'solanaPaymentAddress',
+      'linkedWalletAddress', 'addresses', 'publicKey', 'pubkey',
+      'clientSecret', 'paymentIntentId', 'sessionId'
+    ];
+    
+    const sanitized = { ...data };
+    
+    for (const key in sanitized) {
+      const lowerKey = key.toLowerCase();
+      
+      // Check if key contains sensitive information
+      if (sensitiveKeys.some(sk => lowerKey.includes(sk.toLowerCase()))) {
+        const value = sanitized[key];
+        if (typeof value === 'string' && value.length > 0) {
+          // Truncate addresses/hashes to first 6 and last 4 chars
+          if (value.length > 10) {
+            sanitized[key] = `${value.substring(0, 6)}...${value.substring(value.length - 4)}`;
+          } else {
+            sanitized[key] = '***';
+          }
+        } else if (typeof value === 'object' && value !== null) {
+          sanitized[key] = this.sanitizeData(value);
+        } else {
+          sanitized[key] = '***';
+        }
+      }
+      
+      // Recursively sanitize nested objects
+      if (typeof sanitized[key] === 'object' && sanitized[key] !== null && !Array.isArray(sanitized[key])) {
+        sanitized[key] = this.sanitizeData(sanitized[key]);
+      }
+    }
+    
+    return sanitized;
+  }
+
   formatMessage(level, message, data = null) {
     const timestamp = new Date().toISOString();
     const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
     
     if (data) {
-      return `${prefix} ${message} ${JSON.stringify(data)}`;
+      const sanitized = this.sanitizeData(data);
+      return `${prefix} ${message} ${JSON.stringify(sanitized)}`;
     }
     return `${prefix} ${message}`;
   }

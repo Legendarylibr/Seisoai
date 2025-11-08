@@ -234,10 +234,7 @@ const ImageOutput = () => {
       logger.info('Regeneration with new prompt completed successfully', { hasImageUrl: !!result });
       
       // Save generation to backend and deduct credits IMMEDIATELY after image is returned
-      console.log('💾 [AUTO] Saving generation and deducting credits automatically...', { 
-        imageUrl: result?.substring(0, 50),
-        currentCredits: credits 
-      });
+      logger.debug('Saving generation and deducting credits', { currentCredits: credits });
       
       let deductionResult = null;
       try {
@@ -247,31 +244,29 @@ const ImageOutput = () => {
           imageUrl: result,
           creditsUsed: 1 // 1 credit per generation
         });
-        console.log('✅ [AUTO] Generation saved and credits deducted:', {
+        logger.info('Generation saved and credits deducted', {
           success: deductionResult.success,
           remainingCredits: deductionResult.remainingCredits,
-          creditsDeducted: deductionResult.creditsDeducted
+          address
         });
-        logger.info('Generation saved and credits deducted', { result: deductionResult, address });
         
         // Update UI immediately with the remaining credits from the response
         if (deductionResult.remainingCredits !== undefined && setCreditsManually) {
-          console.log('📊 [AUTO] Updating UI credits immediately to:', deductionResult.remainingCredits);
+          logger.debug('Updating UI credits', { remainingCredits: deductionResult.remainingCredits });
           setCreditsManually(deductionResult.remainingCredits);
         }
         
         // Force immediate credit refresh to ensure UI is in sync with backend
-        console.log('🔄 [AUTO] Refreshing credits from backend to verify...');
+        logger.debug('Refreshing credits from backend');
         if (refreshCredits && address) {
           await refreshCredits();
-          console.log('✅ [AUTO] Credits refreshed in UI from backend');
+          logger.debug('Credits refreshed in UI from backend');
           logger.info('Credits refreshed after generation', { address });
         } else {
-          console.warn('⚠️ [AUTO] Cannot refresh credits - missing refreshCredits or address');
+          logger.warn('Cannot refresh credits - missing refreshCredits or address');
         }
       } catch (error) {
-        console.error('Error saving generation:', error);
-        logger.error('Error saving generation', { error: error.message, address, imageUrl: result });
+        logger.error('Error saving generation', { error: error.message, address });
         setError(`Image generated but failed to save to history. Credits not deducted. Error: ${error.message}`);
         // Still show the image even if saving failed
       }

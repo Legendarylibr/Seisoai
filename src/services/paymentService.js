@@ -1,5 +1,6 @@
 // Payment service for USDC and ERC-20 tokens on EVM chains and Solana
 import { ethers } from 'ethers';
+import logger from '../utils/logger.js';
 
 // Standard ERC-20 ABI for token transfers
 const ERC20_ABI = [
@@ -26,9 +27,7 @@ const validatePaymentConfig = () => {
   
   const missingVars = requiredVars.filter(varName => !import.meta.env[varName]);
   if (missingVars.length > 0) {
-    console.warn('⚠️ Missing payment wallet environment variables:', missingVars.join(', '));
-    console.warn('Please check your .env file and ensure all required variables are set.');
-    console.warn('The app will continue to run but payment features may not work correctly.');
+    logger.warn('Missing payment wallet environment variables', { count: missingVars.length });
     return false; // Don't throw error, just warn
   }
   return true;
@@ -252,7 +251,7 @@ export const getTokenBalance = async (walletAddress, tokenAddress, chainId, prov
       chainId
     };
   } catch (error) {
-    console.error('Error getting token balance:', error);
+    logger.error('Error getting token balance', { error: error.message });
     throw new Error(`Failed to get token balance: ${error.message}`);
   }
 };
@@ -320,7 +319,7 @@ export const getSolanaTokenBalance = async (walletAddress, mintAddress, solanaPr
       chainId: 'solana'
     };
   } catch (error) {
-    console.error('Error getting Solana token balance:', error);
+    logger.error('Error getting Solana token balance', { error: error.message });
     throw new Error(`Failed to get Solana token balance: ${error.message}`);
   }
 };
@@ -347,7 +346,7 @@ export const transferTokens = async (tokenAddress, toAddress, amount, signer) =>
       gasUsed: receipt.gasUsed.toString()
     };
   } catch (error) {
-    console.error('Error transferring tokens:', error);
+    logger.error('Error transferring tokens', { error: error.message });
     throw new Error(`Failed to transfer tokens: ${error.message}`);
   }
 };
@@ -503,7 +502,7 @@ export const transferToPaymentWallet = async (tokenAddress, amount, chainId, sig
       amount: amount.toString()
     };
   } catch (error) {
-    console.error('Error transferring to payment wallet:', error);
+    logger.error('Error transferring to payment wallet', { error: error.message });
     throw new Error(`Failed to transfer tokens: ${error.message}`);
   }
 };
@@ -552,7 +551,7 @@ export const verifyPayment = async (txHash, walletAddress, tokenSymbol, amount, 
       message: data.message
     };
   } catch (error) {
-    console.error('Error verifying payment:', error);
+    logger.error('Error verifying payment', { error: error.message });
     throw new Error(`Payment verification failed: ${error.message}`);
   }
 };

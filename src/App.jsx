@@ -32,7 +32,7 @@ function App() {
 
   // Memoize callbacks to prevent unnecessary re-renders
   const handleShowTokenPayment = useCallback(() => {
-    console.log('🔵 App: onShowTokenPayment called, setting showTokenPaymentModal to true');
+    // Token payment modal opened
     setShowTokenPaymentModal(true);
   }, []);
 
@@ -66,7 +66,7 @@ function App() {
             <TokenPaymentModal 
               isOpen={showTokenPaymentModal} 
               onClose={() => {
-                console.log('🔴 TokenPaymentModal: onClose called');
+                // Token payment modal closed
                 setShowTokenPaymentModal(false);
               }} 
             />

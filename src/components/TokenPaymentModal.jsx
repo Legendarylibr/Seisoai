@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { ethers } from 'ethers';
+import logger from '../utils/logger.js';
 import { 
   getAvailableTokens, 
   getTokenBalance, 
@@ -52,12 +53,12 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         const chainIdNumber = parseInt(chainId, 16);
         const network = CHAIN_IDS[chainIdNumber];
         
-        console.log(`🌐 Current network: ${network?.name || 'Unknown'} (Chain ID: ${chainIdNumber})`);
+        logger.debug('Current network detected', { network: network?.name, chainId: chainIdNumber });
         return { chainId: chainIdNumber, network };
       }
       return null;
     } catch (error) {
-      console.error('Error getting current network:', error);
+      logger.error('Error getting current network', { error: error.message });
       return null;
     }
   };
@@ -104,7 +105,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       // Try each RPC endpoint until one works with better error handling
       for (const url of rpcUrls) {
         try {
-          console.log(`🔗 Trying Solana RPC: ${url}`);
+          logger.debug('Trying Solana RPC', { url });
           const testConnection = new Connection(url, {
             commitment: 'confirmed',
             disableRetryOnRateLimit: false
@@ -116,10 +117,10 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           ]);
           connection = testConnection;
           rpcUrl = url;
-          console.log(`✅ Connected to Solana RPC: ${url}`);
+          logger.debug('Connected to Solana RPC');
           break;
         } catch (error) {
-          console.warn(`❌ Failed to connect to ${url}:`, error.message);
+          logger.warn('Failed to connect to RPC', { error: error.message });
           failedRpcs.push(url);
           lastError = error;
           continue;
@@ -147,20 +148,16 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       // Get payment wallet's USDC token account address
       const paymentTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, paymentPublicKey);
       
-      if (import.meta.env.MODE !== 'production') {
-        console.log('🔍 Checking token accounts...');
-        console.log(`  User token account: ${userTokenAccount.toString()}`);
-        console.log(`  Payment token account: ${paymentTokenAccount.toString()}`);
-      }
+      logger.debug('Checking token accounts');
       
       // Check if user has USDC token account
       let userTokenAccountExists = false;
       try {
         await getAccount(connection, userTokenAccount);
         userTokenAccountExists = true;
-        console.log('✅ User has USDC token account');
+        logger.debug('User has USDC token account');
       } catch (error) {
-        console.error('❌ User USDC token account not found:', error.message);
+        logger.error('User USDC token account not found', { error: error.message });
         throw new Error('USDC token account not found. Please add USDC to your wallet first.');
       }
       
@@ -169,24 +166,22 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       try {
         await getAccount(connection, paymentTokenAccount);
         paymentTokenAccountExists = true;
-        console.log('✅ Payment token account exists');
+        logger.debug('Payment token account exists');
       } catch (error) {
-        console.log('ℹ️ Payment token account does not exist, will create it');
+        logger.debug('Payment token account does not exist, will create it');
         paymentTokenAccountExists = false;
       }
       
       // Convert amount to USDC units (6 decimals)
       const amountInUSDC = BigInt(Math.floor(parseFloat(amount) * 1000000));
-      if (import.meta.env.MODE !== 'production') {
-        console.log(`💰 Transferring ${amount} USDC (${amountInUSDC} raw units)`);
-      }
+      logger.debug('Preparing USDC transfer', { amount });
       
       // Create transaction
       const transaction = new Transaction();
       
       // Add instruction to create payment token account if it doesn't exist
       if (!paymentTokenAccountExists) {
-        console.log('➕ Adding createAssociatedTokenAccount instruction');
+        logger.debug('Adding createAssociatedTokenAccount instruction');
         const createATAInstruction = createAssociatedTokenAccountInstruction(
           userPublicKey,           // payer (user pays for account creation)
           paymentTokenAccount,     // associated token account address to create
@@ -196,11 +191,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           ASSOCIATED_TOKEN_PROGRAM_ID // associated token program
         );
         transaction.add(createATAInstruction);
-        console.log('✅ Added createATA instruction (ATA will be created for recipient)');
+        logger.debug('Added createATA instruction');
       }
       
       // Create and add transfer instruction
-      console.log('➕ Adding transfer instruction');
+      logger.debug('Adding transfer instruction');
       const transferInstruction = createTransferInstruction(
         userTokenAccount,    // source
         paymentTokenAccount, // destination
@@ -210,17 +205,12 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       transaction.add(transferInstruction);
       
       // Get recent blockhash and set transaction parameters
-      if (import.meta.env.MODE !== 'production') {
-        console.log('📡 Getting recent blockhash...');
-      }
+      logger.debug('Getting recent blockhash');
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = userPublicKey;
       
-      if (import.meta.env.MODE !== 'production') {
-        console.log('🔐 Signing transaction with wallet...');
-        console.log(`📝 Transaction has ${transaction.instructions.length} instruction(s)`);
-      }
+      logger.debug('Signing transaction', { instructionCount: transaction.instructions.length });
       
       // Check if wallet is connected
       if (!window.solana.isConnected) {
@@ -230,7 +220,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       // Check if public key matches
       const currentPublicKey = window.solana.publicKey;
       if (!currentPublicKey || currentPublicKey.toString() !== address) {
-        console.warn('⚠️ Wallet public key mismatch, reconnecting...');
+        logger.warn('Wallet public key mismatch, reconnecting');
         await window.solana.connect();
         if (window.solana.publicKey.toString() !== address) {
           throw new Error('Wallet address mismatch. Please reconnect with the correct wallet.');
@@ -245,11 +235,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           maxRetries: 3
         });
         
-        if (import.meta.env.MODE !== 'production') {
-          console.log('✅ Solana transaction result:', result);
-          console.log('✅ Result type:', typeof result);
-          console.log('✅ Result keys:', result ? Object.keys(result) : 'null');
-        }
+        logger.debug('Solana transaction result received', { resultType: typeof result });
         
         // Phantom wallet typically returns signature as base58 string directly
         // But handle all possible formats
@@ -291,16 +277,14 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         }
         
         if (signature) {
-          if (import.meta.env.MODE !== 'production') {
-            console.log(`📋 Transaction signature extracted: ${signature}`);
-          }
+          logger.debug('Transaction signature extracted');
           return signature;
         } else {
-          console.error('❌ Could not extract signature. Full result:', JSON.stringify(result, null, 2));
+          logger.error('Could not extract signature from transaction result');
           throw new Error('Invalid transaction result: no signature found. Result: ' + JSON.stringify(result));
         }
       } catch (signError) {
-        console.error('❌ Error signing/sending transaction:', signError);
+        logger.error('Error signing/sending transaction', { error: signError.message });
         
         // Provide better error messages
         if (signError.code === 4001 || signError.code === -32603) {
@@ -315,7 +299,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       }
       
     } catch (error) {
-      console.error('Error building Solana transaction:', error);
+      logger.error('Error building Solana transaction', { error: error.message });
       throw error;
     }
   };
@@ -374,7 +358,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         }));
       }
     } catch (error) {
-      console.error('Error loading token balance:', error);
+      logger.error('Error loading token balance', { error: error.message });
     }
   };
 
@@ -431,7 +415,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             currentNetworkBalance = formattedBalance;
           }
         } catch (error) {
-          console.log(`Could not check balance on ${network.name}:`, error.message);
+          logger.warn('Could not check balance on network', { network: network.name, error: error.message });
         }
       }
 
@@ -638,7 +622,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         
         // Verify the connected account matches the expected address
         if (window.solana.publicKey && window.solana.publicKey.toString() !== address) {
-          console.log('⚠️ Wallet address mismatch, updating...');
+          logger.warn('Wallet address mismatch, updating');
           // This shouldn't happen in normal flow, but handle gracefully
         }
       } else {
@@ -658,7 +642,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       }
       
       if (walletType === 'solana') {
-        console.log('🔍 Processing Solana USDC payment...');
+        logger.debug('Processing Solana USDC payment');
         
         try {
           const { Connection } = await import('@solana/web3.js');
@@ -685,7 +669,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
               ]);
               connection = testConnection;
-              console.log(`✅ Using RPC for confirmation: ${url}`);
+              logger.debug('Using RPC for confirmation');
               break;
             } catch (error) {
               lastError = error;
@@ -711,7 +695,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               const data = await resp.json();
               if (data?.solanaPaymentAddress && data.solanaPaymentAddress !== solanaPaymentAddress) {
                 if (import.meta.env.MODE !== 'production') {
-                  console.warn('[Payment] Frontend Solana address differs from backend. Using backend value.');
+                  logger.warn('Frontend Solana address differs from backend. Using backend value.');
                 }
                 solanaPaymentAddress = data.solanaPaymentAddress;
               }
@@ -721,11 +705,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           }
           const txSignature = await buildSolanaUSDCTransaction(amount, solanaPaymentAddress);
           
-          console.log('✅ Solana transaction signed! Signature:', txSignature);
+          logger.info('Solana transaction signed', { txSignature });
           setError(`⏳ Transaction submitted! Signature: ${txSignature}\n\nWaiting for confirmation...`);
           
           // Wait for confirmation
-          console.log('⏳ Waiting for Solana transaction confirmation...');
+          logger.debug('Waiting for Solana transaction confirmation');
           let confirmed = false;
           let attempts = 0;
           const maxAttempts = 20; // Wait up to 20 seconds
@@ -884,7 +868,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           
           // Use chainId from above (already fetched)
           const paymentAddress = getPaymentWallet(chainId, 'evm');
-          console.log(`📤 Building USDC transaction to send ${amount} USDC to ${paymentAddress}...`);
+          logger.debug('Building USDC transaction', { amount });
           
           // Build the transaction data
           const txData = usdcContract.interface.encodeFunctionData('transfer', [paymentAddress, amountWei]);

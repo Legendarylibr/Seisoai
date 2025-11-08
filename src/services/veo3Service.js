@@ -2,11 +2,12 @@
 // Uses Google's Veo 3 Fast model via fal.ai API for image-to-video generation
 
 import { optimizeImage, needsOptimization } from '../utils/imageOptimizer';
+import logger from '../utils/logger.js';
 
 const FAL_API_KEY = import.meta.env.VITE_FAL_API_KEY;
 
 if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
-  console.error('VITE_FAL_API_KEY environment variable is required');
+  logger.error('VITE_FAL_API_KEY environment variable is required');
 }
 
 /**
@@ -26,7 +27,7 @@ const prepareImageUrl = async (image) => {
     // Optimize first if it's large
     let optimizedImage = image;
     if (needsOptimization(image, 200)) { // Optimize if > 200KB
-      console.log('🔄 Optimizing image before upload...');
+      logger.debug('Optimizing image before upload');
       try {
         optimizedImage = await optimizeImage(image, {
           maxWidth: 2048,
@@ -35,12 +36,12 @@ const prepareImageUrl = async (image) => {
           format: 'jpeg'
         });
       } catch (error) {
-        console.warn('Image optimization failed, using original:', error);
+        logger.warn('Image optimization failed, using original', { error: error.message });
       }
     }
     
     // Upload to backend which will upload to fal storage
-    console.log('📤 Uploading image to fal storage...');
+    logger.debug('Uploading image to fal storage');
     try {
       const backendBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       const uploadResponse = await fetch(`${backendBase}/api/veo3/upload-image`, {
@@ -61,10 +62,10 @@ const prepareImageUrl = async (image) => {
         throw new Error('No image URL returned from upload');
       }
       
-      console.log('✅ Image uploaded successfully:', imageUrl);
+      logger.debug('Image uploaded successfully');
       return imageUrl;
     } catch (error) {
-      console.error('❌ Failed to upload image, falling back to data URI:', error);
+      logger.error('Failed to upload image, falling back to data URI', { error: error.message });
       // Fallback to optimized data URI if upload fails
       return optimizedImage;
     }
@@ -101,10 +102,8 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
       generate_audio: options.generateAudio !== false
     };
 
-    console.log('🎬 Generating video with Veo 3 Fast Image-to-Video:', { 
-      prompt, 
+    logger.debug('Generating video with Veo 3 Fast', { 
       hasImage: !!input.image_url, 
-      imageUrl: input.image_url?.substring(0, 50) + '...',
       isDataUri: input.image_url?.startsWith('data:'),
       aspect_ratio: input.aspect_ratio, 
       duration: input.duration 
@@ -133,7 +132,7 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
     }
 
     const { request_id } = await response.json();
-    console.log('📝 Request ID:', request_id);
+    logger.debug('Video generation request submitted', { request_id });
 
     // Poll for completion
     let attempts = 0;
@@ -151,7 +150,7 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
         });
       } catch (fetchError) {
         consecutiveErrors++;
-        console.warn(`⚠️ Status check failed (attempt ${attempts + 1}):`, fetchError.message);
+        logger.warn('Status check failed', { attempt: attempts + 1, error: fetchError.message });
         
         if (consecutiveErrors >= maxConsecutiveErrors) {
           throw new Error(`Failed to check status after ${maxConsecutiveErrors} attempts: ${fetchError.message}`);
@@ -185,7 +184,7 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
         consecutiveErrors = 0; // Reset error counter on success
       } catch (parseError) {
         consecutiveErrors++;
-        console.warn(`⚠️ Status response parse error (attempt ${attempts + 1}):`, parseError.message);
+        logger.warn('Status response parse error', { attempt: attempts + 1, error: parseError.message });
         
         if (consecutiveErrors >= maxConsecutiveErrors) {
           throw new Error(`Failed to parse status after ${maxConsecutiveErrors} attempts: ${parseError.message}`);
@@ -194,7 +193,7 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
         continue;
       }
 
-      console.log('📊 Status:', status.status);
+      logger.debug('Video generation status', { status: status.status });
 
       if (status.status === 'COMPLETED') {
         // Get the result
@@ -220,7 +219,7 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
           const result = resultData;
           
           if (result.video && result.video.url) {
-            console.log('✅ Video generated successfully:', result.video.url);
+            logger.info('Video generated successfully');
             return result.video.url;
           } else {
             throw new Error('No video URL in response');
@@ -237,7 +236,7 @@ export const generateVideo = async ({ prompt, image = null, options = {} }) => {
 
     throw new Error('Video generation timeout');
   } catch (error) {
-    console.error('Veo 3 video generation error:', error);
+    logger.error('Veo 3 video generation error', { error: error.message });
     throw new Error(`Failed to generate video: ${error.message}`);
   }
 };

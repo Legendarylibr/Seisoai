@@ -45,7 +45,7 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
       reader.readAsDataURL(file);
     } else {
       // Multiple files - process all (only if not single image mode)
-      console.log(`📸 Processing ${filesToProcess.length} images for multi-image generation`);
+      logger.debug('Processing images for multi-image generation', { count: filesToProcess.length });
       const imageArray = [];
       let loadedCount = 0;
       
@@ -63,7 +63,7 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
             // When all images are loaded, store as multi-image
             if (loadedCount === filesToProcess.length) {
               setControlNetImage(imageArray.map(img => img.url), imageArray[0].dimensions);
-              console.log(`✅ Loaded ${imageArray.length} images for multi-image mode`);
+              logger.debug('Loaded images for multi-image mode', { count: imageArray.length });
             }
           };
           img.onerror = () => {

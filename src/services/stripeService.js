@@ -1,17 +1,18 @@
 // Stripe service for payment processing
 import { loadStripe } from '@stripe/stripe-js';
+import logger from '../utils/logger.js';
 
 // Initialize Stripe with error handling - only accepts live keys
 const getStripePublishableKey = () => {
   const key = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
   if (!key || key.includes('your_stripe_publishable_key_here')) {
-    console.warn('Stripe publishable key not configured');
+    logger.warn('Stripe publishable key not configured');
     return null;
   }
   
   // Validate that live key is being used
   if (!key.startsWith('pk_live_')) {
-    console.error('❌ ERROR: VITE_STRIPE_PUBLISHABLE_KEY must be a live key (pk_live_...). Test keys are not supported.');
+    logger.error('VITE_STRIPE_PUBLISHABLE_KEY must be a live key');
     return null;
   }
   
@@ -99,7 +100,7 @@ export const createPaymentIntent = async (walletAddress, amount, credits, curren
       paymentIntentId: data.paymentIntentId
     };
   } catch (error) {
-    console.error('Error creating payment intent:', error);
+    logger.error('Error creating payment intent', { error: error.message });
     throw new Error(`Payment intent creation failed: ${error.message}`);
   }
 };
@@ -147,7 +148,7 @@ export const verifyStripePayment = async (paymentIntentId, walletAddress = null,
       isNFTHolder: data.isNFTHolder
     };
   } catch (error) {
-    console.error('Error verifying Stripe payment:', error);
+    logger.error('Error verifying Stripe payment', { error: error.message });
     throw new Error(`Payment verification failed: ${error.message}`);
   }
 };
@@ -184,7 +185,7 @@ export const processStripePayment = async (clientSecret, elements, confirmParams
       paymentIntent
     };
   } catch (error) {
-    console.error('Error processing Stripe payment:', error);
+    logger.error('Error processing Stripe payment', { error: error.message });
     throw new Error(`Payment processing failed: ${error.message}`);
   }
 };

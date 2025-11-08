@@ -1,5 +1,6 @@
 // Token balance checking service for ERC-20 and SPL tokens
 import { ethers } from 'ethers';
+import logger from '../utils/logger.js';
 
 // Standard ERC-20 ABI for token balance checking
 const ERC20_ABI = [
@@ -74,7 +75,7 @@ export const checkTokenBalance = async (walletAddress, tokenAddress, chainId, pr
       type: 'ERC20'
     };
   } catch (error) {
-    console.error('Error checking token balance:', error);
+    logger.error('Error checking token balance', { error: error.message });
     throw new Error(`Failed to check token balance: ${error.message}`);
   }
 };
@@ -144,7 +145,7 @@ export const checkSolanaTokenBalance = async (walletAddress, mintAddress, solana
       type: 'SPL'
     };
   } catch (error) {
-    console.error('Error checking Solana token balance:', error);
+    logger.error('Error checking Solana token balance', { error: error.message });
     throw new Error(`Failed to check Solana token balance: ${error.message}`);
   }
 };

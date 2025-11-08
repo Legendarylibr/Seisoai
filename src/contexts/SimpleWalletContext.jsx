@@ -20,15 +20,15 @@ export const SimpleWalletProvider = ({ children }) => {
 
   // Fetch credits from backend with retry logic and caching
   const fetchCredits = useCallback(async (walletAddress, retries = 3, skipCache = false) => {
-    if (!walletAddress) {
-      console.warn('⚠️ No wallet address provided to fetchCredits');
-      setCredits(0);
-      return 0;
-    }
+      if (!walletAddress) {
+        logger.warn('No wallet address provided to fetchCredits');
+        setCredits(0);
+        return 0;
+      }
 
     // Normalize wallet address (lowercase for EVM addresses)
     const normalizedAddress = walletAddress.toLowerCase();
-    console.log('📊 Fetching credits for:', normalizedAddress, 'API URL:', API_URL);
+    logger.debug('Fetching credits', { walletAddress: normalizedAddress });
     
     // Check cache first (1 minute cache for credits) - skip if skipCache is true
     const cacheKey = `credits_${normalizedAddress}`;
@@ -39,13 +39,12 @@ export const SimpleWalletProvider = ({ children }) => {
             const { data, timestamp } = JSON.parse(cached);
             if (Date.now() - timestamp < 60000) { // 1 minute
               logger.debug('Using cached credits', { walletAddress: normalizedAddress, credits: data.credits, totalCreditsEarned: data.totalCreditsEarned, rawCredits: data.rawCredits });
-              console.log('💾 Using cached credits - Current:', data.credits, 'Rewarded:', data.totalCreditsEarned, 'Raw:', data.rawCredits);
               setCredits(data.credits || 0);
               setTotalCreditsEarned(data.totalCreditsEarned || 0);
               return data.credits || 0;
             }
         } catch (cacheError) {
-          console.warn('Failed to parse cached credits', cacheError);
+          logger.warn('Failed to parse cached credits', { error: cacheError.message });
         }
       }
     } else {
@@ -61,15 +60,14 @@ export const SimpleWalletProvider = ({ children }) => {
       } catch (e) {
         // Ignore errors during cache clearing
       }
-      console.log('🔄 Cache cleared, fetching fresh credits');
+      logger.debug('Cache cleared, fetching fresh credits');
     }
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         // Skip NFT checks for faster credits fetching - NFT checks happen separately
         const apiEndpoint = `${API_URL}/api/users/${normalizedAddress}?skipNFTs=true`;
-        console.log(`🔄 Attempt ${attempt}/${retries}: Fetching credits from:`, apiEndpoint);
-        logger.debug('Fetching credits from backend', { walletAddress: normalizedAddress, attempt, retries, apiUrl: API_URL });
+        logger.debug('Fetching credits from backend', { walletAddress: normalizedAddress, attempt, retries });
         const response = await fetch(apiEndpoint, {
           method: 'GET',
           headers: {
@@ -116,7 +114,7 @@ export const SimpleWalletProvider = ({ children }) => {
               userKeys: data.user ? Object.keys(data.user) : [],
               walletAddress: normalizedAddress 
             });
-            console.warn('⚠️ totalCreditsEarned not found in API response. Response structure:', data);
+            logger.warn('totalCreditsEarned not found in API response', { hasUser: !!data.user, hasSuccess: data.success });
           }
           
           // Store both values separately - credits (current spendable balance) and totalCreditsEarned (lifetime total)
@@ -125,10 +123,9 @@ export const SimpleWalletProvider = ({ children }) => {
           setCredits(currentCredits);
           setTotalCreditsEarned(rewardedAmount);
           
-          console.log(`✅ Credits loaded - Current Balance: ${currentCredits}, Total Rewarded: ${rewardedAmount}, for wallet: ${normalizedAddress}`);
-          console.log(`📊 Full API response data:`, JSON.stringify(data, null, 2));
+          logger.info('Credits loaded successfully', { credits: currentCredits, totalCreditsEarned: rewardedAmount, walletAddress: normalizedAddress });
           if (skipCache) {
-            console.log('🔄 Fresh credits fetched (cache bypassed)');
+            logger.debug('Fresh credits fetched (cache bypassed)');
           }
           
           // Cache the result (cache actual credits for faster access)
@@ -149,7 +146,7 @@ export const SimpleWalletProvider = ({ children }) => {
           return currentCredits; // Return actual credits for spending validation
         } else {
           const errorText = await response.text();
-          console.error(`❌ Credits fetch failed (${response.status}):`, errorText);
+          logger.error('Credits fetch failed', { status: response.status, errorText: errorText.substring(0, 100) });
           logger.warn('Failed to fetch credits', { 
             status: response.status, 
             statusText: response.statusText,
@@ -160,11 +157,11 @@ export const SimpleWalletProvider = ({ children }) => {
           });
           if (attempt === retries) {
             setCredits(0);
-            console.warn('⚠️ All attempts failed - credits set to 0');
+            logger.warn('All attempts failed - credits set to 0');
           }
         }
       } catch (error) {
-        console.error(`❌ Error fetching credits (attempt ${attempt}/${retries}):`, error);
+        logger.error('Error fetching credits', { attempt, retries, error: error.message });
         logger.error('Error fetching credits', { 
           error: error.message,
           errorStack: error.stack,
@@ -177,7 +174,6 @@ export const SimpleWalletProvider = ({ children }) => {
         // Don't retry on user abort
         if (error.name === 'AbortError') {
           logger.warn('Request aborted', { walletAddress: normalizedAddress });
-          console.warn('⚠️ Request aborted');
           setCredits(0);
           return;
         }
@@ -185,13 +181,11 @@ export const SimpleWalletProvider = ({ children }) => {
         // On last attempt, set credits to 0
         if (attempt === retries) {
           logger.error('All retry attempts failed', { walletAddress: normalizedAddress });
-          console.error('❌ All retry attempts failed');
           setCredits(0);
         } else {
           // Wait before retrying (exponential backoff)
           const delay = Math.min(1000 * attempt, 3000); // Max 3 second delay
           logger.debug('Retrying credit fetch', { delay, attempt, walletAddress: normalizedAddress });
-          console.log(`🔄 Retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
@@ -202,7 +196,7 @@ export const SimpleWalletProvider = ({ children }) => {
   const checkNFTStatus = async (walletAddress) => {
     try {
       if (!walletAddress) {
-        console.warn('⚠️ No wallet address provided to checkNFTStatus');
+        logger.warn('No wallet address provided to checkNFTStatus');
         setIsNFTHolder(false);
         setNftCollections([]);
         return;
@@ -210,7 +204,7 @@ export const SimpleWalletProvider = ({ children }) => {
 
       // Normalize wallet address (lowercase for EVM addresses)
       const normalizedAddress = walletAddress.toLowerCase();
-      console.log('🔍 Checking NFT status for:', normalizedAddress);
+      logger.debug('Checking NFT status', { walletAddress: normalizedAddress });
       
       // Check cache first (5 minute cache)
       const cacheKey = `nft_${normalizedAddress}`;
@@ -254,12 +248,9 @@ export const SimpleWalletProvider = ({ children }) => {
         collectionCount: collections.length,
         walletAddress: normalizedAddress 
       });
-      console.log(`✅ NFT status: ${isHolder ? 'Holder' : 'Non-holder'} (${collections.length} collections)`);
     } catch (error) {
-      console.error('❌ Error checking NFT status:', error);
       logger.error('Error checking NFT status', { 
         error: error.message,
-        errorStack: error.stack,
         walletAddress: normalizedAddress 
       });
       // Fail gracefully - don't set to false if cache had a value
@@ -320,7 +311,7 @@ export const SimpleWalletProvider = ({ children }) => {
             }
             address = accounts[0];
             setWalletType('evm');
-            console.log('✅ MetaMask connected successfully:', address);
+            logger.info('MetaMask connected successfully', { address });
           } catch (metamaskError) {
             // Ensure timeout is cleared before rethrowing
             if (connectionTimeout) clearTimeout(connectionTimeout);
@@ -367,7 +358,7 @@ export const SimpleWalletProvider = ({ children }) => {
             }
             address = rabbyAccounts[0];
             setWalletType('evm');
-            console.log('✅ Rabby connected successfully:', address);
+            logger.info('Rabby connected successfully', { address });
           } catch (rabbyError) {
             // Ensure timeout is cleared before rethrowing
             if (connectionTimeout) clearTimeout(connectionTimeout);
@@ -403,7 +394,7 @@ export const SimpleWalletProvider = ({ children }) => {
             }
             address = coinbaseAccounts[0];
             setWalletType('evm');
-            console.log('✅ Coinbase Wallet connected successfully:', address);
+            logger.info('Coinbase Wallet connected successfully', { address });
           } catch (coinbaseError) {
             // Ensure timeout is cleared before rethrowing
             if (connectionTimeout) clearTimeout(connectionTimeout);
@@ -445,11 +436,11 @@ export const SimpleWalletProvider = ({ children }) => {
               }
               address = resp.publicKey.toString();
               setWalletType('solana');
-              console.log('✅ Phantom connected successfully:', address);
+              logger.info('Phantom connected successfully', { address });
             } catch (phantomError) {
               clearTimeout(phantomTimeout);
               if (connectionTimeout) clearTimeout(connectionTimeout);
-              console.error('❌ Phantom connection failed:', phantomError);
+              logger.error('Phantom connection failed', { error: phantomError.message });
               throw new Error(`Phantom connection failed: ${phantomError.message}`);
             }
           } catch (phantomOuterError) {
@@ -492,11 +483,11 @@ export const SimpleWalletProvider = ({ children }) => {
               }
               address = provider.publicKey.toString();
               setWalletType('solana');
-              console.log('✅ Solflare connected successfully:', address);
+              logger.info('Solflare connected successfully', { address });
             } catch (solflareError) {
               clearTimeout(solflareTimeout);
               if (connectionTimeout) clearTimeout(connectionTimeout);
-              console.error('❌ Solflare connection failed:', solflareError);
+              logger.error('Solflare connection failed', { error: solflareError.message });
               throw new Error(`Solflare connection failed: ${solflareError.message}`);
             }
           } catch (solflareOuterError) {
@@ -525,12 +516,10 @@ export const SimpleWalletProvider = ({ children }) => {
       // But ensure credits are fetched immediately for display (skip cache for fresh data)
       Promise.all([
         fetchCredits(address, 3, true).then(credits => {
-          console.log('✅ Credits fetched successfully:', credits);
-          logger.info('Credits fetch completed', { credits, address });
+          logger.info('Credits fetched successfully', { credits, address });
           return credits;
         }).catch(error => {
-          logger.error('Credits fetch failed', { error: error.message, errorStack: error.stack, address });
-          console.error('❌ Credits fetch failed:', error);
+          logger.error('Credits fetch failed', { error: error.message, address });
           // Still show 0 credits so user knows it failed
           setCredits(0);
         }),
