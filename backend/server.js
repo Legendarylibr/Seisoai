@@ -4074,46 +4074,82 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
  */
 app.post('/api/generations/add', async (req, res) => {
   try {
-    console.log('📥 [GENERATION ADD] Request received:', {
-      body: req.body,
-      walletAddress: req.body?.walletAddress,
+    logger.debug('Generation add request received', {
+      hasWalletAddress: !!req.body?.walletAddress,
+      hasUserId: !!req.body?.userId,
+      hasEmail: !!req.body?.email,
       hasImageUrl: !!req.body?.imageUrl,
       creditsUsed: req.body?.creditsUsed
     });
 
     const { 
       walletAddress, 
+      userId,
+      email,
       prompt, 
       style, 
       imageUrl, 
       creditsUsed 
     } = req.body;
 
-    if (!walletAddress || !imageUrl) {
-      console.error('❌ [GENERATION ADD] Missing required fields:', { walletAddress: !!walletAddress, imageUrl: !!imageUrl });
+    if (!imageUrl) {
+      logger.error('Missing required field: imageUrl');
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: walletAddress and imageUrl are required'
+        error: 'Missing required field: imageUrl is required'
       });
     }
 
-    // Normalize wallet address to match database storage
-    const isSolanaAddress = !walletAddress.startsWith('0x');
-    const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
-    
-    console.log('🔍 [GENERATION ADD] Getting user:', {
-      originalWalletAddress: walletAddress,
-      normalizedWalletAddress: normalizedWalletAddress,
-      isSolana: isSolanaAddress
-    });
-    
-    const user = await getOrCreateUser(normalizedWalletAddress);
-    console.log('👤 [GENERATION ADD] User found:', {
+    // Support both wallet address and email/userId authentication
+    let user;
+    if (walletAddress) {
+      // Wallet-based user
+      const isSolanaAddress = !walletAddress.startsWith('0x');
+      const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+      
+      logger.debug('Getting user by wallet address', {
+        originalWalletAddress: walletAddress,
+        normalizedWalletAddress: normalizedWalletAddress,
+        isSolana: isSolanaAddress
+      });
+      
+      user = await getOrCreateUser(normalizedWalletAddress);
+    } else if (userId) {
+      // Email-based user (userId format: email_xxxxx)
+      logger.debug('Getting user by userId', { userId });
+      user = await User.findOne({ userId });
+      if (!user) {
+        logger.error('User not found by userId', { userId });
+        return res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+      }
+    } else if (email) {
+      // Email-based user (by email)
+      logger.debug('Getting user by email', { email });
+      user = await User.findOne({ email: email.toLowerCase() });
+      if (!user) {
+        logger.error('User not found by email', { email });
+        return res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+      }
+    } else {
+      logger.error('Missing user identifier', { hasWalletAddress: !!walletAddress, hasUserId: !!userId, hasEmail: !!email });
+      return res.status(400).json({
+        success: false,
+        error: 'Missing user identifier: walletAddress, userId, or email is required'
+      });
+    }
+    logger.debug('User found for generation', {
+      userId: user.userId,
+      email: user.email,
       walletAddress: user.walletAddress,
       credits: user.credits,
       totalCreditsEarned: user.totalCreditsEarned,
-      totalCreditsSpent: user.totalCreditsSpent,
-      matchesNormalized: user.walletAddress === normalizedWalletAddress
+      totalCreditsSpent: user.totalCreditsSpent
     });
     
     // Check credits directly - credits is the spendable balance
@@ -4122,7 +4158,9 @@ app.post('/api/generations/add', async (req, res) => {
     const creditsToDeduct = creditsUsed || 1; // Default to 1 credit if not specified
     
     logger.debug('Checking credits for generation', {
-      walletAddress: normalizedWalletAddress,
+      userId: user.userId,
+      email: user.email,
+      walletAddress: user.walletAddress,
       credits: user.credits,
       totalCreditsEarned: user.totalCreditsEarned,
       availableCredits,
@@ -4132,7 +4170,9 @@ app.post('/api/generations/add', async (req, res) => {
     // Check if user has enough credits
     if (availableCredits < creditsToDeduct) {
       logger.warn('Insufficient credits for generation', {
-        walletAddress: normalizedWalletAddress,
+        userId: user.userId,
+        email: user.email,
+        walletAddress: user.walletAddress,
         availableCredits,
         creditsToDeduct,
         totalCreditsEarned: user.totalCreditsEarned
@@ -4147,12 +4187,14 @@ app.post('/api/generations/add', async (req, res) => {
     const previousCredits = user.credits || 0;
     const previousTotalSpent = user.totalCreditsSpent || 0;
     
-    console.log('💰 [GENERATION ADD] Before deduction:', {
+    logger.debug('Before credit deduction', {
       previousCredits,
       previousTotalSpent,
       creditsToDeduct,
       availableCredits,
-      userWalletAddress: user.walletAddress
+      userId: user.userId,
+      email: user.email,
+      walletAddress: user.walletAddress
     });
     
     // Create generation object
@@ -4169,18 +4211,26 @@ app.post('/api/generations/add', async (req, res) => {
     // Use atomic update to do BOTH credit deduction AND add generation in one operation
     // This prevents race conditions and ensures credits are always deducted
     // DO NOT call user.save() after this - it would overwrite the atomic update!
-    console.log('🔧 [GENERATION ADD] Executing atomic update with:', {
-      walletAddress: normalizedWalletAddress,
+    // Build query based on how we found the user
+    let updateQuery;
+    if (walletAddress) {
+      const isSolanaAddress = !walletAddress.startsWith('0x');
+      const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+      updateQuery = { walletAddress: normalizedWalletAddress };
+    } else if (userId) {
+      updateQuery = { userId };
+    } else if (email) {
+      updateQuery = { email: email.toLowerCase() };
+    }
+    
+    logger.debug('Executing atomic update', {
+      updateQuery,
       creditsToDeduct,
-      hasGeneration: !!generation,
-      updateOperation: {
-        $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct },
-        $push: { generationHistory: generation, gallery: generation }
-      }
+      hasGeneration: !!generation
     });
     
     const updateResult = await User.findOneAndUpdate(
-      { walletAddress: normalizedWalletAddress },
+      updateQuery,
       {
         $inc: { 
           credits: -creditsToDeduct,
@@ -4194,7 +4244,7 @@ app.post('/api/generations/add', async (req, res) => {
       { new: true }
     );
     
-    console.log('🔧 [GENERATION ADD] Atomic update result:', {
+    logger.debug('Atomic update result', {
       found: !!updateResult,
       returnedCredits: updateResult?.credits,
       returnedTotalSpent: updateResult?.totalCreditsSpent,
@@ -4203,30 +4253,31 @@ app.post('/api/generations/add', async (req, res) => {
     });
     
     if (!updateResult) {
-      console.error('❌ [GENERATION ADD] Failed to update user - user not found:', normalizedWalletAddress);
+      logger.error('Failed to update user - user not found', { updateQuery });
       // Try to find the user to see if it exists
-      const checkUser = await User.findOne({ walletAddress: normalizedWalletAddress });
-      console.error('❌ [GENERATION ADD] User check:', {
+      const checkUser = await User.findOne(updateQuery);
+      logger.error('User check after failed update', {
         exists: !!checkUser,
-        foundWalletAddress: checkUser?.walletAddress,
-        searchedFor: normalizedWalletAddress,
-        match: checkUser?.walletAddress === normalizedWalletAddress
+        updateQuery,
+        foundUserId: checkUser?.userId,
+        foundEmail: checkUser?.email,
+        foundWalletAddress: checkUser?.walletAddress
       });
-      throw new Error(`Failed to update user credits. User ${normalizedWalletAddress} not found in database.`);
+      throw new Error(`Failed to update user credits. User not found in database.`);
     }
     
     // Ensure credits don't go negative (shouldn't happen due to availableCredits check, but safety)
     if (updateResult.credits < 0) {
-      console.warn('⚠️ [GENERATION ADD] Credits went negative, correcting to 0');
+      logger.warn('Credits went negative, correcting to 0', { updateQuery, credits: updateResult.credits });
       await User.findOneAndUpdate(
-        { walletAddress: normalizedWalletAddress },
+        updateQuery,
         { $set: { credits: 0 } },
         { new: true }
       );
       updateResult.credits = 0;
     }
     
-    console.log('✅ [GENERATION ADD] Atomic update completed:', {
+    logger.info('Atomic update completed', {
       newCredits: updateResult.credits,
       newTotalSpent: updateResult.totalCreditsSpent,
       generationId,
@@ -4235,8 +4286,8 @@ app.post('/api/generations/add', async (req, res) => {
     });
     
     // Refetch to verify everything saved correctly
-    const savedUser = await User.findOne({ walletAddress: normalizedWalletAddress });
-    console.log('✅ [GENERATION ADD] Verified saved credits:', {
+    const savedUser = await User.findOne(updateQuery);
+    logger.debug('Verified saved credits', {
       savedCredits: savedUser?.credits,
       savedTotalSpent: savedUser?.totalCreditsSpent,
       generationHistoryCount: savedUser?.generationHistory?.length,
@@ -4249,7 +4300,9 @@ app.post('/api/generations/add', async (req, res) => {
     const finalCredits = updateResult.credits;
     
     logger.info('Generation added to history and credits deducted', {
-      walletAddress: walletAddress.toLowerCase(),
+      userId: user.userId,
+      email: user.email,
+      walletAddress: user.walletAddress,
       generationId,
       creditsUsed: creditsToDeduct,
       previousCredits,

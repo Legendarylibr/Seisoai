@@ -1,27 +1,36 @@
 // Gallery and generation history service
+import logger from '../utils/logger.js';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 /**
  * Add generation to history and gallery
- * @param {string} walletAddress - User's wallet address
+ * @param {string} identifier - User's wallet address or userId (for email users)
  * @param {Object} generationData - Generation data
  * @returns {Promise<Object>} - Result
  */
-export const addGeneration = async (walletAddress, generationData) => {
+export const addGeneration = async (identifier, generationData) => {
   try {
     if (!API_URL) {
       throw new Error('API URL not configured');
     }
 
+    // Check if identifier is a wallet address or userId
+    const isWalletAddress = identifier?.startsWith('0x') || 
+                           (identifier && identifier.length > 20 && !identifier.startsWith('email_'));
+    
     // Normalize wallet address (only lowercase EVM addresses, Solana addresses stay as-is)
-    const normalizedAddress = walletAddress?.startsWith('0x') 
-      ? walletAddress.toLowerCase() 
-      : walletAddress;
+    const normalizedIdentifier = isWalletAddress && identifier?.startsWith('0x')
+      ? identifier.toLowerCase() 
+      : identifier;
 
-    console.log('📤 Calling /api/generations/add', {
-      walletAddress: normalizedAddress,
+    logger.debug('Calling /api/generations/add', {
+      identifier: normalizedIdentifier,
+      isWalletAddress,
       creditsUsed: generationData.creditsUsed,
-      hasImageUrl: !!generationData.imageUrl
+      hasImageUrl: !!generationData.imageUrl,
+      hasUserId: !!generationData.userId,
+      hasEmail: !!generationData.email
     });
 
     const response = await fetch(`${API_URL}/api/generations/add`, {
@@ -30,13 +39,15 @@ export const addGeneration = async (walletAddress, generationData) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        walletAddress: normalizedAddress,
+        walletAddress: isWalletAddress ? normalizedIdentifier : undefined,
+        userId: !isWalletAddress ? normalizedIdentifier : undefined,
+        email: generationData.email,
         ...generationData
       })
     });
 
     const responseText = await response.text();
-    console.log('📥 Response from /api/generations/add:', response.status, responseText);
+    logger.debug('Response from /api/generations/add', { status: response.status });
 
     if (!response.ok) {
       let errorData;
@@ -45,20 +56,20 @@ export const addGeneration = async (walletAddress, generationData) => {
       } catch {
         errorData = { error: responseText || 'Failed to add generation' };
       }
-      console.error('❌ Backend error:', errorData);
+      logger.error('Backend error adding generation', { error: errorData.error, status: response.status });
       throw new Error(errorData.error || `Failed to add generation: ${response.status} ${response.statusText}`);
     }
 
     const data = JSON.parse(responseText);
     if (!data.success) {
-      console.error('❌ Backend returned success=false:', data);
+      logger.error('Backend returned success=false', { error: data.error });
       throw new Error(data.error || 'Failed to add generation');
     }
     
-    console.log('✅ Generation added successfully:', data);
+    logger.info('Generation added successfully', { remainingCredits: data.remainingCredits });
     return data;
   } catch (error) {
-    console.error('❌ Error adding generation:', error);
+    logger.error('Error adding generation', { error: error.message });
     throw error;
   }
 };

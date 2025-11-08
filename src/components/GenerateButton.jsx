@@ -105,9 +105,14 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   const handleGenerate = async () => {
     // Check if authenticated (email or wallet)
     const isAuthenticated = isConnected || isEmailAuth;
-    const hasAddress = address || emailContext.linkedWalletAddress;
     
-    if (!isAuthenticated || !hasAddress) {
+    // For email users, we can use userId or linked wallet address
+    // For wallet users, we need the address
+    const hasIdentifier = isEmailAuth 
+      ? (emailContext.userId || emailContext.linkedWalletAddress) 
+      : address;
+    
+    if (!isAuthenticated || !hasIdentifier) {
       if (isEmailAuth) {
         setError('Please sign in with your email account');
       } else {
@@ -164,15 +169,26 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       
       // Save generation to backend and deduct credits IMMEDIATELY after image is returned
       // This happens automatically - no manual trigger needed
-      logger.debug('Saving generation and deducting credits', { address, currentCredits: credits });
+      // Use wallet address if available, otherwise use userId for email users
+      const userIdentifier = isEmailAuth 
+        ? (emailContext.linkedWalletAddress || emailContext.userId) 
+        : address;
+      
+      logger.debug('Saving generation and deducting credits', { 
+        userIdentifier, 
+        isEmailAuth, 
+        currentCredits: availableCredits 
+      });
       
       let deductionResult = null;
       try {
-        deductionResult = await addGeneration(address, {
+        deductionResult = await addGeneration(userIdentifier, {
           prompt: customPrompt || (selectedStyle ? selectedStyle.prompt : 'No style selected'),
           style: selectedStyle ? selectedStyle.name : 'No Style',
           imageUrl,
-          creditsUsed: 1 // 1 credit per generation
+          creditsUsed: 1, // 1 credit per generation
+          userId: isEmailAuth ? emailContext.userId : undefined, // Include userId for email users
+          email: isEmailAuth ? emailContext.email : undefined // Include email for email users
         });
         logger.info('Generation saved and credits deducted', {
           success: deductionResult.success,
