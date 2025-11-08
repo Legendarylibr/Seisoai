@@ -3514,6 +3514,121 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
 });
 
 /**
+ * Create Stripe Checkout Session for subscriptions
+ */
+app.post('/create-checkout-session', async (req, res) => {
+  try {
+    // Check if Stripe is configured
+    if (!stripe) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stripe payment is not configured. Please use token payment instead.'
+      });
+    }
+
+    const { 
+      lookup_key,
+      walletAddress, 
+      userId,  // For email users
+      success_url,
+      cancel_url
+    } = req.body;
+
+    if (!lookup_key) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: lookup_key'
+      });
+    }
+
+    // Verify user exists - support both wallet and email auth
+    let user;
+    if (userId) {
+      // Email user
+      user = await User.findOne({ userId });
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+      }
+    } else if (walletAddress) {
+      // Wallet user
+      user = await getOrCreateUser(walletAddress);
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Either walletAddress or userId is required'
+      });
+    }
+
+    // Get base URL from environment or request
+    const baseUrl = process.env.FRONTEND_URL || 
+                   (req.headers.origin || `http://${req.headers.host}`);
+
+    // Look up the price by lookup_key if it's not already a price ID
+    let priceId = lookup_key;
+    
+    // If lookup_key doesn't start with 'price_', assume it's a lookup_key and retrieve the price
+    if (!lookup_key.startsWith('price_')) {
+      const prices = await stripe.prices.list({
+        lookup_keys: [lookup_key],
+        limit: 1,
+      });
+      
+      if (prices.data.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Price with lookup_key "${lookup_key}" not found`
+        });
+      }
+      
+      priceId = prices.data[0].id;
+    }
+
+    // Create checkout session
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      customer_email: user.email || undefined,
+      metadata: {
+        userId: user._id.toString(),
+        walletAddress: user.walletAddress ? user.walletAddress.toLowerCase() : '',
+        email: user.email || '',
+      },
+      success_url: success_url || `${baseUrl}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: cancel_url || `${baseUrl}?canceled=true`,
+    });
+
+    logger.info('Stripe checkout session created', {
+      userId: user.userId,
+      email: user.email || null,
+      walletAddress: user.walletAddress || null,
+      lookup_key,
+      sessionId: session.id
+    });
+
+    res.json({
+      success: true,
+      sessionId: session.id,
+      url: session.url
+    });
+
+  } catch (error) {
+    logger.error('Stripe checkout session creation error:', error);
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to create checkout session')
+    });
+  }
+});
+
+/**
  * Instant payment detection - checks for payments immediately after wallet connection
  * Note: Rate limiting applied via instantCheckLimiter above
  */

@@ -13,12 +13,13 @@ import EmailSignIn from './components/EmailSignIn';
 import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import ImageGallery from './components/ImageGallery';
+import PricingPage from './components/PricingPage';
 // Batch and Templates removed from UI
 // Settings removed from UI
 // Video functionality removed
 // import LegalDisclaimer from './components/LegalDisclaimer'; // DISABLED - Legal/terms removed from main screen
 import GenerateButton from './components/GenerateButton';
-import { Grid, Sparkles, Wallet, ArrowRight, Image, Mail, CreditCard } from 'lucide-react';
+import { Grid, Sparkles, Wallet, ArrowRight, Image, Mail, CreditCard, DollarSign } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
@@ -27,7 +28,8 @@ function App() {
 
   const tabs = [
     { id: 'generate', name: 'Generate', icon: Sparkles },
-    { id: 'gallery', name: 'Gallery', icon: Grid }
+    { id: 'gallery', name: 'Gallery', icon: Grid },
+    { id: 'pricing', name: 'Pricing', icon: DollarSign }
   ];
 
   const [showStripePaymentModal, setShowStripePaymentModal] = useState(false);
@@ -107,7 +109,12 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
     }
   }, [isAuthenticated, isConnected, emailCredits, hasShownStripeModal, onShowStripePayment]);
 
-  // Show auth prompt if not authenticated
+  // Pricing page is accessible without auth (but checkout requires auth)
+  if (activeTab === 'pricing') {
+    return <PricingPage />;
+  }
+
+  // Show auth prompt if not authenticated (for other tabs)
   if (!isConnected && !isAuthenticated) {
     return <AuthPrompt onSwitchToWallet={() => {}} />;
   }

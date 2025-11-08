@@ -237,7 +237,7 @@ export const getCreditPackages = () => {
     {
       id: 'small',
       name: 'Starter Pack',
-      price: 10,
+      price: 15,
       description: 'Perfect for trying out Seiso AI',
       popular: false
     },
