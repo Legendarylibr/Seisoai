@@ -2,7 +2,6 @@
 // This service handles image generation using your local ComfyUI model via FastAPI
 
 import { VISUAL_STYLES } from '../utils/styles.js';
-// import { performContentSafetyCheck, logSafetyViolation, getSafeAlternatives } from './contentSafetyService.js';
 import logger from '../utils/logger.js';
 
 const FASTAPI_URL = import.meta.env.VITE_FASTAPI_URL || 'http://localhost:8000';

@@ -1,6 +1,5 @@
 // FAL.ai API service for Flux Kontext image generation
 import { VISUAL_STYLES } from '../utils/styles.js';
-// import { performContentSafetyCheck, logSafetyViolation, getSafeAlternatives } from './contentSafetyService.js';
 import logger from '../utils/logger.js';
 import { optimizeImages, needsOptimization } from '../utils/imageOptimizer.js';
 

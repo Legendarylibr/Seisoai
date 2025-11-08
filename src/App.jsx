@@ -14,10 +14,6 @@ import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import ImageGallery from './components/ImageGallery';
 import PricingPage from './components/PricingPage';
-// Batch and Templates removed from UI
-// Settings removed from UI
-// Video functionality removed
-// import LegalDisclaimer from './components/LegalDisclaimer'; // DISABLED - Legal/terms removed from main screen
 import GenerateButton from './components/GenerateButton';
 import { Grid, Sparkles, Wallet, ArrowRight, Image, Mail, CreditCard, DollarSign } from 'lucide-react';
 
@@ -79,11 +75,6 @@ function App() {
               isOpen={showStripePaymentModal} 
               onClose={() => setShowStripePaymentModal(false)} 
             />
-            
-            {/* DISABLED - Legal/terms panel removed from main screen
-            <LegalDisclaimer />
-            */}
-            
           </div>
         </ImageGeneratorProvider>
       </EmailAuthProvider>
@@ -125,8 +116,6 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
       <AuthGuard requireCredits={activeTab === 'generate'}>
         {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
         {activeTab === 'gallery' && <GalleryTab />}
-        {/* Settings route removed */}
-        {/* Video tab removed */}
       </AuthGuard>
     </>
   );
@@ -479,9 +468,5 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
 function GalleryTab() {
   return <ImageGallery />;
 }
-
-// TemplatesTab and BatchTab removed
-// VideoTab removed
-// SettingsTab removed
 
 export default App;
