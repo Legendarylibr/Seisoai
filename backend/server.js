@@ -1026,8 +1026,13 @@ const mongoOptions = {
 // Add SSL for production
 if (process.env.NODE_ENV === 'production') {
   mongoOptions.ssl = true;
-  mongoOptions.tlsAllowInvalidCertificates = true; // Use new option instead of deprecated sslValidate
+  // SECURITY: Only allow invalid certificates in development/testing
+  // In production, certificates MUST be valid for security
+  mongoOptions.tlsAllowInvalidCertificates = process.env.MONGODB_ALLOW_INVALID_CERT === 'true' ? true : false;
   mongoOptions.authSource = 'admin';
+  // Additional security options
+  mongoOptions.retryWrites = true;
+  mongoOptions.w = 'majority';
 }
 
 // Connect to MongoDB
