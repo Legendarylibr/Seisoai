@@ -434,7 +434,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         }
       }
     } catch (error) {
-      console.error('Error checking USDC balance across networks:', error);
+      logger.error('Error checking USDC balance across networks', { error: error.message });
     }
   };
 
@@ -489,11 +489,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         try {
           await addNetwork(chainId);
         } catch (addError) {
-          console.error('Failed to add network:', addError);
+          logger.error('Failed to add network', { error: addError.message });
           setError(`Failed to add network. Please add it manually in your wallet.`);
         }
       } else {
-        console.error('Failed to switch network:', switchError);
+        logger.error('Failed to switch network', { error: switchError.message });
         setError(`Failed to switch network: ${switchError.message}`);
       }
     }
@@ -569,7 +569,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
 
 
   const handleSendTransaction = async () => {
-    console.log('🚀 handleSendTransaction called', { 
+    logger.debug('handleSendTransaction called', { 
       amount, 
       walletType, 
       address,
@@ -577,19 +577,19 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     });
     
     if (!amount) {
-      console.log('❌ Missing amount');
+      logger.debug('Missing amount');
       setError('Please enter an amount');
       return;
     }
     
     if (!address) {
-      console.log('❌ No wallet connected');
+      logger.debug('No wallet connected');
       setError('Please connect your wallet first');
       return;
     }
     
     if (!walletType) {
-      console.log('❌ No wallet type detected');
+      logger.debug('No wallet type detected');
       setError('Wallet type not detected. Please reconnect your wallet');
       return;
     }
@@ -598,7 +598,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       setIsProcessing(true);
       setError('');
       
-      console.log('🔍 Processing transaction for wallet type:', walletType);
+      logger.debug('Processing transaction', { walletType });
       
       // Ensure wallet is still connected and working
       if (walletType === 'solana') {
@@ -608,7 +608,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         
         // Check if wallet is connected
         if (!window.solana.isConnected) {
-          console.log('🔄 Reconnecting to Phantom...');
+          logger.debug('Reconnecting to Phantom');
           try {
             const response = await window.solana.connect();
             if (!response || !response.publicKey) {
