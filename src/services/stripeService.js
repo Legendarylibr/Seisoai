@@ -204,21 +204,19 @@ export const getStripe = async () => {
  * @returns {number} - Number of credits
  */
 export const calculateCreditsFromUSD = (amount, isNFTHolder = false) => {
-  // Base rate: 5 credits per dollar
-  const baseRate = 5;
+  // Base rate: 50 credits for $15 = 3.333 credits per dollar
+  const baseRate = 50 / 15; // 3.333 credits per dollar
   
-  // Subscription scaling based on amount
+  // Subscription scaling based on amount (monthly recurring)
   let scalingMultiplier = 1.0;
   if (amount >= 100) {
-    scalingMultiplier = 1.3; // 30% bonus for $100+ (6.5 credits/dollar)
+    scalingMultiplier = 1.3; // 30% bonus for $100+ (4.33 credits/dollar)
   } else if (amount >= 50) {
-    scalingMultiplier = 1.2; // 20% bonus for $50-99 (6 credits/dollar)
+    scalingMultiplier = 1.2; // 20% bonus for $50-99 (4 credits/dollar)
   } else if (amount >= 25) {
-    scalingMultiplier = 1.1; // 10% bonus for $25-49 (5.5 credits/dollar)
-  } else if (amount >= 10) {
-    scalingMultiplier = 1.05; // 5% bonus for $10-24 (5.25 credits/dollar)
+    scalingMultiplier = 1.1; // 10% bonus for $25-49 (3.67 credits/dollar)
   }
-  // $1-9: 5 credits/dollar (no bonus)
+  // $15: 3.333 credits/dollar (no bonus) = 50 credits
   
   // NFT holder bonus (additional 20% on top of subscription scaling)
   const nftMultiplier = isNFTHolder ? 1.2 : 1;
@@ -232,7 +230,7 @@ export const calculateCreditsFromUSD = (amount, isNFTHolder = false) => {
  * @returns {Array} - Array of credit packages
  */
 export const getCreditPackages = () => {
-  // Base rate: 5 credits per dollar, with scaling for larger purchases
+  // Base rate: 50 credits for $15 = 3.333 credits per dollar, with scaling for larger purchases (monthly recurring)
   const packages = [
     {
       id: 'small',

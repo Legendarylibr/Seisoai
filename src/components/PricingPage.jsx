@@ -107,9 +107,9 @@ const PricingPage = () => {
           <SubscriptionCheckout
             priceLookupKey={starterPriceLookupKey}
             planName="Starter Pack"
-            planPrice="$15"
+            planPrice="$15/month"
             description="Perfect for trying out Seiso AI"
-            credits="75 credits"
+            credits="50 credits/month"
             onSuccess={(sessionId) => handleSuccess(sessionId, 'Starter Pack', '$15/month')}
             onError={handleError}
             compact={true}
@@ -119,9 +119,9 @@ const PricingPage = () => {
           <SubscriptionCheckout
             priceLookupKey={creatorPriceLookupKey}
             planName="Creator Pack"
-            planPrice="$25"
+            planPrice="$25/month"
             description="Great for regular creators"
-            credits="137 credits (10% bulk discount)"
+            credits="91 credits/month (10% savings)"
             highlight="Popular"
             savePercentage="Save 10%"
             onSuccess={(sessionId) => handleSuccess(sessionId, 'Creator Pack', '$25/month')}
@@ -133,9 +133,9 @@ const PricingPage = () => {
           <SubscriptionCheckout
             priceLookupKey={proPriceLookupKey}
             planName="Pro Pack"
-            planPrice="$50"
+            planPrice="$50/month"
             description="Best value for power users"
-            credits="300 credits (20% bulk discount)"
+            credits="200 credits/month (20% savings)"
             savePercentage="Save 20%"
             onSuccess={(sessionId) => handleSuccess(sessionId, 'Pro Pack', '$50/month')}
             onError={handleError}
@@ -146,9 +146,9 @@ const PricingPage = () => {
           <SubscriptionCheckout
             priceLookupKey={studioPriceLookupKey}
             planName="Studio Pack"
-            planPrice="$100"
+            planPrice="$100/month"
             description="For professional studios"
-            credits="650 credits (30% bulk discount)"
+            credits="433 credits/month (30% savings)"
             savePercentage="Save 30%"
             onSuccess={(sessionId) => handleSuccess(sessionId, 'Studio Pack', '$100/month')}
             onError={handleError}

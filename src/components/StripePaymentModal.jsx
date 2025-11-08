@@ -411,7 +411,7 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
                   
                   <div className="text-left">
                     <div className="text-2xl font-bold text-white mb-1">
-                      ${pkg.price}
+                      ${pkg.price}/month
                     </div>
                     <div className="text-sm text-gray-400 mb-2">
                       {pkg.description}
@@ -419,7 +419,7 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
                     <div className="flex items-center gap-2 text-sm">
                       <Coins className="w-4 h-4 text-purple-400" />
                       <span className="text-purple-400 font-medium">
-                        {calculateCreditsFromUSD(pkg.price, isNFTHolder)} credits
+                        {calculateCreditsFromUSD(pkg.price, isNFTHolder)} credits/month
                       </span>
                       {isNFTHolder && (
                         <span className="text-green-400 text-xs">
@@ -428,7 +428,7 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
                       )}
                       {pkg.savings && (
                         <span className="text-blue-400 text-xs">
-                          ({pkg.savings}% bulk discount)
+                          ({pkg.savings}% savings)
                         </span>
                       )}
                     </div>
@@ -468,13 +468,13 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
                 </span>
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                ${getPrice()} USD • {(() => {
+                ${getPrice()}/month USD • {(() => {
                   const amount = getPrice();
-                  let rate = '5 credits/$';
-                  if (amount >= 100) rate = '6.5 credits/$ (30% bonus)';
-                  else if (amount >= 50) rate = '6 credits/$ (20% bonus)';
-                  else if (amount >= 25) rate = '5.5 credits/$ (10% bonus)';
-                  else if (amount >= 10) rate = '5.25 credits/$ (5% bonus)';
+                  let rate = '3.33 credits/$';
+                  if (amount >= 100) rate = '4.33 credits/$ (30% bonus)';
+                  else if (amount >= 50) rate = '4 credits/$ (20% bonus)';
+                  else if (amount >= 25) rate = '3.67 credits/$ (10% bonus)';
+                  else if (amount >= 15) rate = '3.33 credits/$';
                   return rate + (isNFTHolder ? ' + NFT bonus' : '');
                 })()}
               </div>
