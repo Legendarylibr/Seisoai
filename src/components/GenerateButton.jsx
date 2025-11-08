@@ -250,15 +250,15 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     if (isGenerating) return 'Generating...';
     if (walletLoading) return 'Loading...';
     if (!isConnected && !isEmailAuth) return 'Connect Wallet or Sign In First';
-    if (credits <= 0) return 'Buy Credits to Generate';
+    if (availableCredits <= 0) return 'Buy Credits to Generate';
     return 'Generate Image';
   };
 
   const getButtonIcon = () => {
     if (isGenerating) return <div className="w-4 h-4 animate-spin text-lg">⏳</div>;
     if (walletLoading) return <div className="w-4 h-4 animate-pulse text-lg">⏳</div>;
-    if (!isConnected) return <div className="w-4 h-4 text-lg">🔗</div>;
-    if (credits <= 0) return <div className="w-4 h-4 text-lg">💳</div>;
+    if (!isConnected && !isEmailAuth) return <div className="w-4 h-4 text-lg">🔗</div>;
+    if (availableCredits <= 0) return <div className="w-4 h-4 text-lg">💳</div>;
     return <div className="w-4 h-4 text-lg">✨</div>;
   };
 
@@ -274,7 +274,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
             transition-all duration-300 transform
             ${isDisabled 
               ? 'opacity-50 cursor-not-allowed bg-gray-600 text-gray-400' 
-              : (credits <= 0)
+              : (availableCredits <= 0)
                 ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-400 hover:to-orange-400 hover:shadow-xl hover:shadow-yellow-500/30 hover:scale-105'
                 : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400 hover:shadow-xl hover:shadow-purple-500/30 hover:scale-105'
             }

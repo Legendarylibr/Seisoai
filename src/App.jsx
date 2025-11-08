@@ -356,7 +356,7 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
   
   // Use email auth if available, otherwise wallet
   const isEmailAuth = emailContext.isAuthenticated;
-  const credits = isEmailAuth ? emailContext.credits : walletContext.credits;
+  const credits = isEmailAuth ? (emailContext.credits || 0) : (walletContext.credits || 0);
 
   return (
     <div className="fade-in">

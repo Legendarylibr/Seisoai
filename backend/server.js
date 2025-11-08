@@ -472,6 +472,193 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
         logger.error('Error processing webhook payment:', webhookError);
       }
       break;
+
+    case 'checkout.session.completed':
+      // Handle subscription checkout completion
+      const session = event.data.object;
+      logger.info('Checkout session completed via webhook', {
+        sessionId: session.id,
+        mode: session.mode,
+        customer: session.customer,
+        metadata: session.metadata
+      });
+
+      // Only process subscription checkouts
+      if (session.mode === 'subscription' && session.metadata) {
+        try {
+          // Get user from metadata
+          let user;
+          if (session.metadata.userId) {
+            user = await User.findById(session.metadata.userId);
+          } else if (session.metadata.walletAddress) {
+            user = await getOrCreateUser(session.metadata.walletAddress);
+          } else if (session.metadata.email) {
+            user = await User.findOne({ email: session.metadata.email.toLowerCase() });
+          }
+
+          if (user) {
+            // Retrieve the subscription to get the amount
+            const subscriptionId = session.subscription;
+            if (subscriptionId) {
+              const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+              const amount = subscription.items.data[0]?.price?.unit_amount || 0;
+              const amountInDollars = amount / 100;
+
+              // Use session ID as payment identifier to prevent duplicates
+              const paymentId = `checkout_${session.id}`;
+              
+              if (!isPaymentAlreadyProcessed(user, null, paymentId)) {
+                // Calculate credits using same formula
+                const baseRate = 5;
+                let scalingMultiplier = 1.0;
+                if (amountInDollars >= 100) {
+                  scalingMultiplier = 1.3;
+                } else if (amountInDollars >= 50) {
+                  scalingMultiplier = 1.2;
+                } else if (amountInDollars >= 25) {
+                  scalingMultiplier = 1.1;
+                } else if (amountInDollars >= 10) {
+                  scalingMultiplier = 1.05;
+                }
+
+                let isNFTHolder = false;
+                if (user.walletAddress) {
+                  isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+                }
+
+                const nftMultiplier = isNFTHolder ? 1.2 : 1;
+                const finalCredits = Math.floor(amountInDollars * baseRate * scalingMultiplier * nftMultiplier);
+
+                // Add credits
+                await addCreditsToUser(user, {
+                  txHash: paymentId,
+                  tokenSymbol: 'USD',
+                  amount: amountInDollars,
+                  credits: finalCredits,
+                  chainId: 'stripe',
+                  walletType: 'card',
+                  paymentIntentId: paymentId,
+                  subscriptionId: subscriptionId
+                });
+
+                logger.info('Credits added via subscription checkout webhook', {
+                  sessionId: session.id,
+                  subscriptionId: subscriptionId,
+                  userId: user.userId || null,
+                  walletAddress: user.walletAddress || null,
+                  amount: amountInDollars,
+                  credits: finalCredits
+                });
+              }
+            }
+          }
+        } catch (webhookError) {
+          logger.error('Error processing subscription checkout webhook:', webhookError);
+        }
+      }
+      break;
+
+    case 'invoice.payment_succeeded':
+      // Handle recurring subscription payments
+      const invoice = event.data.object;
+      logger.info('Invoice payment succeeded via webhook', {
+        invoiceId: invoice.id,
+        subscription: invoice.subscription,
+        amount: invoice.amount_paid,
+        customer: invoice.customer
+      });
+
+      // Only process subscription invoices
+      if (invoice.subscription && invoice.amount_paid > 0) {
+        try {
+          // Retrieve subscription to get metadata
+          const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+          const customerId = subscription.customer;
+          
+          // Try to get customer to find email
+          let customer = null;
+          if (customerId) {
+            try {
+              customer = await stripe.customers.retrieve(customerId);
+            } catch (e) {
+              logger.warn('Could not retrieve customer:', e.message);
+            }
+          }
+
+          // Get user from subscription metadata or customer email
+          let user = null;
+          if (subscription.metadata && subscription.metadata.userId) {
+            user = await User.findById(subscription.metadata.userId);
+          } else if (subscription.metadata && subscription.metadata.walletAddress) {
+            user = await getOrCreateUser(subscription.metadata.walletAddress);
+          } else if (customer && customer.email) {
+            user = await User.findOne({ email: customer.email.toLowerCase() });
+          }
+
+          if (user) {
+            const amountInDollars = invoice.amount_paid / 100;
+            const paymentId = `invoice_${invoice.id}`;
+
+            if (!isPaymentAlreadyProcessed(user, null, paymentId)) {
+              // Calculate credits using same formula
+              const baseRate = 5;
+              let scalingMultiplier = 1.0;
+              if (amountInDollars >= 100) {
+                scalingMultiplier = 1.3;
+              } else if (amountInDollars >= 50) {
+                scalingMultiplier = 1.2;
+              } else if (amountInDollars >= 25) {
+                scalingMultiplier = 1.1;
+              } else if (amountInDollars >= 10) {
+                scalingMultiplier = 1.05;
+              }
+
+              let isNFTHolder = false;
+              if (user.walletAddress) {
+                isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+              }
+
+              const nftMultiplier = isNFTHolder ? 1.2 : 1;
+              const finalCredits = Math.floor(amountInDollars * baseRate * scalingMultiplier * nftMultiplier);
+
+              // Add credits
+              await addCreditsToUser(user, {
+                txHash: paymentId,
+                tokenSymbol: 'USD',
+                amount: amountInDollars,
+                credits: finalCredits,
+                chainId: 'stripe',
+                walletType: 'card',
+                paymentIntentId: paymentId,
+                subscriptionId: invoice.subscription
+              });
+
+              logger.info('Credits added via subscription invoice webhook', {
+                invoiceId: invoice.id,
+                subscriptionId: invoice.subscription,
+                userId: user.userId || null,
+                walletAddress: user.walletAddress || null,
+                amount: amountInDollars,
+                credits: finalCredits
+              });
+            } else {
+              logger.info('Subscription invoice already processed', {
+                invoiceId: invoice.id
+              });
+            }
+          } else {
+            logger.warn('Could not find user for subscription invoice', {
+              invoiceId: invoice.id,
+              subscriptionId: invoice.subscription,
+              customerId: customerId
+            });
+          }
+        } catch (webhookError) {
+          logger.error('Error processing subscription invoice webhook:', webhookError);
+        }
+      }
+      break;
+
     default:
       logger.info(`Unhandled event type ${event.type}`);
   }
@@ -3616,6 +3803,13 @@ app.post('/create-checkout-session', async (req, res) => {
         userId: user._id.toString(),
         walletAddress: user.walletAddress ? user.walletAddress.toLowerCase() : '',
         email: user.email || '',
+      },
+      subscription_data: {
+        metadata: {
+          userId: user._id.toString(),
+          walletAddress: user.walletAddress ? user.walletAddress.toLowerCase() : '',
+          email: user.email || '',
+        },
       },
       success_url: success_url || `${baseUrl}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancel_url || `${baseUrl}?canceled=true`,

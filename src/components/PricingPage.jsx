@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import SubscriptionCheckout from './SubscriptionCheckout';
+import PaymentSuccessModal from './PaymentSuccessModal';
+import { CheckCircle, AlertCircle, X } from 'lucide-react';
 
 /**
  * PricingPage Component
@@ -16,19 +18,78 @@ const PricingPage = () => {
   const proPriceLookupKey = 'pro_pack_monthly'; // Replace with your actual lookup key
   const studioPriceLookupKey = 'studio_pack_monthly'; // Replace with your actual lookup key
 
-  const handleSuccess = (sessionId) => {
-    console.log('Checkout successful:', sessionId);
-    // You can add redirect logic or success notification here
-    // For example: window.location.href = '/success';
+  const [successState, setSuccessState] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
+
+  // Check for success in URL params when component mounts
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
+    const canceled = urlParams.get('canceled');
+
+    if (sessionId) {
+      // Determine which plan was purchased based on session
+      // For now, we'll show a generic success
+      setSuccessState({
+        sessionId,
+        planName: 'Subscription',
+        planPrice: 'Activated'
+      });
+      
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (canceled) {
+      setErrorMessage('Checkout was canceled. You can try again anytime.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const handleSuccess = (sessionId, planName, planPrice) => {
+    setSuccessState({
+      sessionId,
+      planName: planName || 'Subscription',
+      planPrice: planPrice || 'Activated'
+    });
   };
 
   const handleError = (error) => {
-    console.error('Checkout error:', error);
-    // You can add error notification here
+    setErrorMessage(error);
+    setTimeout(() => setErrorMessage(null), 5000);
+  };
+
+  const closeSuccessModal = () => {
+    setSuccessState(null);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900 animated-bg py-12 px-4">
+      {/* Success Modal */}
+      {successState && (
+        <PaymentSuccessModal
+          isOpen={!!successState}
+          onClose={closeSuccessModal}
+          planName={successState.planName}
+          planPrice={successState.planPrice}
+          sessionId={successState.sessionId}
+        />
+      )}
+
+      {/* Error Message Banner */}
+      {errorMessage && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-40 max-w-md w-full mx-4">
+          <div className="glass-card bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center gap-3 animate-slide-down">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <p className="text-red-400 text-sm flex-1">{errorMessage}</p>
+            <button
+              onClick={() => setErrorMessage(null)}
+              className="text-red-400 hover:text-red-300 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="container mx-auto max-w-6xl">
         {/* Header */}
         <div className="text-center mb-12">
@@ -49,7 +110,7 @@ const PricingPage = () => {
             planPrice="$15"
             description="Perfect for trying out Seiso AI"
             credits="75 credits"
-            onSuccess={handleSuccess}
+            onSuccess={(sessionId) => handleSuccess(sessionId, 'Starter Pack', '$15/month')}
             onError={handleError}
             compact={true}
           />
@@ -63,7 +124,7 @@ const PricingPage = () => {
             credits="137 credits (10% bulk discount)"
             highlight="Popular"
             savePercentage="Save 10%"
-            onSuccess={handleSuccess}
+            onSuccess={(sessionId) => handleSuccess(sessionId, 'Creator Pack', '$25/month')}
             onError={handleError}
             compact={true}
           />
@@ -76,7 +137,7 @@ const PricingPage = () => {
             description="Best value for power users"
             credits="300 credits (20% bulk discount)"
             savePercentage="Save 20%"
-            onSuccess={handleSuccess}
+            onSuccess={(sessionId) => handleSuccess(sessionId, 'Pro Pack', '$50/month')}
             onError={handleError}
             compact={true}
           />
@@ -89,16 +150,33 @@ const PricingPage = () => {
             description="For professional studios"
             credits="650 credits (30% bulk discount)"
             savePercentage="Save 30%"
-            onSuccess={handleSuccess}
+            onSuccess={(sessionId) => handleSuccess(sessionId, 'Studio Pack', '$100/month')}
             onError={handleError}
             compact={true}
           />
         </div>
 
         {/* Additional Info */}
-        <div className="mt-12 text-center">
+        <div className="mt-12 text-center space-y-4">
+          <div className="glass-card rounded-xl p-6 max-w-2xl mx-auto">
+            <h3 className="text-lg font-semibold text-white mb-3">What's Included</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="flex items-center gap-2 text-gray-300">
+                <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+                <span>All AI features</span>
+              </div>
+              <div className="flex items-center gap-2 text-gray-300">
+                <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+                <span>Cancel anytime</span>
+              </div>
+              <div className="flex items-center gap-2 text-gray-300">
+                <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+                <span>Secure payments</span>
+              </div>
+            </div>
+          </div>
           <p className="text-gray-400 text-sm">
-            All plans include access to all features. Cancel anytime.
+            All plans include access to all features. Cancel anytime. No hidden fees.
           </p>
         </div>
       </div>
