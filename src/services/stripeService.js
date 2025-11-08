@@ -231,33 +231,33 @@ export const calculateCreditsFromUSD = (amount, isNFTHolder = false) => {
  * @returns {Array} - Array of credit packages
  */
 export const getCreditPackages = () => {
-  // Base rate: 50 credits for $15 = 3.333 credits per dollar, with scaling for larger purchases (monthly recurring)
+  // Base rate: 33 credits for $10 = 3.333 credits per dollar, with scaling for larger purchases (monthly recurring)
   const packages = [
     {
       id: 'small',
       name: 'Starter Pack',
-      price: 15,
+      price: 10,
       description: 'Perfect for trying out Seiso AI',
       popular: false
     },
     {
       id: 'medium',
       name: 'Creator Pack',
-      price: 25,
+      price: 20,
       description: 'Great for regular creators',
       popular: true
     },
     {
       id: 'large',
       name: 'Pro Pack',
-      price: 50,
+      price: 40,
       description: 'Best value for power users',
       popular: false
     },
     {
       id: 'xlarge',
       name: 'Studio Pack',
-      price: 100,
+      price: 80,
       description: 'For professional studios',
       popular: false
     }
@@ -267,7 +267,7 @@ export const getCreditPackages = () => {
   return packages.map(pkg => {
     const baseCredits = calculateCreditsFromUSD(pkg.price, false);
     const maxCredits = calculateCreditsFromUSD(pkg.price, true); // With NFT bonus
-    const savings = pkg.price >= 100 ? 30 : pkg.price >= 50 ? 20 : pkg.price >= 25 ? 10 : 0;
+    const savings = pkg.price >= 80 ? 30 : pkg.price >= 40 ? 20 : pkg.price >= 20 ? 10 : 0;
     
     return {
       ...pkg,

@@ -75,7 +75,7 @@ async function setupStripeProducts() {
     {
       name: 'Starter Pack',
       description: 'Perfect for trying out Seiso AI',
-      price: 15.00, // $15/month
+      price: 10.00, // $10/month
       lookupKey: 'starter_pack_monthly',
       currency: 'usd',
       interval: 'month'
@@ -83,7 +83,7 @@ async function setupStripeProducts() {
     {
       name: 'Creator Pack',
       description: 'Great for regular creators',
-      price: 25.00, // $25/month
+      price: 20.00, // $20/month
       lookupKey: 'creator_pack_monthly',
       currency: 'usd',
       interval: 'month'
@@ -91,7 +91,7 @@ async function setupStripeProducts() {
     {
       name: 'Pro Pack',
       description: 'Best value for power users',
-      price: 50.00, // $50/month
+      price: 40.00, // $40/month
       lookupKey: 'pro_pack_monthly',
       currency: 'usd',
       interval: 'month'
@@ -99,7 +99,7 @@ async function setupStripeProducts() {
     {
       name: 'Studio Pack',
       description: 'For professional studios',
-      price: 100.00, // $100/month
+      price: 80.00, // $80/month
       lookupKey: 'studio_pack_monthly',
       currency: 'usd',
       interval: 'month'

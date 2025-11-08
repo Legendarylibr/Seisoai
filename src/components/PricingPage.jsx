@@ -107,10 +107,10 @@ const PricingPage = () => {
           <SubscriptionCheckout
             priceLookupKey={starterPriceLookupKey}
             planName="Starter Pack"
-            planPrice="$15/month"
+            planPrice="$10/month"
             description="Perfect for trying out Seiso AI"
-            credits="50 credits/month"
-            onSuccess={(sessionId) => handleSuccess(sessionId, 'Starter Pack', '$15/month')}
+            credits="33 credits/month"
+            onSuccess={(sessionId) => handleSuccess(sessionId, 'Starter Pack', '$10/month')}
             onError={handleError}
             compact={true}
           />
@@ -119,12 +119,12 @@ const PricingPage = () => {
           <SubscriptionCheckout
             priceLookupKey={creatorPriceLookupKey}
             planName="Creator Pack"
-            planPrice="$25/month"
+            planPrice="$20/month"
             description="Great for regular creators"
-            credits="91 credits/month (10% savings)"
+            credits="73 credits/month (10% savings)"
             highlight="Popular"
             savePercentage="Save 10%"
-            onSuccess={(sessionId) => handleSuccess(sessionId, 'Creator Pack', '$25/month')}
+            onSuccess={(sessionId) => handleSuccess(sessionId, 'Creator Pack', '$20/month')}
             onError={handleError}
             compact={true}
           />
@@ -133,11 +133,11 @@ const PricingPage = () => {
           <SubscriptionCheckout
             priceLookupKey={proPriceLookupKey}
             planName="Pro Pack"
-            planPrice="$50/month"
+            planPrice="$40/month"
             description="Best value for power users"
-            credits="200 credits/month (20% savings)"
+            credits="160 credits/month (20% savings)"
             savePercentage="Save 20%"
-            onSuccess={(sessionId) => handleSuccess(sessionId, 'Pro Pack', '$50/month')}
+            onSuccess={(sessionId) => handleSuccess(sessionId, 'Pro Pack', '$40/month')}
             onError={handleError}
             compact={true}
           />
@@ -146,11 +146,11 @@ const PricingPage = () => {
           <SubscriptionCheckout
             priceLookupKey={studioPriceLookupKey}
             planName="Studio Pack"
-            planPrice="$100/month"
+            planPrice="$80/month"
             description="For professional studios"
-            credits="433 credits/month (30% savings)"
+            credits="346 credits/month (30% savings)"
             savePercentage="Save 30%"
-            onSuccess={(sessionId) => handleSuccess(sessionId, 'Studio Pack', '$100/month')}
+            onSuccess={(sessionId) => handleSuccess(sessionId, 'Studio Pack', '$80/month')}
             onError={handleError}
             compact={true}
           />
