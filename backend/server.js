@@ -69,7 +69,7 @@ app.use(helmet({
       connectSrc: ["'self'", "http://localhost:3001", "http://localhost:3000", "http://localhost:5173", "https://api.fal.ai", "https://api.mainnet-beta.solana.com", "https://solana-api.projectserum.com", "https://rpc.ankr.com", "https://solana-mainnet.g.alchemy.com", "https://mainnet.helius-rpc.com", "https://api.devnet.solana.com", "https://js.stripe.com", "https://api.stripe.com", "https://hooks.stripe.com", "https://checkout.stripe.com", "https://static.cloudflareinsights.com", "https:", "wss:"],
       fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
+      mediaSrc: ["'self'", "data:", "blob:", "https:"],
       frameSrc: ["'self'", "https://js.stripe.com", "https://checkout.stripe.com", "https://hooks.stripe.com"],
     },
   },
@@ -689,6 +689,8 @@ app.post('/api/wan-animate/upload-video-direct', express.raw({ type: 'multipart/
 
 // Increase JSON limit for image/video data URIs (can be large even after optimization)
 // Videos especially can be very large, so we need a higher limit
+// Note: Railway's reverse proxy may have a default 10MB limit. If you see 413 errors,
+// you may need to configure Railway's proxy settings or use direct fal.ai uploads from frontend
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 
