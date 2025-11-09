@@ -30,10 +30,17 @@ console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Set' : 'Not set');
 
 // Import and start the real backend server
-import('./backend/server.js').then(({ startServer }) => {
+import('./backend/server.js').then(async ({ startServer }) => {
   console.log('✅ Backend server imported successfully');
-  startServer();
+  try {
+    await startServer();
+    console.log('✅ Server started and ready');
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
 }).catch(error => {
-  console.error('❌ Failed to start backend server:', error);
+  console.error('❌ Failed to import backend server:', error);
+  console.error('Error stack:', error.stack);
   process.exit(1);
 });
