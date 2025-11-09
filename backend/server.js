@@ -1261,11 +1261,32 @@ app.get('/api/wan-animate/status/:requestId', async (req, res) => {
       return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
     }
     const { requestId } = req.params;
+    // fal.ai queue API: try alternative endpoint structure
+    // Based on: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
+    // Try using the model endpoint with requestId as query parameter
     const url = `https://queue.fal.run/fal-ai/wan/v2.2-14b/animate/replace/requests/${requestId}/status`;
     
     let response;
     try {
-      response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
+      // Try GET first (standard REST pattern)
+      response = await fetch(url, { 
+        method: 'GET',
+        headers: { 
+          'Authorization': `Key ${FAL_API_KEY}`
+        }
+      });
+      
+      // If GET returns 405, try POST (some queue APIs use POST)
+      if (response.status === 405) {
+        response = await fetch(url, { 
+          method: 'POST',
+          headers: { 
+            'Authorization': `Key ${FAL_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ request_id: requestId })
+        });
+      }
     } catch (fetchError) {
       logger.error('Wan-animate status proxy fetch error', { 
         requestId, 
@@ -1275,26 +1296,68 @@ app.get('/api/wan-animate/status/:requestId', async (req, res) => {
       return res.status(500).json({ success: false, error: `Network error: ${fetchError.message}` });
     }
 
-    let data;
-    let responseText = '';
-    try {
-      responseText = await response.text();
+    const responseText = await response.text();
+    
+    // Check if response is ok first, before trying to parse JSON
+    if (!response.ok) {
+      // Handle specific error statuses
+      if (response.status === 404) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Request ID not found. The video generation request may have expired.' 
+        });
+      }
       
-      // Try to parse JSON - handle cases where there might be extra content
-      if (responseText) {
-        // Try to find the first valid JSON object
+      if (response.status === 405) {
+        logger.error('Wan-animate status method not allowed', {
+          requestId,
+          status: response.status,
+          responseText: responseText.substring(0, 200),
+          url
+        });
+        return res.status(405).json({ 
+          success: false, 
+          error: `Method not allowed. The API endpoint may have changed. Response: ${responseText.substring(0, 200)}` 
+        });
+      }
+      
+      // Try to parse error response as JSON, but fall back to plain text
+      let errorData = {};
+      try {
+        if (responseText.trim()) {
+          errorData = JSON.parse(responseText);
+        }
+      } catch (parseError) {
+        // If parsing fails, use the plain text as error message
+        errorData = { error: responseText.trim() || `HTTP ${response.status}: ${response.statusText}` };
+      }
+      
+      logger.error('Wan-animate status error', {
+        requestId,
+        status: response.status,
+        errorData,
+        responseText: responseText.substring(0, 500)
+      });
+      
+      return res.status(response.status).json({ 
+        success: false, 
+        error: errorData.error || errorData.message || `HTTP ${response.status}: ${response.statusText}`,
+        ...errorData 
+      });
+    }
+
+    // Response is ok, try to parse as JSON
+    let data;
+    try {
+      if (responseText.trim()) {
+        // Try to find the first valid JSON object in case there's extra content
         const jsonStart = responseText.indexOf('{');
         const jsonEnd = responseText.lastIndexOf('}');
         
         if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
           // Extract just the JSON portion
           const jsonText = responseText.substring(jsonStart, jsonEnd + 1);
-          try {
-            data = JSON.parse(jsonText);
-          } catch (e) {
-            // If that fails, try parsing the whole response
-            data = JSON.parse(responseText.trim());
-          }
+          data = JSON.parse(jsonText);
         } else {
           // Try parsing the whole response
           data = JSON.parse(responseText.trim());
@@ -1309,25 +1372,10 @@ app.get('/api/wan-animate/status/:requestId', async (req, res) => {
         responseText: responseText.substring(0, 500),
         error: parseError.message 
       });
-      return res.status(response.status || 500).json({ 
+      return res.status(500).json({ 
         success: false, 
-        error: `Invalid response from Wan-animate API: ${parseError.message}. Response: ${responseText.substring(0, 200)}` 
+        error: `Invalid JSON response from Wan-animate API: ${parseError.message}. Response: ${responseText.substring(0, 200)}` 
       });
-    }
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return res.status(404).json({ 
-          success: false, 
-          error: 'Request ID not found. The video generation request may have expired.' 
-        });
-      }
-      logger.error('Wan-animate status error', {
-        requestId,
-        status: response.status,
-        data
-      });
-      return res.status(response.status).json({ success: false, ...data });
     }
 
     res.json({ success: true, ...data });
@@ -1349,11 +1397,32 @@ app.get('/api/wan-animate/result/:requestId', async (req, res) => {
       return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
     }
     const { requestId } = req.params;
+    // fal.ai queue API: try alternative endpoint structure
+    // Based on: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
+    // Try using the model endpoint with requestId as query parameter
     const url = `https://queue.fal.run/fal-ai/wan/v2.2-14b/animate/replace/requests/${requestId}/result`;
     
     let response;
     try {
-      response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
+      // Try GET first (standard REST pattern)
+      response = await fetch(url, { 
+        method: 'GET',
+        headers: { 
+          'Authorization': `Key ${FAL_API_KEY}`
+        }
+      });
+      
+      // If GET returns 405, try POST (some queue APIs use POST)
+      if (response.status === 405) {
+        response = await fetch(url, { 
+          method: 'POST',
+          headers: { 
+            'Authorization': `Key ${FAL_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ request_id: requestId })
+        });
+      }
     } catch (fetchError) {
       logger.error('Wan-animate result proxy fetch error', { 
         requestId, 
@@ -1363,26 +1432,68 @@ app.get('/api/wan-animate/result/:requestId', async (req, res) => {
       return res.status(500).json({ success: false, error: `Network error: ${fetchError.message}` });
     }
 
-    let data;
-    let responseText = '';
-    try {
-      responseText = await response.text();
+    const responseText = await response.text();
+    
+    // Check if response is ok first, before trying to parse JSON
+    if (!response.ok) {
+      // Handle specific error statuses
+      if (response.status === 404) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Request ID not found. The video generation request may have expired.' 
+        });
+      }
       
-      // Try to parse JSON - handle cases where there might be extra content
-      if (responseText) {
-        // Try to find the first valid JSON object
+      if (response.status === 405) {
+        logger.error('Wan-animate result method not allowed', {
+          requestId,
+          status: response.status,
+          responseText: responseText.substring(0, 200),
+          url
+        });
+        return res.status(405).json({ 
+          success: false, 
+          error: `Method not allowed. The API endpoint may have changed. Response: ${responseText.substring(0, 200)}` 
+        });
+      }
+      
+      // Try to parse error response as JSON, but fall back to plain text
+      let errorData = {};
+      try {
+        if (responseText.trim()) {
+          errorData = JSON.parse(responseText);
+        }
+      } catch (parseError) {
+        // If parsing fails, use the plain text as error message
+        errorData = { error: responseText.trim() || `HTTP ${response.status}: ${response.statusText}` };
+      }
+      
+      logger.error('Wan-animate result error', {
+        requestId,
+        status: response.status,
+        errorData,
+        responseText: responseText.substring(0, 500)
+      });
+      
+      return res.status(response.status).json({ 
+        success: false, 
+        error: errorData.error || errorData.message || `HTTP ${response.status}: ${response.statusText}`,
+        ...errorData 
+      });
+    }
+
+    // Response is ok, try to parse as JSON
+    let data;
+    try {
+      if (responseText.trim()) {
+        // Try to find the first valid JSON object in case there's extra content
         const jsonStart = responseText.indexOf('{');
         const jsonEnd = responseText.lastIndexOf('}');
         
         if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
           // Extract just the JSON portion
           const jsonText = responseText.substring(jsonStart, jsonEnd + 1);
-          try {
-            data = JSON.parse(jsonText);
-          } catch (e) {
-            // If that fails, try parsing the whole response
-            data = JSON.parse(responseText.trim());
-          }
+          data = JSON.parse(jsonText);
         } else {
           // Try parsing the whole response
           data = JSON.parse(responseText.trim());
@@ -1397,25 +1508,10 @@ app.get('/api/wan-animate/result/:requestId', async (req, res) => {
         responseText: responseText.substring(0, 500),
         error: parseError.message 
       });
-      return res.status(response.status || 500).json({ 
+      return res.status(500).json({ 
         success: false, 
-        error: `Invalid response from Wan-animate API: ${parseError.message}. Response: ${responseText.substring(0, 200)}` 
+        error: `Invalid JSON response from Wan-animate API: ${parseError.message}. Response: ${responseText.substring(0, 200)}` 
       });
-    }
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return res.status(404).json({ 
-          success: false, 
-          error: 'Request ID not found. The video generation request may have expired.' 
-        });
-      }
-      logger.error('Wan-animate result error', {
-        requestId,
-        status: response.status,
-        data
-      });
-      return res.status(response.status).json({ success: false, ...data });
     }
 
     res.json({ success: true, ...data });
