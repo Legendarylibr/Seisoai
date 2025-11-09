@@ -26,14 +26,21 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
   const handleVideoUpload = async (file) => {
     if (file) {
       setVideoFile(file);
-      // Convert to data URI for upload
+      setError(null);
+      
+      // Check file size (warn if too large, but still try)
+      if (file.size > 50 * 1024 * 1024) {
+        setError('Video file is large (>50MB). This may take longer to process.');
+      }
+      
+      // Convert to data URI for upload (backend will handle uploading to fal.ai)
       const reader = new FileReader();
       reader.onload = (e) => {
         setVideoUrl(e.target.result);
-        setError(null);
+        setError(null); // Clear error once loaded
       };
       reader.onerror = () => {
-        setError('Failed to read video file');
+        setError('Failed to read video file. Please try a smaller file or different format.');
       };
       reader.readAsDataURL(file);
     }

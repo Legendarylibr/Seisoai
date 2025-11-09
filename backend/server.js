@@ -667,6 +667,26 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
 });
 
 // Body parsing middleware - AFTER webhook route
+// Wan 2.2 Animate Replace - Direct file upload endpoint (must be before express.json())
+// Direct file upload endpoint (for large files via FormData)
+app.post('/api/wan-animate/upload-video-direct', express.raw({ type: 'multipart/form-data', limit: '200mb' }), async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+
+    // For now, return error - use data URI endpoint instead
+    // This endpoint would need proper multipart parsing library like multer
+    return res.status(501).json({ 
+      success: false, 
+      error: 'Direct upload not yet implemented. Please use smaller files (<50MB) or upload via data URI.' 
+    });
+  } catch (error) {
+    logger.error('Wan-animate video upload error (direct)', { error: error.message });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to upload video') });
+  }
+});
+
 // Increase JSON limit for image data URIs (can be large even after optimization)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -914,6 +934,103 @@ app.get('/api/veo3/status/:requestId', async (req, res) => {
 });
 
 // Wan 2.2 Animate Replace endpoints
+// Direct file upload endpoint (for large files via FormData)
+app.post('/api/wan-animate/upload-video-direct', async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+
+    // Handle multipart/form-data
+    const formData = await new Promise((resolve, reject) => {
+      const chunks = [];
+      req.on('data', chunk => chunks.push(chunk));
+      req.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        // Parse multipart form data manually
+        const boundary = req.headers['content-type']?.split('boundary=')[1];
+        if (!boundary) {
+          return reject(new Error('No boundary in Content-Type'));
+        }
+        
+        const parts = buffer.toString('binary').split(`--${boundary}`);
+        for (const part of parts) {
+          if (part.includes('Content-Disposition: form-data')) {
+            const headerEnd = part.indexOf('\r\n\r\n');
+            if (headerEnd === -1) continue;
+            
+            const headers = part.substring(0, headerEnd);
+            const body = part.substring(headerEnd + 4);
+            const bodyEnd = body.indexOf(`\r\n--${boundary}`);
+            const fileData = bodyEnd === -1 ? body : body.substring(0, bodyEnd);
+            
+            if (headers.includes('name="video"')) {
+              return resolve(Buffer.from(fileData, 'binary'));
+            }
+          }
+        }
+        reject(new Error('No video field found'));
+      });
+      req.on('error', reject);
+    });
+
+    // Determine MIME type from file extension or default
+    const mimeType = 'video/mp4';
+    const extension = 'mp4';
+    
+    // Create multipart/form-data for fal.ai
+    const boundary = `----formdata-${Date.now()}`;
+    const CRLF = '\r\n';
+    
+    let formDataBody = '';
+    formDataBody += `--${boundary}${CRLF}`;
+    formDataBody += `Content-Disposition: form-data; name="file"; filename="video.${extension}"${CRLF}`;
+    formDataBody += `Content-Type: ${mimeType}${CRLF}${CRLF}`;
+    
+    const formDataBuffer = Buffer.concat([
+      Buffer.from(formDataBody, 'utf8'),
+      formData,
+      Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8')
+    ]);
+    
+    // Upload to fal.ai storage API
+    const uploadResponse = await fetch('https://fal.ai/files', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body: formDataBuffer
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      logger.error('Failed to upload video to fal.ai (direct)', { 
+        status: uploadResponse.status, 
+        error: errorText.substring(0, 200) 
+      });
+      return res.status(uploadResponse.status).json({ 
+        success: false, 
+        error: `Failed to upload video: ${errorText.substring(0, 200)}` 
+      });
+    }
+
+    const uploadData = await uploadResponse.json();
+    const videoUrl = uploadData.url || uploadData.file?.url;
+    
+    if (!videoUrl) {
+      logger.error('No video URL in fal.ai upload response (direct)', { uploadData });
+      return res.status(500).json({ success: false, error: 'No video URL returned from upload' });
+    }
+
+    logger.info('Video uploaded to fal.ai (direct)', { videoUrl });
+    res.json({ success: true, url: videoUrl });
+  } catch (error) {
+    logger.error('Wan-animate video upload error (direct)', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to upload video') });
+  }
+});
+
 app.post('/api/wan-animate/upload-video', async (req, res) => {
   try {
     if (!FAL_API_KEY) {
@@ -1142,17 +1259,39 @@ app.get('/api/wan-animate/status/:requestId', async (req, res) => {
     let responseText = '';
     try {
       responseText = await response.text();
-      data = responseText ? JSON.parse(responseText) : {};
+      
+      // Try to parse JSON - handle cases where there might be extra content
+      if (responseText) {
+        // Try to find the first valid JSON object
+        const jsonStart = responseText.indexOf('{');
+        const jsonEnd = responseText.lastIndexOf('}');
+        
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+          // Extract just the JSON portion
+          const jsonText = responseText.substring(jsonStart, jsonEnd + 1);
+          try {
+            data = JSON.parse(jsonText);
+          } catch (e) {
+            // If that fails, try parsing the whole response
+            data = JSON.parse(responseText.trim());
+          }
+        } else {
+          // Try parsing the whole response
+          data = JSON.parse(responseText.trim());
+        }
+      } else {
+        data = {};
+      }
     } catch (parseError) {
       logger.error('Wan-animate status proxy parse error', { 
         requestId,
         status: response.status,
-        responseText: responseText.substring(0, 200),
+        responseText: responseText.substring(0, 500),
         error: parseError.message 
       });
       return res.status(response.status || 500).json({ 
         success: false, 
-        error: `Invalid response from Wan-animate API: ${parseError.message}` 
+        error: `Invalid response from Wan-animate API: ${parseError.message}. Response: ${responseText.substring(0, 200)}` 
       });
     }
 
@@ -1206,17 +1345,39 @@ app.get('/api/wan-animate/result/:requestId', async (req, res) => {
     let responseText = '';
     try {
       responseText = await response.text();
-      data = responseText ? JSON.parse(responseText) : {};
+      
+      // Try to parse JSON - handle cases where there might be extra content
+      if (responseText) {
+        // Try to find the first valid JSON object
+        const jsonStart = responseText.indexOf('{');
+        const jsonEnd = responseText.lastIndexOf('}');
+        
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+          // Extract just the JSON portion
+          const jsonText = responseText.substring(jsonStart, jsonEnd + 1);
+          try {
+            data = JSON.parse(jsonText);
+          } catch (e) {
+            // If that fails, try parsing the whole response
+            data = JSON.parse(responseText.trim());
+          }
+        } else {
+          // Try parsing the whole response
+          data = JSON.parse(responseText.trim());
+        }
+      } else {
+        data = {};
+      }
     } catch (parseError) {
       logger.error('Wan-animate result proxy parse error', { 
         requestId,
         status: response.status,
-        responseText: responseText.substring(0, 200),
+        responseText: responseText.substring(0, 500),
         error: parseError.message 
       });
       return res.status(response.status || 500).json({ 
         success: false, 
-        error: `Invalid response from Wan-animate API: ${parseError.message}` 
+        error: `Invalid response from Wan-animate API: ${parseError.message}. Response: ${responseText.substring(0, 200)}` 
       });
     }
 
