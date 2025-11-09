@@ -913,6 +913,339 @@ app.get('/api/veo3/status/:requestId', async (req, res) => {
   }
 });
 
+// Wan 2.2 Animate Replace endpoints
+app.post('/api/wan-animate/upload-video', async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+
+    const { videoDataUri } = req.body;
+    
+    if (!videoDataUri || !videoDataUri.startsWith('data:')) {
+      return res.status(400).json({ success: false, error: 'Invalid video data URI' });
+    }
+
+    // Convert data URI to buffer
+    const base64Data = videoDataUri.split(',')[1];
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Determine MIME type from data URI
+    const mimeMatch = videoDataUri.match(/data:([^;]+)/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'video/mp4';
+    const extension = mimeType.includes('quicktime') ? 'mov' : 'mp4';
+    
+    // Create multipart/form-data manually for Node.js
+    const boundary = `----formdata-${Date.now()}`;
+    const CRLF = '\r\n';
+    
+    let formDataBody = '';
+    formDataBody += `--${boundary}${CRLF}`;
+    formDataBody += `Content-Disposition: form-data; name="file"; filename="video.${extension}"${CRLF}`;
+    formDataBody += `Content-Type: ${mimeType}${CRLF}${CRLF}`;
+    
+    const formDataBuffer = Buffer.concat([
+      Buffer.from(formDataBody, 'utf8'),
+      buffer,
+      Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8')
+    ]);
+    
+    // Upload to fal.ai storage API
+    const uploadResponse = await fetch('https://fal.ai/files', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body: formDataBuffer
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      logger.error('Failed to upload video to fal.ai', { 
+        status: uploadResponse.status, 
+        error: errorText.substring(0, 200) 
+      });
+      return res.status(uploadResponse.status).json({ 
+        success: false, 
+        error: `Failed to upload video: ${errorText.substring(0, 200)}` 
+      });
+    }
+
+    const uploadData = await uploadResponse.json();
+    const videoUrl = uploadData.url || uploadData.file?.url;
+    
+    if (!videoUrl) {
+      logger.error('No video URL in fal.ai upload response', { uploadData });
+      return res.status(500).json({ success: false, error: 'No video URL returned from upload' });
+    }
+
+    logger.info('Video uploaded to fal.ai', { videoUrl });
+    res.json({ success: true, url: videoUrl });
+  } catch (error) {
+    logger.error('Wan-animate video upload error', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to upload video') });
+  }
+});
+
+app.post('/api/wan-animate/upload-image', async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+
+    const { imageDataUri } = req.body;
+    
+    if (!imageDataUri || !imageDataUri.startsWith('data:')) {
+      return res.status(400).json({ success: false, error: 'Invalid image data URI' });
+    }
+
+    // Convert data URI to buffer
+    const base64Data = imageDataUri.split(',')[1];
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Determine MIME type from data URI
+    const mimeMatch = imageDataUri.match(/data:([^;]+)/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const extension = mimeType.includes('png') ? 'png' : 'jpg';
+    
+    // Create multipart/form-data manually for Node.js
+    const boundary = `----formdata-${Date.now()}`;
+    const CRLF = '\r\n';
+    
+    let formDataBody = '';
+    formDataBody += `--${boundary}${CRLF}`;
+    formDataBody += `Content-Disposition: form-data; name="file"; filename="image.${extension}"${CRLF}`;
+    formDataBody += `Content-Type: ${mimeType}${CRLF}${CRLF}`;
+    
+    const formDataBuffer = Buffer.concat([
+      Buffer.from(formDataBody, 'utf8'),
+      buffer,
+      Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8')
+    ]);
+    
+    // Upload to fal.ai storage API
+    const uploadResponse = await fetch('https://fal.ai/files', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body: formDataBuffer
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      logger.error('Failed to upload image to fal.ai', { 
+        status: uploadResponse.status, 
+        error: errorText.substring(0, 200) 
+      });
+      return res.status(uploadResponse.status).json({ 
+        success: false, 
+        error: `Failed to upload image: ${errorText.substring(0, 200)}` 
+      });
+    }
+
+    const uploadData = await uploadResponse.json();
+    const imageUrl = uploadData.url || uploadData.file?.url;
+    
+    if (!imageUrl) {
+      logger.error('No image URL in fal.ai upload response', { uploadData });
+      return res.status(500).json({ success: false, error: 'No image URL returned from upload' });
+    }
+
+    logger.info('Image uploaded to fal.ai', { imageUrl });
+    res.json({ success: true, url: imageUrl });
+  } catch (error) {
+    logger.error('Wan-animate image upload error', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to upload image') });
+  }
+});
+
+app.post('/api/wan-animate/submit', async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+    const input = req.body?.input || req.body;
+    
+    logger.info('Wan-animate submit request', {
+      hasVideoUrl: !!input?.video_url,
+      hasImageUrl: !!input?.image_url,
+      resolution: input?.resolution,
+      videoQuality: input?.video_quality
+    });
+    
+    const response = await fetch('https://queue.fal.run/fal-ai/wan/v2.2-14b/animate/replace', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ input })
+    });
+    
+    // Handle response text first to avoid JSON parse errors
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      logger.error('Failed to parse wan-animate response', { 
+        status: response.status, 
+        statusText: response.statusText,
+        responseText: responseText.substring(0, 500)
+      });
+      return res.status(response.status).json({ 
+        success: false, 
+        error: `API response parse error: ${responseText.substring(0, 200)}` 
+      });
+    }
+    
+    if (!response.ok) {
+      logger.error('Wan-animate submit error', {
+        status: response.status, 
+        data,
+        responseText: responseText.substring(0, 500)
+      });
+      return res.status(response.status).json({ success: false, ...data });
+    }
+    
+    res.json({ success: true, ...data });
+  } catch (error) {
+    logger.error('Wan-animate submit proxy error', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to submit video generation request') });
+  }
+});
+
+app.get('/api/wan-animate/status/:requestId', async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+    const { requestId } = req.params;
+    const url = `https://queue.fal.run/fal-ai/wan/v2.2-14b/animate/replace/requests/${requestId}/status`;
+    
+    let response;
+    try {
+      response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
+    } catch (fetchError) {
+      logger.error('Wan-animate status proxy fetch error', { 
+        requestId, 
+        error: fetchError.message, 
+        stack: fetchError.stack 
+      });
+      return res.status(500).json({ success: false, error: `Network error: ${fetchError.message}` });
+    }
+
+    let data;
+    let responseText = '';
+    try {
+      responseText = await response.text();
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (parseError) {
+      logger.error('Wan-animate status proxy parse error', { 
+        requestId,
+        status: response.status,
+        responseText: responseText.substring(0, 200),
+        error: parseError.message 
+      });
+      return res.status(response.status || 500).json({ 
+        success: false, 
+        error: `Invalid response from Wan-animate API: ${parseError.message}` 
+      });
+    }
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Request ID not found. The video generation request may have expired.' 
+        });
+      }
+      logger.error('Wan-animate status error', {
+        requestId,
+        status: response.status,
+        data
+      });
+      return res.status(response.status).json({ success: false, ...data });
+    }
+
+    res.json({ success: true, ...data });
+  } catch (error) {
+    logger.error('Wan-animate status proxy error', { 
+      requestId: req.params.requestId,
+      error: error.message, 
+      stack: error.stack 
+    });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to check video generation status') });
+  }
+});
+
+app.get('/api/wan-animate/result/:requestId', async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+    const { requestId } = req.params;
+    const url = `https://queue.fal.run/fal-ai/wan/v2.2-14b/animate/replace/requests/${requestId}/result`;
+    
+    let response;
+    try {
+      response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
+    } catch (fetchError) {
+      logger.error('Wan-animate result proxy fetch error', { 
+        requestId, 
+        error: fetchError.message, 
+        stack: fetchError.stack 
+      });
+      return res.status(500).json({ success: false, error: `Network error: ${fetchError.message}` });
+    }
+
+    let data;
+    let responseText = '';
+    try {
+      responseText = await response.text();
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (parseError) {
+      logger.error('Wan-animate result proxy parse error', { 
+        requestId,
+        status: response.status,
+        responseText: responseText.substring(0, 200),
+        error: parseError.message 
+      });
+      return res.status(response.status || 500).json({ 
+        success: false, 
+        error: `Invalid response from Wan-animate API: ${parseError.message}` 
+      });
+    }
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Request ID not found. The video generation request may have expired.' 
+        });
+      }
+      logger.error('Wan-animate result error', {
+        requestId,
+        status: response.status,
+        data
+      });
+      return res.status(response.status).json({ success: false, ...data });
+    }
+
+    res.json({ success: true, ...data });
+  } catch (error) {
+    logger.error('Wan-animate result proxy error', { 
+      requestId: req.params.requestId,
+      error: error.message, 
+      stack: error.stack 
+    });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to get video generation result') });
+  }
+});
+
 app.get('/api/veo3/result/:requestId', async (req, res) => {
   try {
     if (!FAL_API_KEY) {
