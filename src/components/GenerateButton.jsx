@@ -151,19 +151,27 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       };
 
       logger.info('Starting image generation');
-      const imageUrl = await generateImage(
+      const imageResult = await generateImage(
         selectedStyle || null,
         customPrompt,
         advancedSettings,
         controlNetImage
       );
 
-      // Ensure we have a valid image URL
-      if (!imageUrl || typeof imageUrl !== 'string') {
+      // Handle both single image (string) and multiple images (array)
+      const isArray = Array.isArray(imageResult);
+      const imageUrl = isArray ? imageResult[0] : imageResult;
+      
+      // Ensure we have a valid image URL or array
+      if (!imageResult || (typeof imageResult !== 'string' && !Array.isArray(imageResult))) {
         throw new Error('No image URL returned from generation service');
       }
 
-      logger.info('Image generation completed successfully', { hasImageUrl: !!imageUrl });
+      logger.info('Image generation completed successfully', { 
+        hasImageUrl: !!imageUrl,
+        isMultiple: isArray,
+        imageCount: isArray ? imageResult.length : 1
+      });
       setCurrentStep('Complete!');
       setProgress(100); // Complete the progress bar
       
@@ -219,10 +227,12 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       
       // Wait a moment to show completion, then set the image and stop loading
       setTimeout(() => {
-        setGeneratedImage(imageUrl);
+        // Pass the result (array or string) to setGeneratedImage
+        setGeneratedImage(imageResult);
         setIsLoading(false);
         
         // Store current generation details for explain/regenerate functionality
+        // Use first image for currentGeneration.image (backward compatibility)
         setCurrentGeneration({
           image: imageUrl,
           prompt: customPrompt || (selectedStyle ? selectedStyle.prompt : 'No style selected'),

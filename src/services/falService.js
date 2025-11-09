@@ -368,19 +368,20 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
         referenceImageCount: imageCount
       });
       
-      // For single image, return the first image
-      // For multiple images, return the first image (UI currently displays one at a time)
-      // All images are generated and available in the API response
-      const firstImageUrl = data.images[0].url;
+      // Extract all image URLs
+      const imageUrls = data.images.map(img => img.url || img);
       
-      if (data.images.length > 1) {
+      // If only one image was requested or only one was generated, return single URL
+      // Otherwise return array of URLs for multiple images
+      if (numImages === 1 || imageUrls.length === 1) {
+        return imageUrls[0];
+      } else {
         logger.debug('Multiple images generated', {
-          totalImages: data.images.length,
-          allImageUrls: data.images.map(img => img.url)
+          totalImages: imageUrls.length,
+          allImageUrls: imageUrls
         });
+        return imageUrls; // Return array of URLs
       }
-      
-      return firstImageUrl;
     } else {
       throw new Error('No image generated');
     }

@@ -5,6 +5,7 @@ const ImageGeneratorContext = createContext();
 const initialState = {
   selectedStyle: null,
   generatedImage: null,
+  generatedImages: [], // Array for multiple images
   isGenerating: false,
   error: null,
   generationHistory: [],
@@ -45,19 +46,24 @@ const imageGeneratorReducer = (state, action) => {
       };
     
     case 'SET_GENERATED_IMAGE':
+      // Handle both single image (string) and multiple images (array)
+      const isArray = Array.isArray(action.payload);
+      const images = isArray ? action.payload : [action.payload];
+      
       return {
         ...state,
-        generatedImage: action.payload,
+        generatedImage: isArray ? action.payload[0] : action.payload, // First image for backward compatibility
+        generatedImages: images, // All images
         isGenerating: false,
         error: null,
         generationHistory: [
           ...state.generationHistory,
-          {
-            id: Date.now(),
-            image: action.payload,
+          ...images.map((image, index) => ({
+            id: Date.now() + index,
+            image: image,
             style: state.selectedStyle,
             timestamp: new Date().toISOString()
-          }
+          }))
         ]
       };
     
@@ -78,6 +84,7 @@ const imageGeneratorReducer = (state, action) => {
       return {
         ...state,
         generatedImage: null,
+        generatedImages: [],
         error: null
       };
     

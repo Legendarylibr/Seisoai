@@ -10,6 +10,7 @@ import logger from '../utils/logger.js';
 const ImageOutput = () => {
   const { 
     generatedImage, 
+    generatedImages,
     isGenerating, 
     error, 
     clearGeneration, 
@@ -42,8 +43,9 @@ const ImageOutput = () => {
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [newPrompt, setNewPrompt] = useState('');
 
-  const handleDownload = async () => {
-    if (!generatedImage || isDownloading) return;
+  const handleDownload = async (imageUrl = null) => {
+    const imageToDownload = imageUrl || generatedImage;
+    if (!imageToDownload || isDownloading) return;
     
     setIsDownloading(true);
     
@@ -62,7 +64,7 @@ const ImageOutput = () => {
       const filename = getNextSeisoFilename();
 
       // Fetch the image as a blob to handle CORS issues
-      const response = await fetch(generatedImage);
+      const response = await fetch(imageToDownload);
       const blob = await response.blob();
       
       // Create a blob URL
@@ -107,7 +109,7 @@ const ImageOutput = () => {
       console.error('Download failed:', error);
       // Fallback to opening image in new tab for iOS
       const link = document.createElement('a');
-      link.href = generatedImage;
+      link.href = imageToDownload;
       try {
         const key = 'seiso_download_index';
         const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
@@ -153,12 +155,15 @@ const ImageOutput = () => {
         currentGeneration.referenceImage
       );
       
+      // Handle both single image (string) and multiple images (array)
+      const isArray = Array.isArray(result);
+      const imageUrl = isArray ? result[0] : result;
       setGeneratedImage(result);
       
       // Update current generation with new details
       setCurrentGeneration({
         ...currentGeneration,
-        image: result,
+        image: imageUrl, // Use first image for backward compatibility
         timestamp: new Date().toISOString()
       });
       
@@ -231,12 +236,20 @@ const ImageOutput = () => {
         generatedImage // Use current output as reference image
       );
       
-      // Ensure we have a valid image URL
-      if (!result || typeof result !== 'string') {
+      // Handle both single image (string) and multiple images (array)
+      const isArray = Array.isArray(result);
+      const imageUrl = isArray ? result[0] : result;
+      
+      // Ensure we have a valid image URL or array
+      if (!result || (typeof result !== 'string' && !Array.isArray(result))) {
         throw new Error('No image URL returned from generation service');
       }
 
-      logger.info('Regeneration with new prompt completed successfully', { hasImageUrl: !!result });
+      logger.info('Regeneration with new prompt completed successfully', { 
+        hasImageUrl: !!imageUrl,
+        isMultiple: isArray,
+        imageCount: isArray ? result.length : 1
+      });
       
       // Save generation to backend and deduct credits IMMEDIATELY after image is returned
       // Use wallet address if available, otherwise use userId for email users
@@ -287,12 +300,14 @@ const ImageOutput = () => {
         // Still show the image even if saving failed
       }
       
+      // Handle both single image (string) and multiple images (array)
       setGeneratedImage(result);
       
       // Update current generation with new details
+      const resultImageUrl = isArray ? result[0] : result;
       setCurrentGeneration({
         ...currentGeneration,
-        image: result,
+        image: resultImageUrl, // Use first image for backward compatibility
         prompt: newPrompt.trim(),
         referenceImage: generatedImage, // Previous output becomes new input
         timestamp: new Date().toISOString()
@@ -356,7 +371,11 @@ const ImageOutput = () => {
     );
   }
 
-  if (!generatedImage) {
+  // Get all images to display (use generatedImages array if available, otherwise fallback to single generatedImage)
+  const imagesToDisplay = (generatedImages && generatedImages.length > 0) ? generatedImages : (generatedImage ? [generatedImage] : []);
+  const hasMultipleImages = imagesToDisplay.length > 1;
+
+  if (imagesToDisplay.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-8">
         <div className="glass-card p-12 rounded-2xl text-center max-w-md slide-up">
@@ -379,8 +398,13 @@ const ImageOutput = () => {
     <div className="w-full space-y-2">
       <div className="flex items-center justify-end mb-2 flex-wrap gap-1.5">
         <div className="flex gap-1.5 flex-wrap">
+          {hasMultipleImages && (
+            <div className="text-xs text-gray-400 px-2 py-1.5 flex items-center gap-1">
+              <span>{imagesToDisplay.length} images</span>
+            </div>
+          )}
           <button
-            onClick={handleDownload}
+            onClick={() => handleDownload(imagesToDisplay[0])}
             disabled={isDownloading}
             className="btn-secondary flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-xs px-2.5 py-1.5 hover:scale-105 transition-all duration-300"
           >
@@ -405,29 +429,57 @@ const ImageOutput = () => {
         </div>
       </div>
       
-      <div className="glass-card rounded-xl overflow-hidden mb-3 p-1.5">
-        <img
-          src={generatedImage}
-          alt="Generated AI image"
-          className="w-full h-auto max-h-[200px] xs:max-h-[250px] sm:max-h-[300px] md:max-h-[400px] lg:max-h-[500px] xl:max-h-[600px] object-contain rounded-lg"
-          style={{ 
-            maxWidth: '100%', 
-            height: 'auto',
-            display: 'block',
-            margin: '0 auto'
-          }}
-          loading="lazy"
-          onError={(e) => {
-            console.error('Image failed to load:', generatedImage);
-            setError('Failed to load image. Please try regenerating.');
-            e.target.style.display = 'none';
-          }}
-          onLoad={() => {
-            // Image loaded successfully
-            logger.debug('Generated image loaded successfully');
-          }}
-        />
-      </div>
+      {/* Display images in grid for multiple, single image for one */}
+      {hasMultipleImages ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          {imagesToDisplay.map((imageUrl, index) => (
+            <div key={index} className="glass-card rounded-xl overflow-hidden p-1.5">
+              <img
+                src={imageUrl}
+                alt={`Generated AI image ${index + 1}`}
+                className="w-full h-auto max-h-[200px] xs:max-h-[250px] sm:max-h-[300px] md:max-h-[350px] lg:max-h-[400px] object-contain rounded-lg"
+                style={{ 
+                  maxWidth: '100%', 
+                  height: 'auto',
+                  display: 'block',
+                  margin: '0 auto'
+                }}
+                loading="lazy"
+                onError={(e) => {
+                  console.error('Image failed to load:', imageUrl);
+                  e.target.style.display = 'none';
+                }}
+                onLoad={() => {
+                  logger.debug(`Generated image ${index + 1} loaded successfully`);
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="glass-card rounded-xl overflow-hidden mb-3 p-1.5">
+          <img
+            src={imagesToDisplay[0]}
+            alt="Generated AI image"
+            className="w-full h-auto max-h-[200px] xs:max-h-[250px] sm:max-h-[300px] md:max-h-[400px] lg:max-h-[500px] xl:max-h-[600px] object-contain rounded-lg"
+            style={{ 
+              maxWidth: '100%', 
+              height: 'auto',
+              display: 'block',
+              margin: '0 auto'
+            }}
+            loading="lazy"
+            onError={(e) => {
+              console.error('Image failed to load:', imagesToDisplay[0]);
+              setError('Failed to load image. Please try regenerating.');
+              e.target.style.display = 'none';
+            }}
+            onLoad={() => {
+              logger.debug('Generated image loaded successfully');
+            }}
+          />
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="glass-card rounded-lg p-2 mb-2">
