@@ -1210,13 +1210,14 @@ app.post('/api/wan-animate/submit', async (req, res) => {
     
     // Official fal.ai API endpoint for Wan 2.2 Animate Replace
     // See: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
+    // The API expects the input fields directly in the body, not nested in an "input" object
     const response = await fetch('https://queue.fal.run/fal-ai/wan/v2.2-14b/animate/replace', {
       method: 'POST',
       headers: {
         'Authorization': `Key ${FAL_API_KEY}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ input })
+      body: JSON.stringify(input)
     });
     
     // Handle response text first to avoid JSON parse errors
