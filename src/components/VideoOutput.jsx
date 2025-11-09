@@ -105,13 +105,13 @@ const VideoOutput = ({
         <div className="mt-4">
           <button
             onClick={onGenerate}
-            disabled={!hasInputs || credits <= 0}
+            disabled={!hasInputs || credits < 2}
             className={`
               w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium
               transition-all duration-200 rounded
-              ${!hasInputs || credits <= 0
+              ${!hasInputs || credits < 2
                 ? 'opacity-40 cursor-not-allowed bg-[#2d2d2d] text-gray-500 border border-[#3d3d3d]'
-                : credits <= 0
+                : credits < 2
                   ? 'bg-[#3d2d1a] hover:bg-[#4a3d2a] text-yellow-300 border border-[#5a4a2a] hover:border-[#6a5a3a]'
                   : 'bg-[#3d3d3d] hover:bg-[#4a4a4a] text-gray-100 border border-[#4a4a4a] hover:border-[#555555]'
               }
@@ -120,9 +120,9 @@ const VideoOutput = ({
             <Sparkles className="w-4 h-4" />
             {!hasInputs 
               ? 'Upload Video & Image First' 
-              : credits <= 0 
-                ? 'Buy Credits to Generate' 
-                : 'Generate Video'
+              : credits < 2 
+                ? `Need ${2 - credits} More Credits (2/sec)` 
+                : 'Generate Video (2 credits/sec)'
             }
           </button>
         </div>

@@ -6,6 +6,8 @@ import EmailUserInfo from './EmailUserInfo';
 import VideoOutput from './VideoOutput';
 import VideoUpload from './VideoUpload';
 import { Video as VideoIcon, Upload, Image as ImageIcon } from 'lucide-react';
+import { getVideoDuration, calculateVideoCredits } from '../utils/videoUtils';
+import logger from '../utils/logger';
 
 function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
   const walletContext = useSimpleWallet();
@@ -86,12 +88,15 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
       </div>
 
       {/* Credits Status Banner */}
-      {credits <= 0 && !isEmailAuth && (
+      {credits < 2 && !isEmailAuth && (
         <div className="glass-card bg-yellow-500/10 border-yellow-500/30 rounded-t-none rounded-b-none p-2.5 mb-0 animate-pulse">
           <div className="flex items-center gap-2 text-center justify-center">
             <div className="w-2.5 h-2.5 bg-yellow-400 rounded-full animate-pulse"></div>
             <span className="text-yellow-300 text-xs md:text-sm font-medium">
-              No credits available - Click "Buy Credits" in the top right to purchase credits
+              {credits === 0 
+                ? 'No credits available - Click "Buy Credits" in the top right to purchase credits'
+                : `Insufficient credits (${credits} available). Video generation requires at least 2 credits (2 credits per second).`
+              }
             </span>
           </div>
         </div>
@@ -172,8 +177,9 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                 return;
               }
               
-              if (credits <= 0) {
-                setError('Insufficient credits. Please buy credits to generate videos.');
+              // Check minimum credits (at least 2 credits required)
+              if (credits < 2) {
+                setError('Insufficient credits. Video generation requires at least 2 credits (2 credits per second of video).');
                 return;
               }
               
@@ -197,6 +203,33 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                   }
                 );
                 
+                // Get video duration and calculate credits (2 credits per second)
+                let videoDuration = 0;
+                let creditsToCharge = 2; // Default minimum
+                
+                try {
+                  videoDuration = await getVideoDuration(result);
+                  creditsToCharge = calculateVideoCredits(videoDuration);
+                  logger.info('Video duration calculated', { 
+                    duration: videoDuration, 
+                    creditsToCharge 
+                  });
+                } catch (durationError) {
+                  logger.warn('Failed to get video duration, using minimum credits', { 
+                    error: durationError.message 
+                  });
+                  // Use minimum 2 credits if we can't determine duration
+                }
+                
+                // Check if user has enough credits for the calculated amount
+                if (credits < creditsToCharge) {
+                  throw new Error(
+                    `Insufficient credits. This video requires ${creditsToCharge} credits ` +
+                    `(${videoDuration > 0 ? `${videoDuration.toFixed(1)}s × 2 = ` : ''}${creditsToCharge} credits), ` +
+                    `but you only have ${credits} credits.`
+                  );
+                }
+                
                 // Deduct credits after successful generation
                 const { addGeneration } = await import('../services/galleryService');
                 const userIdentifier = isEmailAuth 
@@ -207,9 +240,15 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                   prompt: 'Video Animate Replace',
                   style: 'Wan 2.2 Animate',
                   imageUrl: result,
-                  creditsUsed: 1,
+                  creditsUsed: creditsToCharge,
                   userId: isEmailAuth ? emailContext.userId : undefined,
                   email: isEmailAuth ? emailContext.email : undefined
+                });
+                
+                logger.info('Video generation completed and credits deducted', {
+                  duration: videoDuration,
+                  creditsCharged: creditsToCharge,
+                  remainingCredits: credits - creditsToCharge
                 });
                 
                 setGeneratedVideoUrl(result);

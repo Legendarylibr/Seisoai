@@ -687,9 +687,10 @@ app.post('/api/wan-animate/upload-video-direct', express.raw({ type: 'multipart/
   }
 });
 
-// Increase JSON limit for image data URIs (can be large even after optimization)
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Increase JSON limit for image/video data URIs (can be large even after optimization)
+// Videos especially can be very large, so we need a higher limit
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 
 // Serve static files from parent dist directory (frontend build)
 const distPath = path.join(__dirname, '..', 'dist');
@@ -1179,6 +1180,8 @@ app.post('/api/wan-animate/upload-image', async (req, res) => {
   }
 });
 
+// Wan 2.2 Animate Replace API endpoint
+// Documentation: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
 app.post('/api/wan-animate/submit', async (req, res) => {
   try {
     if (!FAL_API_KEY) {
@@ -1186,13 +1189,25 @@ app.post('/api/wan-animate/submit', async (req, res) => {
     }
     const input = req.body?.input || req.body;
     
+    // Validate required inputs
+    if (!input?.video_url) {
+      return res.status(400).json({ success: false, error: 'video_url is required' });
+    }
+    if (!input?.image_url) {
+      return res.status(400).json({ success: false, error: 'image_url is required' });
+    }
+    
     logger.info('Wan-animate submit request', {
       hasVideoUrl: !!input?.video_url,
       hasImageUrl: !!input?.image_url,
       resolution: input?.resolution,
-      videoQuality: input?.video_quality
+      videoQuality: input?.video_quality,
+      videoUrlLength: input?.video_url?.length,
+      imageUrlLength: input?.image_url?.length
     });
     
+    // Official fal.ai API endpoint for Wan 2.2 Animate Replace
+    // See: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
     const response = await fetch('https://queue.fal.run/fal-ai/wan/v2.2-14b/animate/replace', {
       method: 'POST',
       headers: {
@@ -1235,6 +1250,8 @@ app.post('/api/wan-animate/submit', async (req, res) => {
   }
 });
 
+// Status endpoint for Wan 2.2 Animate Replace
+// API: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
 app.get('/api/wan-animate/status/:requestId', async (req, res) => {
   try {
     if (!FAL_API_KEY) {
@@ -1321,6 +1338,8 @@ app.get('/api/wan-animate/status/:requestId', async (req, res) => {
   }
 });
 
+// Result endpoint for Wan 2.2 Animate Replace
+// API: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
 app.get('/api/wan-animate/result/:requestId', async (req, res) => {
   try {
     if (!FAL_API_KEY) {

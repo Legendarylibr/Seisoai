@@ -111,7 +111,7 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
           image_url: preparedImageUrl,
           guidance_scale: guidanceScale,
           resolution,
-          seed: seed || undefined,
+          ...(seed !== null && seed !== undefined ? { seed } : {}),
           num_inference_steps: numInferenceSteps,
           enable_safety_checker: enableSafetyChecker,
           enable_output_safety_checker: enableOutputSafetyChecker,
@@ -135,7 +135,16 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
       throw new Error(errorMessage);
     }
 
-    const { request_id } = await response.json();
+    const responseData = await response.json();
+    
+    // Extract request_id - handle both direct response and wrapped response
+    const request_id = responseData.request_id || responseData.requestId;
+    
+    if (!request_id) {
+      logger.error('No request_id in submit response', { responseData });
+      throw new Error('No request ID returned from video generation request');
+    }
+    
     logger.debug('Video generation request submitted', { request_id });
 
     if (onProgress) onProgress(30);
@@ -203,9 +212,16 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
         continue;
       }
 
-      logger.debug('Video generation status', { status: status.status });
+      // Handle different status formats from API
+      // Status might be: "IN_QUEUE", "IN_PROGRESS", "COMPLETED", "FAILED"
+      const currentStatus = status.status || status;
+      
+      logger.debug('Video generation status', { 
+        status: currentStatus,
+        fullStatus: status 
+      });
 
-      if (status.status === 'COMPLETED') {
+      if (currentStatus === 'COMPLETED' || currentStatus === 'completed') {
         if (onProgress) onProgress(85);
         
         // Get the result
@@ -230,18 +246,46 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
           
           const result = resultData;
           
-          if (result.video && result.video.url) {
+          // Handle different possible response structures from fal.ai API
+          // The API may return: { video: { url: "..." } } or { video: "..." } or { data: { video: { url: "..." } } }
+          let videoUrl = null;
+          
+          if (result.video) {
+            if (typeof result.video === 'string') {
+              videoUrl = result.video;
+            } else if (result.video.url) {
+              videoUrl = result.video.url;
+            }
+          } else if (result.data && result.data.video) {
+            if (typeof result.data.video === 'string') {
+              videoUrl = result.data.video;
+            } else if (result.data.video.url) {
+              videoUrl = result.data.video.url;
+            }
+          }
+          
+          if (videoUrl) {
             if (onProgress) onProgress(95);
-            logger.info('Video generated successfully');
-            return result.video.url;
+            logger.info('Video generated successfully', { videoUrl });
+            return videoUrl;
           } else {
-            throw new Error('No video URL in response');
+            logger.error('No video URL in response', { result });
+            throw new Error('No video URL in response. Response structure: ' + JSON.stringify(result).substring(0, 200));
           }
         } catch (resultError) {
           throw new Error(`Failed to retrieve video result: ${resultError.message}`);
         }
-      } else if (status.status === 'FAILED') {
-        throw new Error(status.error || 'Video generation failed');
+      } else if (currentStatus === 'FAILED' || currentStatus === 'failed') {
+        const errorMessage = status.error || status.message || 'Video generation failed';
+        logger.error('Video generation failed', { status, errorMessage });
+        throw new Error(errorMessage);
+      } else if (currentStatus === 'IN_QUEUE' || currentStatus === 'IN_PROGRESS' || 
+                 currentStatus === 'in_queue' || currentStatus === 'in_progress') {
+        // Continue polling for these statuses
+        logger.debug('Video generation in progress', { status: currentStatus });
+      } else {
+        // Unknown status - log but continue polling
+        logger.warn('Unknown video generation status', { status: currentStatus, fullStatus: status });
       }
       
       attempts++;
