@@ -360,10 +360,27 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     });
     
     if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+      // Log all generated images for debugging
+      logger.info(`Generated ${data.images.length} image(s) successfully`, {
+        numImagesRequested: numImages,
+        numImagesReceived: data.images.length,
+        isMultiImage: isMultipleImages,
+        referenceImageCount: imageCount
+      });
+      
       // For single image, return the first image
-      // For multiple images, return the first image (you might want to handle this differently)
-      logger.info(`Generated ${data.images.length} image(s) successfully`);
-      return data.images[0].url;
+      // For multiple images, return the first image (UI currently displays one at a time)
+      // All images are generated and available in the API response
+      const firstImageUrl = data.images[0].url;
+      
+      if (data.images.length > 1) {
+        logger.debug('Multiple images generated', {
+          totalImages: data.images.length,
+          allImageUrls: data.images.map(img => img.url)
+        });
+      }
+      
+      return firstImageUrl;
     } else {
       throw new Error('No image generated');
     }
