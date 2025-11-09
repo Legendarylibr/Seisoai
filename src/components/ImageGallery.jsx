@@ -179,6 +179,11 @@ const ImageGallery = () => {
                 src={item.image}
                 alt="Generated image"
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                loading="lazy"
+                onError={(e) => {
+                  console.error('Gallery image failed to load:', item.image);
+                  e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Crect fill="%23333" width="400" height="400"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em" font-family="sans-serif" font-size="14"%3EImage not available%3C/text%3E%3C/svg%3E';
+                }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
                 <div className="flex items-center gap-2 text-white">
@@ -251,7 +256,17 @@ const ImageGallery = () => {
               <img
                 src={selectedImage.image}
                 alt="Generated image"
-                className="max-w-full max-h-[60vh] object-contain mx-auto rounded-xl shadow-2xl"
+                className="w-full h-auto max-w-full max-h-[60vh] sm:max-h-[70vh] md:max-h-[80vh] object-contain mx-auto rounded-xl shadow-2xl"
+                style={{ 
+                  maxWidth: '100%', 
+                  height: 'auto',
+                  display: 'block'
+                }}
+                loading="lazy"
+                onError={(e) => {
+                  console.error('Modal image failed to load:', selectedImage.image);
+                  e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="600"%3E%3Crect fill="%23333" width="800" height="600"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em" font-family="sans-serif" font-size="16"%3EImage not available%3C/text%3E%3C/svg%3E';
+                }}
               />
               <div className="mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="text-sm text-gray-400 flex items-center gap-2">

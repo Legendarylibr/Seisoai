@@ -409,8 +409,23 @@ const ImageOutput = () => {
         <img
           src={generatedImage}
           alt="Generated AI image"
-          className="w-full h-auto max-h-[200px] sm:max-h-[250px] md:max-h-[350px] lg:max-h-[400px] object-contain rounded-lg"
-          style={{ maxWidth: '100%', height: 'auto' }}
+          className="w-full h-auto max-h-[200px] xs:max-h-[250px] sm:max-h-[300px] md:max-h-[400px] lg:max-h-[500px] xl:max-h-[600px] object-contain rounded-lg"
+          style={{ 
+            maxWidth: '100%', 
+            height: 'auto',
+            display: 'block',
+            margin: '0 auto'
+          }}
+          loading="lazy"
+          onError={(e) => {
+            console.error('Image failed to load:', generatedImage);
+            setError('Failed to load image. Please try regenerating.');
+            e.target.style.display = 'none';
+          }}
+          onLoad={() => {
+            // Image loaded successfully
+            logger.debug('Generated image loaded successfully');
+          }}
         />
       </div>
 
