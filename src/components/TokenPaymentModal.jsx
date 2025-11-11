@@ -614,7 +614,6 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             if (!response || !response.publicKey) {
               throw new Error('Failed to connect to Phantom wallet. Please unlock your wallet and try again.');
             }
-            console.log('✅ Phantom wallet reconnected successfully');
           } catch (connectError) {
             throw new Error(`Failed to connect to Phantom wallet: ${connectError.message}`);
           }
@@ -724,7 +723,6 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 throw new Error('Transaction failed on blockchain');
               }
               confirmed = true;
-              console.log('✅ Solana transaction confirmed on blockchain!');
               break;
             }
           }
@@ -736,7 +734,6 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           // Credit after confirmation
           try {
             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-            console.log('💰 Crediting confirmed Solana transaction...');
             
             const creditResponse = await fetch(`${apiUrl}/api/payments/credit`, {
               method: 'POST',
@@ -804,7 +801,6 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           setError(errorMessage);
         }
       } else {
-        console.log('🔍 Processing USDC payment...');
         
         try {
           // Get current network info
@@ -826,7 +822,6 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           const ethersProvider = new ethers.BrowserProvider(provider);
           const signer = await ethersProvider.getSigner();
           
-          console.log(`🔨 Creating USDC transaction on ${network.name}...`);
           
           // USDC contract addresses for different networks (MUST match backend TOKEN_ADDRESSES)
           const USDC_CONTRACTS = {
@@ -857,7 +852,6 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
           const decimals = await usdcContract.decimals();
           const balanceFormatted = ethers.formatUnits(balance, decimals);
           
-          console.log(`💰 USDC Balance: ${balanceFormatted} USDC`);
           
           if (parseFloat(balanceFormatted) < parseFloat(amount)) {
             throw new Error(`Insufficient USDC balance. You have ${balanceFormatted} USDC but need ${amount} USDC.`);
@@ -887,25 +881,20 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
             value: 0 // No ETH value for token transfer
           };
           
-          console.log('🔨 Transaction built:', transaction);
           
           // Send transaction to wallet
           const tx = await signer.sendTransaction(transaction);
           
-          console.log('✅ Transaction signed! Hash:', tx.hash);
           setError(`⏳ Transaction submitted! Hash: ${tx.hash}\n\nWaiting for confirmation...`);
           
           // Wait for transaction confirmation
-          console.log('⏳ Waiting for transaction confirmation...');
           const receipt = await tx.wait();
           
           if (receipt.status === 1) {
-            console.log('✅ Transaction confirmed on blockchain!');
             
             // Credit after confirmation (transaction is guaranteed to be on-chain)
             try {
               const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-              console.log('💰 Crediting confirmed transaction...');
               
               const creditResponse = await fetch(`${apiUrl}/api/payments/credit`, {
                 method: 'POST',
@@ -925,7 +914,6 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               const creditData = await creditResponse.json();
               
               if (creditData.success) {
-                console.log('✅ Credits added!', creditData);
                 setError(`✅ Payment confirmed! ${creditData.credits} credits added. New balance: ${creditData.totalCredits} credits.`);
                 setPaymentStatus('confirmed');
                 
@@ -1012,7 +1000,6 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
     // Check once for any USDC transfer to payment wallet
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      console.log('[Payment] Checking for USDC transfer to payment wallet');
       
       // Use instant-check endpoint to detect ANY USDC transfer
       const response = await fetch(`${apiUrl}/api/payment/instant-check`, {
@@ -1029,10 +1016,8 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
       });
       
       const data = await response.json();
-      console.log('[Payment] Check result:', data);
       
       if (data.success && data.paymentDetected) {
-        console.log('[Payment] Payment detected!', data.payment);
         setPaymentStatus('confirmed');
         setCheckingPayment(false);
         

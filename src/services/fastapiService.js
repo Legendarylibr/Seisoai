@@ -95,7 +95,6 @@ export const generateImageWithFastAPI = async (style, customPrompt = '', advance
     
     // Generate random seed each time
     const seed = Math.floor(Math.random() * 2147483647);
-    console.log('🎲 [FastAPI] Using random seed:', seed);
 
     // Build optimized prompt for Flux Kontext
     // User's custom prompt takes priority, style enhances without overriding

@@ -16,13 +16,6 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
   // Check if FastAPI is available
   const fastAPIAvailable = await isFastAPIAvailable();
   
-  console.log('🎯 Smart routing decision:', {
-    isNFTHolder,
-    forceModel,
-    fastAPIAvailable,
-    willUseFastAPI: (isNFTHolder && !forceModel) || forceModel === 'fastapi'
-  });
-  
   // Route decision logic
   let useFastAPI = false;
   
@@ -38,26 +31,18 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     useFastAPI = false;
   }
   
-  console.log('✅ Final routing decision:', { useFastAPI, reason: useFastAPI ? 'NFT holder + FastAPI available' : 'Non-NFT holder or FastAPI unavailable' });
-  
   try {
     if (useFastAPI) {
-      console.log('🚀 Using FastAPI/ComfyUI for generation');
       return await generateImageWithFastAPI(style, customPrompt, advancedSettings, referenceImage);
     } else {
-      console.log('🚀 Using FAL.ai for generation');
       return await generateWithFAL(style, customPrompt, advancedSettings, referenceImage);
     }
   } catch (error) {
-    console.error('Image generation failed:', error);
-    
     // Fallback logic: if FastAPI fails and user is NFT holder, try FAL
     if (useFastAPI && isNFTHolder) {
-      console.log('🔄 FastAPI failed, falling back to FAL.ai for NFT holder');
       try {
         return await generateWithFAL(style, customPrompt, advancedSettings, referenceImage);
       } catch (fallbackError) {
-        console.error('Both FastAPI and FAL failed:', fallbackError);
         throw new Error(`Image generation failed: ${error.message}. Fallback also failed: ${fallbackError.message}`);
       }
     }

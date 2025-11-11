@@ -2702,47 +2702,33 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
     const transferTopic = ethers.id('Transfer(address,address,uint256)');
     const transferLogs = receipt.logs.filter(log => log.topics[0] === transferTopic);
     
-    console.log(`[VERIFY] Found ${transferLogs.length} transfer event(s)`);
+    logger.debug(`Found ${transferLogs.length} transfer event(s) for verification`);
     
     let validTransfer = false;
     let actualAmount = 0;
 
     for (const log of transferLogs) {
       try {
-        // Log raw log data for debugging
-        console.log(`[VERIFY] Raw log:`, {
-          address: log.address,
-          topics: log.topics,
-          data: log.data,
-          blockNumber: log.blockNumber
-        });
-        
         const decoded = tokenContract.interface.parseLog(log);
         const from = decoded.args[0];
         const to = decoded.args[1];
         const value = decoded.args[2];
-        
-        console.log(`[VERIFY] Decoded transfer: from=${from}, to=${to}, value=${value.toString()}`);
-        console.log(`[VERIFY] Checking: to===${paymentWallet.toLowerCase()} && from===${walletAddress.toLowerCase()}`);
 
         if (to.toLowerCase() === paymentWallet.toLowerCase() && 
             from.toLowerCase() === walletAddress.toLowerCase()) {
           validTransfer = true;
           actualAmount = parseFloat(ethers.formatUnits(value, tokenConfig.decimals));
-          console.log(`[VERIFY] ✅ Valid transfer found! Amount: ${actualAmount}`);
+          logger.debug(`Valid transfer found`, { amount: actualAmount, from, to });
           break;
-        } else {
-          console.log(`[VERIFY] Transfer doesn't match - to=${to}, from=${from}`);
         }
       } catch (e) {
-        console.log(`[VERIFY] Error parsing log:`, e.message);
-        console.log(`[VERIFY] Error stack:`, e.stack);
+        logger.warn(`Error parsing transfer log`, { error: e.message });
         continue;
       }
     }
 
     if (!validTransfer) {
-      console.log(`[VERIFY] ❌ No valid transfer found. Payment wallet: ${paymentWallet}`);
+      logger.warn(`No valid transfer found to payment wallet`, { paymentWallet, walletAddress });
       throw new Error('No valid transfer found to payment wallet');
     }
 
@@ -3613,60 +3599,36 @@ function getProvider(chain = 'ethereum') {
  */
 async function checkForTokenTransfer(paymentAddress, token = 'USDC', chain = 'ethereum') {
   try {
-    console.log(`\n[${chain.toUpperCase()}] Starting check for ${token} transfers...`);
-    console.log(`[${chain.toUpperCase()}] Looking for ANY transfers TO: ${paymentAddress}`);
+    logger.debug(`Checking for ${token} transfers on ${chain}`, { paymentAddress });
     
     const provider = getProvider(chain);
     const tokenAddress = TOKEN_ADDRESSES[chain]?.[token];
     
     if (!tokenAddress) {
-      console.log(`[${chain.toUpperCase()}] ⚠️  Token ${token} not supported on this chain`);
+      logger.warn(`Token ${token} not supported on chain ${chain}`);
       return null;
     }
     
-    console.log(`[${chain.toUpperCase()}] Token contract: ${tokenAddress}`);
-    
     const contract = new ethers.Contract(tokenAddress, USDC_ABI, provider);
     const decimals = await contract.decimals();
-    console.log(`[${chain.toUpperCase()}] Token decimals: ${decimals}`);
     
     // Get current block and check recent blocks for new transfers (reduced for performance)
     const currentBlock = await provider.getBlockNumber();
     const blocksToCheck = 20; // Check last 20 blocks for better performance
     const fromBlock = Math.max(0, currentBlock - blocksToCheck);
     
-    console.log(`[${chain.toUpperCase()}] Scanning blocks ${fromBlock} to ${currentBlock} (${blocksToCheck} blocks)`);
-    
     // Query Transfer events TO our payment address (second parameter is recipient)
     const filter = contract.filters.Transfer(null, paymentAddress);
-    console.log(`[${chain.toUpperCase()}] Filter: Transfer(from: ANY, to: ${paymentAddress})`);
     
     const events = await contract.queryFilter(filter, fromBlock, currentBlock);
     
-    console.log(`[${chain.toUpperCase()}] Found ${events.length} incoming transfer(s) to payment wallet`);
-    console.log(`[${chain.toUpperCase()}] Blocks scanned: ${fromBlock} to ${currentBlock}`);
+    logger.debug(`Found ${events.length} transfer(s) to payment wallet`, { 
+      chain, 
+      blocksScanned: `${fromBlock}-${currentBlock}` 
+    });
     
     if (events.length === 0) {
-      console.log(`[${chain.toUpperCase()}] ✗ No transfers found to payment wallet in last ${blocksToCheck} blocks`);
-      console.log(`[${chain.toUpperCase()}] Payment wallet address: ${paymentAddress}`);
-      console.log(`[${chain.toUpperCase()}] USDC token address: ${tokenAddress}`);
       return null;
-    }
-    
-    // Log all found transfers for debugging
-    console.log(`[${chain.toUpperCase()}] DETAILED TRANSFER LOGS:`);
-    for (const event of events) {
-      const amount = event.args.value;
-      const from = event.args.from;
-      const to = event.args.to;
-      const amountFormatted = ethers.formatUnits(amount, decimals);
-      console.log(`[${chain.toUpperCase()}]   Transfer #${events.indexOf(event) + 1}:`);
-      console.log(`[${chain.toUpperCase()}]     From: ${from}`);
-      console.log(`[${chain.toUpperCase()}]     To: ${to}`);
-      console.log(`[${chain.toUpperCase()}]     Amount: ${amountFormatted} USDC`);
-      console.log(`[${chain.toUpperCase()}]     TxHash: ${event.transactionHash}`);
-      console.log(`[${chain.toUpperCase()}]     Block: ${event.blockNumber}`);
-      console.log(`[${chain.toUpperCase()}]     ---`);
     }
     
     // Get the most recent transfer (any amount to payment wallet qualifies)
@@ -3677,15 +3639,17 @@ async function checkForTokenTransfer(paymentAddress, token = 'USDC', chain = 'et
       const to = event.args.to;
       const amountFormatted = ethers.formatUnits(amount, decimals);
       
-      console.log(`[${chain.toUpperCase()}]   Found transfer to payment wallet:`);
-      console.log(`[${chain.toUpperCase()}]     TxHash: ${event.transactionHash}`);
-      console.log(`[${chain.toUpperCase()}]     From: ${from}`);
-      console.log(`[${chain.toUpperCase()}]     To: ${to}`);
-      console.log(`[${chain.toUpperCase()}]     Amount: ${amountFormatted} ${token}`);
-      
       const block = await event.getBlock();
-      console.log(`[${chain.toUpperCase()}]     Block: ${event.blockNumber}`);
-      console.log(`[${chain.toUpperCase()}]     Timestamp: ${new Date(block.timestamp * 1000).toISOString()}`);
+      
+      logger.info(`Transfer found to payment wallet`, {
+        chain,
+        txHash: event.transactionHash,
+        from,
+        to,
+        amount: amountFormatted,
+        token,
+        blockNumber: event.blockNumber
+      });
       
       return {
         found: true,
@@ -3736,10 +3700,10 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
           connection.getLatestBlockhash(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 5000))
         ]);
-        console.log(`[SOLANA] Using RPC endpoint: ${rpcUrl}`);
+        logger.debug(`Using Solana RPC endpoint`, { rpcUrl });
         break;
       } catch (error) {
-        console.log(`[SOLANA] Failed to connect to ${rpcUrl}: ${error.message}`);
+        logger.debug(`Failed to connect to Solana RPC`, { rpcUrl, error: error.message });
         lastError = error;
         continue;
       }
@@ -3757,10 +3721,9 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
     // Get recent signatures for the payment address (reduced for performance)
     const signatures = await connection.getSignaturesForAddress(paymentPubkey, { limit: 20 });
     
-    console.log(`[SOLANA] Found ${signatures.length} recent transaction(s)`);
+    logger.debug(`Found ${signatures.length} recent Solana transaction(s)`, { paymentAddress });
     
     if (signatures.length === 0) {
-      console.log(`[SOLANA] ✗ No recent transactions found`);
       return null;
     }
     
@@ -3776,8 +3739,6 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
         
         if (!tx || !tx.meta) continue;
         
-        console.log(`[SOLANA]   Checking tx ${sig.signature}...`);
-        
         // Look for SPL Token transfers in the transaction
         const instructions = tx.transaction.message.instructions;
         
@@ -3785,11 +3746,6 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
           // Check if it's a token transfer instruction
           if (instruction.program === 'spl-token' && instruction.parsed?.type === 'transfer') {
             const info = instruction.parsed.info;
-            
-            console.log(`[SOLANA]     Token transfer found:`);
-            console.log(`[SOLANA]       From: ${info.source}`);
-            console.log(`[SOLANA]       To: ${info.destination}`);
-            console.log(`[SOLANA]       Authority: ${info.authority}`);
             
             // Check if it's to our payment address and is USDC
             // Note: info.destination is the token account address, not the wallet address
@@ -3803,20 +3759,18 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
                 const ownerBytes = tokenAccountData.slice(32, 64);
                 const ownerAddress = new PublicKey(ownerBytes).toString();
                 
-                console.log(`[SOLANA]       Token account owner: ${ownerAddress}`);
-                
                 if (ownerAddress === paymentAddress) {
                   // Get token account info to verify it's USDC
                   const amount = info.amount / 1e6; // USDC has 6 decimals
                   
-                  console.log(`[SOLANA]       Amount: ${amount} USDC`);
-                  
                   // Check if amount matches (within 1% tolerance) or if no expected amount specified
                   if (expectedAmount === null || expectedAmount === undefined) {
-                    console.log(`[SOLANA]       No expected amount specified - accepting any USDC transfer`);
-                    console.log(`[SOLANA]     ✓ MATCH FOUND!`);
-                    console.log(`[SOLANA]       TxHash: ${sig.signature}`);
-                    console.log(`[SOLANA]       Timestamp: ${new Date(sig.blockTime * 1000).toISOString()}`);
+                    logger.info(`Solana USDC transfer found`, {
+                      txHash: sig.signature,
+                      from: info.authority,
+                      amount,
+                      timestamp: new Date(sig.blockTime * 1000).toISOString()
+                    });
                     
                     return {
                       found: true,
@@ -3830,12 +3784,15 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
                   }
                   
                   const tolerance = expectedAmount * 0.01;
-                  console.log(`[SOLANA]       Expected: ${expectedAmount} ± ${tolerance}`);
                   
                   if (amount >= expectedAmount - tolerance && amount <= expectedAmount + tolerance) {
-                    console.log(`[SOLANA]     ✓ MATCH FOUND!`);
-                    console.log(`[SOLANA]       TxHash: ${sig.signature}`);
-                    console.log(`[SOLANA]       Timestamp: ${new Date(sig.blockTime * 1000).toISOString()}`);
+                    logger.info(`Solana USDC transfer found`, {
+                      txHash: sig.signature,
+                      from: info.authority,
+                      amount,
+                      expectedAmount,
+                      timestamp: new Date(sig.blockTime * 1000).toISOString()
+                    });
                     
                     return {
                       found: true,
@@ -3846,31 +3803,23 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
                       chain: 'solana',
                       token: 'USDC'
                     };
-                  } else {
-                    console.log(`[SOLANA]       ✗ Amount doesn't match`);
                   }
-                } else {
-                  console.log(`[SOLANA]       ✗ Not to our payment address`);
                 }
               }
             } catch (accountError) {
-              console.log(`[SOLANA]       ✗ Error checking token account: ${accountError.message}`);
+              logger.warn(`Error checking Solana token account`, { error: accountError.message });
             }
           }
         }
       } catch (txError) {
-        console.error(`[SOLANA] ⚠️  Error parsing transaction ${sig.signature}:`, txError.message);
+        logger.warn(`Error parsing Solana transaction`, { txHash: sig.signature, error: txError.message });
         continue;
       }
     }
     
-    console.log(`[SOLANA] ✗ No matching payments found`);
     return null;
   } catch (error) {
-    console.error('[SOLANA] ❌ Error:', error.message);
-    if (error.stack) {
-      console.error('[SOLANA] Stack:', error.stack);
-    }
+    logger.error('Solana payment check error', { error: error.message, stack: error.stack });
     return null;
   }
 }
@@ -3882,12 +3831,9 @@ app.post('/api/payment/check-payment', async (req, res) => {
   try {
     const { walletAddress, expectedAmount, token = 'USDC' } = req.body;
     
-    console.log('='.repeat(80));
-    console.log('[PAYMENT CHECK] Starting payment check...');
-    console.log('[PAYMENT CHECK] Request body:', JSON.stringify(req.body, null, 2));
+    logger.info('Payment check started', { walletAddress, expectedAmount, token });
     
     if (!walletAddress || !expectedAmount) {
-      console.log('[ERROR] Missing required fields - walletAddress or expectedAmount');
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
@@ -3897,24 +3843,15 @@ app.post('/api/payment/check-payment', async (req, res) => {
     const evmPaymentAddress = EVM_PAYMENT_ADDRESS;
     const solanaPaymentAddress = PAYMENT_WALLETS['solana'];
     
-    console.log(`[PAYMENT CHECK] Configuration:`);
-    console.log(`  - User wallet: ${walletAddress}`);
-    console.log(`  - Expected amount: ${expectedAmount} ${token}`);
-    console.log(`  - EVM Payment wallet: ${evmPaymentAddress}`);
-    console.log(`  - Solana Payment wallet: ${solanaPaymentAddress}`);
-    console.log(`[PAYMENT CHECK] Searching for payments TO payment wallet (not FROM user wallet)`);
-    console.log('-'.repeat(80));
-    
     // Check multiple chains in parallel (EVM + Solana)
     const evmChains = ['ethereum', 'polygon', 'arbitrum', 'optimism', 'base'];
-    console.log(`[PAYMENT CHECK] Checking ${evmChains.length} EVM chains + Solana...`);
     
     const evmPromises = evmChains.map(chain => 
       Promise.race([
         checkForTokenTransfer(evmPaymentAddress, token, chain),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
       ]).catch(err => {
-        console.log(`[WARN] ${chain} check failed:`, err.message);
+        logger.warn(`Payment check failed for ${chain}`, { error: err.message });
         return null;
       })
     );
@@ -3924,28 +3861,17 @@ app.post('/api/payment/check-payment', async (req, res) => {
       checkForSolanaUSDC(solanaPaymentAddress, expectedAmount),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
     ]).catch(err => {
-      console.log(`[WARN] Solana check failed:`, err.message);
+      logger.warn('Solana payment check failed', { error: err.message });
       return null;
     });
     
     const allPromises = [...evmPromises, solanaPromise];
     const results = await Promise.all(allPromises);
     
-    console.log(`[PAYMENT CHECK] Search completed. Results:`);
-    results.forEach((result, idx) => {
-      const chainName = idx < evmChains.length ? evmChains[idx] : 'solana';
-      if (result && result.found) {
-        console.log(`  ✓ ${chainName}: PAYMENT FOUND!`);
-      } else {
-        console.log(`  ✗ ${chainName}: No matching payment`);
-      }
-    });
-    
     const payment = results.find(r => r && r.found);
     
     if (payment) {
-      console.log(`[SUCCESS] Payment detected on ${payment.chain}!`);
-      console.log(`[SUCCESS] Payment details:`, JSON.stringify(payment, null, 2));
+      logger.info(`Payment detected on ${payment.chain}`, { payment });
       
       // Get the sender's wallet address from the blockchain event (the actual person who sent USDC)
       const senderAddress = payment.from;
@@ -3955,8 +3881,7 @@ app.post('/api/payment/check-payment', async (req, res) => {
       
       // Middleware should have caught duplicates, but double-check for safety
       if (isPaymentAlreadyProcessed(user, payment.txHash)) {
-        console.log(`[INFO] Payment ${payment.txHash} already processed for ${senderAddress}`);
-        console.log('='.repeat(80));
+        logger.info(`Payment already processed`, { txHash: payment.txHash, senderAddress });
         return res.json({
           success: true,
           paymentDetected: true,
@@ -3978,7 +3903,7 @@ app.post('/api/payment/check-payment', async (req, res) => {
             { new: true }
           );
           isNFTHolder = true;
-          console.log(`[NFT] User ${senderAddress} is NFT holder - applying 16.67 credits/USDC rate`);
+          logger.info(`NFT holder detected - applying discount rate`, { senderAddress });
         } else {
           updatedUser = await User.findOneAndUpdate(
             { walletAddress: user.walletAddress },
@@ -3986,10 +3911,9 @@ app.post('/api/payment/check-payment', async (req, res) => {
             { new: true }
           );
           isNFTHolder = false;
-          console.log(`[NFT] User ${senderAddress} is not NFT holder - applying standard 6.67 credits/USDC rate`);
         }
       } catch (nftError) {
-        console.warn(`[NFT] Error checking NFT holdings for ${senderAddress}, using database state:`, nftError.message);
+        logger.warn(`Error checking NFT holdings, using database state`, { senderAddress, error: nftError.message });
         isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
       }
       
@@ -3998,8 +3922,11 @@ app.post('/api/payment/check-payment', async (req, res) => {
       // Calculate credits
       const creditsToAdd = calculateCreditsFromAmount(payment.amount, creditsPerUSDC);
       
-      console.log(`[CREDIT] Adding ${creditsToAdd} credits to user ${senderAddress}`);
-      console.log(`[CREDIT] Previous balance: ${updatedUser.credits} credits`);
+      logger.info(`Adding credits to user`, { 
+        senderAddress, 
+        creditsToAdd, 
+        previousBalance: updatedUser.credits 
+      });
       
       // Add credits to user using helper function (use updated user object)
       await addCreditsToUser(updatedUser, {
@@ -4014,8 +3941,11 @@ app.post('/api/payment/check-payment', async (req, res) => {
       
       // Refetch user to get latest credits
       const finalUser = await User.findOne({ walletAddress: user.walletAddress });
-      console.log(`[SUCCESS] New balance: ${finalUser.credits} credits`);
-      console.log('='.repeat(80));
+      logger.info(`Credits added successfully`, { 
+        senderAddress, 
+        creditsAdded: creditsToAdd, 
+        newBalance: finalUser.credits 
+      });
       
       return res.json({
         success: true,
@@ -4033,8 +3963,7 @@ app.post('/api/payment/check-payment', async (req, res) => {
     }
     
     // No payment found
-    console.log(`[INFO] No matching payments found on any chain`);
-    console.log('='.repeat(80));
+    logger.debug('No payment detected on any chain', { walletAddress, expectedAmount });
     res.json({
       success: true,
       paymentDetected: false,
@@ -4042,7 +3971,7 @@ app.post('/api/payment/check-payment', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[ERROR] Check payment error:', error);
+    logger.error('Payment check error', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       error: 'Failed to check payment: ' + error.message
@@ -4064,11 +3993,9 @@ app.post('/api/payments/credit', async (req, res) => {
       walletType 
     } = req.body;
 
-    console.log('💰 [PAYMENT CREDIT] Starting immediate credit...');
-    console.log('💰 [PAYMENT CREDIT] Request:', { txHash, walletAddress, tokenSymbol, amount, chainId, walletType });
+    logger.info('Payment credit started', { txHash, walletAddress, tokenSymbol, amount, chainId, walletType });
 
     if (!txHash || !walletAddress || !amount) {
-      console.log('💰 [PAYMENT CREDIT] Missing fields');
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
@@ -4079,7 +4006,7 @@ app.post('/api/payments/credit', async (req, res) => {
     const user = await getOrCreateUser(walletAddress);
     
     if (isPaymentAlreadyProcessed(user, txHash)) {
-      console.log('💰 [PAYMENT CREDIT] Already processed');
+      logger.info('Payment already processed', { txHash, walletAddress });
       return res.json({
         success: true,
         credits: 0,
@@ -4102,7 +4029,7 @@ app.post('/api/payments/credit', async (req, res) => {
           { new: true }
         );
         isNFTHolder = true;
-        console.log('💰 [PAYMENT CREDIT] ✅ NFT HOLDER DETECTED - applying 16.67 credits/USDC rate (NFT holder discount)');
+        logger.info('NFT holder detected - applying discount rate', { walletAddress });
       } else {
         updatedUser = await User.findOneAndUpdate(
           { walletAddress: user.walletAddress },
@@ -4110,14 +4037,10 @@ app.post('/api/payments/credit', async (req, res) => {
           { new: true }
         );
         isNFTHolder = false;
-        console.log('💰 [PAYMENT CREDIT] ❌ Not NFT holder - applying standard 6.67 credits/USDC rate');
       }
     } catch (nftError) {
-      console.warn('💰 [PAYMENT CREDIT] ⚠️ Error checking NFT holdings, using database state:', nftError.message);
+      logger.warn('Error checking NFT holdings, using database state', { walletAddress, error: nftError.message });
       isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-      if (isNFTHolder) {
-        console.log('💰 [PAYMENT CREDIT] Using cached NFT holder status - applying 16.67 credits/USDC rate');
-      }
     }
 
     const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
@@ -4125,14 +4048,13 @@ app.post('/api/payments/credit', async (req, res) => {
     // Credit immediately based on signature (no verification)
     const creditsToAdd = calculateCreditsFromAmount(amount, creditsPerUSDC);
     
-    console.log('💰 [PAYMENT CREDIT] Calculating credits', {
+    logger.debug('Calculating credits', {
       walletAddress: updatedUser.walletAddress,
       walletType: walletType || 'evm',
       amount: parseFloat(amount),
       creditsPerUSDC: creditsPerUSDC,
       isNFTHolder: isNFTHolder,
-      creditsToAdd,
-      expectedCredits: parseFloat(amount) * creditsPerUSDC
+      creditsToAdd
     });
     
     // Add credits using helper function (use updated user object)
@@ -4147,7 +4069,7 @@ app.post('/api/payments/credit', async (req, res) => {
     
     // Refetch user to get latest credits
     const finalUser = await User.findOne({ walletAddress: walletAddress });
-    console.log('💰 [PAYMENT CREDIT] Credits added successfully', {
+    logger.info('Credits added successfully', {
       walletAddress: finalUser.walletAddress,
       credits: creditsToAdd,
       totalCredits: finalUser.credits,
@@ -4162,8 +4084,7 @@ app.post('/api/payments/credit', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('💰 [PAYMENT CREDIT] Error:', error);
-    logger.error('Payment credit error:', error);
+    logger.error('Payment credit error', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       error: getSafeErrorMessage(error, 'Failed to credit payment')
@@ -4185,11 +4106,9 @@ app.post('/api/payments/verify', async (req, res) => {
       walletType 
     } = req.body;
 
-    console.log('💰 [PAYMENT VERIFY] Starting verification...');
-    console.log('💰 [PAYMENT VERIFY] Request:', { txHash, walletAddress, tokenSymbol, amount, chainId, walletType });
+    logger.info('Payment verification started', { txHash, walletAddress, tokenSymbol, amount, chainId, walletType });
 
     if (!txHash || !walletAddress || !tokenSymbol || !amount || !chainId || !walletType) {
-      console.log('💰 [PAYMENT VERIFY] Missing fields');
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
@@ -4200,7 +4119,7 @@ app.post('/api/payments/verify', async (req, res) => {
     const user = await getOrCreateUser(walletAddress);
     
     if (isPaymentAlreadyProcessed(user, txHash)) {
-      console.log('💰 [PAYMENT VERIFY] Already processed');
+      logger.info('Payment already processed', { txHash, walletAddress });
       return res.json({
         success: true,
         credits: 0,
@@ -4221,7 +4140,7 @@ app.post('/api/payments/verify', async (req, res) => {
           { new: true }
         );
         isNFTHolder = true;
-        console.log('💰 [PAYMENT VERIFY] User is NFT holder - applying 16.67 credits/USDC rate');
+        logger.info('NFT holder detected - applying discount rate', { walletAddress });
       } else {
         updatedUser = await User.findOneAndUpdate(
           { walletAddress: user.walletAddress },
@@ -4229,10 +4148,9 @@ app.post('/api/payments/verify', async (req, res) => {
           { new: true }
         );
         isNFTHolder = false;
-        console.log('💰 [PAYMENT VERIFY] User is not NFT holder - applying standard 6.67 credits/USDC rate');
       }
     } catch (nftError) {
-      console.warn('💰 [PAYMENT VERIFY] Error checking NFT holdings, using database state:', nftError.message);
+      logger.warn('Error checking NFT holdings, using database state', { walletAddress, error: nftError.message });
       isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
     }
 
@@ -4249,14 +4167,14 @@ app.post('/api/payments/verify', async (req, res) => {
         txHash
       };
     } else {
-      console.log('💰 [PAYMENT VERIFY] Calling verifyEVMPayment...');
+      logger.debug('Verifying EVM payment', { txHash, walletAddress, tokenSymbol, amount, chainId });
       verification = await verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chainId);
-      console.log('💰 [PAYMENT VERIFY] Verification result:', verification);
+      logger.debug('EVM payment verification result', { verification });
       
       // Recalculate credits based on NFT holder status if verification succeeded
       if (verification.success && verification.actualAmount) {
         verification.credits = calculateCreditsFromAmount(verification.actualAmount, creditsPerUSDC);
-        console.log('💰 [PAYMENT VERIFY] Recalculated credits for NFT holder:', {
+        logger.debug('Recalculated credits', {
           isNFTHolder,
           creditsPerUSDC,
           actualAmount: verification.actualAmount,

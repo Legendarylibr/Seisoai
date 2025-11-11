@@ -187,9 +187,6 @@ const ImageOutput = () => {
       setGenerating(false);
     }
   };
-
-  const emailContext = useEmailAuth();
-  const isEmailAuth = emailContext.isAuthenticated;
   
   // Use credits from email auth if available, otherwise wallet
   const availableCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
