@@ -2033,7 +2033,7 @@ async function getUserFromRequest(req) {
  * Middleware to check credits before allowing external API calls
  * Requires walletAddress, userId, or email in request body
  */
-async function requireCredits(requiredCredits = 1) {
+function requireCredits(requiredCredits = 1) {
   return async (req, res, next) => {
     try {
       // Get user from request
