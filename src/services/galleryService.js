@@ -76,18 +76,24 @@ export const addGeneration = async (identifier, generationData) => {
 
 /**
  * Get user gallery
- * @param {string} walletAddress - User's wallet address
+ * @param {string} identifier - User's wallet address, userId, or email
  * @param {number} page - Page number
  * @param {number} limit - Items per page
+ * @param {string} userId - Optional userId (for email users)
+ * @param {string} email - Optional email
  * @returns {Promise<Object>} - Gallery data
  */
-export const getGallery = async (walletAddress, page = 1, limit = 20) => {
+export const getGallery = async (identifier, page = 1, limit = 20, userId = null, email = null) => {
   try {
     if (!API_URL) {
       throw new Error('API URL not configured');
     }
 
-    const response = await fetch(`${API_URL}/api/gallery/${walletAddress}?page=${page}&limit=${limit}`);
+    let url = `${API_URL}/api/gallery/${identifier}?page=${page}&limit=${limit}`;
+    if (userId) url += `&userId=${encodeURIComponent(userId)}`;
+    if (email) url += `&email=${encodeURIComponent(email)}`;
+
+    const response = await fetch(url);
 
     if (!response.ok) {
       throw new Error('Failed to fetch gallery');

@@ -147,7 +147,7 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
     
     logger.debug('Video generation request submitted', { request_id });
 
-    if (onProgress) onProgress(30);
+    if (onProgress) onProgress(30, request_id);
 
     // Poll for completion
     let attempts = 0;
@@ -244,33 +244,82 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
             throw new Error(resultData.error || 'Result check returned an error');
           }
           
-          const result = resultData;
+          // Backend wraps the response in { success: true, ...data }
+          // So we need to extract the actual data (excluding success field)
+          const { success, ...falResponse } = resultData;
+          const result = falResponse;
+          
+          // Log full result structure for debugging
+          logger.debug('Wan-animate result response', { 
+            resultKeys: Object.keys(result),
+            hasVideo: !!result.video,
+            hasData: !!result.data,
+            hasSuccess: !!result.success,
+            resultPreview: JSON.stringify(result).substring(0, 500)
+          });
           
           // Handle different possible response structures from fal.ai API
-          // The API may return: { video: { url: "..." } } or { video: "..." } or { data: { video: { url: "..." } } }
+          // The API may return: 
+          // - { video: { url: "..." } } 
+          // - { video: "..." } 
+          // - { data: { video: { url: "..." } } }
+          // - { data: { video: "..." } }
+          // - Direct video URL in result
+          // - Backend may wrap: { success: true, video: {...} }
           let videoUrl = null;
           
+          // Check result.video first
           if (result.video) {
             if (typeof result.video === 'string') {
               videoUrl = result.video;
             } else if (result.video.url) {
               videoUrl = result.video.url;
+            } else if (result.video.file?.url) {
+              videoUrl = result.video.file.url;
             }
-          } else if (result.data && result.data.video) {
-            if (typeof result.data.video === 'string') {
-              videoUrl = result.data.video;
-            } else if (result.data.video.url) {
-              videoUrl = result.data.video.url;
+          } 
+          // Check result.data.video
+          else if (result.data) {
+            if (result.data.video) {
+              if (typeof result.data.video === 'string') {
+                videoUrl = result.data.video;
+              } else if (result.data.video.url) {
+                videoUrl = result.data.video.url;
+              } else if (result.data.video.file?.url) {
+                videoUrl = result.data.video.file.url;
+              }
+            }
+            // Check if data itself is the video URL
+            else if (typeof result.data === 'string' && result.data.startsWith('http')) {
+              videoUrl = result.data;
+            }
+          }
+          // Check if result itself is a URL string
+          else if (typeof result === 'string' && result.startsWith('http')) {
+            videoUrl = result;
+          }
+          // Check all string values in result that look like URLs
+          else {
+            for (const [key, value] of Object.entries(result)) {
+              if (typeof value === 'string' && value.startsWith('http') && (value.includes('.mp4') || value.includes('video') || value.includes('fal.media'))) {
+                videoUrl = value;
+                logger.debug('Found video URL in result field', { key, videoUrl });
+                break;
+              }
             }
           }
           
           if (videoUrl) {
             if (onProgress) onProgress(95);
-            logger.info('Video generated successfully', { videoUrl });
+            logger.info('Video generated successfully', { videoUrl, request_id });
             return videoUrl;
           } else {
-            logger.error('No video URL in response', { result });
-            throw new Error('No video URL in response. Response structure: ' + JSON.stringify(result).substring(0, 200));
+            logger.error('No video URL in response', { 
+              result,
+              resultKeys: Object.keys(result),
+              resultString: JSON.stringify(result).substring(0, 500)
+            });
+            throw new Error('No video URL in response. Response structure: ' + JSON.stringify(result).substring(0, 500));
           }
         } catch (resultError) {
           throw new Error(`Failed to retrieve video result: ${resultError.message}`);

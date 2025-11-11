@@ -1382,6 +1382,15 @@ app.get('/api/wan-animate/result/:requestId', async (req, res) => {
       } else {
         data = {};
       }
+      
+      // Log the result structure for debugging
+      logger.debug('Wan-animate result response', {
+        requestId,
+        hasVideo: !!data.video,
+        hasData: !!data.data,
+        dataKeys: Object.keys(data),
+        dataPreview: JSON.stringify(data).substring(0, 500)
+      });
     } catch (parseError) {
       logger.error('Wan-animate result proxy parse error', { 
         requestId,
@@ -1577,13 +1586,17 @@ const userSchema = new mongoose.Schema({
     id: String,
     prompt: String,
     style: String,
-    imageUrl: String,
+    imageUrl: String, // For images
+    videoUrl: String, // For videos
+    requestId: String, // For tracking queued video generations
+    status: { type: String, enum: ['queued', 'processing', 'completed', 'failed'], default: 'completed' },
     creditsUsed: Number,
     timestamp: { type: Date, default: Date.now }
   }],
   gallery: [{
     id: String,
-    imageUrl: String,
+    imageUrl: String, // For images
+    videoUrl: String, // For videos
     prompt: String,
     style: String,
     creditsUsed: Number,
@@ -4511,14 +4524,18 @@ app.post('/api/generations/add', async (req, res) => {
       prompt, 
       style, 
       imageUrl, 
+      videoUrl,
+      requestId,
+      status,
       creditsUsed 
     } = req.body;
 
-    if (!imageUrl) {
-      logger.error('Missing required field: imageUrl');
+    // Either imageUrl or videoUrl must be provided
+    if (!imageUrl && !videoUrl) {
+      logger.error('Missing required field: imageUrl or videoUrl');
       return res.status(400).json({
         success: false,
-        error: 'Missing required field: imageUrl is required'
+        error: 'Missing required field: imageUrl or videoUrl is required'
       });
     }
 
@@ -4625,7 +4642,21 @@ app.post('/api/generations/add', async (req, res) => {
       id: generationId,
       prompt: prompt || 'No prompt',
       style: style || 'No Style',
-      imageUrl,
+      ...(imageUrl && { imageUrl }),
+      ...(videoUrl && { videoUrl }),
+      ...(requestId && { requestId }),
+      ...(status && { status }),
+      creditsUsed: creditsToDeduct,
+      timestamp: new Date()
+    };
+    
+    // Create gallery item (only add to gallery if completed, or if it's an image)
+    const galleryItem = {
+      id: generationId,
+      prompt: prompt || 'No prompt',
+      style: style || 'No Style',
+      ...(imageUrl && { imageUrl }),
+      ...(videoUrl && { videoUrl }),
       creditsUsed: creditsToDeduct,
       timestamp: new Date()
     };
@@ -4648,21 +4679,31 @@ app.post('/api/generations/add', async (req, res) => {
     logger.debug('Executing atomic update', {
       updateQuery,
       creditsToDeduct,
-      hasGeneration: !!generation
+      hasGeneration: !!generation,
+      hasVideoUrl: !!videoUrl,
+      hasRequestId: !!requestId,
+      status: status || 'completed'
     });
+    
+    // Build update object - only add to gallery if completed or if it's an image
+    const updateObj = {
+      $inc: { 
+        credits: -creditsToDeduct,
+        totalCreditsSpent: creditsToDeduct
+      },
+      $push: {
+        generationHistory: generation
+      }
+    };
+    
+    // Only add to gallery if completed (has videoUrl/imageUrl) or if status is not queued/processing
+    if (status !== 'queued' && status !== 'processing' && (videoUrl || imageUrl)) {
+      updateObj.$push.gallery = galleryItem;
+    }
     
     const updateResult = await User.findOneAndUpdate(
       updateQuery,
-      {
-        $inc: { 
-          credits: -creditsToDeduct,
-          totalCreditsSpent: creditsToDeduct
-        },
-        $push: {
-          generationHistory: generation,
-          gallery: generation
-        }
-      },
+      updateObj,
       { new: true }
     );
     
@@ -4747,6 +4788,120 @@ app.post('/api/generations/add', async (req, res) => {
     console.error('❌ [GENERATION ADD] Error stack:', error.stack);
     logger.error('Error adding generation:', error);
     res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to add generation') });
+  }
+});
+
+/**
+ * Update a generation (e.g., when video completes)
+ */
+app.put('/api/generations/update/:generationId', async (req, res) => {
+  try {
+    const { generationId } = req.params;
+    const { 
+      walletAddress, 
+      userId,
+      email,
+      videoUrl,
+      imageUrl,
+      status
+    } = req.body;
+
+    if (!generationId) {
+      return res.status(400).json({
+        success: false,
+        error: 'generationId is required'
+      });
+    }
+
+    // Find user
+    let user;
+    let updateQuery;
+    if (walletAddress) {
+      const isSolanaAddress = !walletAddress.startsWith('0x');
+      const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+      updateQuery = { walletAddress: normalizedWalletAddress };
+      user = await User.findOne(updateQuery);
+    } else if (userId) {
+      updateQuery = { userId };
+      user = await User.findOne(updateQuery);
+    } else if (email) {
+      updateQuery = { email: email.toLowerCase() };
+      user = await User.findOne(updateQuery);
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'walletAddress, userId, or email is required'
+      });
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Find the generation in history
+    const generation = user.generationHistory.find(gen => gen.id === generationId);
+    if (!generation) {
+      return res.status(404).json({
+        success: false,
+        error: 'Generation not found'
+      });
+    }
+
+    // Build update object
+    const updateFields = {};
+    if (videoUrl) updateFields['generationHistory.$.videoUrl'] = videoUrl;
+    if (imageUrl) updateFields['generationHistory.$.imageUrl'] = imageUrl;
+    if (status) updateFields['generationHistory.$.status'] = status;
+
+    // Update generation in history
+    await User.updateOne(
+      { ...updateQuery, 'generationHistory.id': generationId },
+      { $set: updateFields }
+    );
+
+    // If completed and has videoUrl/imageUrl, add to gallery
+    if ((status === 'completed' || !status) && (videoUrl || imageUrl)) {
+      const galleryItem = {
+        id: generationId,
+        prompt: generation.prompt,
+        style: generation.style,
+        ...(imageUrl && { imageUrl }),
+        ...(videoUrl && { videoUrl }),
+        creditsUsed: generation.creditsUsed,
+        timestamp: generation.timestamp || new Date()
+      };
+
+      // Check if already in gallery
+      const inGallery = user.gallery.some(item => item.id === generationId);
+      if (!inGallery) {
+        await User.updateOne(
+          updateQuery,
+          { $push: { gallery: galleryItem } }
+        );
+      } else {
+        // Update existing gallery item
+        const galleryUpdateFields = {};
+        if (videoUrl) galleryUpdateFields['gallery.$.videoUrl'] = videoUrl;
+        if (imageUrl) galleryUpdateFields['gallery.$.imageUrl'] = imageUrl;
+        await User.updateOne(
+          { ...updateQuery, 'gallery.id': generationId },
+          { $set: galleryUpdateFields }
+        );
+      }
+    }
+
+    logger.info('Generation updated', { generationId, status, hasVideoUrl: !!videoUrl, hasImageUrl: !!imageUrl });
+
+    res.json({
+      success: true,
+      message: 'Generation updated successfully'
+    });
+  } catch (error) {
+    logger.error('Error updating generation:', error);
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to update generation') });
   }
 });
 
@@ -4840,17 +4995,47 @@ app.post('/api/safety/violation', async (req, res) => {
 /**
  * Get user gallery (filtered to last 30 days)
  */
-app.get('/api/gallery/:walletAddress', async (req, res) => {
+app.get('/api/gallery/:identifier', async (req, res) => {
   try {
-    const { walletAddress } = req.params;
-    const { page = 1, limit = 20 } = req.query;
+    const { identifier } = req.params;
+    const { page = 1, limit = 20, userId, email } = req.query;
     
-    const user = await getOrCreateUser(walletAddress);
+    let user;
+    // Support wallet address, userId, or email
+    if (identifier.startsWith('0x') || (identifier.length > 20 && !identifier.startsWith('email_'))) {
+      // Wallet address
+      const isSolanaAddress = !identifier.startsWith('0x');
+      const normalizedWalletAddress = isSolanaAddress ? identifier : identifier.toLowerCase();
+      user = await getOrCreateUser(normalizedWalletAddress);
+    } else if (userId || identifier.startsWith('email_')) {
+      // UserId
+      user = await User.findOne({ userId: userId || identifier });
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+    } else if (email) {
+      // Email
+      user = await User.findOne({ email: email.toLowerCase() });
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+    } else {
+      // Try as wallet address first
+      try {
+        user = await getOrCreateUser(identifier);
+      } catch {
+        return res.status(400).json({ success: false, error: 'Invalid identifier format' });
+      }
+    }
+    
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
     
     // Filter gallery to last 30 days
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const recentGallery = user.gallery.filter(item => 
-      new Date(item.timestamp) >= thirtyDaysAgo
+    const recentGallery = (user.gallery || []).filter(item => 
+      item.timestamp && new Date(item.timestamp) >= thirtyDaysAgo
     );
     
     const startIndex = (page - 1) * limit;

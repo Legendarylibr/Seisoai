@@ -189,6 +189,27 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
               
               try {
                 const { generateVideo } = await import('../services/wanAnimateService');
+                const { addGeneration } = await import('../services/galleryService');
+                
+                const userIdentifier = isEmailAuth 
+                  ? (emailContext.linkedWalletAddress || emailContext.userId) 
+                  : walletContext.address;
+                
+                // Calculate credits first (before starting generation)
+                let videoDuration = 0;
+                let creditsToCharge = 2; // Default minimum
+                
+                // Check if user has enough credits (use minimum estimate)
+                if (credits < creditsToCharge) {
+                  throw new Error(
+                    `Insufficient credits. This video requires at least ${creditsToCharge} credits, ` +
+                    `but you only have ${credits} credits.`
+                  );
+                }
+                
+                // Store generation as queued when we get request_id
+                let generationId = null;
+                let requestId = null;
                 
                 const result = await generateVideo(
                   videoUrl, 
@@ -198,15 +219,33 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                     videoQuality: 'high',
                     videoWriteMode: 'balanced'
                   },
-                  (progress) => {
+                  async (progress, request_id) => {
                     setProgress(progress);
+                    
+                    // When we get the request_id (around 30% progress), store as queued
+                    if (request_id && !generationId) {
+                      requestId = request_id;
+                      try {
+                        const genResult = await addGeneration(userIdentifier, {
+                          prompt: 'Video Animate Replace',
+                          style: 'Wan 2.2 Animate',
+                          requestId: request_id,
+                          status: 'queued',
+                          creditsUsed: creditsToCharge,
+                          userId: isEmailAuth ? emailContext.userId : undefined,
+                          email: isEmailAuth ? emailContext.email : undefined
+                        });
+                        generationId = genResult.generationId;
+                        logger.info('Video generation queued and stored', { generationId, request_id });
+                      } catch (storeError) {
+                        logger.warn('Failed to store queued generation', { error: storeError.message });
+                        // Continue even if storage fails
+                      }
+                    }
                   }
                 );
                 
-                // Get video duration and calculate credits (2 credits per second)
-                let videoDuration = 0;
-                let creditsToCharge = 2; // Default minimum
-                
+                // Get video duration and calculate final credits
                 try {
                   videoDuration = await getVideoDuration(result);
                   creditsToCharge = calculateVideoCredits(videoDuration);
@@ -221,31 +260,47 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                   // Use minimum 2 credits if we can't determine duration
                 }
                 
-                // Check if user has enough credits for the calculated amount
-                if (credits < creditsToCharge) {
-                  throw new Error(
-                    `Insufficient credits. This video requires ${creditsToCharge} credits ` +
-                    `(${videoDuration > 0 ? `${videoDuration.toFixed(1)}s × 2 = ` : ''}${creditsToCharge} credits), ` +
-                    `but you only have ${credits} credits.`
-                  );
+                // Update generation with video URL when completed
+                if (generationId) {
+                  try {
+                    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                    await fetch(`${API_URL}/api/generations/update/${generationId}`, {
+                      method: 'PUT',
+                      headers: {
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify({
+                        walletAddress: !isEmailAuth ? userIdentifier : undefined,
+                        userId: isEmailAuth ? userIdentifier : undefined,
+                        email: isEmailAuth ? emailContext.email : undefined,
+                        videoUrl: result,
+                        status: 'completed'
+                      })
+                    });
+                    logger.info('Video generation updated in database', { generationId, videoUrl: result });
+                  } catch (updateError) {
+                    logger.warn('Failed to update generation', { error: updateError.message });
+                    // Continue even if update fails
+                  }
+                } else {
+                  // If we didn't store as queued, store now as completed
+                  try {
+                    await addGeneration(userIdentifier, {
+                      prompt: 'Video Animate Replace',
+                      style: 'Wan 2.2 Animate',
+                      videoUrl: result,
+                      status: 'completed',
+                      creditsUsed: creditsToCharge,
+                      userId: isEmailAuth ? emailContext.userId : undefined,
+                      email: isEmailAuth ? emailContext.email : undefined
+                    });
+                    logger.info('Video generation stored as completed', { videoUrl: result });
+                  } catch (storeError) {
+                    logger.warn('Failed to store completed generation', { error: storeError.message });
+                  }
                 }
                 
-                // Deduct credits after successful generation
-                const { addGeneration } = await import('../services/galleryService');
-                const userIdentifier = isEmailAuth 
-                  ? (emailContext.linkedWalletAddress || emailContext.userId) 
-                  : walletContext.address;
-                
-                await addGeneration(userIdentifier, {
-                  prompt: 'Video Animate Replace',
-                  style: 'Wan 2.2 Animate',
-                  imageUrl: result,
-                  creditsUsed: creditsToCharge,
-                  userId: isEmailAuth ? emailContext.userId : undefined,
-                  email: isEmailAuth ? emailContext.email : undefined
-                });
-                
-                logger.info('Video generation completed and credits deducted', {
+                logger.info('Video generation completed', {
                   duration: videoDuration,
                   creditsCharged: creditsToCharge,
                   remainingCredits: credits - creditsToCharge
