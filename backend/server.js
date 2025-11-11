@@ -284,11 +284,63 @@ const instantCheckLimiter = rateLimit({
 
 // Note: Applied directly to route handler below
 
+// Request logging and security middleware (before CORS)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const userAgent = req.headers['user-agent'] || 'Unknown';
+  const ip = req.ip || req.connection.remoteAddress;
+  const referer = req.headers.referer || req.headers.referrer;
+  
+  // Check if request has no origin (external tools, scripts, etc.)
+  const hasNoOrigin = !origin;
+  const isLocalhost = origin && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'));
+  const isAllowedOrigin = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',').includes(origin)
+    : false;
+  
+  // Log suspicious requests (no origin in production, or non-whitelisted origins)
+  if (process.env.NODE_ENV === 'production') {
+    if (hasNoOrigin || (!isAllowedOrigin && !isLocalhost)) {
+      logger.warn('⚠️  External API request detected', {
+        ip,
+        origin: origin || 'NO_ORIGIN',
+        userAgent,
+        referer,
+        path: req.path,
+        method: req.method,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } else {
+    // In development, log all non-localhost requests
+    if (hasNoOrigin || (!isLocalhost && !isAllowedOrigin)) {
+      logger.info('External request in development', {
+        ip,
+        origin: origin || 'NO_ORIGIN',
+        userAgent,
+        path: req.path,
+        method: req.method
+      });
+    }
+  }
+  
+  next();
+});
+
 // CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
+    // In production, reject requests with no origin (external tools, scripts)
+    if (!origin) {
+      if (process.env.NODE_ENV === 'production') {
+        logger.warn('CORS: Rejected request with no origin in production', {
+          timestamp: new Date().toISOString()
+        });
+        return callback(new Error('Not allowed by CORS - origin required in production'));
+      }
+      // In development, allow no origin for testing tools
+      return callback(null, true);
+    }
     
     // Dynamic port handling - allow any localhost port in development
     const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
@@ -302,6 +354,7 @@ const corsOptions = {
         return callback(null, true);
       }
       // Reject unauthorized origin in production
+      logger.warn('CORS: Rejected unauthorized origin in production', { origin });
       return callback(new Error('Not allowed by CORS'));
     }
     
@@ -315,6 +368,7 @@ const corsOptions = {
         return callback(null, true);
       }
       // Reject non-localhost, non-whitelisted origins even in development
+      logger.warn('CORS: Rejected non-localhost origin in development', { origin });
       return callback(new Error('Not allowed by CORS. Development mode only allows localhost and whitelisted origins.'));
     }
     
@@ -345,7 +399,13 @@ app.options('*', (req, res) => {
   // Use same origin validation logic as corsOptions
   let allowOrigin = false;
   if (!origin) {
-    allowOrigin = true; // Allow requests with no origin
+    // In production, reject requests with no origin
+    if (process.env.NODE_ENV === 'production') {
+      logger.warn('CORS: Rejected preflight request with no origin in production');
+      return res.status(403).json({ error: 'Not allowed by CORS - origin required in production' });
+    }
+    // In development, allow requests with no origin for testing
+    allowOrigin = true;
   } else {
     const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
     const isAllowedOrigin = process.env.ALLOWED_ORIGINS 
@@ -699,7 +759,9 @@ const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath));
 
 // FAL API Key for Wan 2.2 Animate Replace
-const FAL_API_KEY = process.env.FAL_API_KEY || process.env.VITE_FAL_API_KEY;
+// IMPORTANT: Only use backend environment variable for security
+// Never use VITE_FAL_API_KEY in backend (it's exposed to frontend)
+const FAL_API_KEY = process.env.FAL_API_KEY;
 
 // Wan 2.2 Animate Replace endpoints
 // Direct file upload endpoint (for large files via FormData)
@@ -949,12 +1011,28 @@ app.post('/api/wan-animate/upload-image', async (req, res) => {
 
 // Wan 2.2 Animate Replace API endpoint
 // Documentation: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
-app.post('/api/wan-animate/submit', async (req, res) => {
+// SECURITY: Requires credits check before making external API calls
+// Minimum 2 credits required for video generation (2 credits per second)
+app.post('/api/wan-animate/submit', requireCredits(2), async (req, res) => {
   try {
     if (!FAL_API_KEY) {
+      logger.error('FAL_API_KEY not configured');
       return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
     }
+    
+    // Extract input from request body (can be nested in 'input' or at root level)
+    // User identification (walletAddress, userId, email) is at root level, not in input
     const input = req.body?.input || req.body;
+    
+    logger.debug('Wan-animate submit request', {
+      hasInput: !!input,
+      hasVideoUrl: !!input?.video_url,
+      hasImageUrl: !!input?.image_url,
+      userId: req.user?.userId,
+      email: req.user?.email,
+      walletAddress: req.user?.walletAddress,
+      requestBodyKeys: Object.keys(req.body)
+    });
     
     // Validate required inputs
     if (!input?.video_url || typeof input.video_url !== 'string' || input.video_url.trim() === '') {
@@ -1068,6 +1146,13 @@ app.post('/api/wan-animate/submit', async (req, res) => {
     // Official fal.ai API endpoint for Wan 2.2 Animate Replace
     // See: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
     // The API expects the input fields directly in the body, not nested in an "input" object
+    logger.debug('Making request to fal.ai', {
+      endpoint: 'https://queue.fal.run/fal-ai/wan/v2.2-14b/animate/replace',
+      hasVideoUrl: !!validatedInput.video_url,
+      hasImageUrl: !!validatedInput.image_url,
+      hasApiKey: !!FAL_API_KEY && FAL_API_KEY.length > 0
+    });
+    
     const response = await fetch('https://queue.fal.run/fal-ai/wan/v2.2-14b/animate/replace', {
       method: 'POST',
       headers: {
@@ -1113,11 +1198,29 @@ app.post('/api/wan-animate/submit', async (req, res) => {
         }
       }
       
+      // Check if error is related to API key authentication
+      if (errorMessage.includes('Key') && (errorMessage.includes('Secret') || errorMessage.includes('not found') || errorMessage.includes('invalid'))) {
+        logger.error('FAL_API_KEY authentication error', {
+          status: response.status,
+          errorMessage,
+          hasApiKey: !!FAL_API_KEY && FAL_API_KEY.length > 0,
+          apiKeyLength: FAL_API_KEY ? FAL_API_KEY.length : 0,
+          apiKeyPrefix: FAL_API_KEY ? FAL_API_KEY.substring(0, 10) + '...' : 'none'
+        });
+        return res.status(401).json({ 
+          success: false, 
+          error: 'FAL_API_KEY authentication failed. Please check your API key configuration.'
+        });
+      }
+      
       logger.error('Wan-animate submit error', {
         status: response.status, 
         errorMessage,
         data,
-        responseText: responseText.substring(0, 500)
+        responseText: responseText.substring(0, 500),
+        userId: req.user?.userId,
+        email: req.user?.email,
+        walletAddress: req.user?.walletAddress
       });
       
       return res.status(response.status).json({ 
@@ -1131,6 +1234,137 @@ app.post('/api/wan-animate/submit', async (req, res) => {
   } catch (error) {
     logger.error('Wan-animate submit proxy error', { error: error.message, stack: error.stack });
     res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to submit video generation request') });
+  }
+});
+
+/**
+ * Image generation endpoint - SECURITY: Requires credits check before making external API calls
+ * This endpoint proxies image generation requests to fal.ai after verifying user has credits
+ */
+app.post('/api/generate/image', requireCredits(1), async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+
+    const {
+      prompt,
+      style,
+      guidanceScale = 7.5,
+      imageSize = 'square',
+      numImages = 1,
+      image_url,
+      image_urls,
+      aspect_ratio,
+      seed
+    } = req.body;
+
+    // Validate required inputs
+    if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+      return res.status(400).json({ success: false, error: 'prompt is required and must be a non-empty string' });
+    }
+
+    // Determine endpoint based on whether reference images are provided
+    let endpoint;
+    if (image_urls && Array.isArray(image_urls) && image_urls.length >= 2) {
+      // Multiple images - use multi model
+      endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/max/multi';
+    } else if (image_url || (image_urls && image_urls.length === 1)) {
+      // Single image - use max model
+      endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/max';
+    } else {
+      // No images - use text-to-image
+      endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/text-to-image';
+    }
+
+    // Build request body for fal.ai
+    const requestBody = {
+      prompt: prompt.trim(),
+      guidance_scale: guidanceScale,
+      num_images: numImages,
+      output_format: 'jpeg',
+      safety_tolerance: '6',
+      prompt_safety_tolerance: '6',
+      enhance_prompt: true
+    };
+
+    // Add seed if provided
+    if (seed !== undefined && seed !== null) {
+      requestBody.seed = seed;
+    } else {
+      // Generate random seed if not provided
+      requestBody.seed = Math.floor(Math.random() * 2147483647);
+    }
+
+    // Add reference image(s)
+    if (image_urls && Array.isArray(image_urls) && image_urls.length >= 2) {
+      requestBody.image_urls = image_urls;
+    } else if (image_url || (image_urls && image_urls.length === 1)) {
+      requestBody.image_url = image_url || image_urls[0];
+    }
+
+    // Add aspect ratio if provided
+    if (aspect_ratio) {
+      requestBody.aspect_ratio = aspect_ratio;
+    }
+
+    logger.info('Image generation request', {
+      endpoint,
+      hasImage: !!requestBody.image_url,
+      hasImages: !!requestBody.image_urls,
+      userId: req.user?.userId,
+      email: req.user?.email,
+      walletAddress: req.user?.walletAddress
+    });
+
+    // Make request to fal.ai
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.detail) {
+          errorMessage = Array.isArray(errorData.detail)
+            ? errorData.detail.map(err => err.msg || err).join('; ')
+            : errorData.detail;
+        } else if (errorData.error) {
+          errorMessage = errorData.error;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } catch (parseError) {
+        const errorText = await response.text();
+        errorMessage = errorText || errorMessage;
+      }
+      logger.error('Fal.ai image generation error', { status: response.status, errorMessage });
+      return res.status(response.status).json({ success: false, error: errorMessage });
+    }
+
+    const data = await response.json();
+    
+    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+      logger.info('Image generation successful', {
+        imageCount: data.images.length,
+        userId: req.user?.userId,
+        email: req.user?.email,
+        walletAddress: req.user?.walletAddress
+      });
+      res.json({ success: true, images: data.images });
+    } else {
+      logger.error('No images in fal.ai response', { data });
+      return res.status(500).json({ success: false, error: 'No image generated' });
+    }
+  } catch (error) {
+    logger.error('Image generation proxy error', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to generate image') });
   }
 });
 
@@ -1708,6 +1942,155 @@ async function getOrCreateUserByIdentifier(identifier, type = 'wallet') {
   }
   
   return user;
+}
+
+/**
+ * Helper function to get user from request body (walletAddress, userId, or email)
+ * Used for endpoints that need to identify user before making external API calls
+ */
+async function getUserFromRequest(req) {
+  const { walletAddress, userId, email } = req.body;
+  
+  logger.debug('Getting user from request', {
+    hasWalletAddress: !!walletAddress,
+    hasUserId: !!userId,
+    hasEmail: !!email,
+    walletAddress: walletAddress ? (walletAddress.substring(0, 10) + '...') : null,
+    userId: userId ? (userId.substring(0, 10) + '...') : null,
+    email: email ? (email.substring(0, 10) + '...') : null
+  });
+  
+  if (walletAddress) {
+    const isSolanaAddress = !walletAddress.startsWith('0x');
+    const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    const user = await getOrCreateUser(normalizedWalletAddress);
+    logger.debug('User found by wallet address', { 
+      walletAddress: normalizedWalletAddress.substring(0, 10) + '...',
+      userId: user?.userId,
+      credits: user?.credits 
+    });
+    return user;
+  } else if (userId) {
+    let user = await User.findOne({ userId });
+    if (!user) {
+      // Create user if they don't exist (for email users who haven't been created yet)
+      logger.info('Creating new user with userId', { userId });
+      user = new User({
+        userId,
+        credits: 0,
+        totalCreditsEarned: 0,
+        totalCreditsSpent: 0,
+        nftCollections: [],
+        paymentHistory: [],
+        generationHistory: [],
+        gallery: [],
+        settings: {
+          preferredStyle: null,
+          defaultImageSize: '1024x1024',
+          enableNotifications: true
+        }
+      });
+      await user.save();
+      logger.debug('New user created with userId', { userId, credits: user.credits });
+    } else {
+      logger.debug('User found by userId', { userId, credits: user.credits });
+    }
+    return user;
+  } else if (email) {
+    const normalizedEmail = email.toLowerCase();
+    let user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      // Create user if they don't exist (for email users who haven't been created yet)
+      logger.info('Creating new user with email', { email: normalizedEmail });
+      user = new User({
+        email: normalizedEmail,
+        credits: 0,
+        totalCreditsEarned: 0,
+        totalCreditsSpent: 0,
+        nftCollections: [],
+        paymentHistory: [],
+        generationHistory: [],
+        gallery: [],
+        settings: {
+          preferredStyle: null,
+          defaultImageSize: '1024x1024',
+          enableNotifications: true
+        }
+      });
+      await user.save();
+      logger.debug('New user created with email', { email: normalizedEmail, credits: user.credits });
+    } else {
+      logger.debug('User found by email', { email: normalizedEmail, credits: user.credits });
+    }
+    return user;
+  }
+  
+  logger.warn('No user identification provided in request body');
+  return null;
+}
+
+/**
+ * Middleware to check credits before allowing external API calls
+ * Requires walletAddress, userId, or email in request body
+ */
+async function requireCredits(requiredCredits = 1) {
+  return async (req, res, next) => {
+    try {
+      // Get user from request
+      const user = await getUserFromRequest(req);
+      
+      if (!user) {
+        logger.warn('No user identification in request', {
+          requestBodyKeys: Object.keys(req.body || {}),
+          hasWalletAddress: !!req.body?.walletAddress,
+          hasUserId: !!req.body?.userId,
+          hasEmail: !!req.body?.email
+        });
+        return res.status(400).json({
+          success: false,
+          error: 'User identification required. Please provide walletAddress, userId, or email.'
+        });
+      }
+      
+      // Check if user has enough credits
+      const availableCredits = user.credits || 0;
+      if (availableCredits < requiredCredits) {
+        logger.warn('Insufficient credits for external API call', {
+          userId: user.userId,
+          email: user.email,
+          walletAddress: user.walletAddress,
+          availableCredits,
+          requiredCredits
+        });
+        return res.status(400).json({
+          success: false,
+          error: `Insufficient credits. You have ${availableCredits} credits but need ${requiredCredits}. Please purchase credits first.`
+        });
+      }
+      
+      // Attach user to request for use in route handler
+      req.user = user;
+      req.requiredCredits = requiredCredits;
+      logger.debug('Credit check passed', {
+        userId: user.userId,
+        email: user.email,
+        walletAddress: user.walletAddress,
+        availableCredits,
+        requiredCredits
+      });
+      next();
+    } catch (error) {
+      logger.error('Error in requireCredits middleware', { 
+        error: error.message,
+        stack: error.stack,
+        requestBodyKeys: Object.keys(req.body || {})
+      });
+      return res.status(500).json({
+        success: false,
+        error: getSafeErrorMessage(error, 'Failed to verify credits')
+      });
+    }
+  };
 }
 
 // Payment wallet addresses - use single EVM address for all EVM chains

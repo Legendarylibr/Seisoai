@@ -101,15 +101,15 @@ const VideoOutput = ({
       )}
 
       {/* Generate Button */}
-      {!isGenerating && !videoUrl && (
+      {!videoUrl && (
         <div className="mt-4">
           <button
             onClick={onGenerate}
-            disabled={!hasInputs || credits < 2}
+            disabled={isGenerating || !hasInputs || credits < 2}
             className={`
               w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium
               transition-all duration-200 rounded
-              ${!hasInputs || credits < 2
+              ${isGenerating || !hasInputs || credits < 2
                 ? 'opacity-40 cursor-not-allowed bg-[#2d2d2d] text-gray-500 border border-[#3d3d3d]'
                 : credits < 2
                   ? 'bg-[#3d2d1a] hover:bg-[#4a3d2a] text-yellow-300 border border-[#5a4a2a] hover:border-[#6a5a3a]'
@@ -117,13 +117,22 @@ const VideoOutput = ({
               }
             `}
           >
-            <Sparkles className="w-4 h-4" />
-            {!hasInputs 
-              ? 'Upload Video & Image First' 
-              : credits < 2 
-                ? `Need ${2 - credits} More Credits (2/sec)` 
-                : 'Generate Video (2 credits/sec)'
-            }
+            {isGenerating ? (
+              <>
+                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                {!hasInputs 
+                  ? 'Upload Video & Image First' 
+                  : credits < 2 
+                    ? `Need ${2 - credits} More Credits (2/sec)` 
+                    : 'Generate Video (2 credits/sec)'
+                }
+              </>
+            )}
           </button>
         </div>
       )}

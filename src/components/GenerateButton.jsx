@@ -103,6 +103,12 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   }, [isGenerating, isLoading, generationStartTime, generationMode]);
 
   const handleGenerate = async () => {
+    // Prevent multiple simultaneous requests
+    if (isGenerating || isLoading) {
+      logger.warn('Generation already in progress, ignoring duplicate request');
+      return;
+    }
+    
     // Check if authenticated (email or wallet)
     const isAuthenticated = isConnected || isEmailAuth;
     
@@ -145,7 +151,9 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         numImages,
         enableSafetyChecker,
         generationMode,
-        walletAddress: address, // Pass wallet address for safety logging
+        walletAddress: isEmailAuth ? undefined : address, // Pass wallet address for wallet users
+        userId: isEmailAuth ? emailContext.userId : undefined, // Pass userId for email users
+        email: isEmailAuth ? emailContext.email : undefined, // Pass email for email users
         isNFTHolder: isNFTHolder || false, // Pass NFT holder status for routing
         referenceImageDimensions: controlNetImageDimensions // Pass dimensions to maintain resolution
       };

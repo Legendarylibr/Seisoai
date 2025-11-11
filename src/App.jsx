@@ -32,6 +32,9 @@ function App() {
 
   const [showStripePaymentModal, setShowStripePaymentModal] = useState(false);
 
+  // Check credits on mount and redirect to pricing if needed
+  // This will be handled in AppContent component
+
   // Memoize callbacks to prevent unnecessary re-renders
   const handleShowTokenPayment = useCallback(() => {
     // Token payment modal opened
@@ -46,61 +49,133 @@ function App() {
     <SimpleWalletProvider>
       <EmailAuthProvider>
         <ImageGeneratorProvider>
-          <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900 animated-bg">
-            <Navigation 
-              activeTab={activeTab} 
-              setActiveTab={setActiveTab}
-              tabs={tabs}
-              onShowTokenPayment={handleShowTokenPayment}
-              onShowStripePayment={handleShowStripePayment}
-            />
-            
-            <main className="container mx-auto px-4 md:px-6 lg:px-8 py-1 md:py-2">
-              <div className="fade-in">
-                <AppContent 
-                  activeTab={activeTab} 
-                  onShowTokenPayment={handleShowTokenPayment}
-                  onShowStripePayment={handleShowStripePayment}
-                />
-              </div>
-            </main>
-            
-            <TokenPaymentModal 
-              isOpen={showTokenPaymentModal} 
-              onClose={() => {
-                // Token payment modal closed
-                setShowTokenPaymentModal(false);
-              }} 
-            />
-            
-            <StripePaymentModal 
-              isOpen={showStripePaymentModal} 
-              onClose={() => setShowStripePaymentModal(false)} 
-            />
-          </div>
+          <AppWithCreditsCheck 
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            tabs={tabs}
+            onShowTokenPayment={handleShowTokenPayment}
+            onShowStripePayment={handleShowStripePayment}
+          />
         </ImageGeneratorProvider>
       </EmailAuthProvider>
     </SimpleWalletProvider>
   );
 }
 
-function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
-  const { isConnected } = useSimpleWallet();
-  const { isAuthenticated, credits: emailCredits } = useEmailAuth();
-  const [hasShownStripeModal, setHasShownStripeModal] = useState(false);
+function AppWithCreditsCheck({ activeTab, setActiveTab, tabs, onShowTokenPayment, onShowStripePayment }) {
+  const { isConnected, credits: walletCredits, isLoading: walletLoading } = useSimpleWallet();
+  const { isAuthenticated, credits: emailCredits, isLoading: emailLoading } = useEmailAuth();
+  const [showTokenPaymentModal, setShowTokenPaymentModal] = useState(false);
+  const [showStripePaymentModal, setShowStripePaymentModal] = useState(false);
+  const [currentTab, setCurrentTab] = useState(activeTab);
 
-  // For email users with no credits, automatically show Stripe modal once after sign-in
-  // NOTE: This useEffect must be called before any early returns to follow React hooks rules
+  // Determine current credits based on auth method
+  const isEmailAuth = isAuthenticated && !isConnected;
+  const credits = isEmailAuth ? (emailCredits || 0) : (walletCredits || 0);
+  const isLoading = walletLoading || emailLoading;
+
+  // Redirect to pricing if authenticated but has 0 credits
   useEffect(() => {
-    if (isAuthenticated && !isConnected && (emailCredits === 0 || emailCredits === null || emailCredits === undefined) && !hasShownStripeModal && onShowStripePayment) {
-      setHasShownStripeModal(true);
-      // Small delay to ensure modal can render after component mounts
-      const timer = setTimeout(() => {
-        onShowStripePayment();
-      }, 1000);
-      return () => clearTimeout(timer);
+    if (isLoading) return;
+    
+    // If user is authenticated and has 0 credits, redirect to pricing
+    if ((isConnected || isAuthenticated) && (credits === 0 || credits === null || credits === undefined)) {
+      if (currentTab !== 'pricing') {
+        setCurrentTab('pricing');
+        setActiveTab('pricing');
+      }
+    } else if ((isConnected || isAuthenticated) && credits > 0 && currentTab === 'pricing') {
+      // If user has credits and is on pricing page, redirect to generate
+      setCurrentTab('generate');
+      setActiveTab('generate');
     }
-  }, [isAuthenticated, isConnected, emailCredits, hasShownStripeModal, onShowStripePayment]);
+  }, [isLoading, isConnected, isAuthenticated, credits, currentTab, setActiveTab]);
+
+  const handleShowTokenPayment = useCallback(() => {
+    setShowTokenPaymentModal(true);
+  }, []);
+
+  const handleShowStripePayment = useCallback(() => {
+    setShowStripePaymentModal(true);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900 animated-bg">
+      <Navigation 
+        activeTab={currentTab} 
+        setActiveTab={(tab) => {
+          setCurrentTab(tab);
+          setActiveTab(tab);
+        }}
+        tabs={tabs}
+        onShowTokenPayment={handleShowTokenPayment}
+        onShowStripePayment={handleShowStripePayment}
+      />
+      
+      <main className="container mx-auto px-4 md:px-6 lg:px-8 py-1 md:py-2">
+        <div className="fade-in">
+          <AppContent 
+            activeTab={currentTab} 
+            onShowTokenPayment={handleShowTokenPayment}
+            onShowStripePayment={handleShowStripePayment}
+          />
+        </div>
+      </main>
+      
+      <TokenPaymentModal 
+        isOpen={showTokenPaymentModal} 
+        onClose={() => {
+          setShowTokenPaymentModal(false);
+        }} 
+      />
+      
+      <StripePaymentModal 
+        isOpen={showStripePaymentModal} 
+        onClose={() => setShowStripePaymentModal(false)} 
+      />
+    </div>
+  );
+}
+
+function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
+  const { isConnected, credits: walletCredits, isLoading: walletLoading } = useSimpleWallet();
+  const { isAuthenticated, credits: emailCredits, isLoading: emailLoading } = useEmailAuth();
+  const [hasShownStripeModal, setHasShownStripeModal] = useState(false);
+  const [hasCheckedCredits, setHasCheckedCredits] = useState(false);
+
+  // Determine current credits based on auth method
+  const isEmailAuth = isAuthenticated && !isConnected;
+  const credits = isEmailAuth ? (emailCredits || 0) : (walletCredits || 0);
+  const isLoading = walletLoading || emailLoading;
+
+  // Check credits after authentication completes
+  useEffect(() => {
+    // Wait for loading to complete
+    if (isLoading) {
+      return;
+    }
+
+    // Only check once after authentication
+    if (hasCheckedCredits) {
+      return;
+    }
+
+    // If user is authenticated, check their credits
+    if (isConnected || isAuthenticated) {
+      setHasCheckedCredits(true);
+      
+      // If user has 0 credits, redirect to pricing page
+      if (credits === 0 || credits === null || credits === undefined) {
+        // Only redirect if not already on pricing page
+        if (activeTab !== 'pricing') {
+          // Use a small delay to ensure state is updated
+          setTimeout(() => {
+            // This will be handled by the redirect logic below
+          }, 100);
+        }
+      }
+    }
+  }, [isLoading, isConnected, isAuthenticated, credits, hasCheckedCredits, activeTab]);
 
   // Pricing page is accessible without auth (but checkout requires auth)
   if (activeTab === 'pricing') {
@@ -112,7 +187,13 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
     return <AuthPrompt onSwitchToWallet={() => {}} />;
   }
 
-  // Show main content if authenticated (AuthGuard will handle credit requirements)
+  // If authenticated but has 0 credits, show pricing page
+  // The redirect is handled in AppWithCreditsCheck component
+  if ((isConnected || isAuthenticated) && (credits === 0 || credits === null || credits === undefined) && !isLoading) {
+    return <PricingPage />;
+  }
+
+  // Show main content if authenticated and has credits
   return (
     <>
       <AuthGuard requireCredits={activeTab === 'generate' || activeTab === 'video'}>

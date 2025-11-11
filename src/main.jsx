@@ -52,7 +52,8 @@ global.Buffer = Buffer
 // Validate required environment variables
 import logger from './utils/logger.js';
 
-const requiredEnvVars = ['VITE_FAL_API_KEY'];
+// VITE_FAL_API_KEY is no longer required - all API calls route through backend
+const requiredEnvVars = [];
 const missingVars = requiredEnvVars.filter(varName => !import.meta.env[varName]);
 
 if (missingVars.length > 0) {
@@ -87,7 +88,7 @@ if (missingVars.length > 0) {
   const br1 = document.createElement('br');
   errorDiv.appendChild(br1);
   
-  const text1 = document.createTextNode('Missing FAL API key. Please add VITE_FAL_API_KEY to your .env file.');
+  const text1 = document.createTextNode('Backend API URL not configured. Please check VITE_API_URL in your .env file.');
   errorDiv.appendChild(text1);
   
   const br2 = document.createElement('br');

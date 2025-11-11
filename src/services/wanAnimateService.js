@@ -4,11 +4,8 @@
 
 import logger from '../utils/logger.js';
 
-const FAL_API_KEY = import.meta.env.VITE_FAL_API_KEY;
-
-if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
-  logger.error('VITE_FAL_API_KEY environment variable is required');
-}
+// Note: VITE_FAL_API_KEY is no longer used in frontend for security
+// All fal.ai calls are now proxied through the backend which checks credits first
 
 /**
  * Upload video/image to backend and get URL, or return existing URL
@@ -62,7 +59,7 @@ const prepareFileUrl = async (file, fileType = 'image') => {
  * Generate video using Wan 2.2 Animate Replace
  * @param {string} videoUrl - URL of the input video
  * @param {string} imageUrl - URL of the character image to replace with
- * @param {Object} options - Generation options
+ * @param {Object} options - Generation options (must include walletAddress, userId, or email for credit checks)
  * @param {Function} onProgress - Optional progress callback (0-100)
  * @returns {Promise<string>} - URL of the generated video
  */
@@ -98,14 +95,25 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
       videoWriteMode
     });
 
-    // Submit via backend proxy to avoid CORS and protect API key
+    // SECURITY: Submit via backend proxy which checks credits before making external API calls
     const backendBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    
+    // Extract user identification from options (required for credit checks)
+    const { walletAddress, userId, email } = options;
+    
+    if (!walletAddress && !userId && !email) {
+      throw new Error('User identification required. Please provide walletAddress, userId, or email in options.');
+    }
+    
     const response = await fetch(`${backendBase}/api/wan-animate/submit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        walletAddress,
+        userId,
+        email,
         input: {
           video_url: preparedVideoUrl,
           image_url: preparedImageUrl,

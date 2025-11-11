@@ -38,6 +38,9 @@ const ImageOutput = () => {
     setCreditsManually
   } = useSimpleWallet();
   
+  const emailContext = useEmailAuth();
+  const isEmailAuth = emailContext.isAuthenticated;
+  
   const [isDownloading, setIsDownloading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
@@ -130,7 +133,13 @@ const ImageOutput = () => {
 
 
   const handleRegenerate = async () => {
-    if (!currentGeneration || isRegenerating || !isConnected) return;
+    // Prevent multiple simultaneous requests
+    if (!currentGeneration || isRegenerating || isGenerating || !isConnected) {
+      if (isRegenerating || isGenerating) {
+        logger.warn('Generation already in progress, ignoring duplicate request');
+      }
+      return;
+    }
     
     setIsRegenerating(true);
     setError(null);
@@ -145,6 +154,9 @@ const ImageOutput = () => {
         numImages: currentGeneration.numImages || numImages,
         enableSafetyChecker: currentGeneration.enableSafetyChecker || enableSafetyChecker,
         generationMode: currentGeneration.generationMode || generationMode,
+        walletAddress: isEmailAuth ? undefined : address, // Pass wallet address for wallet users
+        userId: isEmailAuth ? emailContext.userId : undefined, // Pass userId for email users
+        email: isEmailAuth ? emailContext.email : undefined, // Pass email for email users
         isNFTHolder: isNFTHolder || false
       };
       
@@ -183,6 +195,12 @@ const ImageOutput = () => {
   const availableCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
 
   const handleRegenerateWithPrompt = async () => {
+    // Prevent multiple simultaneous requests
+    if (isRegenerating || isGenerating) {
+      logger.warn('Generation already in progress, ignoring duplicate request');
+      return;
+    }
+    
     // Check if authenticated (email or wallet)
     const isAuthenticated = isConnected || isEmailAuth;
     
@@ -207,7 +225,12 @@ const ImageOutput = () => {
       return;
     }
 
-    if (!currentGeneration || isRegenerating || !newPrompt.trim()) return;
+    if (!currentGeneration || !newPrompt.trim()) {
+      if (!newPrompt.trim()) {
+        setError('Please enter a new prompt');
+      }
+      return;
+    }
     
     setIsRegenerating(true);
     setError(null);
@@ -223,7 +246,9 @@ const ImageOutput = () => {
         numImages: currentGeneration.numImages || numImages,
         enableSafetyChecker: currentGeneration.enableSafetyChecker || enableSafetyChecker,
         generationMode: currentGeneration.generationMode || generationMode,
-        walletAddress: address, // Pass wallet address for safety logging
+        walletAddress: isEmailAuth ? undefined : address, // Pass wallet address for wallet users
+        userId: isEmailAuth ? emailContext.userId : undefined, // Pass userId for email users
+        email: isEmailAuth ? emailContext.email : undefined, // Pass email for email users
         isNFTHolder: isNFTHolder || false,
         referenceImageDimensions: currentGeneration.referenceImageDimensions
       };
@@ -413,7 +438,7 @@ const ImageOutput = () => {
           </button>
           <button
             onClick={handleRegenerate}
-            disabled={isRegenerating || !isConnected || !currentGeneration}
+            disabled={isRegenerating || isGenerating || !isConnected || !currentGeneration}
             className="btn-secondary flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-xs px-2.5 py-1.5 hover:scale-105 transition-all duration-300"
           >
             <span className="text-sm">{isRegenerating ? '⏳' : '🔄'}</span>
@@ -532,7 +557,7 @@ const ImageOutput = () => {
             <div className="flex gap-3 mt-6">
               <button
                 onClick={handleRegenerateWithPrompt}
-                disabled={!newPrompt.trim() || isRegenerating}
+                disabled={!newPrompt.trim() || isRegenerating || isGenerating}
                 className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isRegenerating ? 'Generating...' : 'Generate with New Prompt'}

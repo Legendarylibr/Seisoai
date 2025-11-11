@@ -106,60 +106,63 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Left Column - Inputs */}
         <div className="space-y-3">
-          {/* Video Upload */}
+          {/* Combined Upload Card */}
           <div className="glass-card p-3 mb-3">
-            <div className="flex items-center gap-2 mb-2">
-              <VideoIcon className="w-4 h-4 text-gray-400" />
-              <h3 className="text-xs font-medium text-gray-300">Reference Video</h3>
+            {/* Video Upload */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <VideoIcon className="w-4 h-4 text-gray-400" />
+                <h3 className="text-xs font-medium text-gray-300">Reference Video</h3>
+              </div>
+              <VideoUpload
+                onFileSelect={handleVideoUpload}
+                currentFile={videoFile}
+                currentUrl={videoUrl}
+              />
             </div>
-            <VideoUpload
-              onFileSelect={handleVideoUpload}
-              currentFile={videoFile}
-              currentUrl={videoUrl}
-            />
-          </div>
 
-          {/* Image Upload */}
-          <div className="glass-card p-3 mb-3">
-            <div className="flex items-center gap-2 mb-2">
-              <ImageIcon className="w-4 h-4 text-gray-400" />
-              <h3 className="text-xs font-medium text-gray-300">Character Image</h3>
-            </div>
-            <div className="border border-dashed border-[#3d3d3d] p-4 text-center cursor-pointer hover:border-[#4a4a4a] hover:bg-[#1a1a1a] transition-all duration-150">
-              {imageUrl ? (
-                <div className="relative">
-                  <img 
-                    src={imageUrl} 
-                    alt="Character" 
-                    className="max-w-full max-h-64 mx-auto rounded"
-                  />
-                  <button
-                    onClick={() => {
-                      setImageFile(null);
-                      setImageUrl(null);
-                    }}
-                    className="absolute top-2 right-2 p-1.5 bg-[#2d2d2d] hover:bg-[#3d3d3d] border border-[#3d3d3d] rounded"
-                  >
-                    <span className="text-gray-300 text-xs">×</span>
-                  </button>
-                </div>
-              ) : (
-                <label className="cursor-pointer">
-                  <Upload className="w-6 h-6 text-gray-500 mx-auto mb-2" />
-                  <p className="text-xs text-gray-400 mb-1">Click to upload character image</p>
-                  <p className="text-xs text-gray-500">PNG, JPG up to 10MB</p>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleImageUpload(e.target.files[0]);
-                      }
-                    }}
-                    className="hidden"
-                  />
-                </label>
-              )}
+            {/* Image Upload */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <ImageIcon className="w-4 h-4 text-gray-400" />
+                <h3 className="text-xs font-medium text-gray-300">Character Image</h3>
+              </div>
+              <div className="border border-dashed border-[#3d3d3d] p-4 text-center cursor-pointer hover:border-[#4a4a4a] hover:bg-[#1a1a1a] transition-all duration-150">
+                {imageUrl ? (
+                  <div className="relative">
+                    <img 
+                      src={imageUrl} 
+                      alt="Character" 
+                      className="max-w-full max-h-64 mx-auto rounded"
+                    />
+                    <button
+                      onClick={() => {
+                        setImageFile(null);
+                        setImageUrl(null);
+                      }}
+                      className="absolute top-2 right-2 p-1.5 bg-[#2d2d2d] hover:bg-[#3d3d3d] border border-[#3d3d3d] rounded"
+                    >
+                      <span className="text-gray-300 text-xs">×</span>
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer">
+                    <Upload className="w-6 h-6 text-gray-500 mx-auto mb-2" />
+                    <p className="text-xs text-gray-400 mb-1">Click to upload character image</p>
+                    <p className="text-xs text-gray-500">PNG, JPG up to 10MB</p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleImageUpload(e.target.files[0]);
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -172,6 +175,12 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
             progress={progress}
             error={error}
             onGenerate={async () => {
+              // Prevent multiple simultaneous requests
+              if (isGenerating) {
+                logger.warn('Generation already in progress, ignoring duplicate request');
+                return;
+              }
+              
               if (!videoUrl || !imageUrl) {
                 setError('Please upload both a video and an image');
                 return;
@@ -217,7 +226,10 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                   {
                     resolution: '480p',
                     videoQuality: 'high',
-                    videoWriteMode: 'balanced'
+                    videoWriteMode: 'balanced',
+                    walletAddress: isEmailAuth ? undefined : userIdentifier,
+                    userId: isEmailAuth ? emailContext.userId : undefined,
+                    email: isEmailAuth ? emailContext.email : undefined
                   },
                   async (progress, request_id) => {
                     setProgress(progress);

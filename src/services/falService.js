@@ -1,13 +1,13 @@
 // FAL.ai API service for Flux Kontext image generation
+// SECURITY: All API calls now route through backend to ensure credit checks
 import { VISUAL_STYLES } from '../utils/styles.js';
 import logger from '../utils/logger.js';
 import { optimizeImages, needsOptimization } from '../utils/imageOptimizer.js';
 
-const FAL_API_KEY = import.meta.env.VITE_FAL_API_KEY;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-if (!FAL_API_KEY || FAL_API_KEY === 'your_fal_api_key_here') {
-  logger.error('VITE_FAL_API_KEY is not set');
-}
+// Note: VITE_FAL_API_KEY is no longer used in frontend for security
+// All fal.ai calls are now proxied through the backend which checks credits first
 
 /**
  * Get the correct FLUX Kontext endpoint based on image count
@@ -306,13 +306,26 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       guidance_scale: requestBody.guidance_scale
     });
 
-    const response = await fetch(fluxEndpoint, {
+    // SECURITY: Route through backend to ensure credit checks
+    // Extract user identification from advancedSettings
+    const { walletAddress, userId, email } = advancedSettings;
+    
+    if (!walletAddress && !userId && !email) {
+      throw new Error('User identification required. Please provide walletAddress, userId, or email in advancedSettings.');
+    }
+
+    // Call backend endpoint which checks credits before making external API call
+    const response = await fetch(`${API_URL}/api/generate/image`, {
       method: 'POST',
       headers: {
-        'Authorization': `Key ${FAL_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify({
+        ...requestBody,
+        walletAddress,
+        userId,
+        email
+      })
     });
 
     logger.debug('API response received', { 
