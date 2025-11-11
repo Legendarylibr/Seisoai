@@ -284,6 +284,15 @@ const instantCheckLimiter = rateLimit({
 
 // Note: Applied directly to route handler below
 
+// Endpoints that should allow requests without origin (webhooks, health checks, monitoring)
+// Defined early so it's available to all middleware
+const noOriginAllowedPaths = [
+  '/api/health',
+  '/api/stripe/webhook',
+  '/api/webhook',
+  '/api/webhooks'
+];
+
 // Request logging and security middleware (before CORS)
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -298,9 +307,14 @@ app.use((req, res, next) => {
     ? process.env.ALLOWED_ORIGINS.split(',').includes(origin)
     : false;
   
+  // Check if this is a path that allows no-origin requests
+  const path = req.path || req.url?.split('?')[0];
+  const isNoOriginAllowedPath = path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath));
+  
   // Log suspicious requests (no origin in production, or non-whitelisted origins)
+  // But skip logging for legitimate no-origin paths (webhooks, health checks)
   if (process.env.NODE_ENV === 'production') {
-    if (hasNoOrigin || (!isAllowedOrigin && !isLocalhost)) {
+    if ((hasNoOrigin && !isNoOriginAllowedPath) || (!isAllowedOrigin && !isLocalhost && !isNoOriginAllowedPath)) {
       logger.warn('⚠️  External API request detected', {
         ip,
         origin: origin || 'NO_ORIGIN',
@@ -328,14 +342,34 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration
+// Middleware to handle CORS for paths that allow no-origin requests (before main CORS)
+// This sets CORS headers manually for webhooks/health checks, then skips the main CORS middleware
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const path = req.path || req.url?.split('?')[0];
+  
+  // If this is a path that allows no-origin requests, handle CORS manually
+  if (path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath))) {
+    // Set permissive CORS headers for webhooks/health checks
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Stripe-Signature');
+    // Mark that CORS is already handled for this request
+    req._corsHandled = true;
+  }
+  next();
+});
+
 const corsOptions = {
   origin: function (origin, callback) {
-    // In production, reject requests with no origin (external tools, scripts)
+    // Allow requests without origin for specific endpoints (webhooks, health checks)
+    // Note: These are handled by the middleware above, but we need to allow them here too
+    // The middleware above sets req._corsHandled, but cors library doesn't have access to req
+    // So we'll use a different approach - check if we should skip CORS entirely
     if (!origin) {
       if (process.env.NODE_ENV === 'production') {
-        logger.warn('CORS: Rejected request with no origin in production', {
-          timestamp: new Date().toISOString()
-        });
+        // In production, reject no-origin requests (except those handled by middleware above)
+        // The middleware above will have already set headers, so this won't be called for those paths
         return callback(new Error('Not allowed by CORS - origin required in production'));
       }
       // In development, allow no origin for testing tools
@@ -389,23 +423,34 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
-// Apply CORS middleware - MUST be before routes
-app.use(cors(corsOptions));
+// Apply CORS middleware conditionally - skip for paths that already have CORS handled
+app.use((req, res, next) => {
+  // If CORS was already handled by the middleware above, skip the main CORS middleware
+  if (req._corsHandled) {
+    return next();
+  }
+  // Otherwise, apply CORS middleware
+  cors(corsOptions)(req, res, next);
+});
 
 // Handle preflight requests explicitly for all routes
 app.options('*', (req, res) => {
   const origin = req.headers.origin;
+  const path = req.path || req.url?.split('?')[0];
   
   // Use same origin validation logic as corsOptions
   let allowOrigin = false;
   if (!origin) {
-    // In production, reject requests with no origin
-    if (process.env.NODE_ENV === 'production') {
-      logger.warn('CORS: Rejected preflight request with no origin in production');
+    // Allow no-origin requests for webhooks and health checks
+    if (path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath))) {
+      allowOrigin = true;
+    } else if (process.env.NODE_ENV === 'production') {
+      logger.warn('CORS: Rejected preflight request with no origin in production', { path });
       return res.status(403).json({ error: 'Not allowed by CORS - origin required in production' });
+    } else {
+      // In development, allow requests with no origin for testing
+      allowOrigin = true;
     }
-    // In development, allow requests with no origin for testing
-    allowOrigin = true;
   } else {
     const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
     const isAllowedOrigin = process.env.ALLOWED_ORIGINS 
@@ -5439,6 +5484,32 @@ app.delete('/api/gallery/:walletAddress/:generationId', async (req, res) => {
 
 // Global error handler
 app.use((error, req, res, next) => {
+  // Handle CORS errors separately - these are expected for unauthorized requests
+  if (error.message && error.message.includes('CORS')) {
+    // CORS errors are handled by the CORS middleware, but if they reach here,
+    // it means the request was rejected. Log as warning, not error.
+    const path = req.path || req.url?.split('?')[0];
+    const isNoOriginAllowedPath = path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath));
+    
+    // If it's a legitimate no-origin path, this shouldn't happen (should be handled by middleware)
+    // But log it as a warning anyway
+    if (!isNoOriginAllowedPath) {
+      logger.warn('CORS error (expected for unauthorized requests):', {
+        message: error.message,
+        path,
+        origin: req.headers.origin || 'NO_ORIGIN',
+        ip: req.ip
+      });
+    }
+    
+    // Return CORS error response
+    return res.status(403).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Not allowed by CORS')
+    });
+  }
+  
+  // Log other unhandled errors
   logger.error('Unhandled error:', error);
   res.status(500).json({
     success: false,
