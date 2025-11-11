@@ -10,6 +10,7 @@ import compression from 'compression';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -19,7 +20,10 @@ import logger from './utils/logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config();
+// Load environment variables from backend.env in root directory (single source of truth)
+// This ensures there's only one backend configuration file
+const envPath = path.join(__dirname, '..', 'backend.env');
+dotenv.config({ path: envPath });
 
 // Initialize Stripe - optional, allows test keys in development
 let stripe = null;

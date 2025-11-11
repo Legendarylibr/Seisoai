@@ -50,11 +50,23 @@
         Object.defineProperty = function(obj, prop, descriptor) {
           // Handle ethereum property redefinition gracefully - ALWAYS prevent errors
           if (prop === 'ethereum' && obj === window) {
-            // If ethereum already exists, NEVER try to redefine - just return it
+            // If ethereum already exists, NEVER try to redefine - just return window
             // This completely prevents errors from evmAsk.js and other wallet extensions
-            if (window.ethereum) {
-              // Always return existing ethereum object - never throw
-              return window.ethereum;
+            if (window.ethereum !== undefined) {
+              // Merge new properties if descriptor has value/get/set
+              if (descriptor && descriptor.value !== undefined) {
+                // Try to merge properties if it's an object
+                if (typeof descriptor.value === 'object' && descriptor.value !== null && 
+                    typeof window.ethereum === 'object' && window.ethereum !== null) {
+                  try {
+                    Object.assign(window.ethereum, descriptor.value);
+                  } catch (e) {
+                    // If merge fails, just keep existing ethereum
+                  }
+                }
+              }
+              // Always return window (the object being modified), not the property value
+              return window;
             }
             
             // First definition - ensure it's configurable so future redefinitions work
@@ -68,8 +80,8 @@
               return originalDefineProperty.call(this, obj, prop, configurableDescriptor);
             } catch (error) {
               // If it fails for any reason, check if ethereum was set another way
-              if (window.ethereum) {
-                return window.ethereum;
+              if (window.ethereum !== undefined) {
+                return window;
               }
               // If still no ethereum, try with a fully permissive descriptor
               try {
@@ -81,9 +93,13 @@
                 };
                 return originalDefineProperty.call(this, obj, prop, permissiveDescriptor);
               } catch (e2) {
-                // Last resort: set it directly and return
-                window.ethereum = descriptor.value || {};
-                return window.ethereum;
+                // Last resort: set it directly and return window
+                if (descriptor && descriptor.value !== undefined) {
+                  window.ethereum = descriptor.value;
+                } else {
+                  window.ethereum = {};
+                }
+                return window;
               }
             }
           }
@@ -92,32 +108,15 @@
           try {
             return originalDefineProperty.call(this, obj, prop, descriptor);
           } catch (error) {
-            // If it's a redefinition error, silently return the existing property
+            // If it's a redefinition error, silently return the object being modified
             if (error && error.message && (
                 error.message.includes('Cannot redefine property') ||
                 error.message.includes('Cannot define property') ||
                 error.name === 'TypeError'
               )) {
-              // Silently return existing property - no console warning
-              if (obj[prop] !== undefined) {
-                return obj[prop];
-              }
-              // If property doesn't exist but we got an error, try with permissive settings
-              try {
-                const permissiveDescriptor = {
-                  ...descriptor,
-                  configurable: true,
-                  enumerable: true,
-                  writable: true
-                };
-                return originalDefineProperty.call(this, obj, prop, permissiveDescriptor);
-              } catch (e2) {
-                // Final fallback: assign directly if possible
-                if (descriptor && descriptor.value !== undefined) {
-                  obj[prop] = descriptor.value;
-                  return obj;
-                }
-              }
+              // Silently return the object - no console warning
+              // This is what Object.defineProperty should return anyway
+              return obj;
             }
             // Only throw if it's not a redefinition error
             throw error;
