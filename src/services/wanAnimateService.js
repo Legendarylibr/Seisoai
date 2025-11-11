@@ -76,7 +76,7 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
       guidanceScale = 1,
       resolution = '480p', // 480p, 580p, or 720p
       seed = null,
-      numInferenceSteps = 20,
+      numInferenceSteps = 6,
       enableSafetyChecker = true,
       enableOutputSafetyChecker = true,
       shift = 5,
