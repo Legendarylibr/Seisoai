@@ -698,243 +698,8 @@ app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath));
 
-// Proxy Veo3 Fast Image-to-Video to bypass browser CORS
+// FAL API Key for Wan 2.2 Animate Replace
 const FAL_API_KEY = process.env.FAL_API_KEY || process.env.VITE_FAL_API_KEY;
-
-/**
- * Upload image to fal.ai storage and return URL
- * Converts data URI to buffer and uploads via fal storage API
- * Uses multipart/form-data for file upload
- * Note: This endpoint should be placed BEFORE express.json() or use a larger limit
- */
-app.post('/api/veo3/upload-image', async (req, res) => {
-  try {
-    if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
-    }
-
-    const { imageDataUri } = req.body;
-    
-    if (!imageDataUri || !imageDataUri.startsWith('data:')) {
-      return res.status(400).json({ success: false, error: 'Invalid image data URI' });
-    }
-
-    // Convert data URI to buffer
-    const base64Data = imageDataUri.split(',')[1];
-    const buffer = Buffer.from(base64Data, 'base64');
-    
-    // Determine MIME type from data URI
-    const mimeMatch = imageDataUri.match(/data:([^;]+)/);
-    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-    const extension = mimeType.includes('png') ? 'png' : 'jpg';
-    
-    // Create multipart/form-data manually for Node.js
-    const boundary = `----formdata-${Date.now()}`;
-    const CRLF = '\r\n';
-    
-    let formDataBody = '';
-    formDataBody += `--${boundary}${CRLF}`;
-    formDataBody += `Content-Disposition: form-data; name="file"; filename="image.${extension}"${CRLF}`;
-    formDataBody += `Content-Type: ${mimeType}${CRLF}${CRLF}`;
-    
-    const formDataBuffer = Buffer.concat([
-      Buffer.from(formDataBody, 'utf8'),
-      buffer,
-      Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8')
-    ]);
-    
-    // Upload to fal.ai storage API
-    // Using the fal.ai file storage endpoint
-    // According to docs, we can upload files and get URLs back
-    const uploadResponse = await fetch('https://fal.ai/files', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${FAL_API_KEY}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      },
-      body: formDataBuffer
-    });
-
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      let errorData;
-      try {
-        errorData = JSON.parse(errorText);
-      } catch {
-        errorData = { error: errorText.substring(0, 200) };
-      }
-      logger.error('FAL storage upload error', { status: uploadResponse.status, error: errorData });
-      return res.status(uploadResponse.status).json({ success: false, error: errorData });
-    }
-
-    const uploadData = await uploadResponse.json();
-    const imageUrl = uploadData.url || uploadData.file?.url || uploadData.data?.url;
-    
-    if (!imageUrl) {
-      logger.error('No URL in fal storage response', { response: uploadData });
-      return res.status(500).json({ success: false, error: 'Failed to get image URL from upload' });
-    }
-
-    logger.info('Image uploaded to fal storage', { imageUrl, size: buffer.length });
-    res.json({ success: true, imageUrl });
-  } catch (error) {
-    logger.error('Image upload error', { error: error.message, stack: error.stack });
-    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to upload image') });
-  }
-});
-
-app.post('/api/veo3/submit', async (req, res) => {
-  try {
-    if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
-    }
-    const input = req.body?.input || req.body;
-    
-    // If image_url is a data URI, we should have uploaded it first
-    // But if it somehow got here, log it and proceed (API might handle it)
-    const imageUrl = input?.image_url || '';
-    const isDataUri = imageUrl.startsWith('data:');
-    
-    if (isDataUri) {
-      logger.warn('Data URI sent to veo3/submit - consider using upload-image endpoint first', {
-        imageSizeKB: (imageUrl.length / 1024).toFixed(2)
-      });
-    }
-    
-    // Log payload size for debugging
-    const payload = JSON.stringify({ input });
-    const payloadSizeKB = (payload.length / 1024).toFixed(2);
-    const imageSizeKB = isDataUri ? (imageUrl.length / 1024).toFixed(2) : 'N/A (URL)';
-    
-    logger.info('Veo3 submit request', {
-      payloadSizeKB,
-      imageSizeKB,
-      hasImage: !!imageUrl,
-      isDataUri,
-      promptLength: input?.prompt?.length || 0
-    });
-    
-    const response = await fetch('https://queue.fal.run/fal-ai/veo3/fast/image-to-video', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${FAL_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: payload
-    });
-    
-    // Handle response text first to avoid JSON parse errors
-    const responseText = await response.text();
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      logger.error('Failed to parse veo3 response', { 
-        status: response.status, 
-        statusText: response.statusText,
-        responseText: responseText.substring(0, 500)
-      });
-      return res.status(response.status).json({ 
-        success: false, 
-        error: `API response parse error: ${responseText.substring(0, 200)}` 
-      });
-    }
-    
-    if (!response.ok) {
-      logger.error('Veo3 API error', { 
-        status: response.status, 
-        data,
-        responseText: responseText.substring(0, 500)
-      });
-      return res.status(response.status).json({ success: false, ...data });
-    }
-    
-    res.json({ success: true, ...data });
-  } catch (error) {
-    logger.error('Veo3 submit proxy error', { error: error.message, stack: error.stack });
-    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to submit video generation request') });
-  }
-});
-
-app.get('/api/veo3/status/:requestId', async (req, res) => {
-  try {
-    if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
-    }
-    const { requestId } = req.params;
-    const url = `https://queue.fal.run/fal-ai/veo3/fast/image-to-video/requests/${requestId}/status`;
-    
-    let response;
-    try {
-      response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
-    } catch (fetchError) {
-      logger.error('Veo3 status proxy fetch error', { 
-        requestId, 
-        error: fetchError.message, 
-        stack: fetchError.stack 
-      });
-      return res.status(500).json({ success: false, error: `Network error: ${fetchError.message}` });
-    }
-
-    let data;
-    let responseText = '';
-    try {
-      responseText = await response.text();
-      data = responseText ? JSON.parse(responseText) : {};
-    } catch (parseError) {
-      logger.error('Veo3 status proxy parse error', { 
-        requestId,
-        status: response.status,
-        responseText: responseText.substring(0, 200),
-        error: parseError.message 
-      });
-      return res.status(response.status || 500).json({ 
-        success: false, 
-        error: `Invalid response from Veo3 API: ${parseError.message}` 
-      });
-    }
-
-    if (!response.ok) {
-      // If 404, the request ID might be invalid or expired
-      if (response.status === 404) {
-        logger.warn('Veo3 status request not found', { 
-          requestId,
-          status: response.status,
-          message: 'Request ID may be invalid or expired'
-        });
-        return res.status(404).json({ 
-          success: false, 
-          error: 'Request ID not found. The video generation request may have expired or does not exist.',
-          ...data 
-        });
-      }
-      
-      logger.warn('Veo3 status API error', { 
-        requestId,
-        status: response.status, 
-        data 
-      });
-      return res.status(response.status).json({ success: false, ...data });
-    }
-    
-    // Validate that we have status data
-    if (!data || typeof data.status === 'undefined') {
-      logger.warn('Veo3 status response missing status field', { 
-        requestId,
-        data 
-      });
-    }
-    
-    res.json({ success: true, ...data });
-  } catch (error) {
-    logger.error('Veo3 status proxy error', { 
-      requestId: req.params.requestId,
-      error: error.message, 
-      stack: error.stack 
-    });
-    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to check video generation status') });
-  }
-});
 
 // Wan 2.2 Animate Replace endpoints
 // Direct file upload endpoint (for large files via FormData)
@@ -1192,20 +957,112 @@ app.post('/api/wan-animate/submit', async (req, res) => {
     const input = req.body?.input || req.body;
     
     // Validate required inputs
-    if (!input?.video_url) {
-      return res.status(400).json({ success: false, error: 'video_url is required' });
+    if (!input?.video_url || typeof input.video_url !== 'string' || input.video_url.trim() === '') {
+      return res.status(400).json({ success: false, error: 'video_url is required and must be a non-empty string' });
     }
-    if (!input?.image_url) {
-      return res.status(400).json({ success: false, error: 'image_url is required' });
+    if (!input?.image_url || typeof input.image_url !== 'string' || input.image_url.trim() === '') {
+      return res.status(400).json({ success: false, error: 'image_url is required and must be a non-empty string' });
+    }
+    
+    // Validate and sanitize optional parameters according to API spec
+    // https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
+    const validResolutions = ['480p', '580p', '720p'];
+    const validVideoQualities = ['low', 'medium', 'high', 'maximum'];
+    const validVideoWriteModes = ['fast', 'balanced', 'small'];
+    
+    const validatedInput = {
+      video_url: input.video_url.trim(),
+      image_url: input.image_url.trim()
+    };
+    
+    // Optional parameters with validation
+    if (input.guidance_scale !== undefined) {
+      const guidanceScale = parseFloat(input.guidance_scale);
+      if (isNaN(guidanceScale) || guidanceScale < 0) {
+        return res.status(400).json({ success: false, error: 'guidance_scale must be a non-negative number' });
+      }
+      validatedInput.guidance_scale = guidanceScale;
+    }
+    
+    if (input.resolution !== undefined) {
+      if (!validResolutions.includes(input.resolution)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `resolution must be one of: ${validResolutions.join(', ')}` 
+        });
+      }
+      validatedInput.resolution = input.resolution;
+    }
+    
+    if (input.seed !== undefined && input.seed !== null) {
+      const seed = parseInt(input.seed);
+      if (isNaN(seed)) {
+        return res.status(400).json({ success: false, error: 'seed must be an integer' });
+      }
+      validatedInput.seed = seed;
+    }
+    
+    if (input.num_inference_steps !== undefined) {
+      const steps = parseInt(input.num_inference_steps);
+      if (isNaN(steps) || steps < 1) {
+        return res.status(400).json({ success: false, error: 'num_inference_steps must be a positive integer' });
+      }
+      validatedInput.num_inference_steps = steps;
+    }
+    
+    if (input.enable_safety_checker !== undefined) {
+      validatedInput.enable_safety_checker = Boolean(input.enable_safety_checker);
+    }
+    
+    if (input.enable_output_safety_checker !== undefined) {
+      validatedInput.enable_output_safety_checker = Boolean(input.enable_output_safety_checker);
+    }
+    
+    if (input.shift !== undefined) {
+      const shift = parseFloat(input.shift);
+      if (isNaN(shift) || shift < 1.0 || shift > 10.0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'shift must be a number between 1.0 and 10.0' 
+        });
+      }
+      validatedInput.shift = shift;
+    }
+    
+    if (input.video_quality !== undefined) {
+      if (!validVideoQualities.includes(input.video_quality)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `video_quality must be one of: ${validVideoQualities.join(', ')}` 
+        });
+      }
+      validatedInput.video_quality = input.video_quality;
+    }
+    
+    if (input.video_write_mode !== undefined) {
+      if (!validVideoWriteModes.includes(input.video_write_mode)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `video_write_mode must be one of: ${validVideoWriteModes.join(', ')}` 
+        });
+      }
+      validatedInput.video_write_mode = input.video_write_mode;
+    }
+    
+    if (input.return_frames_zip !== undefined) {
+      validatedInput.return_frames_zip = Boolean(input.return_frames_zip);
+    }
+    
+    if (input.use_turbo !== undefined) {
+      validatedInput.use_turbo = Boolean(input.use_turbo);
     }
     
     logger.info('Wan-animate submit request', {
-      hasVideoUrl: !!input?.video_url,
-      hasImageUrl: !!input?.image_url,
-      resolution: input?.resolution,
-      videoQuality: input?.video_quality,
-      videoUrlLength: input?.video_url?.length,
-      imageUrlLength: input?.image_url?.length
+      hasVideoUrl: !!validatedInput.video_url,
+      hasImageUrl: !!validatedInput.image_url,
+      resolution: validatedInput.resolution,
+      videoQuality: validatedInput.video_quality,
+      videoWriteMode: validatedInput.video_write_mode
     });
     
     // Official fal.ai API endpoint for Wan 2.2 Animate Replace
@@ -1217,7 +1074,7 @@ app.post('/api/wan-animate/submit', async (req, res) => {
         'Authorization': `Key ${FAL_API_KEY}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(input)
+      body: JSON.stringify(validatedInput)
     });
     
     // Handle response text first to avoid JSON parse errors
@@ -1238,12 +1095,36 @@ app.post('/api/wan-animate/submit', async (req, res) => {
     }
     
     if (!response.ok) {
+      // Extract detailed error message from API response
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      if (data) {
+        // Handle different error response formats from fal.ai API
+        if (data.detail) {
+          // fal.ai often returns errors in { detail: "..." } format
+          errorMessage = Array.isArray(data.detail) 
+            ? data.detail.map(err => err.msg || err).join('; ')
+            : data.detail;
+        } else if (data.error) {
+          errorMessage = data.error;
+        } else if (data.message) {
+          errorMessage = data.message;
+        } else if (typeof data === 'string') {
+          errorMessage = data;
+        }
+      }
+      
       logger.error('Wan-animate submit error', {
         status: response.status, 
+        errorMessage,
         data,
         responseText: responseText.substring(0, 500)
       });
-      return res.status(response.status).json({ success: false, ...data });
+      
+      return res.status(response.status).json({ 
+        success: false, 
+        error: errorMessage,
+        ...(data && typeof data === 'object' ? data : {})
+      });
     }
     
     res.json({ success: true, ...data });
@@ -1525,77 +1406,6 @@ app.get('/api/wan-animate/result/:requestId', async (req, res) => {
   }
 });
 
-app.get('/api/veo3/result/:requestId', async (req, res) => {
-  try {
-    if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
-    }
-    const { requestId } = req.params;
-    const url = `https://queue.fal.run/fal-ai/veo3/fast/image-to-video/requests/${requestId}/result`;
-    
-    let response;
-    try {
-      response = await fetch(url, { headers: { 'Authorization': `Key ${FAL_API_KEY}` }});
-    } catch (fetchError) {
-      logger.error('Veo3 result proxy fetch error', { 
-        requestId, 
-        error: fetchError.message, 
-        stack: fetchError.stack 
-      });
-      return res.status(500).json({ success: false, error: `Network error: ${fetchError.message}` });
-    }
-
-    let data;
-    let responseText = '';
-    try {
-      responseText = await response.text();
-      data = responseText ? JSON.parse(responseText) : {};
-    } catch (parseError) {
-      logger.error('Veo3 result proxy parse error', { 
-        requestId,
-        status: response.status,
-        responseText: responseText.substring(0, 200),
-        error: parseError.message 
-      });
-      return res.status(response.status || 500).json({ 
-        success: false, 
-        error: `Invalid response from Veo3 API: ${parseError.message}` 
-      });
-    }
-
-    if (!response.ok) {
-      // If 404, the request ID might be invalid or expired
-      if (response.status === 404) {
-        logger.warn('Veo3 result request not found', { 
-          requestId,
-          status: response.status,
-          message: 'Request ID may be invalid or expired'
-        });
-        return res.status(404).json({ 
-          success: false, 
-          error: 'Request ID not found. The video generation request may have expired or does not exist.',
-          ...data 
-        });
-      }
-      
-      logger.warn('Veo3 result API error', { 
-        requestId,
-        status: response.status, 
-        data 
-      });
-      return res.status(response.status).json({ success: false, ...data });
-    }
-    
-    res.json({ success: true, ...data });
-  } catch (error) {
-    logger.error('Veo3 result proxy error', { 
-      requestId: req.params.requestId,
-      error: error.message, 
-      stack: error.stack 
-    });
-    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to retrieve video generation result') });
-  }
-});
 
 // Validate required environment variables
 const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'SESSION_SECRET'];
