@@ -292,6 +292,7 @@ const instantCheckLimiter = rateLimit({
 // Defined early so it's available to all middleware
 const noOriginAllowedPaths = [
   '/api/health',
+  '/api/metrics',  // Prometheus metrics scraping
   '/api/stripe/webhook',
   '/api/webhook',
   '/api/webhooks'
@@ -317,9 +318,11 @@ app.use((req, res, next) => {
   
   // Log suspicious requests (no origin in production, or non-whitelisted origins)
   // But skip logging for legitimate no-origin paths (webhooks, health checks)
+  // Also suppress logging here since CORS errors will be logged by error handler
   if (process.env.NODE_ENV === 'production') {
-    // Only log if it's NOT a no-origin allowed path AND (has no origin OR is not allowed)
-    if (!isNoOriginAllowedPath && (hasNoOrigin || (!isAllowedOrigin && !isLocalhost))) {
+    // Only log if it's NOT a no-origin allowed path AND has an origin (but not allowed)
+    // Don't log no-origin requests here - they'll be handled by CORS and logged once there
+    if (!isNoOriginAllowedPath && origin && !isAllowedOrigin && !isLocalhost) {
       logger.warn('⚠️  External API request detected', {
         ip,
         origin: origin || 'NO_ORIGIN',
@@ -331,6 +334,7 @@ app.use((req, res, next) => {
       });
     }
     // Suppress logging for no-origin allowed paths - these are expected
+    // Suppress logging for no-origin requests - they'll be logged by CORS error handler if needed
   } else {
     // In development, log all non-localhost requests
     if (hasNoOrigin || (!isLocalhost && !isAllowedOrigin)) {
@@ -2935,6 +2939,55 @@ app.get('/api/health', async (req, res) => {
       error: getSafeErrorMessage(error, 'Health check failed'),
       timestamp: new Date().toISOString()
     });
+  }
+});
+
+/**
+ * Prometheus metrics endpoint
+ * Returns metrics in Prometheus text format for scraping
+ */
+app.get('/api/metrics', async (req, res) => {
+  try {
+    const dbState = mongoose.connection.readyState;
+    const dbStatus = dbState === 1 ? 1 : 0; // 1 = connected, 0 = not connected
+    
+    // Get memory usage
+    const memUsage = process.memoryUsage();
+    const uptime = process.uptime();
+    
+    // Prometheus text format metrics
+    const metrics = [
+      '# HELP nodejs_up Node.js application is up',
+      '# TYPE nodejs_up gauge',
+      `nodejs_up 1`,
+      '',
+      '# HELP nodejs_uptime_seconds Node.js application uptime in seconds',
+      '# TYPE nodejs_uptime_seconds gauge',
+      `nodejs_uptime_seconds ${uptime}`,
+      '',
+      '# HELP nodejs_memory_heap_used_bytes Node.js heap memory used in bytes',
+      '# TYPE nodejs_memory_heap_used_bytes gauge',
+      `nodejs_memory_heap_used_bytes ${memUsage.heapUsed}`,
+      '',
+      '# HELP nodejs_memory_heap_total_bytes Node.js heap memory total in bytes',
+      '# TYPE nodejs_memory_heap_total_bytes gauge',
+      `nodejs_memory_heap_total_bytes ${memUsage.heapTotal}`,
+      '',
+      '# HELP nodejs_memory_rss_bytes Node.js resident set size in bytes',
+      '# TYPE nodejs_memory_rss_bytes gauge',
+      `nodejs_memory_rss_bytes ${memUsage.rss}`,
+      '',
+      '# HELP mongodb_connection_status MongoDB connection status (1=connected, 0=disconnected)',
+      '# TYPE mongodb_connection_status gauge',
+      `mongodb_connection_status ${dbStatus}`,
+      ''
+    ].join('\n');
+    
+    res.set('Content-Type', 'text/plain; version=0.0.4');
+    res.status(200).send(metrics);
+  } catch (error) {
+    logger.error('Metrics endpoint error:', error);
+    res.status(500).send('# Error generating metrics\n');
   }
 });
 
@@ -5682,6 +5735,10 @@ app.delete('/api/gallery/:walletAddress/:generationId', async (req, res) => {
 });
 
 
+// Rate limiting for CORS error logging to prevent log spam
+const corsErrorLogCache = new Map();
+const CORS_ERROR_LOG_INTERVAL = 60000; // 1 minute
+
 // Global error handler
 app.use((error, req, res, next) => {
   // Handle CORS errors separately - these are expected for unauthorized requests
@@ -5694,14 +5751,40 @@ app.use((error, req, res, next) => {
     // If it's a legitimate no-origin path, don't log - it's expected and handled by middleware
     // Only log if it's NOT a no-origin allowed path
     if (!isNoOriginAllowedPath) {
-      // Only log if it's not a health check or webhook (those are expected to have no origin sometimes)
-      // Suppress warnings for legitimate no-origin requests to allowed paths
-      logger.warn('CORS error (expected for unauthorized requests):', {
-        message: error.message,
-        path,
-        origin: req.headers.origin || 'NO_ORIGIN',
-        ip: req.ip
-      });
+      // Rate limit CORS error logging to prevent spam
+      const logKey = `${req.ip || 'unknown'}-${path || 'unknown'}`;
+      const lastLogTime = corsErrorLogCache.get(logKey);
+      const now = Date.now();
+      
+      // Only log if we haven't logged this IP+path combination in the last minute
+      if (!lastLogTime || (now - lastLogTime) > CORS_ERROR_LOG_INTERVAL) {
+        corsErrorLogCache.set(logKey, now);
+        
+        // Clean up old entries from cache (keep it under 1000 entries)
+        if (corsErrorLogCache.size > 1000) {
+          const oldestKey = corsErrorLogCache.keys().next().value;
+          corsErrorLogCache.delete(oldestKey);
+        }
+        
+        // Log at debug level to reduce noise, or suppress entirely for no-origin requests
+        const hasNoOrigin = !req.headers.origin;
+        if (hasNoOrigin) {
+          // No-origin requests are common from monitoring tools - only log at debug level
+          logger.debug('CORS: No-origin request rejected', {
+            path,
+            ip: req.ip,
+            method: req.method
+          });
+        } else {
+          // Requests with origin but not allowed - log as warning
+          logger.warn('CORS: Unauthorized origin rejected', {
+            message: error.message,
+            path,
+            origin: req.headers.origin,
+            ip: req.ip
+          });
+        }
+      }
     }
     // Don't log anything if it's a no-origin allowed path - these are handled by middleware
     
