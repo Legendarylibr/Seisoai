@@ -928,7 +928,7 @@ app.post('/api/wan-animate/upload-video-direct', async (req, res) => {
   }
 });
 
-app.post('/api/wan-animate/upload-video', wanUploadLimiter, async (req, res) => {
+app.post('/api/wan-animate/upload-video', async (req, res) => {
   try {
     if (!FAL_API_KEY) {
       return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
@@ -1033,7 +1033,7 @@ app.post('/api/wan-animate/upload-video', wanUploadLimiter, async (req, res) => 
   }
 });
 
-app.post('/api/wan-animate/upload-image', wanUploadLimiter, async (req, res) => {
+app.post('/api/wan-animate/upload-image', async (req, res) => {
   try {
     if (!FAL_API_KEY) {
       return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
@@ -1647,18 +1647,6 @@ const wanSubmitLimiter = rateLimit({
   message: {
     error: 'Too many video generation requests. Please wait before submitting another.',
     retryAfter: '5 minutes'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-// Upload endpoints - prevent file upload spam
-const wanUploadLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 20, // limit each IP to 20 uploads per minute
-  message: {
-    error: 'Too many upload requests. Please wait a moment.',
-    retryAfter: '1 minute'
   },
   standardHeaders: true,
   legacyHeaders: false
