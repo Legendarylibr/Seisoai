@@ -382,18 +382,40 @@ const corsOptions = {
     
     // Dynamic port handling - allow any localhost port in development
     const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
-    const isAllowedOrigin = process.env.ALLOWED_ORIGINS 
-      ? process.env.ALLOWED_ORIGINS.split(',').includes(origin)
-      : false;
+    
+    // Check if origin is in allowed list (trim whitespace and handle variations)
+    const allowedOriginsList = process.env.ALLOWED_ORIGINS 
+      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+      : [];
+    const isAllowedOrigin = allowedOriginsList.some(allowed => {
+      // Exact match
+      if (allowed === origin) return true;
+      // Match with/without trailing slash
+      const allowedNoSlash = allowed.replace(/\/$/, '');
+      const originNoSlash = origin.replace(/\/$/, '');
+      if (allowedNoSlash === originNoSlash) return true;
+      // Match with/without www (for same domain)
+      const allowedNoWww = allowed.replace(/^https?:\/\/(www\.)?/, 'https://');
+      const originNoWww = origin.replace(/^https?:\/\/(www\.)?/, 'https://');
+      if (allowedNoWww === originNoWww) return true;
+      return false;
+    });
     
     // In production, only allow whitelisted origins
     if (process.env.NODE_ENV === 'production') {
       if (isAllowedOrigin) {
+        logger.debug('CORS: Allowed origin', { origin });
         return callback(null, true);
       }
-      // Reject unauthorized origin in production
-      logger.warn('CORS: Rejected unauthorized origin in production', { origin });
-      return callback(new Error('Not allowed by CORS'));
+      // Reject unauthorized origin in production - log detailed info for debugging
+      logger.error('CORS: Rejected unauthorized origin in production', { 
+        origin, 
+        allowedOrigins: process.env.ALLOWED_ORIGINS,
+        allowedOriginsArray: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [],
+        isAllowed: isAllowedOrigin,
+        exactMatch: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').includes(origin) : false
+      });
+      return callback(new Error(`Not allowed by CORS. Origin '${origin}' is not in ALLOWED_ORIGINS: ${process.env.ALLOWED_ORIGINS || 'not set'}`));
     }
     
     // In development, allow localhost only (more secure than allowing all)
@@ -531,19 +553,18 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
         if (user && !isPaymentAlreadyProcessed(user, null, paymentIntent.id)) {
           // Calculate credits using same formula as verify-payment endpoint
           const amount = paymentIntent.amount / 100; // Convert from cents
-          const baseRate = 5;
+          const baseRate = 5; // 5 credits per dollar (50 credits for $10)
           
           // Subscription scaling based on amount
           let scalingMultiplier = 1.0;
-          if (amount >= 100) {
-            scalingMultiplier = 1.3; // 30% bonus for $100+
-          } else if (amount >= 50) {
-            scalingMultiplier = 1.2; // 20% bonus for $50-99
-          } else if (amount >= 25) {
-            scalingMultiplier = 1.1; // 10% bonus for $25-49
-          } else if (amount >= 10) {
-            scalingMultiplier = 1.05; // 5% bonus for $10-24
+          if (amount >= 80) {
+            scalingMultiplier = 1.3; // 30% bonus for $80+
+          } else if (amount >= 40) {
+            scalingMultiplier = 1.2; // 20% bonus for $40-79
+          } else if (amount >= 20) {
+            scalingMultiplier = 1.1; // 10% bonus for $20-39
           }
+          // $10: 5 credits/dollar (no bonus) = 50 credits
           
           // Check if user is NFT holder
           let isNFTHolder = false;
@@ -618,17 +639,16 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
               
               if (!isPaymentAlreadyProcessed(user, null, paymentId)) {
                 // Calculate credits using same formula
-                const baseRate = 5;
+                const baseRate = 5; // 5 credits per dollar (50 credits for $10)
                 let scalingMultiplier = 1.0;
-                if (amountInDollars >= 100) {
-                  scalingMultiplier = 1.3;
-                } else if (amountInDollars >= 50) {
-                  scalingMultiplier = 1.2;
-                } else if (amountInDollars >= 25) {
-                  scalingMultiplier = 1.1;
-                } else if (amountInDollars >= 10) {
-                  scalingMultiplier = 1.05;
+                if (amountInDollars >= 80) {
+                  scalingMultiplier = 1.3; // 30% bonus for $80+
+                } else if (amountInDollars >= 40) {
+                  scalingMultiplier = 1.2; // 20% bonus for $40-79
+                } else if (amountInDollars >= 20) {
+                  scalingMultiplier = 1.1; // 10% bonus for $20-39
                 }
+                // $10: 5 credits/dollar (no bonus) = 50 credits
 
                 let isNFTHolder = false;
                 if (user.walletAddress) {
@@ -710,17 +730,16 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
 
             if (!isPaymentAlreadyProcessed(user, null, paymentId)) {
               // Calculate credits using same formula
-              const baseRate = 5;
+              const baseRate = 5; // 5 credits per dollar (50 credits for $10)
               let scalingMultiplier = 1.0;
-              if (amountInDollars >= 100) {
-                scalingMultiplier = 1.3;
-              } else if (amountInDollars >= 50) {
-                scalingMultiplier = 1.2;
-              } else if (amountInDollars >= 25) {
-                scalingMultiplier = 1.1;
-              } else if (amountInDollars >= 10) {
-                scalingMultiplier = 1.05;
+              if (amountInDollars >= 80) {
+                scalingMultiplier = 1.3; // 30% bonus for $80+
+              } else if (amountInDollars >= 40) {
+                scalingMultiplier = 1.2; // 20% bonus for $40-79
+              } else if (amountInDollars >= 20) {
+                scalingMultiplier = 1.1; // 10% bonus for $20-39
               }
+              // $10: 5 credits/dollar (no bonus) = 50 credits
 
               let isNFTHolder = false;
               if (user.walletAddress) {
@@ -805,7 +824,18 @@ app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 
 // Serve static files from parent dist directory (frontend build)
 const distPath = path.join(__dirname, '..', 'dist');
-app.use(express.static(distPath));
+
+// Check if dist directory exists
+if (!fs.existsSync(distPath)) {
+  logger.warn(`⚠️  Dist directory not found at ${distPath}. Frontend may not be built.`);
+} else {
+  logger.info(`✅ Serving static files from ${distPath}`);
+  app.use(express.static(distPath, {
+    maxAge: '1d', // Cache static assets for 1 day
+    etag: true,
+    lastModified: true
+  }));
+}
 
 // FAL API Key for Wan 2.2 Animate Replace
 // IMPORTANT: Only use backend environment variable for security
@@ -1703,10 +1733,19 @@ app.get('/api/wan-animate/result/:requestId', async (req, res) => {
 const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'SESSION_SECRET'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
+// In production, payment wallet addresses are REQUIRED (no hardcoded fallbacks)
+const productionRequiredVars = [];
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.EVM_PAYMENT_WALLET_ADDRESS) {
+    productionRequiredVars.push('EVM_PAYMENT_WALLET_ADDRESS');
+  }
+  if (!process.env.SOLANA_PAYMENT_WALLET_ADDRESS && !process.env.SOLANA_PAYMENT_WALLET) {
+    productionRequiredVars.push('SOLANA_PAYMENT_WALLET_ADDRESS or SOLANA_PAYMENT_WALLET');
+  }
+}
+
 // Optional but recommended variables for full functionality
 const recommendedEnvVars = [
-  'ETH_PAYMENT_WALLET',
-  'POLYGON_PAYMENT_WALLET', 
   'ETH_RPC_URL',
   'POLYGON_RPC_URL',
   'STRIPE_SECRET_KEY'
@@ -1717,16 +1756,27 @@ if (missingVars.length > 0) {
   logger.error('Missing required environment variables:', { missingVars });
   // Don't exit in development, just warn
   if (process.env.NODE_ENV === 'production') {
+    logger.error('❌ CRITICAL: Required environment variables missing in production. Server cannot start.');
     process.exit(1);
   } else {
     logger.warn('Running in development mode with missing required environment variables');
   }
 }
 
+if (productionRequiredVars.length > 0) {
+  logger.error('❌ CRITICAL: Payment wallet addresses are REQUIRED in production:', { 
+    missing: productionRequiredVars,
+    note: 'Payment wallet addresses must be set via environment variables. Hardcoded fallbacks are not allowed in production.'
+  });
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
+}
+
 if (missingRecommended.length > 0) {
   logger.warn('Missing recommended environment variables (some features may not work):', { 
     missingRecommended,
-    note: 'Payment features and blockchain verification may be limited'
+    note: 'Blockchain verification and payment features may be limited'
   });
 }
 
@@ -1917,8 +1967,16 @@ userSchema.pre('save', async function(next) {
 
 const User = mongoose.model('User', userSchema);
 
-// JWT Secret - use from env or default for development
+// JWT Secret - REQUIRED in production, default only for development
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  logger.error('❌ CRITICAL: JWT_SECRET is required in production. Server cannot start without a secure JWT secret.');
+  process.exit(1);
+}
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-here-32-chars-minimum-change-in-production';
+if (process.env.NODE_ENV === 'production' && JWT_SECRET.length < 32) {
+  logger.error('❌ CRITICAL: JWT_SECRET must be at least 32 characters long in production.');
+  process.exit(1);
+}
 
 // JWT Authentication Middleware
 const authenticateToken = async (req, res, next) => {
@@ -2143,14 +2201,37 @@ function requireCredits(requiredCredits = 1) {
 }
 
 // Payment wallet addresses - use single EVM address for all EVM chains
-const EVM_PAYMENT_ADDRESS = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
+// SECURITY: In production, these MUST be set via environment variables (no hardcoded fallbacks)
+let EVM_PAYMENT_ADDRESS;
+let SOLANA_PAYMENT_ADDRESS;
+
+if (process.env.NODE_ENV === 'production') {
+  // Production: REQUIRE environment variables (validated above)
+  EVM_PAYMENT_ADDRESS = process.env.EVM_PAYMENT_WALLET_ADDRESS;
+  SOLANA_PAYMENT_ADDRESS = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || process.env.SOLANA_PAYMENT_WALLET;
+  
+  // Validate wallet address formats
+  if (EVM_PAYMENT_ADDRESS && !/^0x[a-fA-F0-9]{40}$/.test(EVM_PAYMENT_ADDRESS)) {
+    logger.error('❌ CRITICAL: EVM_PAYMENT_WALLET_ADDRESS has invalid format. Must be a valid Ethereum address (0x followed by 40 hex characters).');
+    process.exit(1);
+  }
+  if (SOLANA_PAYMENT_ADDRESS && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(SOLANA_PAYMENT_ADDRESS)) {
+    logger.error('❌ CRITICAL: SOLANA_PAYMENT_WALLET_ADDRESS has invalid format. Must be a valid Solana address.');
+    process.exit(1);
+  }
+} else {
+  // Development: Allow fallbacks for testing
+  EVM_PAYMENT_ADDRESS = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
+  SOLANA_PAYMENT_ADDRESS = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || process.env.SOLANA_PAYMENT_WALLET || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA';
+}
+
 const PAYMENT_WALLETS = {
   '1': EVM_PAYMENT_ADDRESS, // Ethereum
   '137': EVM_PAYMENT_ADDRESS, // Polygon
   '42161': EVM_PAYMENT_ADDRESS, // Arbitrum
   '10': EVM_PAYMENT_ADDRESS, // Optimism
   '8453': EVM_PAYMENT_ADDRESS, // Base
-  'solana': process.env.SOLANA_PAYMENT_WALLET_ADDRESS || process.env.SOLANA_PAYMENT_WALLET || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA'
+  'solana': SOLANA_PAYMENT_ADDRESS
 };
 
 // Token configurations
@@ -2884,16 +2965,27 @@ app.post('/api/logs', (req, res) => {
   }
 });
 
-// Root health check for Railway - simple and fast
+// Root route - serve frontend index.html (SPA routing)
+// Health check is available at /api/health
 app.get('/', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    service: 'Seiso AI Backend',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development',
-    port: process.env.PORT || 3001
-  });
+  const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
+  
+  // Check if index.html exists
+  if (!fs.existsSync(indexPath)) {
+    // If dist doesn't exist, return a simple message
+    return res.status(200).json({
+      status: 'healthy',
+      service: 'Seiso AI Backend',
+      message: 'Frontend not built. Please build the frontend and ensure dist/ directory exists.',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+      port: process.env.PORT || 3001
+    });
+  }
+  
+  // Serve the frontend
+  res.sendFile(indexPath);
 });
 
 /**
@@ -4437,22 +4529,22 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
       });
     }
 
-    // Calculate credits using same formula as frontend (50 credits for $15 base rate with scaling)
+    // Calculate credits using same formula as frontend (50 credits for $10 base rate with scaling)
     const amount = paymentIntent.amount / 100; // Convert from cents
     
-    // Base rate: 50 credits for $15 = 3.333 credits per dollar
-    const baseRate = 50 / 15; // 3.333 credits per dollar
+    // Base rate: 50 credits for $10 = 5 credits per dollar
+    const baseRate = 50 / 10; // 5 credits per dollar
     
     // Subscription scaling based on amount (monthly recurring)
     let scalingMultiplier = 1.0;
-    if (amount >= 100) {
-      scalingMultiplier = 1.3; // 30% bonus for $100+ (4.33 credits/dollar)
-    } else if (amount >= 50) {
-      scalingMultiplier = 1.2; // 20% bonus for $50-99 (4 credits/dollar)
-    } else if (amount >= 25) {
-      scalingMultiplier = 1.1; // 10% bonus for $25-49 (3.67 credits/dollar)
+    if (amount >= 80) {
+      scalingMultiplier = 1.3; // 30% bonus for $80+ (6.5 credits/dollar)
+    } else if (amount >= 40) {
+      scalingMultiplier = 1.2; // 20% bonus for $40-79 (6 credits/dollar)
+    } else if (amount >= 20) {
+      scalingMultiplier = 1.1; // 10% bonus for $20-39 (5.5 credits/dollar)
     }
-    // $15: 3.333 credits/dollar (no bonus) = 50 credits
+    // $10: 5 credits/dollar (no bonus) = 50 credits
     
     // Check if user is NFT holder (if wallet is linked)
     let isNFTHolder = false;
@@ -4714,15 +4806,40 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
           });
         }
         
-        // Check if user is NFT holder for pricing
-        const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-        const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
+        // CRITICAL: Refresh NFT holder status in real-time before calculating credits
+        // This ensures NFT holders get 16.67 credits/USDC instead of 6.67 credits/USDC
+        const normalizedAddressForNFT = senderAddress.toLowerCase();
+        let isNFTHolder = false;
+        let updatedUser = user;
+        try {
+          const { ownedCollections, isHolder } = await checkNFTHoldingsForWallet(normalizedAddressForNFT);
+          if (ownedCollections.length > 0) {
+            updatedUser = await User.findOneAndUpdate(
+              { walletAddress: user.walletAddress },
+              { $set: { nftCollections: ownedCollections } },
+              { new: true }
+            );
+            isNFTHolder = true;
+            logger.info('NFT holder detected - applying discount rate', { senderAddress });
+          } else {
+            updatedUser = await User.findOneAndUpdate(
+              { walletAddress: user.walletAddress },
+              { $set: { nftCollections: [] } },
+              { new: true }
+            );
+            isNFTHolder = false;
+          }
+        } catch (nftError) {
+          logger.warn('Error checking NFT holdings, using database state', { senderAddress, error: nftError.message });
+          isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+        }
         
-        // Calculate credits
+        // Calculate credits using pay-per-credit pricing ($0.15 for non-NFT holders, $0.06 for NFT holders)
+        const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
         const creditsToAdd = calculateCreditsFromAmount(quickPayment.amount, creditsPerUSDC);
         
-        // Add credits using helper function
-        await addCreditsToUser(user, {
+        // Add credits using helper function (use updated user object)
+        await addCreditsToUser(updatedUser, {
           txHash: quickPayment.txHash,
           tokenSymbol: quickPayment.token || 'USDC',
           amount: quickPayment.amount,
@@ -4809,11 +4926,40 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         });
       }
       
-      // Calculate credits
-      const creditsToAdd = calculateCreditsFromAmount(quickPayment.amount);
+      // CRITICAL: Refresh NFT holder status in real-time before calculating credits
+      // This ensures NFT holders get 16.67 credits/USDC instead of 6.67 credits/USDC
+      const normalizedAddressForNFT = senderAddress.toLowerCase();
+      let isNFTHolder = false;
+      let updatedUser = user;
+      try {
+        const { ownedCollections, isHolder } = await checkNFTHoldingsForWallet(normalizedAddressForNFT);
+        if (ownedCollections.length > 0) {
+          updatedUser = await User.findOneAndUpdate(
+            { walletAddress: user.walletAddress },
+            { $set: { nftCollections: ownedCollections } },
+            { new: true }
+          );
+          isNFTHolder = true;
+          logger.info('NFT holder detected - applying discount rate', { senderAddress });
+        } else {
+          updatedUser = await User.findOneAndUpdate(
+            { walletAddress: user.walletAddress },
+            { $set: { nftCollections: [] } },
+            { new: true }
+          );
+          isNFTHolder = false;
+        }
+      } catch (nftError) {
+        logger.warn('Error checking NFT holdings, using database state', { senderAddress, error: nftError.message });
+        isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      }
       
-      // Add credits using helper function
-      await addCreditsToUser(user, {
+      // Calculate credits using pay-per-credit pricing ($0.15 for non-NFT holders, $0.06 for NFT holders)
+      const creditsPerUSDC = isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC;
+      const creditsToAdd = calculateCreditsFromAmount(quickPayment.amount, creditsPerUSDC);
+      
+      // Add credits using helper function (use updated user object)
+      await addCreditsToUser(updatedUser, {
         txHash: quickPayment.txHash,
         tokenSymbol: quickPayment.token || 'USDC',
         amount: quickPayment.amount,
@@ -4823,6 +4969,9 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         timestamp: new Date(quickPayment.timestamp * 1000)
       });
       
+      // Refetch user to get latest credits
+      const finalUser = await User.findOne({ walletAddress: senderAddress });
+      
       console.log(`[INSTANT] Added ${creditsToAdd} credits to ${senderAddress}!`);
       
       return res.json({
@@ -4830,7 +4979,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         paymentDetected: true,
         payment: quickPayment,
         credits: creditsToAdd,
-        newBalance: user.credits,
+        newBalance: finalUser.credits,
         senderAddress: senderAddress,
         message: 'Payment detected and credits added instantly!'
       });

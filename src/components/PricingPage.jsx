@@ -109,7 +109,7 @@ const PricingPage = () => {
             planName="Starter Pack"
             planPrice="$10/month"
             description="Perfect for trying out Seiso AI"
-            credits="33 credits/month"
+            credits="50 credits/month"
             onSuccess={(sessionId) => handleSuccess(sessionId, 'Starter Pack', '$10/month')}
             onError={handleError}
             compact={true}
@@ -121,7 +121,7 @@ const PricingPage = () => {
             planName="Creator Pack"
             planPrice="$20/month"
             description="Great for regular creators"
-            credits="73 credits/month (10% savings)"
+            credits="110 credits/month (10% savings)"
             highlight="Popular"
             savePercentage="Save 10%"
             onSuccess={(sessionId) => handleSuccess(sessionId, 'Creator Pack', '$20/month')}
@@ -135,7 +135,7 @@ const PricingPage = () => {
             planName="Pro Pack"
             planPrice="$40/month"
             description="Best value for power users"
-            credits="160 credits/month (20% savings)"
+            credits="240 credits/month (20% savings)"
             savePercentage="Save 20%"
             onSuccess={(sessionId) => handleSuccess(sessionId, 'Pro Pack', '$40/month')}
             onError={handleError}
@@ -148,7 +148,7 @@ const PricingPage = () => {
             planName="Studio Pack"
             planPrice="$80/month"
             description="For professional studios"
-            credits="346 credits/month (30% savings)"
+            credits="520 credits/month (30% savings)"
             savePercentage="Save 30%"
             onSuccess={(sessionId) => handleSuccess(sessionId, 'Studio Pack', '$80/month')}
             onError={handleError}

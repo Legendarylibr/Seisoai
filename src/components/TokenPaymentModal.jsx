@@ -14,7 +14,7 @@ import {
 } from '../services/paymentService';
 import { X, CreditCard, Coins, RefreshCw, ChevronDown, ChevronUp, Wallet, Copy, Check, ExternalLink } from 'lucide-react';
 
-const TokenPaymentModal = ({ isOpen, onClose }) => {
+const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess = null }) => {
   const { 
     address, 
     credits, 
@@ -308,11 +308,17 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen) {
       // Reset state when modal opens
-      setAmount('');
       setError('');
       setPaymentStatus('');
       setCheckingPayment(false);
       setIsProcessing(false);
+      
+      // Set prefilled amount if provided, otherwise reset
+      if (prefilledAmount) {
+        setAmount(prefilledAmount);
+      } else {
+        setAmount('');
+      }
       
       // Lock body scroll when modal is open
       const originalStyle = window.getComputedStyle(document.body).overflow;
@@ -335,7 +341,7 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         document.body.style.overflow = originalStyle;
       };
     }
-  }, [isOpen]);
+  }, [isOpen, prefilledAmount]);
 
 
   // Load token balances when token is selected
@@ -768,6 +774,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
               // Refresh user credits immediately (skip cache to get fresh data)
               fetchCredits(address, 3, true).catch(() => {});
               
+              // Call onSuccess callback if provided
+              if (onSuccess) {
+                onSuccess();
+              }
+              
               setTimeout(() => {
                 onClose();
               }, 2000);
@@ -928,6 +939,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
                 // Refresh user credits in background to reconcile
                 fetchCredits(address, 3, true).catch(() => {});
                 
+                // Call onSuccess callback if provided
+                if (onSuccess) {
+                  onSuccess();
+                }
+                
                 setTimeout(() => {
                   onClose();
                 }, 2000);
@@ -1034,6 +1050,11 @@ const TokenPaymentModal = ({ isOpen, onClose }) => {
         
         const senderInfo = data.senderAddress ? `Sender: ${data.senderAddress}` : '';
         setError(`✅ Payment confirmed! ${data.credits} credits added. New balance: ${data.newBalance} credits. ${senderInfo}`);
+        
+        // Call onSuccess callback if provided
+        if (onSuccess) {
+          onSuccess();
+        }
         
         setTimeout(() => {
           onClose();

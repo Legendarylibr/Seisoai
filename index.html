@@ -24,6 +24,45 @@
         }
         window.__walletConflictResolutionSetup = true;
         
+        // CRITICAL: Set up error handlers FIRST before anything else
+        // This catches errors from evmAsk.js and other extension scripts
+        const errorHandler = function(event) {
+          const error = event.error || event;
+          const message = (error?.message || event.message || '').toString();
+          const stack = (error?.stack || event.error?.stack || '').toString();
+          const filename = (event.filename || event.source || '').toString();
+          
+          // Catch ALL ethereum redefinition errors from evmAsk.js or any source
+          if ((message.includes('Cannot redefine property') || 
+              message.includes('Cannot define property')) &&
+              (message.includes('ethereum') || 
+               filename.includes('evmAsk') || 
+               filename.includes('contentScript') ||
+               stack.includes('evmAsk') ||
+               stack.includes('contentScript'))) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            return false;
+          }
+          
+          // Catch ANY errors from evmAsk.js or contentScript.js related to defineProperty
+          if ((filename.includes('evmAsk') || filename.includes('contentScript') || 
+               stack.includes('evmAsk') || stack.includes('contentScript')) && 
+              (message.includes('defineProperty') || 
+               message.includes('TypeError') ||
+               message.includes('Cannot redefine') ||
+               message.includes('Cannot define'))) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            return false;
+          }
+        };
+        
+        // Register error handler with highest priority (capture phase)
+        window.addEventListener('error', errorHandler, true);
+        
         // CRITICAL: Make any existing ethereum property configurable BEFORE anything else
         // This ensures wallet extensions can redefine it without errors
         try {
@@ -138,45 +177,6 @@
         window.originalDefineProperty = originalDefineProperty;
         window.originalDefineProperties = originalDefineProperties;
         
-        // Handle uncaught errors - silently catch wallet redefinition errors
-        // Use capture phase at the highest priority to catch before anything else
-        window.addEventListener('error', function(event) {
-          const error = event.error || event;
-          const message = (error?.message || event.message || '').toString();
-          const stack = (error?.stack || event.error?.stack || '').toString();
-          const filename = (event.filename || event.source || '').toString();
-          
-          // EXTREMELY BROAD: Catch ALL variations of ethereum redefinition errors
-          if (message.includes('Cannot redefine property') || 
-              message.includes('Cannot define property')) {
-            // Check if it's related to ethereum or evmAsk
-            if (message.includes('ethereum') || 
-                filename.includes('evmAsk') || 
-                filename.includes('contentScript') ||
-                stack.includes('evmAsk') ||
-                stack.includes('contentScript')) {
-              event.preventDefault();
-              event.stopPropagation();
-              event.stopImmediatePropagation();
-              // Silent - don't log to avoid console noise
-              return false;
-            }
-          }
-          
-          // Catch ANY errors from evmAsk.js or contentScript.js
-          if ((filename.includes('evmAsk') || filename.includes('contentScript') || 
-               stack.includes('evmAsk') || stack.includes('contentScript')) && 
-              (message.includes('defineProperty') || 
-               message.includes('TypeError') ||
-               message.includes('Cannot redefine') ||
-               message.includes('Cannot define'))) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-            return false;
-          }
-        }, true); // Use capture phase to catch earlier
-        
         // ULTRA-AGGRESSIVE: Override ALL error handling
         const originalOnError = window.onerror;
         const originalConsoleError = console.error;
@@ -186,19 +186,24 @@
         console.error = function(...args) {
           const message = (args[0]?.toString?.() || '').toString();
           const fullMessage = args.map(a => a?.toString?.() || '').join(' ');
+          const stack = (args.find(a => a?.stack)?.stack || '').toString();
           
           // EXTREMELY BROAD: Filter ALL ethereum redefinition errors
           if ((message.includes('Cannot redefine property') || 
                message.includes('Cannot define property')) && 
               (message.includes('ethereum') || 
+               fullMessage.includes('ethereum') ||
                fullMessage.includes('evmAsk') ||
-               fullMessage.includes('contentScript'))) {
+               fullMessage.includes('contentScript') ||
+               stack.includes('evmAsk') ||
+               stack.includes('contentScript'))) {
             return; // Silent - these are harmless
           }
           
           // Filter ANY errors from evmAsk or contentScript related to defineProperty
           if ((message.includes('evmAsk') || fullMessage.includes('evmAsk') ||
-               message.includes('contentScript') || fullMessage.includes('contentScript')) && 
+               message.includes('contentScript') || fullMessage.includes('contentScript') ||
+               stack.includes('evmAsk') || stack.includes('contentScript')) && 
               (message.includes('defineProperty') || 
                message.includes('TypeError') ||
                message.includes('Cannot redefine') ||

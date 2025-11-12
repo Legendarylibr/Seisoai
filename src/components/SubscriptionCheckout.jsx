@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
+import TokenPaymentModal from './TokenPaymentModal';
 
 /**
  * SubscriptionCheckout Component
@@ -30,10 +31,12 @@ const SubscriptionCheckout = ({
   onError,
   compact = false
 }) => {
-  const { isConnected, address } = useSimpleWallet();
+  const { isConnected, address, isNFTHolder } = useSimpleWallet();
   const { isAuthenticated, userId } = useEmailAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showTokenPayment, setShowTokenPayment] = useState(false);
+  const [prefilledAmount, setPrefilledAmount] = useState(null);
 
   // Check if user is authenticated
   const isUserAuthenticated = isConnected || isAuthenticated;
@@ -52,6 +55,22 @@ const SubscriptionCheckout = ({
     }
   }, [onSuccess, onError, planName, planPrice]);
 
+  // Extract credits number from credits string (e.g., "50 credits/month" -> 50)
+  const extractCreditsFromString = (creditsString) => {
+    if (!creditsString) return null;
+    const match = creditsString.match(/(\d+)\s*credits?/i);
+    return match ? parseInt(match[1], 10) : null;
+  };
+
+  // Calculate USDC amount based on credits and NFT holder status
+  const calculateUSDCAmount = (numCredits) => {
+    if (!numCredits) return null;
+    // Non-NFT holder: $0.15 per credit
+    // NFT holder: $0.06 per credit
+    const pricePerCredit = isNFTHolder ? 0.06 : 0.15;
+    return (numCredits * pricePerCredit).toFixed(2);
+  };
+
   const handleCheckout = async (e) => {
     e.preventDefault();
 
@@ -61,6 +80,22 @@ const SubscriptionCheckout = ({
       return;
     }
 
+    // If crypto wallet is connected, use USDC payment instead of Stripe
+    if (isConnected && address) {
+      const numCredits = extractCreditsFromString(credits);
+      if (!numCredits) {
+        setError('Could not determine credits for this plan.');
+        if (onError) onError('Invalid plan configuration');
+        return;
+      }
+
+      const usdcAmount = calculateUSDCAmount(numCredits);
+      setPrefilledAmount(usdcAmount);
+      setShowTokenPayment(true);
+      return;
+    }
+
+    // For email auth, use Stripe
     if (!priceLookupKey) {
       setError('Price lookup key is required.');
       if (onError) onError('Price lookup key is required');
@@ -77,11 +112,9 @@ const SubscriptionCheckout = ({
         lookup_key: priceLookupKey,
       };
 
-      // Add walletAddress or userId based on auth type
+      // Add userId for email auth
       if (userId) {
         body.userId = userId;
-      } else if (address) {
-        body.walletAddress = address;
       }
 
       const response = await fetch(`${apiUrl}/create-checkout-session`, {
@@ -114,10 +147,32 @@ const SubscriptionCheckout = ({
     }
   };
 
+  const handleTokenPaymentSuccess = () => {
+    setShowTokenPayment(false);
+    setPrefilledAmount(null);
+    // Extract credits for success message
+    const numCredits = extractCreditsFromString(credits);
+    if (onSuccess) {
+      onSuccess(null, planName, `Purchased ${numCredits} credits`);
+    }
+  };
+
+  const handleTokenPaymentClose = () => {
+    setShowTokenPayment(false);
+    setPrefilledAmount(null);
+  };
+
   // Compact card layout for pricing grid
   if (compact) {
     return (
-      <div className="glass-card rounded-xl p-6 h-full flex flex-col relative">
+      <>
+        <TokenPaymentModal 
+          isOpen={showTokenPayment} 
+          onClose={handleTokenPaymentClose}
+          prefilledAmount={prefilledAmount}
+          onSuccess={handleTokenPaymentSuccess}
+        />
+        <div className="glass-card rounded-xl p-6 h-full flex flex-col relative">
         {/* Save Percentage Badge - Top Right */}
         {savePercentage && (
           <div className="absolute top-4 right-4">
@@ -220,11 +275,19 @@ const SubscriptionCheckout = ({
           </button>
         </form>
       </div>
+      </>
     );
   }
 
   // Full page layout (original)
   return (
+    <>
+      <TokenPaymentModal 
+        isOpen={showTokenPayment} 
+        onClose={handleTokenPaymentClose}
+        prefilledAmount={prefilledAmount}
+        onSuccess={handleTokenPaymentSuccess}
+      />
     <section className="flex items-center justify-center min-h-[60vh] px-4">
       <div className="glass-card rounded-xl p-8 max-w-md w-full">
         <div className="product mb-6">
@@ -318,6 +381,7 @@ const SubscriptionCheckout = ({
         </form>
       </div>
     </section>
+    </>
   );
 };
 

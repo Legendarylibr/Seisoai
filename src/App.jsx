@@ -74,12 +74,13 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs, onShowTokenPayment
   const credits = isEmailAuth ? (emailCredits || 0) : (walletCredits || 0);
   const isLoading = walletLoading || emailLoading;
 
-  // Redirect to pricing if authenticated but has 0 credits
+  // Redirect to pricing if authenticated but has 0 credits (only for email/Stripe users)
   useEffect(() => {
     if (isLoading) return;
     
-    // If user is authenticated and has 0 credits, redirect to pricing
-    if ((isConnected || isAuthenticated) && (credits === 0 || credits === null || credits === undefined)) {
+    // Only redirect email/Stripe users to pricing page
+    // Crypto wallet users will see the pay-per-credit modal instead
+    if (isAuthenticated && !isConnected && (credits === 0 || credits === null || credits === undefined)) {
       if (currentTab !== 'pricing') {
         setCurrentTab('pricing');
         setActiveTab('pricing');
@@ -142,6 +143,7 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   const { isAuthenticated, credits: emailCredits, isLoading: emailLoading } = useEmailAuth();
   const [hasShownStripeModal, setHasShownStripeModal] = useState(false);
   const [hasCheckedCredits, setHasCheckedCredits] = useState(false);
+  const [showCryptoCheckout, setShowCryptoCheckout] = useState(false);
 
   // Determine current credits based on auth method
   const isEmailAuth = isAuthenticated && !isConnected;
@@ -164,15 +166,9 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
     if (isConnected || isAuthenticated) {
       setHasCheckedCredits(true);
       
-      // If user has 0 credits, redirect to pricing page
-      if (credits === 0 || credits === null || credits === undefined) {
-        // Only redirect if not already on pricing page
-        if (activeTab !== 'pricing') {
-          // Use a small delay to ensure state is updated
-          setTimeout(() => {
-            // This will be handled by the redirect logic below
-          }, 100);
-        }
+      // If crypto wallet user has 0 credits, show crypto checkout modal
+      if (isConnected && (credits === 0 || credits === null || credits === undefined)) {
+        setShowCryptoCheckout(true);
       }
     }
   }, [isLoading, isConnected, isAuthenticated, credits, hasCheckedCredits, activeTab]);
@@ -187,9 +183,39 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
     return <AuthPrompt onSwitchToWallet={() => {}} />;
   }
 
-  // If authenticated but has 0 credits, show pricing page
-  // The redirect is handled in AppWithCreditsCheck component
-  if ((isConnected || isAuthenticated) && (credits === 0 || credits === null || credits === undefined) && !isLoading) {
+  // If crypto wallet user has 0 credits, show crypto checkout modal (pay-per-credit)
+  if (isConnected && (credits === 0 || credits === null || credits === undefined) && !isLoading) {
+    return (
+      <>
+        <TokenPaymentModal
+          isOpen={showCryptoCheckout}
+          onClose={() => setShowCryptoCheckout(false)}
+          onSuccess={() => {
+            setShowCryptoCheckout(false);
+            // Credits will be refreshed automatically by the wallet context
+          }}
+        />
+        {/* Minimal background - modal will be shown automatically */}
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-white mb-4">Welcome! Purchase Credits</h2>
+            <p className="text-gray-400 mb-6">Pay-per-credit pricing with USDC</p>
+            {!showCryptoCheckout && (
+              <button
+                onClick={() => setShowCryptoCheckout(true)}
+                className="btn-primary px-6 py-3"
+              >
+                Buy Credits
+              </button>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // If email/Stripe user has 0 credits, show subscription pricing page
+  if (isAuthenticated && !isConnected && (credits === 0 || credits === null || credits === undefined) && !isLoading) {
     return <PricingPage />;
   }
 

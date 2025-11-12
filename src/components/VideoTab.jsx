@@ -8,6 +8,7 @@ import VideoUpload from './VideoUpload';
 import { Video as VideoIcon, Upload, Image as ImageIcon } from 'lucide-react';
 import { getVideoDuration, calculateVideoCredits } from '../utils/videoUtils';
 import logger from '../utils/logger';
+import { addGeneration } from '../services/galleryService';
 
 function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
   const walletContext = useSimpleWallet();
@@ -198,7 +199,7 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
               
               try {
                 const { generateVideo } = await import('../services/wanAnimateService');
-                const { addGeneration } = await import('../services/galleryService');
+                // galleryService is now statically imported at top of file to avoid Vite chunking warning
                 
                 const userIdentifier = isEmailAuth 
                   ? (emailContext.linkedWalletAddress || emailContext.userId) 
