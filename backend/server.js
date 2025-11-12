@@ -360,8 +360,9 @@ app.use((req, res, next) => {
   
   // If this is a path that allows no-origin requests, handle CORS manually
   if (path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath))) {
-    // Set permissive CORS headers for webhooks/health checks
-    res.header('Access-Control-Allow-Origin', '*');
+    // For no-origin paths, allow all origins (webhooks, health checks, monitoring)
+    // Note: Can't use credentials with wildcard, but these paths don't need credentials
+    res.header('Access-Control-Allow-Origin', origin || '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Stripe-Signature');
     // Mark that CORS is already handled for this request
@@ -373,16 +374,9 @@ app.use((req, res, next) => {
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests without origin - these are handled by middleware above for specific paths
-    // The middleware above sets req._corsHandled and handles CORS for no-origin allowed paths
-    // If we reach here with no origin, it means the path wasn't in noOriginAllowedPaths
-    // But we should still allow it in development, and in production the middleware should have handled it
     if (!origin) {
-      // In production, if we reach here, the path wasn't in noOriginAllowedPaths
-      // But the middleware should have already handled it, so this shouldn't happen
-      // However, to be safe, we'll allow it if we're in development
+      // In production, reject no-origin requests that weren't handled by middleware
       if (process.env.NODE_ENV === 'production') {
-        // In production, reject no-origin requests that weren't handled by middleware
-        // This should rarely happen since middleware handles no-origin allowed paths
         return callback(new Error('Not allowed by CORS - origin required in production'));
       }
       // In development, allow no origin for testing tools
@@ -398,30 +392,27 @@ const corsOptions = {
       : [];
     const originLower = origin.toLowerCase();
     
+    // Helper function to normalize URLs for comparison
+    const normalizeUrl = (url) => {
+      return url
+        .replace(/\/$/, '') // Remove trailing slash
+        .replace(/^https?:\/\//, '') // Remove protocol
+        .replace(/^www\./, ''); // Remove www
+    };
+    
     const isAllowedOrigin = allowedOriginsList.some(allowed => {
-      // Normalize both for comparison (remove trailing slash, normalize protocol)
-      const normalizeUrl = (url) => {
-        return url
-          .replace(/\/$/, '') // Remove trailing slash
-          .replace(/^https?:\/\//, '') // Remove protocol
-          .replace(/^www\./, ''); // Remove www
-      };
-      
-      const normalizedAllowed = normalizeUrl(allowed);
-      const normalizedOrigin = normalizeUrl(originLower);
-      
       // Exact match (case-insensitive)
       if (allowed === originLower) return true;
       
       // Match without trailing slash
-      const allowedNoSlash = allowed.replace(/\/$/, '');
-      const originNoSlash = originLower.replace(/\/$/, '');
-      if (allowedNoSlash === originNoSlash) return true;
+      if (allowed.replace(/\/$/, '') === originLower.replace(/\/$/, '')) return true;
       
       // Match normalized (without protocol and www)
+      const normalizedAllowed = normalizeUrl(allowed);
+      const normalizedOrigin = normalizeUrl(originLower);
       if (normalizedAllowed === normalizedOrigin) return true;
       
-      // Match with/without www prefix
+      // Match with/without www prefix (but keep protocol)
       const allowedNoWww = allowed.replace(/^www\./, '');
       const originNoWww = originLower.replace(/^www\./, '');
       if (allowedNoWww === originNoWww) return true;
@@ -433,7 +424,8 @@ const corsOptions = {
     if (process.env.NODE_ENV === 'production') {
       if (isAllowedOrigin) {
         logger.debug('CORS: Allowed origin', { origin });
-        return callback(null, true);
+        // Return the actual origin (not true) so CORS library sets it correctly with credentials
+        return callback(null, origin);
       }
       // Reject unauthorized origin in production - log detailed info for debugging
       logger.warn('CORS: Rejected unauthorized origin in production', { 
@@ -441,36 +433,19 @@ const corsOptions = {
         originLower,
         allowedOrigins: process.env.ALLOWED_ORIGINS,
         allowedOriginsArray: allowedOriginsList,
-        isAllowed: isAllowedOrigin,
-        path: req.path,
-        method: req.method
+        isAllowed: isAllowedOrigin
       });
       return callback(new Error(`Not allowed by CORS. Origin '${origin}' is not in ALLOWED_ORIGINS: ${process.env.ALLOWED_ORIGINS || 'not set'}`));
     }
     
-    // In development, allow localhost only (more secure than allowing all)
-    if (process.env.NODE_ENV !== 'production') {
-      if (isLocalhost) {
-        return callback(null, true);
-      }
-      // Also allow explicitly whitelisted origins in development
-      if (isAllowedOrigin) {
-        return callback(null, true);
-      }
-      // Reject non-localhost, non-whitelisted origins even in development
-      logger.warn('CORS: Rejected non-localhost origin in development', { origin });
-      return callback(new Error('Not allowed by CORS. Development mode only allows localhost and whitelisted origins.'));
+    // In development, allow localhost and whitelisted origins
+    if (isLocalhost || isAllowedOrigin) {
+      return callback(null, origin); // Return actual origin for credentials support
     }
     
-    // Log the rejected origin for debugging
-    logger.warn('CORS rejected origin', { 
-      origin, 
-      allowedOrigins: process.env.ALLOWED_ORIGINS,
-      nodeEnv: process.env.NODE_ENV 
-    });
-    
-    // Fallback: if we get here, reject for safety
-    callback(new Error('Not allowed by CORS'));
+    // Reject non-localhost, non-whitelisted origins even in development
+    logger.warn('CORS: Rejected non-localhost origin in development', { origin });
+    return callback(new Error('Not allowed by CORS. Development mode only allows localhost and whitelisted origins.'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -542,6 +517,7 @@ app.options('*', (req, res) => {
   }
   
   if (allowOrigin) {
+    // Must use actual origin (not '*') when credentials: true
     res.header('Access-Control-Allow-Origin', origin || '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
@@ -549,6 +525,7 @@ app.options('*', (req, res) => {
     res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
     res.sendStatus(200);
   } else {
+    logger.warn('CORS: Preflight rejected', { origin, path });
     res.status(403).json({ error: 'Not allowed by CORS' });
   }
 });
