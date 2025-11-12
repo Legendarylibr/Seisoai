@@ -288,6 +288,59 @@ const instantCheckLimiter = rateLimit({
 
 // Note: Applied directly to route handler below
 
+// Rate limiters for Wan 2.2 endpoints (prevent API abuse)
+// Defined early so they're available to route handlers
+
+// In-memory cache for duplicate request prevention (prevents same request within 30 seconds)
+const recentSubmissions = new Map();
+const DUPLICATE_PREVENTION_TTL = 30 * 1000; // 30 seconds
+
+// Cleanup old entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamp] of recentSubmissions.entries()) {
+    if (now - timestamp > DUPLICATE_PREVENTION_TTL) {
+      recentSubmissions.delete(key);
+    }
+  }
+}, 60000); // Cleanup every minute
+
+// Status checks - allow 60 requests per minute per IP
+const wanStatusLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 60, // limit each IP to 60 requests per minute
+  message: {
+    error: 'Too many status check requests. Please wait a moment.',
+    retryAfter: '1 minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Submit endpoint - prevent spam submissions (strict limit)
+const wanSubmitLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 10, // limit each IP to 10 submissions per 5 minutes
+  message: {
+    error: 'Too many video generation requests. Please wait before submitting another.',
+    retryAfter: '5 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Result endpoint - prevent result fetching spam
+const wanResultLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 30, // limit each IP to 30 result fetches per minute
+  message: {
+    error: 'Too many result requests. Please wait a moment.',
+    retryAfter: '1 minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // Endpoints that should allow requests without origin (webhooks, health checks, monitoring)
 // Defined early so it's available to all middleware
 const noOriginAllowedPaths = [
@@ -1610,58 +1663,6 @@ app.post('/api/generate/image', requireCredits(1), async (req, res) => {
     logger.error('Image generation proxy error', { error: error.message, stack: error.stack });
     res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to generate image') });
   }
-});
-
-// Rate limiters for Wan 2.2 endpoints (prevent API abuse)
-
-// In-memory cache for duplicate request prevention (prevents same request within 30 seconds)
-const recentSubmissions = new Map();
-const DUPLICATE_PREVENTION_TTL = 30 * 1000; // 30 seconds
-
-// Cleanup old entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, timestamp] of recentSubmissions.entries()) {
-    if (now - timestamp > DUPLICATE_PREVENTION_TTL) {
-      recentSubmissions.delete(key);
-    }
-  }
-}, 60000); // Cleanup every minute
-
-// Status checks - allow 60 requests per minute per IP
-const wanStatusLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 60, // limit each IP to 60 requests per minute
-  message: {
-    error: 'Too many status check requests. Please wait a moment.',
-    retryAfter: '1 minute'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-// Submit endpoint - prevent spam submissions (strict limit)
-const wanSubmitLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 10, // limit each IP to 10 submissions per 5 minutes
-  message: {
-    error: 'Too many video generation requests. Please wait before submitting another.',
-    retryAfter: '5 minutes'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-// Result endpoint - prevent result fetching spam
-const wanResultLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 30, // limit each IP to 30 result fetches per minute
-  message: {
-    error: 'Too many result requests. Please wait a moment.',
-    retryAfter: '1 minute'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
 });
 
 // Status endpoint for Wan 2.2 Animate Replace
