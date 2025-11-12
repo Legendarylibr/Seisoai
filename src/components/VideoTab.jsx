@@ -271,46 +271,47 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                     error: durationError.message 
                   });
                   // Use minimum 2 credits if we can't determine duration
+                  videoDuration = 1; // Default to 1 second for minimum
+                  creditsToCharge = 2;
                 }
                 
-                // Update generation with video URL when completed
-                if (generationId) {
-                  try {
-                    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                    await fetch(`${API_URL}/api/generations/update/${generationId}`, {
-                      method: 'PUT',
-                      headers: {
-                        'Content-Type': 'application/json'
-                      },
-                      body: JSON.stringify({
-                        walletAddress: !isEmailAuth ? userIdentifier : undefined,
-                        userId: isEmailAuth ? userIdentifier : undefined,
-                        email: isEmailAuth ? emailContext.email : undefined,
-                        videoUrl: result,
-                        status: 'completed'
-                      })
-                    });
-                    logger.info('Video generation updated in database', { generationId, videoUrl: result });
-                  } catch (updateError) {
-                    logger.warn('Failed to update generation', { error: updateError.message });
-                    // Continue even if update fails
-                  }
-                } else {
-                  // If we didn't store as queued, store now as completed
-                  try {
-                    await addGeneration(userIdentifier, {
-                      prompt: 'Video Animate Replace',
-                      style: 'Wan 2.2 Animate',
+                // Call completion endpoint to deduct credits and add to gallery
+                try {
+                  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                  const completeResponse = await fetch(`${API_URL}/api/wan-animate/complete`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      requestId: requestId,
                       videoUrl: result,
-                      status: 'completed',
-                      creditsUsed: creditsToCharge,
+                      duration: videoDuration,
+                      walletAddress: !isEmailAuth ? userIdentifier : undefined,
                       userId: isEmailAuth ? emailContext.userId : undefined,
                       email: isEmailAuth ? emailContext.email : undefined
-                    });
-                    logger.info('Video generation stored as completed', { videoUrl: result });
-                  } catch (storeError) {
-                    logger.warn('Failed to store completed generation', { error: storeError.message });
+                    })
+                  });
+                  
+                  if (!completeResponse.ok) {
+                    const errorData = await completeResponse.json().catch(() => ({ error: 'Unknown error' }));
+                    throw new Error(errorData.error || 'Failed to complete video generation');
                   }
+                  
+                  const completeData = await completeResponse.json();
+                  if (completeData.success) {
+                    creditsToCharge = completeData.creditsDeducted;
+                    logger.info('Video generation completed and credits deducted', {
+                      generationId: completeData.generationId,
+                      creditsDeducted: completeData.creditsDeducted,
+                      remainingCredits: completeData.remainingCredits,
+                      duration: completeData.duration
+                    });
+                  }
+                } catch (completeError) {
+                  logger.error('Failed to complete video generation', { error: completeError.message });
+                  // Don't fail the whole process, but log the error
+                  setError(`Video generated but failed to process: ${completeError.message}`);
                 }
                 
                 logger.info('Video generation completed', {

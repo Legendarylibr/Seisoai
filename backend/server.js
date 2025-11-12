@@ -1987,6 +1987,137 @@ app.get('/api/wan-animate/result/:requestId', wanResultLimiter, async (req, res)
   }
 });
 
+/**
+ * Complete video generation - deduct credits based on duration and add to gallery
+ * Called by frontend after video is successfully generated and duration is calculated
+ */
+app.post('/api/wan-animate/complete', async (req, res) => {
+  try {
+    const { requestId, videoUrl, duration, walletAddress, userId, email } = req.body;
+    
+    if (!videoUrl) {
+      return res.status(400).json({ success: false, error: 'videoUrl is required' });
+    }
+    
+    if (!duration || duration <= 0) {
+      return res.status(400).json({ success: false, error: 'duration is required and must be greater than 0' });
+    }
+    
+    // Get user
+    let user;
+    if (walletAddress) {
+      const isSolanaAddress = !walletAddress.startsWith('0x');
+      const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+      user = await getOrCreateUser(normalizedWalletAddress);
+    } else if (userId) {
+      user = await User.findOne({ userId });
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+    } else if (email) {
+      user = await User.findOne({ email: email.toLowerCase() });
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+    } else {
+      return res.status(400).json({ success: false, error: 'walletAddress, userId, or email is required' });
+    }
+    
+    // Calculate credits (2 credits per second, minimum 2 credits)
+    const creditsToDeduct = Math.max(Math.ceil(duration * 2), 2);
+    
+    // Check if user has enough credits
+    const availableCredits = user.credits || 0;
+    if (availableCredits < creditsToDeduct) {
+      logger.warn('Insufficient credits for video completion', {
+        userId: user.userId,
+        email: user.email,
+        walletAddress: user.walletAddress,
+        availableCredits,
+        creditsToDeduct,
+        duration
+      });
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient credits. Video requires ${creditsToDeduct} credits (${duration}s × 2), but you only have ${availableCredits} credits.`
+      });
+    }
+    
+    // Deduct credits and add to gallery
+    const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const generation = {
+      id: generationId,
+      prompt: 'Video Animate Replace',
+      style: 'Wan 2.2 Animate',
+      videoUrl,
+      creditsUsed: creditsToDeduct,
+      timestamp: new Date()
+    };
+    
+    const galleryItem = {
+      id: generationId,
+      prompt: 'Video Animate Replace',
+      style: 'Wan 2.2 Animate',
+      videoUrl,
+      creditsUsed: creditsToDeduct,
+      timestamp: new Date()
+    };
+    
+    // Build update query
+    let updateQuery;
+    if (walletAddress) {
+      const isSolanaAddress = !walletAddress.startsWith('0x');
+      const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+      updateQuery = { walletAddress: normalizedWalletAddress };
+    } else if (userId) {
+      updateQuery = { userId };
+    } else if (email) {
+      updateQuery = { email: email.toLowerCase() };
+    }
+    
+    // Atomic update: deduct credits and add to history/gallery
+    const updateResult = await User.findOneAndUpdate(
+      updateQuery,
+      {
+        $inc: { 
+          credits: -creditsToDeduct,
+          totalCreditsSpent: creditsToDeduct
+        },
+        $push: {
+          generationHistory: generation,
+          gallery: galleryItem
+        }
+      },
+      { new: true }
+    );
+    
+    if (!updateResult) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    logger.info('Video generation completed and credits deducted', {
+      userId: user.userId,
+      email: user.email,
+      walletAddress: user.walletAddress,
+      generationId,
+      requestId,
+      duration,
+      creditsToDeduct,
+      remainingCredits: updateResult.credits
+    });
+    
+    res.json({
+      success: true,
+      generationId,
+      remainingCredits: updateResult.credits,
+      creditsDeducted: creditsToDeduct,
+      duration
+    });
+  } catch (error) {
+    logger.error('Error completing video generation', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to complete video generation') });
+  }
+});
 
 // Validate required environment variables
 const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'SESSION_SECRET'];

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
-import { Download, Trash2, Eye, Calendar, Palette, Sparkles, X, Video, Play } from 'lucide-react';
+import { Download, Trash2, Eye, Calendar, Palette, Sparkles, X, Video, Play, Image as ImageIcon, ArrowLeft } from 'lucide-react';
 import { getGallery } from '../services/galleryService';
 import logger from '../utils/logger.js';
 
@@ -11,12 +11,10 @@ const ImageGallery = () => {
   const walletContext = useSimpleWallet();
   const emailContext = useEmailAuth();
   const [selectedItem, setSelectedItem] = useState(null);
-  const [filterCategory, setFilterCategory] = useState('All');
+  const [activeTab, setActiveTab] = useState('all'); // 'all', 'image', 'video'
   const [galleryItems, setGalleryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const categories = ['All', 'Photorealistic', 'Artistic', 'Professional', 'Creative'];
 
   // Fetch gallery from database
   useEffect(() => {
@@ -100,9 +98,14 @@ const ImageGallery = () => {
     fetchGallery();
   }, [walletContext.address, emailContext.isAuthenticated, emailContext.userId, generationHistory.length]);
 
-  const filteredHistory = galleryItems.filter(item => 
-    filterCategory === 'All' || item.style?.category === filterCategory
-  );
+  // Filter by tab selection
+  const filteredHistory = galleryItems.filter(item => {
+    const isVideo = item.isVideo || !!item.videoUrl;
+    if (activeTab === 'all') return true;
+    if (activeTab === 'image') return !isVideo;
+    if (activeTab === 'video') return isVideo;
+    return true;
+  });
 
   const handleDownload = async (url, styleName, isVideo = false) => {
     if (!url) return;
@@ -236,8 +239,12 @@ const ImageGallery = () => {
         <div className="slide-up">
           <h2 className="text-3xl md:text-4xl font-bold gradient-text mb-2">Your Gallery</h2>
           <p className="text-gray-400 text-base">
-            {galleryItems.length} {galleryItems.length === 1 ? 'item' : 'items'} 
-            {galleryItems.filter(i => i.isVideo).length > 0 && ` (${galleryItems.filter(i => i.isVideo).length} video${galleryItems.filter(i => i.isVideo).length === 1 ? '' : 's'})`}
+            {filteredHistory.length} {filteredHistory.length === 1 ? 'item' : 'items'}
+            {activeTab === 'all' && (
+              <>
+                {' '}({galleryItems.filter(i => !i.isVideo && !i.videoUrl).length} image{galleryItems.filter(i => !i.isVideo && !i.videoUrl).length === 1 ? '' : 's'}, {galleryItems.filter(i => i.isVideo || i.videoUrl).length} video{galleryItems.filter(i => i.isVideo || i.videoUrl).length === 1 ? '' : 's'})
+              </>
+            )}
           </p>
         </div>
         <button
@@ -250,25 +257,64 @@ const ImageGallery = () => {
         </button>
       </div>
 
-      {/* Filter */}
+      {/* Tabs - Image and Video only */}
       <div className="flex flex-wrap gap-3 mb-6">
-        {categories.map((category, index) => (
-          <button
-            key={category}
-            onClick={() => setFilterCategory(category)}
-            className={`
-              px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300
-              ${filterCategory === category
-                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30 scale-105'
-                : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:scale-105'
-              }
-            `}
-            style={{ animationDelay: `${index * 50}ms` }}
-          >
-            {category}
-          </button>
-        ))}
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`
+            px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-2
+            ${activeTab === 'all'
+              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30 scale-105'
+              : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:scale-105'
+            }
+          `}
+        >
+          <Palette className="w-4 h-4" />
+          All
+        </button>
+        <button
+          onClick={() => setActiveTab('image')}
+          className={`
+            px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-2
+            ${activeTab === 'image'
+              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30 scale-105'
+              : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:scale-105'
+            }
+          `}
+        >
+          <ImageIcon className="w-4 h-4" />
+          Images
+          <span className="ml-1 text-xs opacity-75">({galleryItems.filter(i => !i.isVideo && !i.videoUrl).length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('video')}
+          className={`
+            px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-2
+            ${activeTab === 'video'
+              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30 scale-105'
+              : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:scale-105'
+            }
+          `}
+        >
+          <Video className="w-4 h-4" />
+          Videos
+          <span className="ml-1 text-xs opacity-75">({galleryItems.filter(i => i.isVideo || i.videoUrl).length})</span>
+        </button>
       </div>
+      
+      {/* Back button and spacing when tab is selected */}
+      {activeTab !== 'all' && (
+        <div className="mb-4 flex items-center gap-3">
+          <button
+            onClick={() => setActiveTab('all')}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-gray-300 hover:bg-white/20 transition-all duration-300 hover:scale-105"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to All
+          </button>
+          <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+        </div>
+      )}
 
       {/* Gallery Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
@@ -353,10 +399,20 @@ const ImageGallery = () => {
       {filteredHistory.length === 0 && (
         <div className="text-center py-16 slide-up">
           <div className="glass-card w-20 h-20 mx-auto mb-6 flex items-center justify-center rounded-xl">
-            <div className="text-4xl">🔍</div>
+            {activeTab === 'image' ? (
+              <ImageIcon className="w-10 h-10 text-gray-400" />
+            ) : activeTab === 'video' ? (
+              <Video className="w-10 h-10 text-gray-400" />
+            ) : (
+              <div className="text-4xl">🔍</div>
+            )}
           </div>
-          <h3 className="text-xl font-semibold text-gray-300 mb-2">No images found</h3>
-          <p className="text-gray-500">Try selecting a different category</p>
+          <h3 className="text-xl font-semibold text-gray-300 mb-2">
+            {activeTab === 'image' ? 'No images yet' : activeTab === 'video' ? 'No videos yet' : 'No items found'}
+          </h3>
+          <p className="text-gray-500">
+            {activeTab === 'image' ? 'Start generating images to see them here' : activeTab === 'video' ? 'Start generating videos to see them here' : 'Try selecting a different tab'}
+          </p>
         </div>
       )}
 
