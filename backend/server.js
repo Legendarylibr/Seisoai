@@ -400,17 +400,12 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests without origin - these are handled by middleware above for specific paths
     if (!origin) {
-      // In development, allow no origin for testing tools
-      if (process.env.NODE_ENV !== 'production') {
-        return callback(null, true);
-      }
-      // In production, check if CORS was already handled by middleware above
-      // If not, this is an unauthorized no-origin request
+      // Allow no origin for testing tools (same in dev and production)
       // The middleware above will have already set headers for allowed paths
-      return callback(new Error('Not allowed by CORS - origin required in production'));
+      return callback(null, true);
     }
     
-    // Dynamic port handling - allow any localhost port in development
+    // Dynamic port handling - allow any localhost port (same in dev and production)
     const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
     
     // Check if origin is in allowed list (trim whitespace and handle variations)
@@ -447,32 +442,24 @@ const corsOptions = {
       return false;
     });
     
-    // In production, only allow whitelisted origins
-    if (process.env.NODE_ENV === 'production') {
-      if (isAllowedOrigin) {
-        logger.debug('CORS: Allowed origin', { origin });
-        // Return the actual origin (not true) so CORS library sets it correctly with credentials
-        return callback(null, origin);
-      }
-      // Reject unauthorized origin in production - log detailed info for debugging
-      logger.warn('CORS: Rejected unauthorized origin in production', { 
-        origin, 
-        originLower,
-        allowedOrigins: process.env.ALLOWED_ORIGINS,
-        allowedOriginsArray: allowedOriginsList,
-        isAllowed: isAllowedOrigin
-      });
-      return callback(new Error(`Not allowed by CORS. Origin '${origin}' is not in ALLOWED_ORIGINS: ${process.env.ALLOWED_ORIGINS || 'not set'}`));
+    // Allow localhost, whitelisted origins, or any origin if ALLOWED_ORIGINS not set
+    // Same logic for both dev and production
+    if (isLocalhost || isAllowedOrigin || allowedOriginsList.length === 0) {
+      logger.debug('CORS: Allowed origin', { origin, isLocalhost, isAllowedOrigin, allowedOriginsListLength: allowedOriginsList.length });
+      // Return the actual origin (not true) so CORS library sets it correctly with credentials
+      return callback(null, origin);
     }
     
-    // In development, allow localhost and whitelisted origins
-    if (isLocalhost || isAllowedOrigin) {
-      return callback(null, origin); // Return actual origin for credentials support
-    }
-    
-    // Reject non-localhost, non-whitelisted origins even in development
-    logger.warn('CORS: Rejected non-localhost origin in development', { origin });
-    return callback(new Error('Not allowed by CORS. Development mode only allows localhost and whitelisted origins.'));
+    // Reject non-localhost, non-whitelisted origins (only if ALLOWED_ORIGINS is set)
+    logger.warn('CORS: Rejected origin', { 
+      origin, 
+      originLower,
+      allowedOrigins: process.env.ALLOWED_ORIGINS,
+      allowedOriginsArray: allowedOriginsList,
+      isAllowed: isAllowedOrigin,
+      isLocalhost
+    });
+    return callback(new Error(`Not allowed by CORS. Origin '${origin}' is not in ALLOWED_ORIGINS: ${process.env.ALLOWED_ORIGINS || 'not set'}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -5767,6 +5754,30 @@ app.use((error, req, res, next) => {
       }
     }
     // Don't log anything if it's a no-origin allowed path - these are handled by middleware
+    
+    // Set CORS headers on error response so browser can read it
+    const origin = req.headers.origin;
+    if (origin) {
+      // Check if origin should be allowed (for error responses, we need to allow it to send the error)
+      // Use same logic as main CORS handler
+      const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+      const allowedOriginsList = process.env.ALLOWED_ORIGINS 
+        ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim().toLowerCase())
+        : [];
+      const originLower = origin.toLowerCase();
+      const isAllowedOrigin = allowedOriginsList.some(allowed => {
+        const allowedLower = allowed.toLowerCase();
+        return allowedLower === originLower || 
+               allowedLower.replace(/\/$/, '') === originLower.replace(/\/$/, '');
+      });
+      
+      // Allow origin for error response if it's localhost, in allowed list, or ALLOWED_ORIGINS not set
+      // Same logic for both dev and production
+      if (isLocalhost || isAllowedOrigin || allowedOriginsList.length === 0) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+      }
+    }
     
     // Return CORS error response
     return res.status(403).json({
