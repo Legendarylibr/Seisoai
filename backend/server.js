@@ -352,8 +352,7 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration
-// Middleware to handle CORS for paths that allow no-origin requests (before main CORS)
-// This sets CORS headers manually for webhooks/health checks, then skips the main CORS middleware
+// Middleware to handle CORS for paths that allow no-origin requests (webhooks, health checks)
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const path = req.path || req.url?.split('?')[0];
@@ -361,12 +360,18 @@ app.use((req, res, next) => {
   // If this is a path that allows no-origin requests, handle CORS manually
   if (path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath))) {
     // For no-origin paths, allow all origins (webhooks, health checks, monitoring)
-    // Note: Can't use credentials with wildcard, but these paths don't need credentials
     res.header('Access-Control-Allow-Origin', origin || '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Stripe-Signature');
+    res.header('Access-Control-Allow-Credentials', origin ? 'true' : 'false'); // Can't use credentials with wildcard
+    res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
     // Mark that CORS is already handled for this request
     req._corsHandled = true;
+    
+    // Handle OPTIONS preflight requests for these paths
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
   }
   next();
 });
@@ -375,12 +380,13 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests without origin - these are handled by middleware above for specific paths
     if (!origin) {
-      // In production, reject no-origin requests that weren't handled by middleware
-      if (process.env.NODE_ENV === 'production') {
-        return callback(new Error('Not allowed by CORS - origin required in production'));
-      }
       // In development, allow no origin for testing tools
-      return callback(null, true);
+      if (process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+      // In production, reject no-origin requests (except for paths handled by middleware above)
+      // The middleware above will have already set headers for allowed paths
+      return callback(new Error('Not allowed by CORS - origin required in production'));
     }
     
     // Dynamic port handling - allow any localhost port in development
@@ -449,85 +455,19 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Stripe-Signature'],
   exposedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200
 };
 
-// Apply CORS middleware conditionally - skip for paths that already have CORS handled
+// Apply CORS middleware - skip for paths that already have CORS handled
 app.use((req, res, next) => {
   // If CORS was already handled by the middleware above, skip the main CORS middleware
   if (req._corsHandled) {
     return next();
   }
-  // Otherwise, apply CORS middleware
-  cors(corsOptions)(req, res, next);
-});
-
-// Handle preflight requests explicitly for all routes
-app.options('*', (req, res) => {
-  const origin = req.headers.origin;
-  const path = req.path || req.url?.split('?')[0];
-  
-  // Use same origin validation logic as corsOptions
-  let allowOrigin = false;
-  if (!origin) {
-    // Allow no-origin requests for webhooks and health checks
-    if (path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath))) {
-      allowOrigin = true;
-    } else if (process.env.NODE_ENV === 'production') {
-      logger.warn('CORS: Rejected preflight request with no origin in production', { path });
-      return res.status(403).json({ error: 'Not allowed by CORS - origin required in production' });
-    } else {
-      // In development, allow requests with no origin for testing
-      allowOrigin = true;
-    }
-  } else {
-    const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
-    
-    // Use same improved origin matching logic as corsOptions
-    const allowedOriginsList = process.env.ALLOWED_ORIGINS 
-      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim().toLowerCase())
-      : [];
-    const originLower = origin.toLowerCase();
-    
-    const isAllowedOrigin = allowedOriginsList.some(allowed => {
-      const normalizeUrl = (url) => {
-        return url
-          .replace(/\/$/, '')
-          .replace(/^https?:\/\//, '')
-          .replace(/^www\./, '');
-      };
-      
-      const normalizedAllowed = normalizeUrl(allowed);
-      const normalizedOrigin = normalizeUrl(originLower);
-      
-      if (allowed === originLower) return true;
-      if (allowed.replace(/\/$/, '') === originLower.replace(/\/$/, '')) return true;
-      if (normalizedAllowed === normalizedOrigin) return true;
-      if (allowed.replace(/^www\./, '') === originLower.replace(/^www\./, '')) return true;
-      return false;
-    });
-    
-    if (process.env.NODE_ENV === 'production') {
-      allowOrigin = isAllowedOrigin;
-    } else {
-      allowOrigin = isLocalhost || isAllowedOrigin;
-    }
-  }
-  
-  if (allowOrigin) {
-    // Must use actual origin (not '*') when credentials: true
-    res.header('Access-Control-Allow-Origin', origin || '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
-    res.sendStatus(200);
-  } else {
-    logger.warn('CORS: Preflight rejected', { origin, path });
-    res.status(403).json({ error: 'Not allowed by CORS' });
-  }
+  // Otherwise, apply CORS middleware normally
+  return cors(corsOptions)(req, res, next);
 });
 
 // Log CORS configuration on startup
