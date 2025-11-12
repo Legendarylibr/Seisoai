@@ -251,11 +251,17 @@ const ImageOutput = () => {
       };
       
       logger.info('Starting regeneration with new prompt');
+      // Use the most current image as reference: prefer currentGeneration.referenceImage if available,
+      // otherwise use currentGeneration.image, otherwise fall back to generatedImage
+      const referenceImageForGeneration = currentGeneration.referenceImage || 
+                                          currentGeneration.image || 
+                                          generatedImage;
+      
       const result = await generateImage(
         currentGeneration.style,
         newPrompt.trim(),
         advancedSettings,
-        generatedImage // Use current output as reference image
+        referenceImageForGeneration // Use current output as reference image
       );
       
       // Handle both single image (string) and multiple images (array)
@@ -302,19 +308,26 @@ const ImageOutput = () => {
         });
         
         // Update UI immediately with the remaining credits from the response
-        if (deductionResult.remainingCredits !== undefined && setCreditsManually) {
-          logger.debug('Updating UI credits', { remainingCredits: deductionResult.remainingCredits });
-          setCreditsManually(deductionResult.remainingCredits);
+        if (deductionResult.remainingCredits !== undefined) {
+          if (setCreditsManually) {
+            // For wallet users, update credits directly
+            setCreditsManually(deductionResult.remainingCredits);
+            logger.debug('Updated wallet user credits', { remainingCredits: deductionResult.remainingCredits });
+          }
         }
         
         // Force immediate credit refresh to ensure UI is in sync with backend
         logger.debug('Refreshing credits from backend');
-        if (refreshCredits && address) {
+        if (isEmailAuth && emailContext.refreshCredits) {
+          // For email users, refresh from backend (will update credits automatically)
+          await emailContext.refreshCredits();
+          logger.debug('Email user credits refreshed from backend', { remainingCredits: deductionResult.remainingCredits });
+        } else if (refreshCredits && address) {
+          // For wallet users, refresh from backend
           await refreshCredits();
-          logger.debug('Credits refreshed in UI from backend');
-          logger.info('Credits refreshed after generation', { address });
+          logger.debug('Wallet user credits refreshed from backend', { remainingCredits: deductionResult.remainingCredits });
         } else {
-          logger.warn('Cannot refresh credits - missing refreshCredits or address');
+          logger.warn('Cannot refresh credits - missing refreshCredits function');
         }
       } catch (error) {
         logger.error('Error saving generation', { error: error.message, address });
@@ -327,11 +340,13 @@ const ImageOutput = () => {
       
       // Update current generation with new details
       const resultImageUrl = isArray ? result[0] : result;
+      // Use the NEW result as the reference image for next generation
+      const newReferenceImage = isArray ? result[0] : result;
       setCurrentGeneration({
         ...currentGeneration,
         image: resultImageUrl, // Use first image for backward compatibility
         prompt: newPrompt.trim(),
-        referenceImage: generatedImage, // Previous output becomes new input
+        referenceImage: newReferenceImage, // New output becomes reference for next generation
         timestamp: new Date().toISOString()
       });
       

@@ -181,57 +181,45 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
 
           {/* Mobile Credits & Menu */}
           <div className="md:hidden flex items-center gap-2">
-            {/* Stripe button for email users or when not connected */}
-            {(!isConnected || isEmailAuth) && onShowStripePayment && (
-              <button
-                onClick={onShowStripePayment}
-                className="flex items-center gap-1 px-3 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium rounded-lg transition-all duration-200"
-              >
-                <CreditCard className="w-4 h-4" />
-                <span className="text-xs">Card</span>
-              </button>
-            )}
-
-            {/* Mobile Credits Display */}
-            {isConnected && (
+            {isConnected ? (
               <>
-                <div className="flex items-center gap-1 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
+                {/* Combined Credits Card with Buy Button - Mobile */}
+                <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20">
                   <Coins className="w-4 h-4 text-purple-400" />
-                  <span className="text-xs font-medium text-white">
+                  <span className="text-xs font-semibold text-white">
                     {credits}
                   </span>
+                  {/* Buy Credits Button - Show Stripe for email users, Token for wallet users */}
+                  {isEmailAuth && onShowStripePayment ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onShowStripePayment) {
+                          onShowStripePayment();
+                        }
+                      }}
+                      className="ml-1 px-2 py-1 bg-blue-500/30 hover:bg-blue-500/40 rounded border border-blue-500/40 transition-all duration-200"
+                      title="Buy Credits"
+                      style={{ position: 'relative', zIndex: 999998 }}
+                    >
+                      <CreditCard className="w-3.5 h-3.5 text-blue-300" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onShowTokenPayment) {
+                          onShowTokenPayment();
+                        }
+                      }}
+                      className="ml-1 px-2 py-1 bg-purple-500/30 hover:bg-purple-500/40 rounded border border-purple-500/40 transition-all duration-200"
+                      title="Buy Credits"
+                      style={{ position: 'relative', zIndex: 999998 }}
+                    >
+                      <Coins className="w-3.5 h-3.5 text-purple-300" />
+                    </button>
+                  )}
                 </div>
-                
-                {/* Mobile Buy Credits Button - Show Stripe for email users, Token for wallet users */}
-                {isEmailAuth && onShowStripePayment ? (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onShowStripePayment) {
-                        onShowStripePayment();
-                      }
-                    }}
-                    className="p-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg border border-blue-500/30 transition-colors"
-                    title="Buy Credits"
-                    style={{ position: 'relative', zIndex: 999998 }}
-                  >
-                    <CreditCard className="w-4 h-4 text-blue-400" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onShowTokenPayment) {
-                        onShowTokenPayment();
-                      }
-                    }}
-                    className="p-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg border border-purple-500/30 transition-colors"
-                    title="Buy Credits"
-                    style={{ position: 'relative', zIndex: 999998 }}
-                  >
-                    <Coins className="w-4 h-4 text-purple-400" />
-                  </button>
-                )}
                 
                 <button
                   onClick={isEmailAuth ? signOut : disconnectWallet}
@@ -240,6 +228,19 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
                 >
                   <LogOut className="w-4 h-4 text-red-400" />
                 </button>
+              </>
+            ) : (
+              /* Not connected - Show single buy button */
+              <>
+                {onShowStripePayment && (
+                  <button
+                    onClick={onShowStripePayment}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium rounded-lg transition-all duration-200 text-xs"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>Buy Credits</span>
+                  </button>
+                )}
               </>
             )}
           </div>
