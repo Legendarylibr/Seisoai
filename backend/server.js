@@ -352,19 +352,62 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration
+// Middleware to handle CORS for paths that allow no-origin requests (webhooks, health checks)
+// This runs BEFORE the main CORS middleware to handle special cases
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const path = req.path || req.url?.split('?')[0];
+  
+  // If this is a path that allows no-origin requests, handle CORS manually
+  if (path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath))) {
+    // For webhook endpoints (server-to-server), no CORS headers needed
+    if (path.startsWith('/api/stripe/webhook') || path.startsWith('/api/webhook') || path.startsWith('/api/webhooks')) {
+      // Webhooks don't need CORS - they're server-to-server
+      // Mark that CORS is already handled for this request
+      req._corsHandled = true;
+      return next();
+    }
+    
+    // For health checks and metrics (may be accessed from browsers/monitoring tools)
+    if (path.startsWith('/api/health') || path.startsWith('/api/metrics')) {
+      // Set CORS headers but never use wildcard with credentials
+      if (origin) {
+        // Browser request - set specific origin, no credentials
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Credentials', 'false');
+      } else {
+        // Server-to-server request - no CORS headers needed
+        // Don't set wildcard to avoid security issues
+      }
+      res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type');
+      res.header('Access-Control-Max-Age', '86400');
+      
+      // Mark that CORS is already handled for this request
+      req._corsHandled = true;
+      
+      // Handle OPTIONS preflight requests for these paths
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+      }
+      return next();
+    }
+  }
+  next();
+});
+
 const corsOptions = {
   origin: function (origin, callback) {
-    // Handle requests without origin header
+    // Allow requests without origin - these are handled by middleware above for specific paths
     if (!origin) {
       // In development, allow no origin for testing tools
       if (process.env.NODE_ENV !== 'production') {
         return callback(null, true);
       }
-      // In production, reject no-origin requests by default
-      // Webhook endpoints will be handled separately without CORS (they don't need it)
-      // This prevents unauthorized access by omitting origin header
-      logger.warn('CORS: Rejected no-origin request in production');
-      return callback(new Error('Not allowed by CORS. Origin header is required in production.'));
+      // In production, check if CORS was already handled by middleware above
+      // If not, this is an unauthorized no-origin request
+      // The middleware above will have already set headers for allowed paths
+      return callback(new Error('Not allowed by CORS - origin required in production'));
     }
     
     // Dynamic port handling - allow any localhost port in development
@@ -438,35 +481,12 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
-// Apply CORS middleware conditionally - skip for webhook/health check paths
-// Webhooks and health checks are server-to-server and don't need CORS
+// Apply CORS middleware - it will skip requests where _corsHandled is set
 app.use((req, res, next) => {
-  const path = req.path || req.url?.split('?')[0];
-  
-  // Skip CORS for webhook and health check paths (server-to-server endpoints)
-  if (path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath))) {
-    // These endpoints don't need CORS - they're not browser requests
-    // For health checks accessed from monitoring tools, set minimal CORS headers
-    if (path.startsWith('/api/health') || path.startsWith('/api/metrics')) {
-      const origin = req.headers.origin;
-      // Only set CORS headers if origin is present (browser request)
-      if (origin) {
-        res.header('Access-Control-Allow-Origin', origin);
-        res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-        res.header('Access-Control-Allow-Headers', 'Content-Type');
-        res.header('Access-Control-Allow-Credentials', 'false');
-        
-        // Handle OPTIONS preflight requests
-        if (req.method === 'OPTIONS') {
-          return res.sendStatus(200);
-        }
-      }
-      // No origin = server-to-server, no CORS headers needed
-    }
-    // Webhook endpoints don't need any CORS headers (server-to-server only)
+  // Skip CORS if already handled by middleware above
+  if (req._corsHandled) {
     return next();
   }
-  
   // Apply CORS for all other paths
   return cors(corsOptions)(req, res, next);
 });
