@@ -157,14 +157,31 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
 
     if (onProgress) onProgress(30, request_id);
 
-    // Poll for completion
+    // Poll for completion with exponential backoff to reduce API spam
     let attempts = 0;
-    const maxAttempts = 300; // 5 minutes max (video generation takes longer)
+    const maxAttempts = 300; // 15 minutes max (video generation takes longer)
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 5;
+    let lastStatus = null;
+    let pollInterval = 3000; // Start with 3 seconds
     
     while (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+      // Use exponential backoff: increase interval if still in queue/progress
+      // Start with 3s, increase to 5s after 10 attempts, 10s after 30 attempts
+      if (attempts > 30) {
+        pollInterval = 10000; // 10 seconds for long-running requests
+      } else if (attempts > 10) {
+        pollInterval = 5000; // 5 seconds after initial polling
+      } else {
+        pollInterval = 3000; // 3 seconds for first 10 attempts
+      }
+      
+      // If status is IN_QUEUE, poll less frequently (it's just waiting)
+      if (lastStatus === 'IN_QUEUE' || lastStatus === 'in_queue') {
+        pollInterval = Math.max(pollInterval, 5000); // At least 5 seconds when queued
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
       
       // Update progress (30-80% during polling)
       if (onProgress) {
@@ -223,10 +240,13 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
       // Handle different status formats from API
       // Status might be: "IN_QUEUE", "IN_PROGRESS", "COMPLETED", "FAILED"
       const currentStatus = status.status || status;
+      lastStatus = currentStatus; // Track status for adaptive polling
       
       logger.debug('Video generation status', { 
         status: currentStatus,
-        fullStatus: status 
+        fullStatus: status,
+        attempt: attempts + 1,
+        pollInterval
       });
 
       if (currentStatus === 'COMPLETED' || currentStatus === 'completed') {

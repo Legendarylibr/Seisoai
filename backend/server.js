@@ -445,19 +445,31 @@ const corsOptions = {
     // Allow localhost, whitelisted origins, or any origin if ALLOWED_ORIGINS not set
     // Same logic for both dev and production
     if (isLocalhost || isAllowedOrigin || allowedOriginsList.length === 0) {
-      logger.debug('CORS: Allowed origin', { origin, isLocalhost, isAllowedOrigin, allowedOriginsListLength: allowedOriginsList.length });
+      // Log when origin is allowed (info level so it's visible)
+      const reason = isLocalhost ? 'localhost' : 
+                     isAllowedOrigin ? 'in allowed list' : 
+                     'ALLOWED_ORIGINS not set (permissive mode)';
+      logger.info('CORS: ✅ Allowed origin', { 
+        origin, 
+        reason,
+        isLocalhost, 
+        isAllowedOrigin, 
+        allowedOriginsCount: allowedOriginsList.length,
+        allowedOrigins: allowedOriginsList.length > 0 ? allowedOriginsList : ['any origin allowed']
+      });
       // Return the actual origin (not true) so CORS library sets it correctly with credentials
       return callback(null, origin);
     }
     
     // Reject non-localhost, non-whitelisted origins (only if ALLOWED_ORIGINS is set)
-    logger.warn('CORS: Rejected origin', { 
+    logger.warn('CORS: ❌ Rejected origin', { 
       origin, 
       originLower,
       allowedOrigins: process.env.ALLOWED_ORIGINS,
       allowedOriginsArray: allowedOriginsList,
       isAllowed: isAllowedOrigin,
-      isLocalhost
+      isLocalhost,
+      reason: 'Origin not in ALLOWED_ORIGINS list and not localhost'
     });
     return callback(new Error(`Not allowed by CORS. Origin '${origin}' is not in ALLOWED_ORIGINS: ${process.env.ALLOWED_ORIGINS || 'not set'}`));
   },
@@ -916,7 +928,7 @@ app.post('/api/wan-animate/upload-video-direct', async (req, res) => {
   }
 });
 
-app.post('/api/wan-animate/upload-video', async (req, res) => {
+app.post('/api/wan-animate/upload-video', wanUploadLimiter, async (req, res) => {
   try {
     if (!FAL_API_KEY) {
       return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
@@ -928,9 +940,40 @@ app.post('/api/wan-animate/upload-video', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid video data URI' });
     }
 
+    // SECURITY: Limit data URI size to prevent memory exhaustion (50MB max)
+    const MAX_DATA_URI_SIZE = 50 * 1024 * 1024; // 50MB
+    if (videoDataUri.length > MAX_DATA_URI_SIZE) {
+      logger.warn('Video data URI too large', { 
+        size: videoDataUri.length,
+        maxSize: MAX_DATA_URI_SIZE,
+        ip: req.ip
+      });
+      return res.status(400).json({ 
+        success: false, 
+        error: `Video file too large. Maximum size is ${MAX_DATA_URI_SIZE / (1024 * 1024)}MB.` 
+      });
+    }
+
     // Convert data URI to buffer
     const base64Data = videoDataUri.split(',')[1];
+    if (!base64Data) {
+      return res.status(400).json({ success: false, error: 'Invalid video data URI format' });
+    }
+    
     const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Additional size check after decoding (base64 is ~33% larger)
+    if (buffer.length > MAX_DATA_URI_SIZE) {
+      logger.warn('Decoded video buffer too large', { 
+        bufferSize: buffer.length,
+        maxSize: MAX_DATA_URI_SIZE,
+        ip: req.ip
+      });
+      return res.status(400).json({ 
+        success: false, 
+        error: `Video file too large after decoding. Maximum size is ${MAX_DATA_URI_SIZE / (1024 * 1024)}MB.` 
+      });
+    }
     
     // Determine MIME type from data URI
     const mimeMatch = videoDataUri.match(/data:([^;]+)/);
@@ -990,7 +1033,7 @@ app.post('/api/wan-animate/upload-video', async (req, res) => {
   }
 });
 
-app.post('/api/wan-animate/upload-image', async (req, res) => {
+app.post('/api/wan-animate/upload-image', wanUploadLimiter, async (req, res) => {
   try {
     if (!FAL_API_KEY) {
       return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
@@ -1002,9 +1045,40 @@ app.post('/api/wan-animate/upload-image', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid image data URI' });
     }
 
+    // SECURITY: Limit data URI size to prevent memory exhaustion (10MB max for images)
+    const MAX_IMAGE_DATA_URI_SIZE = 10 * 1024 * 1024; // 10MB
+    if (imageDataUri.length > MAX_IMAGE_DATA_URI_SIZE) {
+      logger.warn('Image data URI too large', { 
+        size: imageDataUri.length,
+        maxSize: MAX_IMAGE_DATA_URI_SIZE,
+        ip: req.ip
+      });
+      return res.status(400).json({ 
+        success: false, 
+        error: `Image file too large. Maximum size is ${MAX_IMAGE_DATA_URI_SIZE / (1024 * 1024)}MB.` 
+      });
+    }
+
     // Convert data URI to buffer
     const base64Data = imageDataUri.split(',')[1];
+    if (!base64Data) {
+      return res.status(400).json({ success: false, error: 'Invalid image data URI format' });
+    }
+    
     const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Additional size check after decoding
+    if (buffer.length > MAX_IMAGE_DATA_URI_SIZE) {
+      logger.warn('Decoded image buffer too large', { 
+        bufferSize: buffer.length,
+        maxSize: MAX_IMAGE_DATA_URI_SIZE,
+        ip: req.ip
+      });
+      return res.status(400).json({ 
+        success: false, 
+        error: `Image file too large after decoding. Maximum size is ${MAX_IMAGE_DATA_URI_SIZE / (1024 * 1024)}MB.` 
+      });
+    }
     
     // Determine MIME type from data URI
     const mimeMatch = imageDataUri.match(/data:([^;]+)/);
@@ -1068,7 +1142,7 @@ app.post('/api/wan-animate/upload-image', async (req, res) => {
 // Documentation: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
 // SECURITY: Requires credits check before making external API calls
 // Minimum 2 credits required for video generation (2 credits per second)
-app.post('/api/wan-animate/submit', requireCredits(2), async (req, res) => {
+app.post('/api/wan-animate/submit', wanSubmitLimiter, requireCredits(2), async (req, res) => {
   try {
     if (!FAL_API_KEY) {
       logger.error('FAL_API_KEY not configured');
@@ -1097,6 +1171,56 @@ app.post('/api/wan-animate/submit', requireCredits(2), async (req, res) => {
       return res.status(400).json({ success: false, error: 'image_url is required and must be a non-empty string' });
     }
     
+    // SECURITY: Validate URLs to prevent SSRF attacks
+    // Only allow URLs from trusted domains (fal.ai, fal.media, or data URIs)
+    const videoUrl = input.video_url.trim();
+    const imageUrl = input.image_url.trim();
+    
+    const isValidUrl = (url) => {
+      // Allow data URIs (for uploaded files)
+      if (url.startsWith('data:')) return true;
+      
+      // Allow fal.ai and fal.media domains (trusted CDN)
+      try {
+        const urlObj = new URL(url);
+        const hostname = urlObj.hostname.toLowerCase();
+        return hostname.includes('fal.ai') || 
+               hostname.includes('fal.media') ||
+               hostname.endsWith('.fal.ai') ||
+               hostname.endsWith('.fal.media');
+      } catch (e) {
+        return false; // Invalid URL format
+      }
+    };
+    
+    if (!isValidUrl(videoUrl)) {
+      logger.warn('Invalid video URL - potential SSRF attempt', { 
+        videoUrl: videoUrl.substring(0, 100),
+        userId: req.user?.userId,
+        email: req.user?.email,
+        walletAddress: req.user?.walletAddress,
+        ip: req.ip
+      });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid video_url. Only URLs from fal.ai/fal.media or data URIs are allowed.' 
+      });
+    }
+    
+    if (!isValidUrl(imageUrl)) {
+      logger.warn('Invalid image URL - potential SSRF attempt', { 
+        imageUrl: imageUrl.substring(0, 100),
+        userId: req.user?.userId,
+        email: req.user?.email,
+        walletAddress: req.user?.walletAddress,
+        ip: req.ip
+      });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid image_url. Only URLs from fal.ai/fal.media or data URIs are allowed.' 
+      });
+    }
+    
     // Validate and sanitize optional parameters according to API spec
     // https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
     const validResolutions = ['480p', '580p', '720p'];
@@ -1104,9 +1228,36 @@ app.post('/api/wan-animate/submit', requireCredits(2), async (req, res) => {
     const validVideoWriteModes = ['fast', 'balanced', 'small'];
     
     const validatedInput = {
-      video_url: input.video_url.trim(),
-      image_url: input.image_url.trim()
+      video_url: videoUrl,
+      image_url: imageUrl
     };
+    
+    // SECURITY: Prevent duplicate submissions within 30 seconds
+    // Create a hash of the request to identify duplicates
+    const requestHash = crypto.createHash('sha256')
+      .update(`${videoUrl}|${imageUrl}|${req.user?.userId || req.user?.email || req.user?.walletAddress || req.ip}`)
+      .digest('hex');
+    
+    const now = Date.now();
+    const lastSubmission = recentSubmissions.get(requestHash);
+    if (lastSubmission && (now - lastSubmission < DUPLICATE_PREVENTION_TTL)) {
+      const timeRemaining = Math.ceil((DUPLICATE_PREVENTION_TTL - (now - lastSubmission)) / 1000);
+      logger.warn('Duplicate submission attempt blocked', {
+        requestHash: requestHash.substring(0, 16),
+        timeRemaining,
+        userId: req.user?.userId,
+        email: req.user?.email,
+        walletAddress: req.user?.walletAddress,
+        ip: req.ip
+      });
+      return res.status(429).json({
+        success: false,
+        error: `Duplicate request detected. Please wait ${timeRemaining} second(s) before submitting the same request again.`
+      });
+    }
+    
+    // Record this submission
+    recentSubmissions.set(requestHash, now);
     
     // Optional parameters with validation
     if (input.guidance_scale !== undefined) {
@@ -1253,18 +1404,28 @@ app.post('/api/wan-animate/submit', requireCredits(2), async (req, res) => {
         }
       }
       
-      // Check if error is related to API key authentication
-      if (errorMessage.includes('Key') && (errorMessage.includes('Secret') || errorMessage.includes('not found') || errorMessage.includes('invalid'))) {
+      // Check if error is related to API key authentication (401 or 403 status)
+      const isAuthError = response.status === 401 || response.status === 403;
+      const isKeyError = errorMessage.toLowerCase().includes('key') || 
+                         errorMessage.toLowerCase().includes('secret') || 
+                         errorMessage.toLowerCase().includes('not found') || 
+                         errorMessage.toLowerCase().includes('invalid') ||
+                         errorMessage.toLowerCase().includes('unauthorized') ||
+                         errorMessage.toLowerCase().includes('authentication');
+      
+      if (isAuthError || isKeyError) {
         logger.error('FAL_API_KEY authentication error', {
           status: response.status,
           errorMessage,
+          responseText: responseText.substring(0, 500),
           hasApiKey: !!FAL_API_KEY && FAL_API_KEY.length > 0,
           apiKeyLength: FAL_API_KEY ? FAL_API_KEY.length : 0,
-          apiKeyPrefix: FAL_API_KEY ? FAL_API_KEY.substring(0, 10) + '...' : 'none'
+          apiKeyPrefix: FAL_API_KEY ? FAL_API_KEY.substring(0, 10) + '...' : 'none',
+          apiKeyStartsWith: FAL_API_KEY ? (FAL_API_KEY.startsWith('fal_') ? 'fal_' : 'other') : 'none'
         });
         return res.status(401).json({ 
           success: false, 
-          error: 'FAL_API_KEY authentication failed. Please check your API key configuration.'
+          error: `FAL_API_KEY authentication failed (${response.status}). ${errorMessage}. Please check your API key configuration in backend.env.`
         });
       }
       
@@ -1384,8 +1545,9 @@ app.post('/api/generate/image', requireCredits(1), async (req, res) => {
 
     if (!response.ok) {
       let errorMessage = `HTTP error! status: ${response.status}`;
+      let errorData = null;
       try {
-        const errorData = await response.json();
+        errorData = await response.json();
         if (errorData.detail) {
           errorMessage = Array.isArray(errorData.detail)
             ? errorData.detail.map(err => err.msg || err).join('; ')
@@ -1399,7 +1561,34 @@ app.post('/api/generate/image', requireCredits(1), async (req, res) => {
         const errorText = await response.text();
         errorMessage = errorText || errorMessage;
       }
-      logger.error('Fal.ai image generation error', { status: response.status, errorMessage });
+      
+      // Check if error is related to API key authentication (401 or 403 status)
+      const isAuthError = response.status === 401 || response.status === 403;
+      const isKeyError = errorMessage.toLowerCase().includes('key') || 
+                         errorMessage.toLowerCase().includes('secret') || 
+                         errorMessage.toLowerCase().includes('not found') || 
+                         errorMessage.toLowerCase().includes('invalid') ||
+                         errorMessage.toLowerCase().includes('unauthorized') ||
+                         errorMessage.toLowerCase().includes('authentication') ||
+                         errorMessage.toLowerCase().includes('no user found');
+      
+      if (isAuthError || isKeyError) {
+        logger.error('FAL_API_KEY authentication error in image generation', {
+          status: response.status,
+          errorMessage,
+          errorData,
+          hasApiKey: !!FAL_API_KEY && FAL_API_KEY.length > 0,
+          apiKeyLength: FAL_API_KEY ? FAL_API_KEY.length : 0,
+          apiKeyPrefix: FAL_API_KEY ? FAL_API_KEY.substring(0, 10) + '...' : 'none',
+          apiKeyStartsWith: FAL_API_KEY ? (FAL_API_KEY.startsWith('fal_') ? 'fal_' : 'other') : 'none'
+        });
+        return res.status(401).json({ 
+          success: false, 
+          error: `FAL_API_KEY authentication failed (${response.status}). ${errorMessage}. Please check your FAL_API_KEY in backend.env - it should start with 'fal_' and be a valid fal.ai API key.`
+        });
+      }
+      
+      logger.error('Fal.ai image generation error', { status: response.status, errorMessage, errorData });
       return res.status(response.status).json({ success: false, error: errorMessage });
     }
 
@@ -1423,14 +1612,99 @@ app.post('/api/generate/image', requireCredits(1), async (req, res) => {
   }
 });
 
+// Rate limiters for Wan 2.2 endpoints (prevent API abuse)
+
+// In-memory cache for duplicate request prevention (prevents same request within 30 seconds)
+const recentSubmissions = new Map();
+const DUPLICATE_PREVENTION_TTL = 30 * 1000; // 30 seconds
+
+// Cleanup old entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamp] of recentSubmissions.entries()) {
+    if (now - timestamp > DUPLICATE_PREVENTION_TTL) {
+      recentSubmissions.delete(key);
+    }
+  }
+}, 60000); // Cleanup every minute
+
+// Status checks - allow 60 requests per minute per IP
+const wanStatusLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 60, // limit each IP to 60 requests per minute
+  message: {
+    error: 'Too many status check requests. Please wait a moment.',
+    retryAfter: '1 minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Submit endpoint - prevent spam submissions (strict limit)
+const wanSubmitLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 10, // limit each IP to 10 submissions per 5 minutes
+  message: {
+    error: 'Too many video generation requests. Please wait before submitting another.',
+    retryAfter: '5 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Upload endpoints - prevent file upload spam
+const wanUploadLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 20, // limit each IP to 20 uploads per minute
+  message: {
+    error: 'Too many upload requests. Please wait a moment.',
+    retryAfter: '1 minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Result endpoint - prevent result fetching spam
+const wanResultLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 30, // limit each IP to 30 result fetches per minute
+  message: {
+    error: 'Too many result requests. Please wait a moment.',
+    retryAfter: '1 minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // Status endpoint for Wan 2.2 Animate Replace
 // API: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
-app.get('/api/wan-animate/status/:requestId', async (req, res) => {
+app.get('/api/wan-animate/status/:requestId', wanStatusLimiter, async (req, res) => {
   try {
     if (!FAL_API_KEY) {
       return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
     }
     const { requestId } = req.params;
+    
+    // SECURITY: Validate requestId format to prevent injection attacks
+    // fal.ai request IDs are typically UUIDs or alphanumeric strings
+    if (!requestId || typeof requestId !== 'string' || requestId.length > 200) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid request ID format' 
+      });
+    }
+    
+    // Only allow alphanumeric, hyphens, underscores, and dots
+    if (!/^[a-zA-Z0-9._-]+$/.test(requestId)) {
+      logger.warn('Invalid requestId format - potential injection attempt', { 
+        requestId: requestId.substring(0, 50),
+        ip: req.ip
+      });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid request ID format. Only alphanumeric characters, hyphens, underscores, and dots are allowed.' 
+      });
+    }
     // fal.ai queue API: try alternative endpoint structure
     // Based on: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
     // Try using the model endpoint with requestId as query parameter
@@ -1561,12 +1835,32 @@ app.get('/api/wan-animate/status/:requestId', async (req, res) => {
 
 // Result endpoint for Wan 2.2 Animate Replace
 // API: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
-app.get('/api/wan-animate/result/:requestId', async (req, res) => {
+app.get('/api/wan-animate/result/:requestId', wanResultLimiter, async (req, res) => {
   try {
     if (!FAL_API_KEY) {
       return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
     }
     const { requestId } = req.params;
+    
+    // SECURITY: Validate requestId format to prevent injection attacks
+    if (!requestId || typeof requestId !== 'string' || requestId.length > 200) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid request ID format' 
+      });
+    }
+    
+    // Only allow alphanumeric, hyphens, underscores, and dots
+    if (!/^[a-zA-Z0-9._-]+$/.test(requestId)) {
+      logger.warn('Invalid requestId format - potential injection attempt', { 
+        requestId: requestId.substring(0, 50),
+        ip: req.ip
+      });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid request ID format. Only alphanumeric characters, hyphens, underscores, and dots are allowed.' 
+      });
+    }
     // fal.ai queue API: try alternative endpoint structure
     // Based on: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
     // Try using the model endpoint with requestId as query parameter
@@ -2886,6 +3180,11 @@ app.get('/api/health', async (req, res) => {
     const dbState = mongoose.connection.readyState;
     const dbStatus = dbState === 1 ? 'connected' : dbState === 2 ? 'connecting' : 'disconnected';
     
+    // Get CORS configuration
+    const allowedOriginsList = process.env.ALLOWED_ORIGINS 
+      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+      : [];
+    
     const health = {
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -2893,7 +3192,12 @@ app.get('/api/health', async (req, res) => {
       environment: process.env.NODE_ENV || 'development',
       database: dbStatus,
       port: process.env.PORT || 3001,
-      version: '1.0.0'
+      version: '1.0.0',
+      cors: {
+        allowedOriginsCount: allowedOriginsList.length,
+        allowedOrigins: allowedOriginsList.length > 0 ? allowedOriginsList : ['localhost (any port)', 'any origin (ALLOWED_ORIGINS not set)'],
+        credentials: true
+      }
     };
     
     // Always return 200 - server is healthy if it can respond
@@ -2907,6 +3211,81 @@ app.get('/api/health', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   }
+});
+
+/**
+ * CORS debug endpoint - shows current CORS configuration
+ * Useful for debugging CORS issues
+ * This endpoint itself validates CORS, so you can see if your origin is allowed
+ */
+app.get('/api/cors-info', (req, res) => {
+  const allowedOriginsList = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : [];
+  
+  const origin = req.headers.origin;
+  let wouldBeAllowed = 'unknown';
+  let validationDetails = {};
+  
+  if (!origin) {
+    wouldBeAllowed = 'yes (no origin - handled by middleware)';
+  } else {
+    const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+    const originLower = origin.toLowerCase();
+    
+    const isAllowedOrigin = allowedOriginsList.some(allowed => {
+      const allowedLower = allowed.toLowerCase();
+      return allowedLower === originLower || 
+             allowedLower.replace(/\/$/, '') === originLower.replace(/\/$/, '');
+    });
+    
+    if (isLocalhost) {
+      wouldBeAllowed = 'yes (localhost - always allowed)';
+    } else if (allowedOriginsList.length === 0) {
+      wouldBeAllowed = 'yes (ALLOWED_ORIGINS not set - permissive mode)';
+    } else if (isAllowedOrigin) {
+      wouldBeAllowed = 'yes (in allowed list)';
+    } else {
+      wouldBeAllowed = 'no (not in allowed list)';
+    }
+    
+    validationDetails = {
+      isLocalhost,
+      isAllowedOrigin,
+      originLower,
+      checkedAgainst: allowedOriginsList
+    };
+  }
+  
+  const corsInfo = {
+    environment: process.env.NODE_ENV || 'development',
+    allowedOrigins: {
+      raw: process.env.ALLOWED_ORIGINS || 'not set',
+      parsed: allowedOriginsList,
+      count: allowedOriginsList.length,
+      mode: allowedOriginsList.length === 0 ? 'permissive (allows any origin)' : 'restrictive (only listed origins)',
+      note: allowedOriginsList.length === 0 
+        ? '⚠️ WARNING: ALLOWED_ORIGINS not set - allowing ALL origins (not recommended for production)'
+        : '✅ ALLOWED_ORIGINS is set - only listed origins are allowed'
+    },
+    localhost: {
+      allowed: true,
+      note: 'localhost and 127.0.0.1 are always allowed on any port'
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    currentRequest: {
+      origin: origin || 'no origin header',
+      wouldBeAllowed,
+      validationDetails
+    },
+    verification: {
+      message: 'If you can see this response, CORS validation is working!',
+      note: 'Check server logs for "CORS: ✅ Allowed origin" or "CORS: ❌ Rejected origin" messages'
+    }
+  };
+  
+  res.status(200).json(corsInfo);
 });
 
 /**

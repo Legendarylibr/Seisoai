@@ -7,6 +7,10 @@ const SimpleWalletContext = createContext();
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+// Request deduplication - prevent multiple simultaneous requests for same wallet
+// Shared across all instances to prevent duplicate requests from multiple tabs/components
+const pendingRequests = new Map();
+
 export const SimpleWalletProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [address, setAddress] = useState(null);
@@ -17,7 +21,7 @@ export const SimpleWalletProvider = ({ children }) => {
   const [isNFTHolder, setIsNFTHolder] = useState(false);
   const [nftCollections, setNftCollections] = useState([]);
   const [walletType, setWalletType] = useState(null); // 'evm' or 'solana'
-
+  
   // Fetch credits from backend with retry logic and caching
   const fetchCredits = useCallback(async (walletAddress, retries = 3, skipCache = false) => {
       if (!walletAddress) {
@@ -28,6 +32,14 @@ export const SimpleWalletProvider = ({ children }) => {
 
     // Normalize wallet address (lowercase for EVM addresses)
     const normalizedAddress = walletAddress.toLowerCase();
+    
+    // Check if there's already a pending request for this wallet
+    const requestKey = `${normalizedAddress}_${skipCache ? 'fresh' : 'cached'}`;
+    if (pendingRequests.has(requestKey)) {
+      logger.debug('Deduplicating credit fetch request', { walletAddress: normalizedAddress });
+      return pendingRequests.get(requestKey);
+    }
+    
     logger.debug('Fetching credits', { walletAddress: normalizedAddress });
     
     // Check cache first (1 minute cache for credits) - skip if skipCache is true
@@ -63,12 +75,14 @@ export const SimpleWalletProvider = ({ children }) => {
       logger.debug('Cache cleared, fetching fresh credits');
     }
 
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        // Skip NFT checks for faster credits fetching - NFT checks happen separately
-        const apiEndpoint = `${API_URL}/api/users/${normalizedAddress}?skipNFTs=true`;
-        logger.debug('Fetching credits from backend', { walletAddress: normalizedAddress, attempt, retries });
-        const response = await fetch(apiEndpoint, {
+    // Create promise and store it for deduplication
+    const fetchPromise = (async () => {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          // Skip NFT checks for faster credits fetching - NFT checks happen separately
+          const apiEndpoint = `${API_URL}/api/users/${normalizedAddress}?skipNFTs=true`;
+          logger.debug('Fetching credits from backend', { walletAddress: normalizedAddress, attempt, retries });
+          const response = await fetch(apiEndpoint, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -158,6 +172,7 @@ export const SimpleWalletProvider = ({ children }) => {
           if (attempt === retries) {
             setCredits(0);
             logger.warn('All attempts failed - credits set to 0');
+            return 0;
           }
         }
       } catch (error) {
@@ -175,13 +190,14 @@ export const SimpleWalletProvider = ({ children }) => {
         if (error.name === 'AbortError') {
           logger.warn('Request aborted', { walletAddress: normalizedAddress });
           setCredits(0);
-          return;
+          return 0;
         }
         
         // On last attempt, set credits to 0
         if (attempt === retries) {
           logger.error('All retry attempts failed', { walletAddress: normalizedAddress });
           setCredits(0);
+          return 0;
         } else {
           // Wait before retrying (exponential backoff)
           const delay = Math.min(1000 * attempt, 3000); // Max 3 second delay
@@ -190,6 +206,21 @@ export const SimpleWalletProvider = ({ children }) => {
         }
       }
     }
+    return 0; // Fallback
+    })();
+    
+    // Store promise for deduplication
+    pendingRequests.set(requestKey, fetchPromise);
+    
+    // Clean up after request completes
+    fetchPromise.finally(() => {
+      // Small delay before removing to allow concurrent requests to share the promise
+      setTimeout(() => {
+        pendingRequests.delete(requestKey);
+      }, 100);
+    });
+    
+    return fetchPromise;
   }, [API_URL]);
 
   // Check NFT holdings with caching
@@ -570,13 +601,13 @@ export const SimpleWalletProvider = ({ children }) => {
       logger.error('Initial credit refresh failed', { error: error.message, address });
     });
 
-    // Refresh credits every 60 seconds to keep display updated
+    // Refresh credits every 2 minutes to keep display updated (reduced from 60s to reduce API spam)
     const refreshInterval = setInterval(() => {
       logger.debug('Periodic credit refresh');
       fetchCredits(address).catch(error => {
         logger.error('Periodic credit refresh failed', { error: error.message, address });
       });
-    }, 60000); // Every 60 seconds
+    }, 120000); // Every 2 minutes (reduced API calls)
 
     // Cleanup interval on unmount
     return () => clearInterval(refreshInterval);

@@ -102,13 +102,13 @@ export const EmailAuthProvider = ({ children }) => {
     checkAuth();
   }, [fetchUserData]);
 
-  // Refresh credits periodically
+  // Refresh credits periodically (reduced frequency to prevent API spam)
   useEffect(() => {
     if (!isAuthenticated) return;
 
     const refreshInterval = setInterval(() => {
       fetchUserData();
-    }, 60000); // Every 60 seconds
+    }, 120000); // Every 2 minutes (reduced from 60s to reduce API calls)
 
     return () => clearInterval(refreshInterval);
   }, [isAuthenticated, fetchUserData]);
