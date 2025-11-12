@@ -2882,22 +2882,27 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
 
 /**
  * Health check - Railway compatible
+ * Always returns 200 as long as the server is running
+ * Database connection status is informational only
  */
 app.get('/api/health', async (req, res) => {
   try {
+    const dbState = mongoose.connection.readyState;
+    const dbStatus = dbState === 1 ? 'connected' : dbState === 2 ? 'connecting' : 'disconnected';
+    
     const health = {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development',
-      database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      database: dbStatus,
       port: process.env.PORT || 3001,
       version: '1.0.0'
     };
     
-    // Return 200 for healthy, 503 for unhealthy
-    const statusCode = health.database === 'connected' || process.env.NODE_ENV !== 'production' ? 200 : 503;
-    res.status(statusCode).json(health);
+    // Always return 200 - server is healthy if it can respond
+    // Database connection can happen asynchronously and shouldn't fail healthcheck
+    res.status(200).json(health);
   } catch (error) {
     logger.error('Health check error:', error);
     res.status(500).json({
