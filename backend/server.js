@@ -3174,13 +3174,15 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
  * Health check - Railway compatible
  * Always returns 200 as long as the server is running
  * Database connection status is informational only
+ * This endpoint must be simple and fast - no async operations that could fail
  */
-app.get('/api/health', async (req, res) => {
+app.get('/api/health', (req, res) => {
   try {
+    // Simple synchronous health check - no async operations
     const dbState = mongoose.connection.readyState;
     const dbStatus = dbState === 1 ? 'connected' : dbState === 2 ? 'connecting' : 'disconnected';
     
-    // Get CORS configuration
+    // Get CORS configuration (synchronous)
     const allowedOriginsList = process.env.ALLOWED_ORIGINS 
       ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
       : [];
@@ -3204,11 +3206,15 @@ app.get('/api/health', async (req, res) => {
     // Database connection can happen asynchronously and shouldn't fail healthcheck
     res.status(200).json(health);
   } catch (error) {
+    // Even if there's an error, try to return something
+    // This ensures Railway knows the server is running
     logger.error('Health check error:', error);
-    res.status(500).json({
-      status: 'unhealthy',
-      error: getSafeErrorMessage(error, 'Health check failed'),
-      timestamp: new Date().toISOString()
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      note: 'Health check had minor error but server is running',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -6202,23 +6208,37 @@ const startServer = async (port = process.env.PORT || 3001) => {
   // Ensure port is a number
   const serverPort = parseInt(port, 10);
   
-  const server = app.listen(serverPort, '0.0.0.0', () => {
-    logger.info(`AI Image Generator API running on port ${serverPort}`);
-    logger.info(`MongoDB connected: ${mongoose.connection.readyState === 1 ? 'Yes' : 'No'}`);
-    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`✅ Server started successfully on port ${serverPort}`);
-    console.log(`🌐 Health check: http://localhost:${serverPort}/api/health`);
-  });
+  if (isNaN(serverPort) || serverPort < 1 || serverPort > 65535) {
+    const error = new Error(`Invalid port: ${port}`);
+    console.error('❌ Invalid port:', port);
+    throw error;
+  }
+  
+  return new Promise((resolve, reject) => {
+    const server = app.listen(serverPort, '0.0.0.0', () => {
+      logger.info(`AI Image Generator API running on port ${serverPort}`);
+      logger.info(`MongoDB connected: ${mongoose.connection.readyState === 1 ? 'Yes' : 'No'}`);
+      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`✅ Server started successfully on port ${serverPort}`);
+      console.log(`🌐 Health check: http://0.0.0.0:${serverPort}/api/health`);
+      console.log(`🌐 Health check (localhost): http://localhost:${serverPort}/api/health`);
+      
+      // Health check endpoint is ready - no need to verify with fetch
+      // The endpoint will respond when Railway's healthcheck probes it
+      
+      resolve(server);
+    });
 
-  server.on('error', (err) => {
-    console.error('❌ Server error:', err);
-    if (err.code === 'EADDRINUSE') {
-      logger.warn(`Port ${serverPort} is in use, trying port ${serverPort + 1}`);
-      startServer(serverPort + 1);
-    } else {
-      logger.error('Server error:', err);
-      process.exit(1);
-    }
+    server.on('error', (err) => {
+      console.error('❌ Server error:', err);
+      if (err.code === 'EADDRINUSE') {
+        logger.warn(`Port ${serverPort} is in use, trying port ${serverPort + 1}`);
+        startServer(serverPort + 1).then(resolve).catch(reject);
+      } else {
+        logger.error('Server error:', err);
+        reject(err);
+      }
+    });
   });
 
   // Cleanup job: Remove gallery items older than 30 days
@@ -6283,6 +6303,16 @@ export { startServer };
 export default app;
 
 // Start server if this file is run directly
-if (process.argv[1] && process.argv[1].includes('server.js')) {
-  startServer();
+// Also start if called via serve-real-backend.js or any other entry point
+if (import.meta.url === `file://${process.argv[1]}` || 
+    (process.argv[1] && process.argv[1].includes('server.js')) ||
+    !process.env.RAILWAY_ENVIRONMENT) {
+  // Only auto-start if not being imported (Railway uses serve-real-backend.js)
+  // But allow manual start for testing
+  if (process.argv[1] && process.argv[1].includes('server.js')) {
+    startServer().catch(error => {
+      console.error('❌ Failed to start server:', error);
+      process.exit(1);
+    });
+  }
 }
