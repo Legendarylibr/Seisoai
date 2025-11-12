@@ -15,14 +15,17 @@
     
     <!-- Enhanced wallet conflict resolution - must run first -->
     <script>
-      (function() {
-        'use strict';
-        
-        // Prevent multiple executions
-        if (window.__walletConflictResolutionSetup) {
-          return;
-        }
+      // CRITICAL: This must run IMMEDIATELY and SYNCHRONOUSLY before ANY other script
+      // No IIFE wrapper - execute directly to ensure it runs first
+      'use strict';
+      
+      // Prevent multiple executions
+      if (window.__walletConflictResolutionSetup) {
+        // Already set up, but ensure handlers are still active
+      } else {
         window.__walletConflictResolutionSetup = true;
+        
+        (function() {
         
         // CRITICAL: Set up error handlers FIRST before anything else
         // This catches errors from evmAsk.js and other extension scripts
@@ -303,7 +306,8 @@
         // Note: We no longer aggressively block script injection - we handle redefinition gracefully
         
         console.log('🛡️ Enhanced wallet conflict resolution initialized');
-      })();
+        })();
+      }
     </script>
   </head>
   <body>

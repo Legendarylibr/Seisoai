@@ -2965,6 +2965,23 @@ app.post('/api/logs', (req, res) => {
   }
 });
 
+// Favicon handler - serve the PNG icon as favicon.ico
+app.get('/favicon.ico', (req, res) => {
+  const faviconPath = path.join(__dirname, '..', 'dist', '1d1c7555360a737bb22bbdfc2784655f.png');
+  const defaultFaviconPath = path.join(__dirname, '..', 'public', 'favicon.ico');
+  
+  // Try to serve the PNG icon first, then fallback to default favicon
+  if (fs.existsSync(faviconPath)) {
+    res.setHeader('Content-Type', 'image/png');
+    res.sendFile(faviconPath);
+  } else if (fs.existsSync(defaultFaviconPath)) {
+    res.sendFile(defaultFaviconPath);
+  } else {
+    // Return 204 No Content if no favicon exists (prevents 403 errors)
+    res.status(204).end();
+  }
+});
+
 // Root route - serve frontend index.html (SPA routing)
 // Health check is available at /api/health
 app.get('/', (req, res) => {
