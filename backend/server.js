@@ -394,19 +394,38 @@ const corsOptions = {
     
     // Check if origin is in allowed list (trim whitespace and handle variations)
     const allowedOriginsList = process.env.ALLOWED_ORIGINS 
-      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim().toLowerCase())
       : [];
+    const originLower = origin.toLowerCase();
+    
     const isAllowedOrigin = allowedOriginsList.some(allowed => {
-      // Exact match
-      if (allowed === origin) return true;
-      // Match with/without trailing slash
+      // Normalize both for comparison (remove trailing slash, normalize protocol)
+      const normalizeUrl = (url) => {
+        return url
+          .replace(/\/$/, '') // Remove trailing slash
+          .replace(/^https?:\/\//, '') // Remove protocol
+          .replace(/^www\./, ''); // Remove www
+      };
+      
+      const normalizedAllowed = normalizeUrl(allowed);
+      const normalizedOrigin = normalizeUrl(originLower);
+      
+      // Exact match (case-insensitive)
+      if (allowed === originLower) return true;
+      
+      // Match without trailing slash
       const allowedNoSlash = allowed.replace(/\/$/, '');
-      const originNoSlash = origin.replace(/\/$/, '');
+      const originNoSlash = originLower.replace(/\/$/, '');
       if (allowedNoSlash === originNoSlash) return true;
-      // Match with/without www (for same domain)
-      const allowedNoWww = allowed.replace(/^https?:\/\/(www\.)?/, 'https://');
-      const originNoWww = origin.replace(/^https?:\/\/(www\.)?/, 'https://');
+      
+      // Match normalized (without protocol and www)
+      if (normalizedAllowed === normalizedOrigin) return true;
+      
+      // Match with/without www prefix
+      const allowedNoWww = allowed.replace(/^www\./, '');
+      const originNoWww = originLower.replace(/^www\./, '');
       if (allowedNoWww === originNoWww) return true;
+      
       return false;
     });
     
@@ -417,12 +436,14 @@ const corsOptions = {
         return callback(null, true);
       }
       // Reject unauthorized origin in production - log detailed info for debugging
-      logger.error('CORS: Rejected unauthorized origin in production', { 
+      logger.warn('CORS: Rejected unauthorized origin in production', { 
         origin, 
+        originLower,
         allowedOrigins: process.env.ALLOWED_ORIGINS,
-        allowedOriginsArray: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [],
+        allowedOriginsArray: allowedOriginsList,
         isAllowed: isAllowedOrigin,
-        exactMatch: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').includes(origin) : false
+        path: req.path,
+        method: req.method
       });
       return callback(new Error(`Not allowed by CORS. Origin '${origin}' is not in ALLOWED_ORIGINS: ${process.env.ALLOWED_ORIGINS || 'not set'}`));
     }
@@ -488,9 +509,30 @@ app.options('*', (req, res) => {
     }
   } else {
     const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
-    const isAllowedOrigin = process.env.ALLOWED_ORIGINS 
-      ? process.env.ALLOWED_ORIGINS.split(',').includes(origin)
-      : false;
+    
+    // Use same improved origin matching logic as corsOptions
+    const allowedOriginsList = process.env.ALLOWED_ORIGINS 
+      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim().toLowerCase())
+      : [];
+    const originLower = origin.toLowerCase();
+    
+    const isAllowedOrigin = allowedOriginsList.some(allowed => {
+      const normalizeUrl = (url) => {
+        return url
+          .replace(/\/$/, '')
+          .replace(/^https?:\/\//, '')
+          .replace(/^www\./, '');
+      };
+      
+      const normalizedAllowed = normalizeUrl(allowed);
+      const normalizedOrigin = normalizeUrl(originLower);
+      
+      if (allowed === originLower) return true;
+      if (allowed.replace(/\/$/, '') === originLower.replace(/\/$/, '')) return true;
+      if (normalizedAllowed === normalizedOrigin) return true;
+      if (allowed.replace(/^www\./, '') === originLower.replace(/^www\./, '')) return true;
+      return false;
+    });
     
     if (process.env.NODE_ENV === 'production') {
       allowOrigin = isAllowedOrigin;
