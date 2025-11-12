@@ -1734,10 +1734,18 @@ const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'SESSION_SECRET'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 // In production, payment wallet addresses are REQUIRED (no hardcoded fallbacks)
+// Support both new unified variable (EVM_PAYMENT_WALLET_ADDRESS) and old individual chain variables
 const productionRequiredVars = [];
 if (process.env.NODE_ENV === 'production') {
-  if (!process.env.EVM_PAYMENT_WALLET_ADDRESS) {
-    productionRequiredVars.push('EVM_PAYMENT_WALLET_ADDRESS');
+  // Check for new unified EVM wallet or any of the old individual chain wallets
+  const hasEVMWallet = process.env.EVM_PAYMENT_WALLET_ADDRESS || 
+                       process.env.ETH_PAYMENT_WALLET || 
+                       process.env.POLYGON_PAYMENT_WALLET || 
+                       process.env.ARBITRUM_PAYMENT_WALLET || 
+                       process.env.OPTIMISM_PAYMENT_WALLET || 
+                       process.env.BASE_PAYMENT_WALLET;
+  if (!hasEVMWallet) {
+    productionRequiredVars.push('EVM_PAYMENT_WALLET_ADDRESS (or ETH_PAYMENT_WALLET, POLYGON_PAYMENT_WALLET, etc.)');
   }
   if (!process.env.SOLANA_PAYMENT_WALLET_ADDRESS && !process.env.SOLANA_PAYMENT_WALLET) {
     productionRequiredVars.push('SOLANA_PAYMENT_WALLET_ADDRESS or SOLANA_PAYMENT_WALLET');
@@ -2202,27 +2210,39 @@ function requireCredits(requiredCredits = 1) {
 
 // Payment wallet addresses - use single EVM address for all EVM chains
 // SECURITY: In production, these MUST be set via environment variables (no hardcoded fallbacks)
+// Support both new unified variable and old individual chain variables for backward compatibility
 let EVM_PAYMENT_ADDRESS;
 let SOLANA_PAYMENT_ADDRESS;
 
+// Get EVM wallet address - check new unified variable first, then fall back to old individual chain variables
+EVM_PAYMENT_ADDRESS = process.env.EVM_PAYMENT_WALLET_ADDRESS || 
+                      process.env.ETH_PAYMENT_WALLET || 
+                      process.env.POLYGON_PAYMENT_WALLET || 
+                      process.env.ARBITRUM_PAYMENT_WALLET || 
+                      process.env.OPTIMISM_PAYMENT_WALLET || 
+                      process.env.BASE_PAYMENT_WALLET;
+
+// Get Solana wallet address
+SOLANA_PAYMENT_ADDRESS = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || process.env.SOLANA_PAYMENT_WALLET;
+
 if (process.env.NODE_ENV === 'production') {
-  // Production: REQUIRE environment variables (validated above)
-  EVM_PAYMENT_ADDRESS = process.env.EVM_PAYMENT_WALLET_ADDRESS;
-  SOLANA_PAYMENT_ADDRESS = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || process.env.SOLANA_PAYMENT_WALLET;
-  
-  // Validate wallet address formats
+  // Production: Validate wallet address formats (addresses should be set by validation above)
   if (EVM_PAYMENT_ADDRESS && !/^0x[a-fA-F0-9]{40}$/.test(EVM_PAYMENT_ADDRESS)) {
-    logger.error('❌ CRITICAL: EVM_PAYMENT_WALLET_ADDRESS has invalid format. Must be a valid Ethereum address (0x followed by 40 hex characters).');
+    logger.error('❌ CRITICAL: EVM payment wallet address has invalid format. Must be a valid Ethereum address (0x followed by 40 hex characters).');
     process.exit(1);
   }
   if (SOLANA_PAYMENT_ADDRESS && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(SOLANA_PAYMENT_ADDRESS)) {
-    logger.error('❌ CRITICAL: SOLANA_PAYMENT_WALLET_ADDRESS has invalid format. Must be a valid Solana address.');
+    logger.error('❌ CRITICAL: SOLANA payment wallet address has invalid format. Must be a valid Solana address.');
     process.exit(1);
   }
 } else {
   // Development: Allow fallbacks for testing
-  EVM_PAYMENT_ADDRESS = process.env.EVM_PAYMENT_WALLET_ADDRESS || '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
-  SOLANA_PAYMENT_ADDRESS = process.env.SOLANA_PAYMENT_WALLET_ADDRESS || process.env.SOLANA_PAYMENT_WALLET || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA';
+  if (!EVM_PAYMENT_ADDRESS) {
+    EVM_PAYMENT_ADDRESS = '0xa0aE05e2766A069923B2a51011F270aCadFf023a';
+  }
+  if (!SOLANA_PAYMENT_ADDRESS) {
+    SOLANA_PAYMENT_ADDRESS = 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA';
+  }
 }
 
 const PAYMENT_WALLETS = {
