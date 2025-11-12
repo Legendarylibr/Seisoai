@@ -199,27 +199,10 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
               
               try {
                 const { generateVideo } = await import('../services/wanAnimateService');
-                // galleryService is now statically imported at top of file to avoid Vite chunking warning
                 
                 const userIdentifier = isEmailAuth 
                   ? (emailContext.linkedWalletAddress || emailContext.userId) 
                   : walletContext.address;
-                
-                // Calculate credits first (before starting generation)
-                let videoDuration = 0;
-                let creditsToCharge = 2; // Default minimum
-                
-                // Check if user has enough credits (use minimum estimate)
-                if (credits < creditsToCharge) {
-                  throw new Error(
-                    `Insufficient credits. This video requires at least ${creditsToCharge} credits, ` +
-                    `but you only have ${credits} credits.`
-                  );
-                }
-                
-                // Store generation as queued when we get request_id
-                let generationId = null;
-                let requestId = null;
                 
                 const result = await generateVideo(
                   videoUrl, 
@@ -232,33 +215,15 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                     userId: isEmailAuth ? emailContext.userId : undefined,
                     email: isEmailAuth ? emailContext.email : undefined
                   },
-                  async (progress, request_id) => {
+                  (progress) => {
                     setProgress(progress);
-                    
-                    // When we get the request_id (around 30% progress), store as queued
-                    if (request_id && !generationId) {
-                      requestId = request_id;
-                      try {
-                        const genResult = await addGeneration(userIdentifier, {
-                          prompt: 'Video Animate Replace',
-                          style: 'Wan 2.2 Animate',
-                          requestId: request_id,
-                          status: 'queued',
-                          creditsUsed: creditsToCharge,
-                          userId: isEmailAuth ? emailContext.userId : undefined,
-                          email: isEmailAuth ? emailContext.email : undefined
-                        });
-                        generationId = genResult.generationId;
-                        logger.info('Video generation queued and stored', { generationId, request_id });
-                      } catch (storeError) {
-                        logger.warn('Failed to store queued generation', { error: storeError.message });
-                        // Continue even if storage fails
-                      }
-                    }
                   }
                 );
                 
                 // Get video duration and calculate final credits
+                let videoDuration = 0;
+                let creditsToCharge = 2; // Default minimum
+                
                 try {
                   videoDuration = await getVideoDuration(result);
                   creditsToCharge = calculateVideoCredits(videoDuration);
@@ -284,7 +249,6 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                       'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                      requestId: requestId,
                       videoUrl: result,
                       duration: videoDuration,
                       walletAddress: !isEmailAuth ? userIdentifier : undefined,
@@ -295,29 +259,28 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                   
                   if (!completeResponse.ok) {
                     const errorData = await completeResponse.json().catch(() => ({ error: 'Unknown error' }));
-                    throw new Error(errorData.error || 'Failed to complete video generation');
-                  }
-                  
-                  const completeData = await completeResponse.json();
-                  if (completeData.success) {
-                    creditsToCharge = completeData.creditsDeducted;
-                    logger.info('Video generation completed and credits deducted', {
-                      generationId: completeData.generationId,
-                      creditsDeducted: completeData.creditsDeducted,
-                      remainingCredits: completeData.remainingCredits,
-                      duration: completeData.duration
-                    });
+                    logger.warn('Failed to complete video generation', { error: errorData.error });
+                    // Don't fail - video was generated successfully
+                  } else {
+                    const completeData = await completeResponse.json();
+                    if (completeData.success) {
+                      creditsToCharge = completeData.creditsDeducted;
+                      logger.info('Video generation completed and credits deducted', {
+                        generationId: completeData.generationId,
+                        creditsDeducted: completeData.creditsDeducted,
+                        remainingCredits: completeData.remainingCredits,
+                        duration: completeData.duration
+                      });
+                    }
                   }
                 } catch (completeError) {
                   logger.error('Failed to complete video generation', { error: completeError.message });
-                  // Don't fail the whole process, but log the error
-                  setError(`Video generated but failed to process: ${completeError.message}`);
+                  // Don't fail the whole process - video was generated successfully
                 }
                 
                 logger.info('Video generation completed', {
                   duration: videoDuration,
-                  creditsCharged: creditsToCharge,
-                  remainingCredits: credits - creditsToCharge
+                  creditsCharged: creditsToCharge
                 });
                 
                 setGeneratedVideoUrl(result);

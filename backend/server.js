@@ -1956,13 +1956,43 @@ app.get('/api/wan-animate/result/:requestId', wanResultLimiter, async (req, res)
       }
       
       // Log the result structure for debugging
-      logger.debug('Wan-animate result response', {
+      logger.debug('Wan-animate result response from fal.ai', {
         requestId,
         hasVideo: !!data.video,
         hasData: !!data.data,
         dataKeys: Object.keys(data),
         dataPreview: JSON.stringify(data).substring(0, 500)
       });
+      
+      // Ensure we're properly passing through the video data
+      // The response should contain the video URL in one of these formats:
+      // - data.video (string or object with url)
+      // - data.data.video (string or object with url)
+      // - data itself might be the video URL
+      
+      // Log video URL if found for verification
+      let detectedVideoUrl = null;
+      if (data.video) {
+        detectedVideoUrl = typeof data.video === 'string' ? data.video : (data.video.url || data.video.file?.url);
+      } else if (data.data?.video) {
+        detectedVideoUrl = typeof data.data.video === 'string' ? data.data.video : (data.data.video.url || data.data.video.file?.url);
+      } else if (typeof data === 'string' && data.startsWith('http')) {
+        detectedVideoUrl = data;
+      }
+      
+      if (detectedVideoUrl) {
+        logger.info('Video URL detected in fal.ai response', {
+          requestId,
+          videoUrl: detectedVideoUrl.substring(0, 100),
+          urlHost: new URL(detectedVideoUrl).hostname
+        });
+      } else {
+        logger.warn('No video URL detected in fal.ai response structure', {
+          requestId,
+          dataKeys: Object.keys(data),
+          dataStructure: JSON.stringify(data).substring(0, 500)
+        });
+      }
     } catch (parseError) {
       logger.error('Wan-animate result proxy parse error', { 
         requestId,
@@ -1976,6 +2006,8 @@ app.get('/api/wan-animate/result/:requestId', wanResultLimiter, async (req, res)
       });
     }
 
+    // Return the fal.ai response wrapped in success flag
+    // This ensures the frontend can extract the video URL properly
     res.json({ success: true, ...data });
   } catch (error) {
     logger.error('Wan-animate result proxy error', { 

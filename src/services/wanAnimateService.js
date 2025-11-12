@@ -296,56 +296,105 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
           // - Backend may wrap: { success: true, video: {...} }
           let videoUrl = null;
           
-          // Check result.video first
+          // Helper function to extract URL from nested structures
+          const extractVideoUrl = (obj) => {
+            if (!obj) return null;
+            
+            // If it's already a string URL, return it
+            if (typeof obj === 'string' && obj.startsWith('http')) {
+              return obj;
+            }
+            
+            // If it's an object, check common URL fields
+            if (typeof obj === 'object') {
+              // Check direct url field
+              if (obj.url && typeof obj.url === 'string' && obj.url.startsWith('http')) {
+                return obj.url;
+              }
+              // Check file.url
+              if (obj.file?.url && typeof obj.file.url === 'string' && obj.file.url.startsWith('http')) {
+                return obj.file.url;
+              }
+              // Check nested video object
+              if (obj.video) {
+                return extractVideoUrl(obj.video);
+              }
+            }
+            
+            return null;
+          };
+          
+          // Try different extraction strategies
+          // Strategy 1: Check result.video
           if (result.video) {
-            if (typeof result.video === 'string') {
-              videoUrl = result.video;
-            } else if (result.video.url) {
-              videoUrl = result.video.url;
-            } else if (result.video.file?.url) {
-              videoUrl = result.video.file.url;
-            }
-          } 
-          // Check result.data.video
-          else if (result.data) {
-            if (result.data.video) {
-              if (typeof result.data.video === 'string') {
-                videoUrl = result.data.video;
-              } else if (result.data.video.url) {
-                videoUrl = result.data.video.url;
-              } else if (result.data.video.file?.url) {
-                videoUrl = result.data.video.file.url;
-              }
-            }
-            // Check if data itself is the video URL
-            else if (typeof result.data === 'string' && result.data.startsWith('http')) {
-              videoUrl = result.data;
-            }
-          }
-          // Check if result itself is a URL string
-          else if (typeof result === 'string' && result.startsWith('http')) {
-            videoUrl = result;
-          }
-          // Check all string values in result that look like URLs
-          else {
-            for (const [key, value] of Object.entries(result)) {
-              if (typeof value === 'string' && value.startsWith('http') && (value.includes('.mp4') || value.includes('video') || value.includes('fal.media'))) {
-                videoUrl = value;
-                logger.debug('Found video URL in result field', { key, videoUrl });
-                break;
-              }
-            }
+            videoUrl = extractVideoUrl(result.video);
           }
           
+          // Strategy 2: Check result.data.video
+          if (!videoUrl && result.data?.video) {
+            videoUrl = extractVideoUrl(result.data.video);
+          }
+          
+          // Strategy 3: Check if result.data is a URL string
+          if (!videoUrl && result.data && typeof result.data === 'string' && result.data.startsWith('http')) {
+            videoUrl = result.data;
+          }
+          
+          // Strategy 4: Check if result itself is a URL string
+          if (!videoUrl && typeof result === 'string' && result.startsWith('http')) {
+            videoUrl = result;
+          }
+          
+          // Strategy 5: Search all string values in result that look like video URLs
+          if (!videoUrl) {
+            const searchForVideoUrl = (obj, depth = 0) => {
+              if (depth > 3) return null; // Prevent infinite recursion
+              if (!obj || typeof obj !== 'object') return null;
+              
+              for (const [key, value] of Object.entries(obj)) {
+                if (typeof value === 'string' && value.startsWith('http')) {
+                  // Check if it looks like a video URL
+                  if (value.includes('.mp4') || value.includes('video') || value.includes('fal.media') || value.includes('fal.ai')) {
+                    return value;
+                  }
+                } else if (value && typeof value === 'object') {
+                  const found = searchForVideoUrl(value, depth + 1);
+                  if (found) return found;
+                }
+              }
+              return null;
+            };
+            videoUrl = searchForVideoUrl(result);
+          }
+          
+          // Validate the extracted URL
           if (videoUrl) {
-            if (onProgress) onProgress(95);
-            logger.info('Video generated successfully', { videoUrl, request_id });
-            return videoUrl;
+            // Ensure it's a valid URL
+            try {
+              const url = new URL(videoUrl);
+              if (!url.protocol.startsWith('http')) {
+                throw new Error('Invalid URL protocol');
+              }
+              // URL is valid
+              if (onProgress) onProgress(95);
+              logger.info('Video generated successfully', { 
+                videoUrl, 
+                request_id,
+                urlHost: url.hostname 
+              });
+              return videoUrl;
+            } catch (urlError) {
+              logger.error('Invalid video URL extracted', { 
+                videoUrl,
+                error: urlError.message 
+              });
+              throw new Error(`Invalid video URL format: ${videoUrl}`);
+            }
           } else {
-            logger.error('No video URL in response', { 
+            logger.error('No video URL found in response', { 
               result,
               resultKeys: Object.keys(result),
-              resultString: JSON.stringify(result).substring(0, 500)
+              resultString: JSON.stringify(result).substring(0, 1000)
             });
             throw new Error('No video URL in response. Response structure: ' + JSON.stringify(result).substring(0, 500));
           }
@@ -398,4 +447,5 @@ export const getVideoOptions = () => {
     ]
   };
 };
+
 
