@@ -352,41 +352,19 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration
-// Middleware to handle CORS for paths that allow no-origin requests (webhooks, health checks)
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  const path = req.path || req.url?.split('?')[0];
-  
-  // If this is a path that allows no-origin requests, handle CORS manually
-  if (path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath))) {
-    // For no-origin paths, allow all origins (webhooks, health checks, monitoring)
-    res.header('Access-Control-Allow-Origin', origin || '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Stripe-Signature');
-    res.header('Access-Control-Allow-Credentials', origin ? 'true' : 'false'); // Can't use credentials with wildcard
-    res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
-    // Mark that CORS is already handled for this request
-    req._corsHandled = true;
-    
-    // Handle OPTIONS preflight requests for these paths
-    if (req.method === 'OPTIONS') {
-      return res.sendStatus(200);
-    }
-  }
-  next();
-});
-
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests without origin - these are handled by middleware above for specific paths
+    // Handle requests without origin header
     if (!origin) {
       // In development, allow no origin for testing tools
       if (process.env.NODE_ENV !== 'production') {
         return callback(null, true);
       }
-      // In production, reject no-origin requests (except for paths handled by middleware above)
-      // The middleware above will have already set headers for allowed paths
-      return callback(new Error('Not allowed by CORS - origin required in production'));
+      // In production, reject no-origin requests by default
+      // Webhook endpoints will be handled separately without CORS (they don't need it)
+      // This prevents unauthorized access by omitting origin header
+      logger.warn('CORS: Rejected no-origin request in production');
+      return callback(new Error('Not allowed by CORS. Origin header is required in production.'));
     }
     
     // Dynamic port handling - allow any localhost port in development
@@ -460,13 +438,36 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
-// Apply CORS middleware - skip for paths that already have CORS handled
+// Apply CORS middleware conditionally - skip for webhook/health check paths
+// Webhooks and health checks are server-to-server and don't need CORS
 app.use((req, res, next) => {
-  // If CORS was already handled by the middleware above, skip the main CORS middleware
-  if (req._corsHandled) {
+  const path = req.path || req.url?.split('?')[0];
+  
+  // Skip CORS for webhook and health check paths (server-to-server endpoints)
+  if (path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath))) {
+    // These endpoints don't need CORS - they're not browser requests
+    // For health checks accessed from monitoring tools, set minimal CORS headers
+    if (path.startsWith('/api/health') || path.startsWith('/api/metrics')) {
+      const origin = req.headers.origin;
+      // Only set CORS headers if origin is present (browser request)
+      if (origin) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type');
+        res.header('Access-Control-Allow-Credentials', 'false');
+        
+        // Handle OPTIONS preflight requests
+        if (req.method === 'OPTIONS') {
+          return res.sendStatus(200);
+        }
+      }
+      // No origin = server-to-server, no CORS headers needed
+    }
+    // Webhook endpoints don't need any CORS headers (server-to-server only)
     return next();
   }
-  // Otherwise, apply CORS middleware normally
+  
+  // Apply CORS for all other paths
   return cors(corsOptions)(req, res, next);
 });
 
