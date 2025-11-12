@@ -318,7 +318,8 @@ app.use((req, res, next) => {
   // Log suspicious requests (no origin in production, or non-whitelisted origins)
   // But skip logging for legitimate no-origin paths (webhooks, health checks)
   if (process.env.NODE_ENV === 'production') {
-    if ((hasNoOrigin && !isNoOriginAllowedPath) || (!isAllowedOrigin && !isLocalhost && !isNoOriginAllowedPath)) {
+    // Only log if it's NOT a no-origin allowed path AND (has no origin OR is not allowed)
+    if (!isNoOriginAllowedPath && (hasNoOrigin || (!isAllowedOrigin && !isLocalhost))) {
       logger.warn('⚠️  External API request detected', {
         ip,
         origin: origin || 'NO_ORIGIN',
@@ -329,6 +330,7 @@ app.use((req, res, next) => {
         timestamp: new Date().toISOString()
       });
     }
+    // Suppress logging for no-origin allowed paths - these are expected
   } else {
     // In development, log all non-localhost requests
     if (hasNoOrigin || (!isLocalhost && !isAllowedOrigin)) {
@@ -366,14 +368,17 @@ app.use((req, res, next) => {
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests without origin for specific endpoints (webhooks, health checks)
-    // Note: These are handled by the middleware above, but we need to allow them here too
-    // The middleware above sets req._corsHandled, but cors library doesn't have access to req
-    // So we'll use a different approach - check if we should skip CORS entirely
+    // Allow requests without origin - these are handled by middleware above for specific paths
+    // The middleware above sets req._corsHandled and handles CORS for no-origin allowed paths
+    // If we reach here with no origin, it means the path wasn't in noOriginAllowedPaths
+    // But we should still allow it in development, and in production the middleware should have handled it
     if (!origin) {
+      // In production, if we reach here, the path wasn't in noOriginAllowedPaths
+      // But the middleware should have already handled it, so this shouldn't happen
+      // However, to be safe, we'll allow it if we're in development
       if (process.env.NODE_ENV === 'production') {
-        // In production, reject no-origin requests (except those handled by middleware above)
-        // The middleware above will have already set headers, so this won't be called for those paths
+        // In production, reject no-origin requests that weren't handled by middleware
+        // This should rarely happen since middleware handles no-origin allowed paths
         return callback(new Error('Not allowed by CORS - origin required in production'));
       }
       // In development, allow no origin for testing tools
@@ -5686,9 +5691,11 @@ app.use((error, req, res, next) => {
     const path = req.path || req.url?.split('?')[0];
     const isNoOriginAllowedPath = path && noOriginAllowedPaths.some(allowedPath => path.startsWith(allowedPath));
     
-    // If it's a legitimate no-origin path, this shouldn't happen (should be handled by middleware)
-    // But log it as a warning anyway
+    // If it's a legitimate no-origin path, don't log - it's expected and handled by middleware
+    // Only log if it's NOT a no-origin allowed path
     if (!isNoOriginAllowedPath) {
+      // Only log if it's not a health check or webhook (those are expected to have no origin sometimes)
+      // Suppress warnings for legitimate no-origin requests to allowed paths
       logger.warn('CORS error (expected for unauthorized requests):', {
         message: error.message,
         path,
@@ -5696,6 +5703,7 @@ app.use((error, req, res, next) => {
         ip: req.ip
       });
     }
+    // Don't log anything if it's a no-origin allowed path - these are handled by middleware
     
     // Return CORS error response
     return res.status(403).json({
