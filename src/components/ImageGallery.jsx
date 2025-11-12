@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
-import { Download, Trash2, Eye, Calendar, Palette, Sparkles, X, Video, Play, Image as ImageIcon, ArrowLeft } from 'lucide-react';
+import { Download, Trash2, Eye, Calendar, Palette, Sparkles, X, Video, Play, Image as ImageIcon } from 'lucide-react';
 import { getGallery } from '../services/galleryService';
 import logger from '../utils/logger.js';
 
@@ -11,7 +11,6 @@ const ImageGallery = () => {
   const walletContext = useSimpleWallet();
   const emailContext = useEmailAuth();
   const [selectedItem, setSelectedItem] = useState(null);
-  const [activeTab, setActiveTab] = useState('all'); // 'all', 'image', 'video'
   const [galleryItems, setGalleryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -98,14 +97,8 @@ const ImageGallery = () => {
     fetchGallery();
   }, [walletContext.address, emailContext.isAuthenticated, emailContext.userId, generationHistory.length]);
 
-  // Filter by tab selection
-  const filteredHistory = galleryItems.filter(item => {
-    const isVideo = item.isVideo || !!item.videoUrl;
-    if (activeTab === 'all') return true;
-    if (activeTab === 'image') return !isVideo;
-    if (activeTab === 'video') return isVideo;
-    return true;
-  });
+  // Show all items (no filtering)
+  const filteredHistory = galleryItems;
 
   const handleDownload = async (url, styleName, isVideo = false) => {
     if (!url) return;
@@ -209,38 +202,24 @@ const ImageGallery = () => {
   }
 
   if (filteredHistory.length === 0 && galleryItems.length === 0) {
-    // Show appropriate empty state based on active tab
-    const isVideoTab = activeTab === 'video';
-    const isImageTab = activeTab === 'image';
-    
     return (
       <div className="text-center py-16 md:py-24 fade-in">
         <div className="glass-card w-32 h-32 mx-auto mb-8 flex items-center justify-center rounded-2xl">
-          {isVideoTab ? (
-            <Video className="w-16 h-16 text-gray-400" />
-          ) : isImageTab ? (
-            <ImageIcon className="w-16 h-16 text-gray-400" />
-          ) : (
-            <svg viewBox="0 0 24 24" fill="none" className="w-16 h-16 text-gray-400">
-              <path
-                d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
-                fill="currentColor"
-              />
-            </svg>
-          )}
+          <svg viewBox="0 0 24 24" fill="none" className="w-16 h-16 text-gray-400">
+            <path
+              d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
+              fill="currentColor"
+            />
+          </svg>
         </div>
-        <h3 className="text-2xl md:text-3xl font-semibold gradient-text mb-3">
-          {isVideoTab ? 'No Videos Yet' : isImageTab ? 'No Images Yet' : 'No Items Yet'}
-        </h3>
-        <p className="text-gray-400 text-lg mb-8">
-          {isVideoTab ? 'Start generating videos to see them here' : isImageTab ? 'Start generating images to see them here' : 'Start generating content to see it here'}
-        </p>
+        <h3 className="text-2xl md:text-3xl font-semibold gradient-text mb-3">No Images Yet</h3>
+        <p className="text-gray-400 text-lg mb-8">Start generating images to see them here</p>
         <button
           onClick={() => window.location.href = '#generate'}
           className="btn-primary flex items-center gap-2 mx-auto slide-up"
         >
           <Sparkles className="w-5 h-5" />
-          {isVideoTab ? 'Generate Your First Video' : isImageTab ? 'Generate Your First Image' : 'Generate Your First Content'}
+          Generate Your First Image
         </button>
       </div>
     );
@@ -253,12 +232,7 @@ const ImageGallery = () => {
         <div className="slide-up">
           <h2 className="text-3xl md:text-4xl font-bold gradient-text mb-2">Your Gallery</h2>
           <p className="text-gray-400 text-base">
-            {filteredHistory.length} {filteredHistory.length === 1 ? 'item' : 'items'}
-            {activeTab === 'all' && (
-              <>
-                {' '}({galleryItems.filter(i => !i.isVideo && !i.videoUrl).length} image{galleryItems.filter(i => !i.isVideo && !i.videoUrl).length === 1 ? '' : 's'}, {galleryItems.filter(i => i.isVideo || i.videoUrl).length} video{galleryItems.filter(i => i.isVideo || i.videoUrl).length === 1 ? '' : 's'})
-              </>
-            )}
+            {galleryItems.length} {galleryItems.length === 1 ? 'item' : 'items'}
           </p>
         </div>
         <button
@@ -271,64 +245,6 @@ const ImageGallery = () => {
         </button>
       </div>
 
-      {/* Tabs - Image and Video only */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        <button
-          onClick={() => setActiveTab('all')}
-          className={`
-            px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-2
-            ${activeTab === 'all'
-              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30 scale-105'
-              : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:scale-105'
-            }
-          `}
-        >
-          <Palette className="w-4 h-4" />
-          All
-        </button>
-        <button
-          onClick={() => setActiveTab('image')}
-          className={`
-            px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-2
-            ${activeTab === 'image'
-              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30 scale-105'
-              : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:scale-105'
-            }
-          `}
-        >
-          <ImageIcon className="w-4 h-4" />
-          Images
-          <span className="ml-1 text-xs opacity-75">({galleryItems.filter(i => !i.isVideo && !i.videoUrl).length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('video')}
-          className={`
-            px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-2
-            ${activeTab === 'video'
-              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30 scale-105'
-              : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:scale-105'
-            }
-          `}
-        >
-          <Video className="w-4 h-4" />
-          Videos
-          <span className="ml-1 text-xs opacity-75">({galleryItems.filter(i => i.isVideo || i.videoUrl).length})</span>
-        </button>
-      </div>
-      
-      {/* Back button and spacing when tab is selected */}
-      {activeTab !== 'all' && (
-        <div className="mb-4 flex items-center gap-3">
-          <button
-            onClick={() => setActiveTab('all')}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-gray-300 hover:bg-white/20 transition-all duration-300 hover:scale-105"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to All
-          </button>
-          <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
-        </div>
-      )}
 
       {/* Gallery Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
@@ -409,35 +325,6 @@ const ImageGallery = () => {
         })}
       </div>
 
-      {/* No Results (when filtered but other items exist) */}
-      {filteredHistory.length === 0 && galleryItems.length > 0 && (
-        <div className="text-center py-16 slide-up">
-          <div className="glass-card w-20 h-20 mx-auto mb-6 flex items-center justify-center rounded-xl">
-            {activeTab === 'image' ? (
-              <ImageIcon className="w-10 h-10 text-gray-400" />
-            ) : activeTab === 'video' ? (
-              <Video className="w-10 h-10 text-gray-400" />
-            ) : (
-              <div className="text-4xl">🔍</div>
-            )}
-          </div>
-          <h3 className="text-xl font-semibold text-gray-300 mb-2">
-            {activeTab === 'image' ? 'No images yet' : activeTab === 'video' ? 'No videos yet' : 'No items found'}
-          </h3>
-          <p className="text-gray-500">
-            {activeTab === 'image' ? 'Start generating images to see them here' : activeTab === 'video' ? 'Start generating videos to see them here' : 'Try selecting a different tab'}
-          </p>
-          {activeTab === 'video' && (
-            <button
-              onClick={() => window.location.href = '#generate'}
-              className="btn-primary flex items-center gap-2 mx-auto mt-4 slide-up"
-            >
-              <Sparkles className="w-4 h-4" />
-              Generate Your First Video
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Item Modal */}
       {selectedItem && (
