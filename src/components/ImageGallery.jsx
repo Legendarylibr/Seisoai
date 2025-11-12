@@ -208,25 +208,39 @@ const ImageGallery = () => {
     );
   }
 
-  if (filteredHistory.length === 0) {
+  if (filteredHistory.length === 0 && galleryItems.length === 0) {
+    // Show appropriate empty state based on active tab
+    const isVideoTab = activeTab === 'video';
+    const isImageTab = activeTab === 'image';
+    
     return (
       <div className="text-center py-16 md:py-24 fade-in">
         <div className="glass-card w-32 h-32 mx-auto mb-8 flex items-center justify-center rounded-2xl">
-          <svg viewBox="0 0 24 24" fill="none" className="w-16 h-16 text-gray-400">
-            <path
-              d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
-              fill="currentColor"
-            />
-          </svg>
+          {isVideoTab ? (
+            <Video className="w-16 h-16 text-gray-400" />
+          ) : isImageTab ? (
+            <ImageIcon className="w-16 h-16 text-gray-400" />
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" className="w-16 h-16 text-gray-400">
+              <path
+                d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
+                fill="currentColor"
+              />
+            </svg>
+          )}
         </div>
-        <h3 className="text-2xl md:text-3xl font-semibold gradient-text mb-3">No Images Yet</h3>
-        <p className="text-gray-400 text-lg mb-8">Start generating images to see them here</p>
+        <h3 className="text-2xl md:text-3xl font-semibold gradient-text mb-3">
+          {isVideoTab ? 'No Videos Yet' : isImageTab ? 'No Images Yet' : 'No Items Yet'}
+        </h3>
+        <p className="text-gray-400 text-lg mb-8">
+          {isVideoTab ? 'Start generating videos to see them here' : isImageTab ? 'Start generating images to see them here' : 'Start generating content to see it here'}
+        </p>
         <button
           onClick={() => window.location.href = '#generate'}
           className="btn-primary flex items-center gap-2 mx-auto slide-up"
         >
           <Sparkles className="w-5 h-5" />
-          Generate Your First Image
+          {isVideoTab ? 'Generate Your First Video' : isImageTab ? 'Generate Your First Image' : 'Generate Your First Content'}
         </button>
       </div>
     );
@@ -395,8 +409,8 @@ const ImageGallery = () => {
         })}
       </div>
 
-      {/* No Results */}
-      {filteredHistory.length === 0 && (
+      {/* No Results (when filtered but other items exist) */}
+      {filteredHistory.length === 0 && galleryItems.length > 0 && (
         <div className="text-center py-16 slide-up">
           <div className="glass-card w-20 h-20 mx-auto mb-6 flex items-center justify-center rounded-xl">
             {activeTab === 'image' ? (
@@ -413,6 +427,15 @@ const ImageGallery = () => {
           <p className="text-gray-500">
             {activeTab === 'image' ? 'Start generating images to see them here' : activeTab === 'video' ? 'Start generating videos to see them here' : 'Try selecting a different tab'}
           </p>
+          {activeTab === 'video' && (
+            <button
+              onClick={() => window.location.href = '#generate'}
+              className="btn-primary flex items-center gap-2 mx-auto mt-4 slide-up"
+            >
+              <Sparkles className="w-4 h-4" />
+              Generate Your First Video
+            </button>
+          )}
         </div>
       )}
 

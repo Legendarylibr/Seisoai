@@ -220,6 +220,10 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                   }
                 );
                 
+                // Set video URL immediately so it shows up on screen
+                setGeneratedVideoUrl(result);
+                setProgress(100);
+                
                 // Get video duration and calculate final credits
                 let videoDuration = 0;
                 let creditsToCharge = 2; // Default minimum
@@ -282,9 +286,6 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                   duration: videoDuration,
                   creditsCharged: creditsToCharge
                 });
-                
-                setGeneratedVideoUrl(result);
-                setProgress(100);
                 
                 // Refresh credits
                 if (isEmailAuth) {
