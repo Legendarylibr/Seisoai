@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import SubscriptionCheckout from './SubscriptionCheckout';
 import PaymentSuccessModal from './PaymentSuccessModal';
+import SubscriptionManagement from './SubscriptionManagement';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
-import { CheckCircle, AlertCircle, X } from 'lucide-react';
+import { CheckCircle, AlertCircle, X, CreditCard } from 'lucide-react';
 
 /**
  * PricingPage Component
@@ -19,12 +20,35 @@ const PricingPage = () => {
   const proPriceLookupKey = 'pro_pack_monthly'; // Replace with your actual lookup key
   const studioPriceLookupKey = 'studio_pack_monthly'; // Replace with your actual lookup key
 
-  const { refreshCredits, userId } = useEmailAuth();
+  const { refreshCredits, userId, isAuthenticated } = useEmailAuth();
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   const [successState, setSuccessState] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [showSubscriptionManagement, setShowSubscriptionManagement] = useState(false);
 
   // Check for success in URL params when component mounts
+  const handleSuccess = useCallback((sessionId, planName, planPrice) => {
+    setSuccessState({
+      sessionId,
+      planName: planName || 'Subscription',
+      planPrice: planPrice || 'Activated'
+    });
+    
+    if (refreshCredits) {
+      setTimeout(() => {
+        refreshCredits();
+      }, 2000);
+      
+      const pollInterval = setInterval(() => {
+        refreshCredits();
+      }, 3000);
+      
+      setTimeout(() => {
+        clearInterval(pollInterval);
+      }, 30000);
+    }
+  }, [refreshCredits]);
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionId = urlParams.get('session_id');
@@ -74,34 +98,7 @@ const PricingPage = () => {
       setTimeout(() => setErrorMessage(null), 6000);
       cleanupUrl();
     }
-  }, [apiUrl, refreshCredits, userId, handleSuccess]);
-
-  const handleSuccess = (sessionId, planName, planPrice) => {
-    setSuccessState({
-      sessionId,
-      planName: planName || 'Subscription',
-      planPrice: planPrice || 'Activated'
-    });
-    
-    // Refresh credits after subscription purchase
-    // Webhook should have added credits, but refresh to ensure UI is updated
-    if (refreshCredits) {
-      // Wait a moment for webhook to process, then refresh
-      setTimeout(() => {
-        refreshCredits();
-      }, 2000);
-      
-      // Also poll for credits update (webhook might take a few seconds)
-      const pollInterval = setInterval(() => {
-        refreshCredits();
-      }, 3000);
-      
-      // Stop polling after 30 seconds
-      setTimeout(() => {
-        clearInterval(pollInterval);
-      }, 30000);
-    }
-  };
+  }, [apiUrl, userId, handleSuccess]);
 
   const handleError = (error) => {
     setErrorMessage(error);
@@ -124,6 +121,11 @@ const PricingPage = () => {
           sessionId={successState.sessionId}
         />
       )}
+
+      <SubscriptionManagement
+        isOpen={showSubscriptionManagement}
+        onClose={() => setShowSubscriptionManagement(false)}
+      />
 
       {/* Error Message Banner */}
       {errorMessage && (
@@ -150,6 +152,20 @@ const PricingPage = () => {
           <p className="text-xl text-gray-300">
             Select the perfect pack for your needs
           </p>
+          {isAuthenticated && (
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
+              <button
+                onClick={() => setShowSubscriptionManagement(true)}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white/10 border border-white/20 text-white text-sm font-semibold hover:bg-white/15 transition-all w-full sm:w-auto"
+              >
+                <CreditCard className="w-4 h-4" />
+                Manage Subscription
+              </button>
+              <p className="text-xs sm:text-sm text-gray-400">
+                View plan details, billing dates, or cancel anytime.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Pricing Cards Grid */}
