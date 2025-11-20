@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import SubscriptionCheckout from './SubscriptionCheckout';
 import PaymentSuccessModal from './PaymentSuccessModal';
+import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { CheckCircle, AlertCircle, X } from 'lucide-react';
 
 /**
@@ -18,6 +19,7 @@ const PricingPage = () => {
   const proPriceLookupKey = 'pro_pack_monthly'; // Replace with your actual lookup key
   const studioPriceLookupKey = 'studio_pack_monthly'; // Replace with your actual lookup key
 
+  const { refreshCredits } = useEmailAuth();
   const [successState, setSuccessState] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
@@ -36,13 +38,32 @@ const PricingPage = () => {
         planPrice: 'Activated'
       });
       
+      // Refresh credits after subscription purchase
+      // Webhook should have added credits, but refresh to ensure UI is updated
+      if (refreshCredits) {
+        // Wait a moment for webhook to process, then refresh
+        setTimeout(() => {
+          refreshCredits();
+        }, 2000);
+        
+        // Also poll for credits update (webhook might take a few seconds)
+        const pollInterval = setInterval(() => {
+          refreshCredits();
+        }, 3000);
+        
+        // Stop polling after 30 seconds
+        setTimeout(() => {
+          clearInterval(pollInterval);
+        }, 30000);
+      }
+      
       // Clean up URL
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (canceled) {
       setErrorMessage('Checkout was canceled. You can try again anytime.');
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, []);
+  }, [refreshCredits]);
 
   const handleSuccess = (sessionId, planName, planPrice) => {
     setSuccessState({
@@ -50,6 +71,25 @@ const PricingPage = () => {
       planName: planName || 'Subscription',
       planPrice: planPrice || 'Activated'
     });
+    
+    // Refresh credits after subscription purchase
+    // Webhook should have added credits, but refresh to ensure UI is updated
+    if (refreshCredits) {
+      // Wait a moment for webhook to process, then refresh
+      setTimeout(() => {
+        refreshCredits();
+      }, 2000);
+      
+      // Also poll for credits update (webhook might take a few seconds)
+      const pollInterval = setInterval(() => {
+        refreshCredits();
+      }, 3000);
+      
+      // Stop polling after 30 seconds
+      setTimeout(() => {
+        clearInterval(pollInterval);
+      }, 30000);
+    }
   };
 
   const handleError = (error) => {

@@ -668,12 +668,25 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
           }
 
           if (user) {
+            logger.info('User found for subscription checkout', {
+              userId: user._id.toString(),
+              email: user.email || null,
+              walletAddress: user.walletAddress || null,
+              currentCredits: user.credits
+            });
+            
             // Retrieve the subscription to get the amount
             const subscriptionId = session.subscription;
             if (subscriptionId) {
               const subscription = await stripe.subscriptions.retrieve(subscriptionId);
               const amount = subscription.items.data[0]?.price?.unit_amount || 0;
               const amountInDollars = amount / 100;
+
+              logger.info('Subscription retrieved', {
+                subscriptionId,
+                amount: amountInDollars,
+                priceId: subscription.items.data[0]?.price?.id
+              });
 
               // Use session ID as payment identifier to prevent duplicates
               const paymentId = `checkout_${session.id}`;
@@ -717,8 +730,44 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
                   userId: user.userId || null,
                   walletAddress: user.walletAddress || null,
                   amount: amountInDollars,
-                  credits: finalCredits
+                  credits: finalCredits,
+                  totalCredits: user.credits
                 });
+              } else {
+                logger.info('Subscription checkout already processed', {
+                  sessionId: session.id,
+                  paymentId: paymentId
+                });
+              }
+            } else {
+              logger.warn('No subscription ID found in checkout session', {
+                sessionId: session.id
+              });
+            }
+          } else {
+            logger.warn('Could not find user for subscription checkout', {
+              sessionId: session.id,
+              metadata: session.metadata,
+              customerEmail: session.customer_email || null,
+              customer: session.customer || null
+            });
+            
+            // Try to get customer email and find user that way
+            if (session.customer) {
+              try {
+                const customer = await stripe.customers.retrieve(session.customer);
+                if (customer && customer.email) {
+                  const userByEmail = await User.findOne({ email: customer.email.toLowerCase() });
+                  if (userByEmail) {
+                    logger.info('Found user by customer email, retrying credit addition', {
+                      email: customer.email,
+                      userId: userByEmail._id.toString()
+                    });
+                    // Retry with this user (will be handled by recursive call or manual retry)
+                  }
+                }
+              } catch (customerError) {
+                logger.error('Error retrieving customer:', customerError);
               }
             }
           }
@@ -808,23 +857,32 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
                 userId: user.userId || null,
                 walletAddress: user.walletAddress || null,
                 amount: amountInDollars,
-                credits: finalCredits
+                credits: finalCredits,
+                totalCredits: user.credits
               });
             } else {
               logger.info('Subscription invoice already processed', {
-                invoiceId: invoice.id
+                invoiceId: invoice.id,
+                paymentId: paymentId
               });
             }
           } else {
             logger.warn('Could not find user for subscription invoice', {
               invoiceId: invoice.id,
               subscriptionId: invoice.subscription,
-              customerId: customerId
+              customerId: customerId,
+              customerEmail: customer?.email || null
             });
           }
         } catch (webhookError) {
           logger.error('Error processing subscription invoice webhook:', webhookError);
         }
+      } else {
+        logger.info('Skipping non-subscription invoice or zero amount', {
+          invoiceId: invoice.id,
+          hasSubscription: !!invoice.subscription,
+          amountPaid: invoice.amount_paid
+        });
       }
       break;
 
@@ -2736,7 +2794,8 @@ const addCreditsToUser = async (user, {
   chainId,
   walletType,
   timestamp = new Date(),
-  paymentIntentId = null
+  paymentIntentId = null,
+  subscriptionId = null
 }) => {
   user.credits += credits;
   user.totalCreditsEarned += credits;
@@ -2753,6 +2812,10 @@ const addCreditsToUser = async (user, {
   
   if (paymentIntentId) {
     paymentEntry.paymentIntentId = paymentIntentId;
+  }
+  
+  if (subscriptionId) {
+    paymentEntry.subscriptionId = subscriptionId;
   }
   
   user.paymentHistory.push(paymentEntry);

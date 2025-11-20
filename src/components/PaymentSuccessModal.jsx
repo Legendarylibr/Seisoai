@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { CheckCircle, Sparkles, X, CreditCard } from 'lucide-react';
 
 /**
@@ -12,15 +13,35 @@ const PaymentSuccessModal = ({
   planPrice,
   sessionId 
 }) => {
+  const { refreshCredits } = useEmailAuth();
+  
   useEffect(() => {
     if (isOpen) {
+      // Refresh credits when modal opens (subscription was just purchased)
+      if (refreshCredits) {
+        // Wait a moment for webhook to process, then refresh
+        setTimeout(() => {
+          refreshCredits();
+        }, 2000);
+        
+        // Poll for credits update (webhook might take a few seconds)
+        const pollInterval = setInterval(() => {
+          refreshCredits();
+        }, 3000);
+        
+        // Stop polling after 30 seconds
+        setTimeout(() => {
+          clearInterval(pollInterval);
+        }, 30000);
+      }
+      
       // Auto-close after 5 seconds
       const timer = setTimeout(() => {
         onClose();
       }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, refreshCredits]);
 
   if (!isOpen) return null;
 
@@ -83,12 +104,24 @@ const PaymentSuccessModal = ({
             <strong>Credits are being processed</strong>
             <br />
             Your credits will be added to your account automatically. This usually takes just a few seconds.
+            <br />
+            <button
+              onClick={() => refreshCredits && refreshCredits()}
+              className="mt-2 text-xs underline hover:text-blue-200"
+            >
+              Refresh Credits Now
+            </button>
           </p>
         </div>
 
         {/* Action Button */}
         <button
-          onClick={onClose}
+          onClick={() => {
+            if (refreshCredits) {
+              refreshCredits();
+            }
+            onClose();
+          }}
           className="w-full btn-primary py-3 flex items-center justify-center gap-2"
         >
           <CheckCircle className="w-5 h-5" />
