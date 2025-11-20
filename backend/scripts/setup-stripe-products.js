@@ -12,8 +12,14 @@
 */
 
 /* eslint-disable no-console */
-const path = require('path');
-const fs = require('fs');
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+// ES module setup
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load env from backend.env if present at repo root
 (() => {
@@ -21,14 +27,14 @@ const fs = require('fs');
   const backendEnvPath = path.join(repoRoot, 'backend.env');
   if (fs.existsSync(backendEnvPath)) {
     try {
-      require('dotenv').config({ path: backendEnvPath });
+      dotenv.config({ path: backendEnvPath });
       console.log(`[env] Loaded environment from ${backendEnvPath}`);
     } catch (e) {
       console.warn('[env] Failed to load backend.env:', e.message);
     }
   } else if (fs.existsSync(path.join(repoRoot, '.env'))) {
     try {
-      require('dotenv').config({ path: path.join(repoRoot, '.env') });
+      dotenv.config({ path: path.join(repoRoot, '.env') });
       console.log('[env] Loaded environment from .env');
     } catch (e) {
       console.warn('[env] Failed to load .env:', e.message);
