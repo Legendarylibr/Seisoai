@@ -293,10 +293,13 @@ const ImageOutput = () => {
       
       let deductionResult = null;
       try {
+        // Handle both single image (string) and multiple images (array)
+        const imageUrlForSave = isArray ? result[0] : result;
+        
         deductionResult = await addGeneration(userIdentifier, {
           prompt: newPrompt.trim(),
           style: currentGeneration.style ? currentGeneration.style.name : 'No Style',
-          imageUrl: result,
+          imageUrl: imageUrlForSave, // Use first image if array, or the single image
           creditsUsed: 1, // 1 credit per generation
           userId: isEmailAuth ? emailContext.userId : undefined, // Include userId for email users
           email: isEmailAuth ? emailContext.email : undefined // Include email for email users
@@ -304,12 +307,13 @@ const ImageOutput = () => {
         logger.info('Generation saved and credits deducted', {
           success: deductionResult.success,
           remainingCredits: deductionResult.remainingCredits,
-          address
+          userIdentifier,
+          isEmailAuth
         });
         
         // Update UI immediately with the remaining credits from the response
         if (deductionResult.remainingCredits !== undefined) {
-          if (setCreditsManually) {
+          if (!isEmailAuth && setCreditsManually) {
             // For wallet users, update credits directly
             setCreditsManually(deductionResult.remainingCredits);
             logger.debug('Updated wallet user credits', { remainingCredits: deductionResult.remainingCredits });
@@ -322,15 +326,19 @@ const ImageOutput = () => {
           // For email users, refresh from backend (will update credits automatically)
           await emailContext.refreshCredits();
           logger.debug('Email user credits refreshed from backend', { remainingCredits: deductionResult.remainingCredits });
-        } else if (refreshCredits && address) {
+        } else if (!isEmailAuth && refreshCredits && address) {
           // For wallet users, refresh from backend
           await refreshCredits();
           logger.debug('Wallet user credits refreshed from backend', { remainingCredits: deductionResult.remainingCredits });
         } else {
-          logger.warn('Cannot refresh credits - missing refreshCredits function');
+          logger.warn('Cannot refresh credits - missing refreshCredits function or address', { 
+            isEmailAuth, 
+            hasRefreshCredits: !!emailContext.refreshCredits || !!refreshCredits,
+            hasAddress: !!address 
+          });
         }
       } catch (error) {
-        logger.error('Error saving generation', { error: error.message, address });
+        logger.error('Error saving generation', { error: error.message, userIdentifier, isEmailAuth });
         setError(`Image generated but failed to save to history. Credits not deducted. Error: ${error.message}`);
         // Still show the image even if saving failed
       }
@@ -527,8 +535,9 @@ const ImageOutput = () => {
         <div className="flex gap-1.5 flex-wrap">
           <button
             onClick={() => setShowPromptModal(true)}
-            disabled={isRegenerating || !isConnected || !currentGeneration}
+            disabled={isRegenerating || isGenerating || (!isConnected && !isEmailAuth) || !currentGeneration || availableCredits <= 0}
             className="btn-primary flex items-center gap-1.5 text-xs px-2.5 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={availableCredits <= 0 ? 'Insufficient credits' : 'Regenerate with new prompt'}
           >
             <Sparkles className="w-3 h-3" />
             <span className="text-xs">New Prompt</span>
