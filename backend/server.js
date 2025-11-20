@@ -2290,9 +2290,19 @@ if (process.env.NODE_ENV === 'production') {
 // Connect to MongoDB
 if (process.env.MONGODB_URI) {
   logger.info('Connecting to MongoDB');
-  mongoose.connect(process.env.MONGODB_URI, mongoOptions);
+  mongoose.connect(process.env.MONGODB_URI, mongoOptions).catch((err) => {
+    logger.error('MongoDB connection failed:', {
+      message: err.message,
+      code: err.code,
+      note: 'Check that MONGODB_URI is correct and MongoDB is accessible'
+    });
+  });
 } else {
-  logger.warn('MONGODB_URI not provided, running without database');
+  const errorMsg = 'MONGODB_URI not provided - signup and database features will not work';
+  logger.error(errorMsg);
+  if (process.env.NODE_ENV === 'production') {
+    logger.error('❌ CRITICAL: MONGODB_URI is required in production. Set it in Railway environment variables.');
+  }
 }
 
 // Create indexes for better performance
@@ -2325,8 +2335,16 @@ mongoose.connection.on('connected', async () => {
 });
 
 mongoose.connection.on('error', (err) => {
-  logger.error('MongoDB connection error', { error: err.message });
-  logger.warn('MongoDB connection failed - app will continue without database');
+  logger.error('MongoDB connection error', { 
+    error: err.message,
+    code: err.code,
+    note: 'Check MONGODB_URI environment variable and MongoDB accessibility'
+  });
+  if (process.env.NODE_ENV === 'production') {
+    logger.error('❌ CRITICAL: MongoDB connection failed in production. Signup will not work.');
+  } else {
+    logger.warn('MongoDB connection failed - app will continue without database');
+  }
 });
 
 mongoose.connection.on('disconnected', () => {
@@ -2446,9 +2464,14 @@ userSchema.index({ 'gallery.timestamp': 1 });
 // Generate unique userId for email users
 userSchema.pre('save', async function(next) {
   if (this.isNew && this.email && !this.userId) {
-    // Generate userId from email hash
-    const hash = crypto.createHash('sha256').update(this.email).digest('hex').substring(0, 16);
-    this.userId = `email_${hash}`;
+    try {
+      // Generate userId from email hash
+      const hash = crypto.createHash('sha256').update(this.email).digest('hex').substring(0, 16);
+      this.userId = `email_${hash}`;
+    } catch (error) {
+      logger.error('Error generating userId in pre-save hook', { error: error.message });
+      // Don't block save, but log the error
+    }
   }
   next();
 });
@@ -3402,9 +3425,21 @@ app.get('/api/health', (req, res) => {
       ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
       : [];
     
+    // Check critical environment variables for signup
+    const criticalVars = {
+      MONGODB_URI: !!process.env.MONGODB_URI,
+      JWT_SECRET: !!process.env.JWT_SECRET,
+      SESSION_SECRET: !!process.env.SESSION_SECRET
+    };
+    const missingCritical = Object.entries(criticalVars)
+      .filter(([_, exists]) => !exists)
+      .map(([name]) => name);
+    
     const health = {
-      status: 'healthy',
+      status: missingCritical.length > 0 ? 'degraded' : 'healthy',
       timestamp: new Date().toISOString(),
+      signupAvailable: dbState === 1 && criticalVars.MONGODB_URI && criticalVars.JWT_SECRET,
+      missingEnvVars: missingCritical.length > 0 ? missingCritical : undefined,
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development',
       database: dbStatus,
@@ -3754,7 +3789,22 @@ app.post('/api/auth/signup', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('Sign up error:', error);
+    // Log detailed error for debugging
+    logger.error('Sign up error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      code: error.code
+    });
+    
+    // Check for common issues
+    if (error.message && error.message.includes('buffering timed out')) {
+      logger.error('MongoDB connection issue - MONGODB_URI may not be set or MongoDB is not accessible');
+    }
+    if (error.message && error.message.includes('JWT_SECRET')) {
+      logger.error('JWT_SECRET is missing or invalid');
+    }
+    
     res.status(500).json({
       success: false,
       error: getSafeErrorMessage(error, 'Failed to create account')
