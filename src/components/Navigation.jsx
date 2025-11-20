@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard, Mail } from 'lucide-react';
+import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard, Mail, Settings } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
+import SubscriptionManagement from './SubscriptionManagement';
 
   const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment, onShowStripePayment }) => {
   const walletContext = useSimpleWallet();
@@ -15,6 +16,26 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
   const disconnectWallet = walletContext.disconnectWallet;
   const signOut = emailContext.signOut;
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showSubscriptionManagement, setShowSubscriptionManagement] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowUserDropdown(false);
+      }
+    };
+
+    if (showUserDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserDropdown]);
 
   // Safety check to prevent the error
   if (!tabs || !Array.isArray(tabs)) {
@@ -100,13 +121,48 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
                 </div>
               )}
               
-              {/* Email Display (for email users) */}
+              {/* Email User Dropdown (for email users) */}
               {isEmailAuth && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300">
-                  <Mail className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs text-gray-300">
-                    {emailContext.email}
-                  </span>
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    onClick={() => setShowUserDropdown(!showUserDropdown)}
+                    className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300"
+                  >
+                    <Mail className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs text-gray-300">
+                      {emailContext.email}
+                    </span>
+                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {showUserDropdown && (
+                    <div className="absolute right-0 mt-2 w-56 bg-gray-900/95 backdrop-blur-xl rounded-lg border border-white/10 shadow-xl z-50 overflow-hidden">
+                      <div className="py-1">
+                        <button
+                          onClick={() => {
+                            setShowSubscriptionManagement(true);
+                            setShowUserDropdown(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
+                        >
+                          <Settings className="w-4 h-4 text-blue-400" />
+                          <span>Manage Subscription</span>
+                        </button>
+                        <div className="border-t border-white/10 my-1"></div>
+                        <button
+                          onClick={() => {
+                            signOut();
+                            setShowUserDropdown(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-red-300 hover:bg-red-500/10 transition-colors"
+                        >
+                          <LogOut className="w-4 h-4 text-red-400" />
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -151,17 +207,19 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
                 )}
               </div>
 
-              {/* Sign Out / Disconnect Button */}
-              <button
-                onClick={isEmailAuth ? signOut : disconnectWallet}
-                className="flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg border border-red-500/30 transition-all duration-300 hover:scale-105"
-                title={isEmailAuth ? "Sign Out" : "Disconnect Wallet"}
-              >
-                <LogOut className="w-4 h-4 text-red-400" />
-                <span className="text-sm font-medium text-red-300 hidden lg:inline">
-                  {isEmailAuth ? 'Sign Out' : 'Disconnect'}
-                </span>
-              </button>
+              {/* Sign Out / Disconnect Button (only for wallet users, email users have dropdown) */}
+              {!isEmailAuth && (
+                <button
+                  onClick={disconnectWallet}
+                  className="flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg border border-red-500/30 transition-all duration-300 hover:scale-105"
+                  title="Disconnect Wallet"
+                >
+                  <LogOut className="w-4 h-4 text-red-400" />
+                  <span className="text-sm font-medium text-red-300 hidden lg:inline">
+                    Disconnect
+                  </span>
+                </button>
+              )}
             </div>
           )}
 
@@ -272,10 +330,35 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
                   </button>
                 );
               })}
+              
+              {/* Subscription Management for Email Users */}
+              {isEmailAuth && (
+                <>
+                  <div className="border-t border-white/10 my-2"></div>
+                  <button
+                    onClick={() => {
+                      setShowSubscriptionManagement(true);
+                      setShowMobileMenu(false);
+                    }}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-300"
+                  >
+                    <Settings className="w-5 h-5 text-blue-400" />
+                    <span className="font-semibold">Manage Subscription</span>
+                  </button>
+                </>
+              )}
             </nav>
           </div>
         )}
       </div>
+
+      {/* Subscription Management Modal */}
+      {isEmailAuth && (
+        <SubscriptionManagement
+          isOpen={showSubscriptionManagement}
+          onClose={() => setShowSubscriptionManagement(false)}
+        />
+      )}
     </header>
   );
 };

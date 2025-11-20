@@ -4002,6 +4002,177 @@ app.post('/api/auth/unlink-wallet', authenticateToken, async (req, res) => {
 });
 
 /**
+ * Get user's active subscription
+ */
+app.get('/api/stripe/subscription', authenticateToken, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stripe is not configured'
+      });
+    }
+
+    const user = req.user;
+    
+    // Find subscription in payment history
+    let subscriptionId = null;
+    if (user.paymentHistory && user.paymentHistory.length > 0) {
+      // Find the most recent subscription
+      const subscriptionPayment = user.paymentHistory
+        .filter(p => p.subscriptionId)
+        .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0];
+      
+      if (subscriptionPayment) {
+        subscriptionId = subscriptionPayment.subscriptionId;
+      }
+    }
+
+    if (!subscriptionId) {
+      // Try to find by customer email
+      try {
+        const customers = await stripe.customers.list({
+          email: user.email,
+          limit: 1
+        });
+
+        if (customers.data.length > 0) {
+          const subscriptions = await stripe.subscriptions.list({
+            customer: customers.data[0].id,
+            status: 'all',
+            limit: 1
+          });
+
+          if (subscriptions.data.length > 0) {
+            subscriptionId = subscriptions.data[0].id;
+          }
+        }
+      } catch (stripeError) {
+        logger.error('Error finding subscription by customer:', stripeError);
+      }
+    }
+
+    if (!subscriptionId) {
+      return res.json({
+        success: true,
+        subscription: null,
+        error: 'No active subscription found'
+      });
+    }
+
+    // Retrieve subscription from Stripe
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+
+    res.json({
+      success: true,
+      subscription: {
+        id: subscription.id,
+        status: subscription.status,
+        current_period_start: subscription.current_period_start,
+        current_period_end: subscription.current_period_end,
+        cancel_at_period_end: subscription.cancel_at_period_end,
+        canceled_at: subscription.canceled_at,
+        items: subscription.items
+      }
+    });
+
+  } catch (error) {
+    logger.error('Get subscription error:', error);
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to get subscription')
+    });
+  }
+});
+
+/**
+ * Cancel user's subscription
+ */
+app.post('/api/stripe/subscription/cancel', authenticateToken, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stripe is not configured'
+      });
+    }
+
+    const { subscriptionId } = req.body;
+    const user = req.user;
+
+    if (!subscriptionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Subscription ID is required'
+      });
+    }
+
+    // Verify subscription belongs to user
+    let userSubscriptionId = null;
+    if (user.paymentHistory && user.paymentHistory.length > 0) {
+      const subscriptionPayment = user.paymentHistory.find(p => p.subscriptionId === subscriptionId);
+      if (!subscriptionPayment) {
+        // Try to verify by customer email
+        try {
+          const customers = await stripe.customers.list({
+            email: user.email,
+            limit: 1
+          });
+
+          if (customers.data.length > 0) {
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+            if (subscription.customer !== customers.data[0].id) {
+              return res.status(403).json({
+                success: false,
+                error: 'Subscription does not belong to this user'
+              });
+            }
+          }
+        } catch (stripeError) {
+          logger.error('Error verifying subscription ownership:', stripeError);
+          return res.status(403).json({
+            success: false,
+            error: 'Unable to verify subscription ownership'
+          });
+        }
+      }
+    }
+
+    // Cancel subscription at period end
+    const subscription = await stripe.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: true
+    });
+
+    logger.info('Subscription canceled at period end', {
+      subscriptionId: subscription.id,
+      userId: user.userId || user._id.toString(),
+      email: user.email,
+      cancelAt: subscription.current_period_end
+    });
+
+    res.json({
+      success: true,
+      subscription: {
+        id: subscription.id,
+        status: subscription.status,
+        current_period_start: subscription.current_period_start,
+        current_period_end: subscription.current_period_end,
+        cancel_at_period_end: subscription.cancel_at_period_end,
+        canceled_at: subscription.canceled_at,
+        items: subscription.items
+      }
+    });
+
+  } catch (error) {
+    logger.error('Cancel subscription error:', error);
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to cancel subscription')
+    });
+  }
+});
+
+/**
  * Get user data
  */
 app.get('/api/users/:walletAddress', async (req, res) => {
