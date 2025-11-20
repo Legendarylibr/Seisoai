@@ -2828,6 +2828,30 @@ const calculateCreditsFromAmount = (amount, creditsPerUSDC = STANDARD_CREDITS_PE
   return Math.floor(parseFloat(amount) * creditsPerUSDC);
 };
 
+// Helper to calculate subscription credits (shared by webhook + verification endpoint)
+const calculateSubscriptionCredits = (user, amountInDollars) => {
+  const baseRate = 5; // 5 credits per dollar (50 credits for $10)
+  let scalingMultiplier = 1.0;
+  if (amountInDollars >= 80) {
+    scalingMultiplier = 1.3; // 30% bonus for $80+
+  } else if (amountInDollars >= 40) {
+    scalingMultiplier = 1.2; // 20% bonus for $40-79
+  } else if (amountInDollars >= 20) {
+    scalingMultiplier = 1.1; // 10% bonus for $20-39
+  }
+
+  const isNFTHolder = !!(user.walletAddress && user.nftCollections && user.nftCollections.length > 0);
+  const nftMultiplier = isNFTHolder ? 1.2 : 1;
+
+  const finalCredits = Math.floor(amountInDollars * baseRate * scalingMultiplier * nftMultiplier);
+
+  return {
+    finalCredits,
+    isNFTHolder,
+    nftMultiplier
+  };
+};
+
 // Helper function to add credits and payment history to user
 const addCreditsToUser = async (user, {
   txHash,
@@ -2865,6 +2889,29 @@ const addCreditsToUser = async (user, {
   await user.save();
   
   return paymentEntry;
+};
+
+const addSubscriptionCredits = async (user, {
+  amountInDollars,
+  paymentId,
+  subscriptionId,
+  chainId = 'stripe',
+  walletType = 'card'
+}) => {
+  const { finalCredits } = calculateSubscriptionCredits(user, amountInDollars);
+
+  await addCreditsToUser(user, {
+    txHash: paymentId,
+    tokenSymbol: 'USD',
+    amount: amountInDollars,
+    credits: finalCredits,
+    chainId,
+    walletType,
+    paymentIntentId: paymentId,
+    subscriptionId
+  });
+
+  return finalCredits;
 };
 
 /**
@@ -5632,6 +5679,154 @@ app.post('/create-checkout-session', async (req, res) => {
     res.status(500).json({
       success: false,
       error: getSafeErrorMessage(error, 'Failed to create checkout session')
+    });
+  }
+});
+
+/**
+ * Verify subscription checkout session manually (fallback if webhook missed)
+ */
+app.post('/api/subscription/verify', async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stripe payment is not configured. Please contact support.'
+      });
+    }
+
+    const { sessionId, userId } = req.body;
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'sessionId is required'
+      });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        error: 'Checkout session not found'
+      });
+    }
+
+    if (session.mode !== 'subscription') {
+      return res.status(400).json({
+        success: false,
+        error: 'Only subscription checkouts can be verified'
+      });
+    }
+
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({
+        success: false,
+        error: 'Payment is not completed yet. Please wait a moment and refresh.'
+      });
+    }
+
+    const subscriptionId = session.subscription;
+    if (!subscriptionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'No subscription found for this checkout session'
+      });
+    }
+
+    const metadata = session.metadata || {};
+    let user = null;
+
+    if (userId) {
+      user = await User.findById(userId);
+    }
+
+    if (!user && metadata.userId) {
+      user = await User.findById(metadata.userId);
+    }
+
+    if (!user && metadata.walletAddress) {
+      user = await getOrCreateUser(metadata.walletAddress);
+    }
+
+    if (!user && metadata.email) {
+      user = await User.findOne({ email: metadata.email.toLowerCase() });
+    }
+
+    if (!user && session.customer) {
+      try {
+        const customer = await stripe.customers.retrieve(session.customer);
+        if (customer && customer.email) {
+          user = await User.findOne({ email: customer.email.toLowerCase() });
+        }
+      } catch (customerError) {
+        logger.warn('Could not retrieve customer while verifying subscription', { error: customerError.message });
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'We could not find your user account for this payment. Please contact support with your receipt.'
+      });
+    }
+
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const price = subscription?.items?.data?.[0]?.price;
+    const amountInDollars = price?.unit_amount ? price.unit_amount / 100 : null;
+
+    if (!amountInDollars) {
+      return res.status(400).json({
+        success: false,
+        error: 'Unable to determine subscription amount. Please contact support.'
+      });
+    }
+
+    const paymentId = `checkout_${session.id}`;
+
+    if (isPaymentAlreadyProcessed(user, null, paymentId)) {
+      const refreshedUser = await User.findById(user._id);
+      return res.json({
+        success: true,
+        alreadyProcessed: true,
+        credits: 0,
+        totalCredits: refreshedUser?.credits ?? user.credits,
+        planName: price?.nickname || null,
+        planPrice: price?.unit_amount ? `$${(price.unit_amount / 100).toFixed(2)}/month` : null,
+        amount: amountInDollars
+      });
+    }
+
+    const finalCredits = await addSubscriptionCredits(user, {
+      amountInDollars,
+      paymentId,
+      subscriptionId
+    });
+
+    const updatedUser = await User.findById(user._id);
+
+    logger.info('Credits added via subscription verification endpoint', {
+      sessionId,
+      subscriptionId,
+      userId: user.userId || null,
+      walletAddress: user.walletAddress || null,
+      amount: amountInDollars,
+      credits: finalCredits,
+      totalCredits: updatedUser?.credits ?? user.credits
+    });
+
+    return res.json({
+      success: true,
+      credits: finalCredits,
+      totalCredits: updatedUser?.credits ?? user.credits,
+      planName: price?.nickname || null,
+      planPrice: price?.unit_amount ? `$${(price.unit_amount / 100).toFixed(2)}/month` : null,
+      amount: amountInDollars
+    });
+  } catch (error) {
+    logger.error('Subscription verification error', { error: error.message, stack: error.stack });
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to verify subscription payment')
     });
   }
 });

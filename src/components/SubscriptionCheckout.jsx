@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import TokenPaymentModal from './TokenPaymentModal';
@@ -33,6 +33,7 @@ const SubscriptionCheckout = ({
 }) => {
   const { isConnected, address, isNFTHolder: walletIsNFTHolder } = useSimpleWallet();
   const { isAuthenticated, userId, linkedWalletAddress, isNFTHolder: emailIsNFTHolder } = useEmailAuth();
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   
   // Only apply NFT pricing if user has a linked wallet (for email users) or is a wallet user
   const isNFTHolder = isAuthenticated && !isConnected
@@ -45,20 +46,6 @@ const SubscriptionCheckout = ({
 
   // Check if user is authenticated
   const isUserAuthenticated = isConnected || isAuthenticated;
-
-  useEffect(() => {
-    // Check for success or cancel in URL params
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('session_id');
-    const canceled = urlParams.get('canceled');
-
-    if (sessionId && onSuccess) {
-      // Pass plan info to success handler
-      onSuccess(sessionId, planName, planPrice);
-    } else if (canceled && onError) {
-      onError('Checkout was canceled');
-    }
-  }, [onSuccess, onError, planName, planPrice]);
 
   // Extract credits number from credits string (e.g., "50 credits/month" -> 50)
   const extractCreditsFromString = (creditsString) => {
@@ -111,8 +98,6 @@ const SubscriptionCheckout = ({
     setError('');
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      
       const body = {
         lookup_key: priceLookupKey,
       };

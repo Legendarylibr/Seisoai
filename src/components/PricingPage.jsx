@@ -19,7 +19,8 @@ const PricingPage = () => {
   const proPriceLookupKey = 'pro_pack_monthly'; // Replace with your actual lookup key
   const studioPriceLookupKey = 'studio_pack_monthly'; // Replace with your actual lookup key
 
-  const { refreshCredits } = useEmailAuth();
+  const { refreshCredits, userId } = useEmailAuth();
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   const [successState, setSuccessState] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
@@ -29,41 +30,51 @@ const PricingPage = () => {
     const sessionId = urlParams.get('session_id');
     const canceled = urlParams.get('canceled');
 
-    if (sessionId) {
-      // Determine which plan was purchased based on session
-      // For now, we'll show a generic success
-      setSuccessState({
-        sessionId,
-        planName: 'Subscription',
-        planPrice: 'Activated'
-      });
-      
-      // Refresh credits after subscription purchase
-      // Webhook should have added credits, but refresh to ensure UI is updated
-      if (refreshCredits) {
-        // Wait a moment for webhook to process, then refresh
-        setTimeout(() => {
-          refreshCredits();
-        }, 2000);
-        
-        // Also poll for credits update (webhook might take a few seconds)
-        const pollInterval = setInterval(() => {
-          refreshCredits();
-        }, 3000);
-        
-        // Stop polling after 30 seconds
-        setTimeout(() => {
-          clearInterval(pollInterval);
-        }, 30000);
-      }
-      
-      // Clean up URL
+    const cleanupUrl = () => {
       window.history.replaceState({}, document.title, window.location.pathname);
+    };
+
+    if (sessionId) {
+      const verifySubscription = async () => {
+        try {
+          const body = { sessionId };
+          if (userId) {
+            body.userId = userId;
+          }
+
+          const response = await fetch(`${apiUrl}/api/subscription/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || 'Failed to verify subscription payment. Please contact support.');
+          }
+
+          handleSuccess(
+            sessionId,
+            data.planName || 'Subscription',
+            data.planPrice || (data.amount ? `$${data.amount}/month` : 'Activated')
+          );
+        } catch (error) {
+          console.error('Subscription verification failed:', error);
+          const message = error.message || 'Failed to verify subscription payment. Please contact support.';
+          setErrorMessage(message);
+          setTimeout(() => setErrorMessage(null), 6000);
+        } finally {
+          cleanupUrl();
+        }
+      };
+
+      verifySubscription();
     } else if (canceled) {
       setErrorMessage('Checkout was canceled. You can try again anytime.');
-      window.history.replaceState({}, document.title, window.location.pathname);
+      setTimeout(() => setErrorMessage(null), 6000);
+      cleanupUrl();
     }
-  }, [refreshCredits]);
+  }, [apiUrl, refreshCredits, userId, handleSuccess]);
 
   const handleSuccess = (sessionId, planName, planPrice) => {
     setSuccessState({
