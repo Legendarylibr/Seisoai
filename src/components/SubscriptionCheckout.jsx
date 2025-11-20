@@ -31,8 +31,13 @@ const SubscriptionCheckout = ({
   onError,
   compact = false
 }) => {
-  const { isConnected, address, isNFTHolder } = useSimpleWallet();
-  const { isAuthenticated, userId } = useEmailAuth();
+  const { isConnected, address, isNFTHolder: walletIsNFTHolder } = useSimpleWallet();
+  const { isAuthenticated, userId, linkedWalletAddress, isNFTHolder: emailIsNFTHolder } = useEmailAuth();
+  
+  // Only apply NFT pricing if user has a linked wallet (for email users) or is a wallet user
+  const isNFTHolder = isAuthenticated && !isConnected
+    ? (linkedWalletAddress && emailIsNFTHolder)
+    : walletIsNFTHolder;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showTokenPayment, setShowTokenPayment] = useState(false);

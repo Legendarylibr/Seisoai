@@ -3722,6 +3722,15 @@ app.post('/api/auth/signup', async (req, res) => {
 
     await user.save();
 
+    // Ensure userId was generated (should be done by pre-save hook, but verify)
+    if (!user.userId) {
+      logger.error('userId was not generated for new user', { email: user.email });
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create user account'
+      });
+    }
+
     // Generate JWT token
     const token = jwt.sign(
       { userId: user.userId, email: user.email },
@@ -3739,7 +3748,8 @@ app.post('/api/auth/signup', async (req, res) => {
         email: user.email,
         credits: user.credits,
         totalCreditsEarned: user.totalCreditsEarned,
-        walletAddress: user.walletAddress || null
+        walletAddress: user.walletAddress || null,
+        isNFTHolder: user.nftCollections && user.nftCollections.length > 0
       }
     });
 

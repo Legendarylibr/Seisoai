@@ -61,28 +61,7 @@ const EmailUserInfo = ({ onShowStripePayment }) => {
           </div>
         </div>
 
-        {/* Optional Wallet Connection - Discreet for NFT discounts */}
-        {!linkedWalletAddress && (
-          <details className="group">
-            <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-400 transition-colors list-none">
-              <span className="flex items-center gap-1">
-                <span>✨</span>
-                <span>Get NFT holder discount (optional)</span>
-              </span>
-            </summary>
-            <div className="mt-2 p-2 bg-white/5 rounded-lg border border-white/10">
-              <p className="text-xs text-gray-400 mb-2">Connect your wallet to verify NFT ownership and get 20% bonus credits</p>
-              <button
-                onClick={() => connectWallet('metamask').catch(() => {})}
-                className="w-full flex items-center justify-center gap-2 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
-              >
-                <Wallet className="w-3.5 h-3.5 text-purple-400" />
-                <span>Connect Wallet</span>
-              </button>
-            </div>
-          </details>
-        )}
-
+        {/* Optional Wallet Connection - Only show NFT discount info if wallet is linked */}
         {linkedWalletAddress && (
           <div className="p-2 bg-green-500/10 rounded-lg border border-green-500/20">
             <div className="flex items-center justify-between">

@@ -201,7 +201,7 @@ export const getStripe = async () => {
 /**
  * Calculate credits for USD amount with subscription scaling
  * @param {number} amount - The amount in USD
- * @param {boolean} isNFTHolder - Whether user owns NFT collections
+ * @param {boolean} isNFTHolder - Whether user owns NFT collections (only applies if user has linked wallet)
  * @returns {number} - Number of credits
  */
 export const calculateCreditsFromUSD = (amount, isNFTHolder = false) => {
@@ -220,6 +220,7 @@ export const calculateCreditsFromUSD = (amount, isNFTHolder = false) => {
   // $10: 5 credits/dollar (no bonus) = 50 credits
   
   // NFT holder bonus (additional 20% on top of subscription scaling)
+  // Note: Only applies to users with linked wallets, not email-only users
   const nftMultiplier = isNFTHolder ? 1.2 : 1;
   
   const credits = amount * baseRate * scalingMultiplier * nftMultiplier;
