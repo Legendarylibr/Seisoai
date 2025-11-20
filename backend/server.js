@@ -2309,8 +2309,28 @@ if (process.env.MONGODB_URI) {
 async function createIndexes() {
   try {
     if (mongoose.connection.readyState === 1) {
-      // Create indexes for frequently queried fields (only if they don't exist)
-      await User.collection.createIndex({ "walletAddress": 1 }, { background: true });
+      // Ensure walletAddress index is sparse + unique (allows multiple documents with no wallet)
+      const existingIndexes = await User.collection.indexes();
+      const walletIndex = existingIndexes.find(idx => idx.name === 'walletAddress_1');
+
+      if (walletIndex) {
+        const needsUpdate = !(walletIndex.unique && walletIndex.sparse);
+        if (needsUpdate) {
+          logger.warn('Recreating walletAddress index to enforce unique+sparse');
+          await User.collection.dropIndex('walletAddress_1');
+          await User.collection.createIndex(
+            { "walletAddress": 1 },
+            { unique: true, sparse: true, background: true }
+          );
+        }
+      } else {
+        await User.collection.createIndex(
+          { "walletAddress": 1 },
+          { unique: true, sparse: true, background: true }
+        );
+      }
+
+      // Create other indexes for frequently queried fields (only if they don't exist)
       await User.collection.createIndex({ "paymentHistory.txHash": 1 }, { background: true });
       await User.collection.createIndex({ "createdAt": 1 }, { background: true });
       await User.collection.createIndex({ "userId": 1 }, { background: true });
