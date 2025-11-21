@@ -18,6 +18,8 @@ const initialState = {
   enableSafetyChecker: false,
   // Generation mode
   generationMode: 'flux-pro', // 'flux-pro', 'flux-multi', 'fast-sdxl'
+  // Model selection for multi-image editing
+  multiImageModel: 'flux-multi', // 'flux-multi' or 'nano-banana-pro'
   // ControlNet settings
   controlNetType: null,
   controlNetImage: null,
@@ -131,6 +133,12 @@ const imageGeneratorReducer = (state, action) => {
         generationMode: action.payload
       };
     
+    case 'SET_MULTI_IMAGE_MODEL':
+      return {
+        ...state,
+        multiImageModel: action.payload
+      };
+    
     case 'SET_BATCH_PROMPTS':
       return {
         ...state,
@@ -226,6 +234,10 @@ export const ImageGeneratorProvider = ({ children }) => {
     dispatch({ type: 'SET_GENERATION_MODE', payload: mode });
   };
 
+  const setMultiImageModel = (model) => {
+    dispatch({ type: 'SET_MULTI_IMAGE_MODEL', payload: model });
+  };
+
   const setBatchPrompts = (prompts) => {
     dispatch({ type: 'SET_BATCH_PROMPTS', payload: prompts });
   };
@@ -270,6 +282,7 @@ export const ImageGeneratorProvider = ({ children }) => {
     setNumImages,
     setSafetyChecker,
     setGenerationMode,
+    setMultiImageModel,
     setBatchPrompts,
     setBatchProcessing,
     addBatchResult,

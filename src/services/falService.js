@@ -308,10 +308,16 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
 
     // SECURITY: Route through backend to ensure credit checks
     // Extract user identification from advancedSettings
-    const { walletAddress, userId, email } = advancedSettings;
+    const { walletAddress, userId, email, multiImageModel } = advancedSettings;
     
     if (!walletAddress && !userId && !email) {
       throw new Error('User identification required. Please provide walletAddress, userId, or email in advancedSettings.');
+    }
+
+    // Determine model to use for multi-image editing
+    let model = null;
+    if (isMultipleImages && multiImageModel === 'nano-banana-pro') {
+      model = 'nano-banana-pro';
     }
 
     // Call backend endpoint which checks credits before making external API call
@@ -324,7 +330,8 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
         ...requestBody,
         walletAddress,
         userId,
-        email
+        email,
+        model // Pass model selection to backend
       })
     });
 

@@ -7,6 +7,7 @@ import StyleSelector from './components/StyleSelector';
 import ImageOutput from './components/ImageOutput';
 import Navigation from './components/Navigation';
 import ReferenceImageInput from './components/ReferenceImageInput';
+import MultiImageModelSelector from './components/MultiImageModelSelector';
 import TokenPaymentModal from './components/TokenPaymentModal';
 import StripePaymentModal from './components/StripePaymentModal';
 import EmailSignIn from './components/EmailSignIn';
@@ -603,6 +604,11 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
               {/* Style Selection */}
               <div>
                 <StyleSelector />
+              </div>
+
+              {/* Multi-Image Model Selection */}
+              <div>
+                <MultiImageModelSelector />
               </div>
             </div>
 

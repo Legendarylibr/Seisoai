@@ -1565,10 +1565,35 @@ app.post('/api/wan-animate/submit', wanSubmitLimiter, requireCredits(2), async (
 });
 
 /**
+ * Dynamic credit requirement middleware factory
+ * Determines required credits based on model selection before checking
+ */
+const requireCreditsForModel = () => {
+  return async (req, res, next) => {
+    try {
+      // Determine required credits based on model selection
+      const { model, image_urls } = req.body;
+      const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
+      const isNanoBananaPro = isMultipleImages && model === 'nano-banana-pro';
+      const requiredCredits = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro ($0.20), 1 for others
+      
+      // Store required credits for use in handler
+      req.requiredCreditsForModel = requiredCredits;
+      
+      // Use requireCredits middleware with dynamic credit amount
+      return requireCredits(requiredCredits)(req, res, next);
+    } catch (error) {
+      logger.error('Error determining required credits', { error: error.message });
+      return res.status(500).json({ success: false, error: 'Failed to determine required credits' });
+    }
+  };
+};
+
+/**
  * Image generation endpoint - SECURITY: Requires credits check before making external API calls
  * This endpoint proxies image generation requests to fal.ai after verifying user has credits
  */
-app.post('/api/generate/image', requireCredits(1), async (req, res) => {
+app.post('/api/generate/image', requireCreditsForModel(), async (req, res) => {
   try {
     if (!FAL_API_KEY) {
       return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
@@ -1583,7 +1608,8 @@ app.post('/api/generate/image', requireCredits(1), async (req, res) => {
       image_url,
       image_urls,
       aspect_ratio,
-      seed
+      seed,
+      model
     } = req.body;
 
     // Validate required inputs
@@ -1591,9 +1617,15 @@ app.post('/api/generate/image', requireCredits(1), async (req, res) => {
       return res.status(400).json({ success: false, error: 'prompt is required and must be a non-empty string' });
     }
 
-    // Determine endpoint based on whether reference images are provided
+    // Determine endpoint based on whether reference images are provided and model selection
     let endpoint;
-    if (image_urls && Array.isArray(image_urls) && image_urls.length >= 2) {
+    const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
+    const isNanoBananaPro = isMultipleImages && model === 'nano-banana-pro';
+    
+    if (isNanoBananaPro) {
+      // Multiple images with Nano Banana Pro selected
+      endpoint = 'https://fal.run/fal-ai/nano-banana-pro/edit';
+    } else if (isMultipleImages) {
       // Multiple images - use multi model
       endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/max/multi';
     } else if (image_url || (image_urls && image_urls.length === 1)) {
@@ -1605,40 +1637,63 @@ app.post('/api/generate/image', requireCredits(1), async (req, res) => {
     }
 
     // Build request body for fal.ai
-    const requestBody = {
-      prompt: prompt.trim(),
-      guidance_scale: guidanceScale,
-      num_images: numImages,
-      output_format: 'jpeg',
-      safety_tolerance: '6',
-      prompt_safety_tolerance: '6',
-      enhance_prompt: true
-    };
-
-    // Add seed if provided
-    if (seed !== undefined && seed !== null) {
-      requestBody.seed = seed;
+    // Nano Banana Pro has different parameters than FLUX
+    let requestBody;
+    
+    if (isNanoBananaPro) {
+      // Nano Banana Pro API format
+      requestBody = {
+        prompt: prompt.trim(),
+        image_urls: image_urls // Required for Nano Banana Pro
+      };
+      
+      // Add aspect ratio if provided
+      if (aspect_ratio) {
+        requestBody.aspect_ratio = aspect_ratio;
+      }
+      
+      // Nano Banana Pro supports resolution parameter (1K, 2K, 4K)
+      // Default to 1K if not specified
+      requestBody.resolution = '1K';
     } else {
-      // Generate random seed if not provided
-      requestBody.seed = Math.floor(Math.random() * 2147483647);
-    }
+      // FLUX Kontext API format
+      requestBody = {
+        prompt: prompt.trim(),
+        guidance_scale: guidanceScale,
+        num_images: numImages,
+        output_format: 'jpeg',
+        safety_tolerance: '6',
+        prompt_safety_tolerance: '6',
+        enhance_prompt: true
+      };
 
-    // Add reference image(s)
-    if (image_urls && Array.isArray(image_urls) && image_urls.length >= 2) {
-      requestBody.image_urls = image_urls;
-    } else if (image_url || (image_urls && image_urls.length === 1)) {
-      requestBody.image_url = image_url || image_urls[0];
-    }
+      // Add seed if provided
+      if (seed !== undefined && seed !== null) {
+        requestBody.seed = seed;
+      } else {
+        // Generate random seed if not provided
+        requestBody.seed = Math.floor(Math.random() * 2147483647);
+      }
 
-    // Add aspect ratio if provided
-    if (aspect_ratio) {
-      requestBody.aspect_ratio = aspect_ratio;
+      // Add reference image(s)
+      if (image_urls && Array.isArray(image_urls) && image_urls.length >= 2) {
+        requestBody.image_urls = image_urls;
+      } else if (image_url || (image_urls && image_urls.length === 1)) {
+        requestBody.image_url = image_url || image_urls[0];
+      }
+
+      // Add aspect ratio if provided
+      if (aspect_ratio) {
+        requestBody.aspect_ratio = aspect_ratio;
+      }
     }
 
     logger.info('Image generation request', {
       endpoint,
+      model: isNanoBananaPro ? 'nano-banana-pro' : 'flux',
       hasImage: !!requestBody.image_url,
       hasImages: !!requestBody.image_urls,
+      imageCount: requestBody.image_urls?.length || 0,
       userId: req.user?.userId,
       email: req.user?.email,
       walletAddress: req.user?.walletAddress
@@ -1705,16 +1760,31 @@ app.post('/api/generate/image', requireCredits(1), async (req, res) => {
 
     const data = await response.json();
     
-    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+    // Handle both FLUX and Nano Banana Pro response formats
+    // FLUX returns: { images: [{ url: ... }, ...] }
+    // Nano Banana Pro returns: { images: [{ url: ... }, ...] } or similar format
+    let images = [];
+    if (data.images && Array.isArray(data.images)) {
+      images = data.images;
+    } else if (data.image && typeof data.image === 'string') {
+      // Single image as string
+      images = [{ url: data.image }];
+    } else if (data.url && typeof data.url === 'string') {
+      // Single image URL
+      images = [{ url: data.url }];
+    }
+    
+    if (images.length > 0) {
       logger.info('Image generation successful', {
-        imageCount: data.images.length,
+        model: isNanoBananaPro ? 'nano-banana-pro' : 'flux',
+        imageCount: images.length,
         userId: req.user?.userId,
         email: req.user?.email,
         walletAddress: req.user?.walletAddress
       });
-      res.json({ success: true, images: data.images });
+      res.json({ success: true, images: images });
     } else {
-      logger.error('No images in fal.ai response', { data });
+      logger.error('No images in fal.ai response', { data, model: isNanoBananaPro ? 'nano-banana-pro' : 'flux' });
       return res.status(500).json({ success: false, error: 'No image generated' });
     }
   } catch (error) {

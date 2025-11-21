@@ -19,6 +19,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     numImages,
     enableSafetyChecker,
     generationMode,
+    multiImageModel,
     controlNetImage,
     controlNetImageDimensions,
     setCurrentGeneration
@@ -151,6 +152,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         numImages,
         enableSafetyChecker,
         generationMode,
+        multiImageModel, // Pass model selection for multi-image editing
         walletAddress: isEmailAuth ? undefined : address, // Pass wallet address for wallet users
         userId: isEmailAuth ? emailContext.userId : undefined, // Pass userId for email users
         email: isEmailAuth ? emailContext.email : undefined, // Pass email for email users
@@ -190,10 +192,17 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         ? (emailContext.linkedWalletAddress || emailContext.userId) 
         : address;
       
+      // Calculate credits based on model selection
+      const isMultipleImages = Array.isArray(controlNetImage) && controlNetImage.length >= 2;
+      const isNanoBananaPro = isMultipleImages && multiImageModel === 'nano-banana-pro';
+      const creditsUsed = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro ($0.20), 1 for others
+      
       logger.debug('Saving generation and deducting credits', { 
         userIdentifier, 
         isEmailAuth, 
-        currentCredits: availableCredits 
+        currentCredits: availableCredits,
+        creditsUsed,
+        model: isNanoBananaPro ? 'nano-banana-pro' : 'flux'
       });
       
       let deductionResult = null;
@@ -202,7 +211,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           prompt: customPrompt || (selectedStyle ? selectedStyle.prompt : 'No style selected'),
           style: selectedStyle ? selectedStyle.name : 'No Style',
           imageUrl,
-          creditsUsed: 1, // 1 credit per generation
+          creditsUsed: creditsUsed, // Dynamic credits based on model
           userId: isEmailAuth ? emailContext.userId : undefined, // Include userId for email users
           email: isEmailAuth ? emailContext.email : undefined // Include email for email users
         });
