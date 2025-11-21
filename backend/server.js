@@ -5645,13 +5645,13 @@ app.post('/create-checkout-session', async (req, res) => {
       ],
       customer_email: user.email || undefined,
       metadata: {
-        userId: user._id.toString(),
+        userId: user.userId || user._id.toString(), // Use custom userId if available, fallback to _id
         walletAddress: user.walletAddress ? user.walletAddress.toLowerCase() : '',
         email: user.email || '',
       },
       subscription_data: {
         metadata: {
-          userId: user._id.toString(),
+          userId: user.userId || user._id.toString(), // Use custom userId if available, fallback to _id
           walletAddress: user.walletAddress ? user.walletAddress.toLowerCase() : '',
           email: user.email || '',
         },
@@ -5703,8 +5703,11 @@ app.post('/api/subscription/verify', async (req, res) => {
       });
     }
 
+    logger.info('Subscription verification started', { sessionId, userId: userId || 'not provided' });
+
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     if (!session) {
+      logger.error('Checkout session not found', { sessionId });
       return res.status(404).json({
         success: false,
         error: 'Checkout session not found'
@@ -5712,6 +5715,7 @@ app.post('/api/subscription/verify', async (req, res) => {
     }
 
     if (session.mode !== 'subscription') {
+      logger.warn('Non-subscription checkout attempted', { sessionId, mode: session.mode });
       return res.status(400).json({
         success: false,
         error: 'Only subscription checkouts can be verified'
@@ -5719,6 +5723,7 @@ app.post('/api/subscription/verify', async (req, res) => {
     }
 
     if (session.payment_status !== 'paid') {
+      logger.warn('Payment not completed yet', { sessionId, payment_status: session.payment_status });
       return res.status(400).json({
         success: false,
         error: 'Payment is not completed yet. Please wait a moment and refresh.'
@@ -5727,6 +5732,7 @@ app.post('/api/subscription/verify', async (req, res) => {
 
     const subscriptionId = session.subscription;
     if (!subscriptionId) {
+      logger.error('No subscription ID in session', { sessionId });
       return res.status(400).json({
         success: false,
         error: 'No subscription found for this checkout session'
@@ -5736,27 +5742,80 @@ app.post('/api/subscription/verify', async (req, res) => {
     const metadata = session.metadata || {};
     let user = null;
 
-    if (userId) {
-      user = await User.findById(userId);
+    // Try to get user from auth token first
+    const authHeader = req.headers['authorization'];
+    if (authHeader) {
+      try {
+        const token = authHeader.split(' ')[1]; // Bearer TOKEN
+        if (token) {
+          const decoded = jwt.verify(token, JWT_SECRET);
+          user = await User.findOne({
+            $or: [
+              { userId: decoded.userId },
+              { email: decoded.email }
+            ]
+          });
+          if (user) {
+            logger.info('User found via auth token', { userId: user.userId, email: user.email });
+          }
+        }
+      } catch (tokenError) {
+        logger.warn('Invalid or missing auth token', { error: tokenError.message });
+      }
     }
 
+    // Try userId from request body (custom userId field, not MongoDB _id)
+    if (!user && userId) {
+      user = await User.findOne({ userId });
+      if (user) {
+        logger.info('User found via request userId', { userId });
+      } else {
+        logger.warn('User not found by request userId', { userId });
+      }
+    }
+
+    // Try userId from session metadata (could be custom userId or MongoDB _id)
     if (!user && metadata.userId) {
-      user = await User.findById(metadata.userId);
+      // First try as custom userId field
+      user = await User.findOne({ userId: metadata.userId });
+      if (!user) {
+        // If not found, try as MongoDB _id
+        try {
+          user = await User.findById(metadata.userId);
+        } catch (idError) {
+          // Invalid ObjectId format, ignore
+        }
+      }
+      if (user) {
+        logger.info('User found via session metadata userId', { metadataUserId: metadata.userId, foundUserId: user.userId });
+      }
     }
 
+    // Try walletAddress from metadata
     if (!user && metadata.walletAddress) {
       user = await getOrCreateUser(metadata.walletAddress);
+      if (user) {
+        logger.info('User found/created via walletAddress', { walletAddress: metadata.walletAddress });
+      }
     }
 
+    // Try email from metadata
     if (!user && metadata.email) {
       user = await User.findOne({ email: metadata.email.toLowerCase() });
+      if (user) {
+        logger.info('User found via session metadata email', { email: metadata.email });
+      }
     }
 
+    // Try customer email from Stripe
     if (!user && session.customer) {
       try {
         const customer = await stripe.customers.retrieve(session.customer);
         if (customer && customer.email) {
           user = await User.findOne({ email: customer.email.toLowerCase() });
+          if (user) {
+            logger.info('User found via Stripe customer email', { email: customer.email });
+          }
         }
       } catch (customerError) {
         logger.warn('Could not retrieve customer while verifying subscription', { error: customerError.message });
@@ -5764,6 +5823,14 @@ app.post('/api/subscription/verify', async (req, res) => {
     }
 
     if (!user) {
+      logger.error('User not found for subscription verification', {
+        sessionId,
+        requestUserId: userId || null,
+        metadataUserId: metadata.userId || null,
+        metadataEmail: metadata.email || null,
+        metadataWalletAddress: metadata.walletAddress || null,
+        sessionCustomer: session.customer || null
+      });
       return res.status(404).json({
         success: false,
         error: 'We could not find your user account for this payment. Please contact support with your receipt.'

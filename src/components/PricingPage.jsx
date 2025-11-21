@@ -66,9 +66,15 @@ const PricingPage = () => {
             body.userId = userId;
           }
 
+          const headers = { 'Content-Type': 'application/json' };
+          const token = localStorage.getItem('authToken');
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
+
           const response = await fetch(`${apiUrl}/api/subscription/verify`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(body)
           });
 
