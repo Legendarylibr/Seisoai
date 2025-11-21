@@ -96,8 +96,8 @@ import SubscriptionManagement from './SubscriptionManagement';
             })}
           </nav>
 
-          {/* Stripe button for email users or when not connected */}
-          {(!isConnected || isEmailAuth) && onShowStripePayment && (
+          {/* Stripe button - only show for authenticated email users */}
+          {isEmailAuth && onShowStripePayment && (
             <button
               onClick={onShowStripePayment}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium rounded-lg transition-all duration-200 hover:scale-105 shadow-lg"
@@ -287,20 +287,7 @@ import SubscriptionManagement from './SubscriptionManagement';
                   <LogOut className="w-4 h-4 text-red-400" />
                 </button>
               </>
-            ) : (
-              /* Not connected - Show single buy button */
-              <>
-                {onShowStripePayment && (
-                  <button
-                    onClick={onShowStripePayment}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium rounded-lg transition-all duration-200 text-xs"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>Buy Credits</span>
-                  </button>
-                )}
-              </>
-            )}
+            ) : null}
           </div>
         </div>
 
