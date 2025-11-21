@@ -571,6 +571,11 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
               <div className="min-h-[120px] md:min-h-[140px]">
                 <ReferenceImageInput />
               </div>
+              
+              {/* Multi-Image Model Selection - Show immediately after images */}
+              <div className="mt-2">
+                <MultiImageModelSelector />
+              </div>
             </div>
 
             {/* Prompt and Style Combined */}
@@ -604,11 +609,6 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
               {/* Style Selection */}
               <div>
                 <StyleSelector />
-              </div>
-
-              {/* Multi-Image Model Selection */}
-              <div>
-                <MultiImageModelSelector />
               </div>
             </div>
 
