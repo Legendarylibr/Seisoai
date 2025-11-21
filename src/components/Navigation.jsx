@@ -96,18 +96,6 @@ import SubscriptionManagement from './SubscriptionManagement';
             })}
           </nav>
 
-          {/* Stripe button - only show for authenticated email users */}
-          {isEmailAuth && onShowStripePayment && (
-            <button
-              onClick={onShowStripePayment}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium rounded-lg transition-all duration-200 hover:scale-105 shadow-lg"
-            >
-              <CreditCard className="w-4 h-4" />
-              <span className="hidden sm:inline">Buy Credits with Card</span>
-              <span className="sm:hidden">Card</span>
-            </button>
-          )}
-
           {/* Credits Dropdown */}
           {isConnected && (
             <div className="hidden md:flex items-center space-x-3">
