@@ -1572,9 +1572,10 @@ const requireCreditsForModel = () => {
   return async (req, res, next) => {
     try {
       // Determine required credits based on model selection
-      const { model, image_urls } = req.body;
+      const { model, image_urls, image_url } = req.body;
       const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
-      const isNanoBananaPro = isMultipleImages && model === 'nano-banana-pro';
+      const isSingleImage = image_url || (image_urls && image_urls.length === 1);
+      const isNanoBananaPro = model === 'nano-banana-pro' && (isMultipleImages || isSingleImage);
       const requiredCredits = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro ($0.20), 1 for others
       
       // Store required credits for use in handler
@@ -1620,15 +1621,16 @@ app.post('/api/generate/image', requireCreditsForModel(), async (req, res) => {
     // Determine endpoint based on whether reference images are provided and model selection
     let endpoint;
     const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
-    const isNanoBananaPro = isMultipleImages && model === 'nano-banana-pro';
+    const isSingleImage = image_url || (image_urls && image_urls.length === 1);
+    const isNanoBananaPro = model === 'nano-banana-pro' && (isMultipleImages || isSingleImage);
     
     if (isNanoBananaPro) {
-      // Multiple images with Nano Banana Pro selected
+      // Nano Banana Pro selected (works for both single and multiple images)
       endpoint = 'https://fal.run/fal-ai/nano-banana-pro/edit';
     } else if (isMultipleImages) {
       // Multiple images - use multi model
       endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/max/multi';
-    } else if (image_url || (image_urls && image_urls.length === 1)) {
+    } else if (isSingleImage) {
       // Single image - use max model
       endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/max';
     } else {
@@ -1643,9 +1645,17 @@ app.post('/api/generate/image', requireCreditsForModel(), async (req, res) => {
     if (isNanoBananaPro) {
       // Nano Banana Pro API format
       requestBody = {
-        prompt: prompt.trim(),
-        image_urls: image_urls // Required for Nano Banana Pro
+        prompt: prompt.trim()
       };
+      
+      // For Nano Banana Pro, use image_urls for multiple images or single image
+      if (isMultipleImages) {
+        requestBody.image_urls = image_urls;
+      } else if (isSingleImage) {
+        // For single image, Nano Banana Pro also uses image_urls array format
+        const singleImageUrl = image_url || (image_urls && image_urls[0]);
+        requestBody.image_urls = [singleImageUrl];
+      }
       
       // Add aspect ratio if provided
       if (aspect_ratio) {

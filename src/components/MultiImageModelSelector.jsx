@@ -6,7 +6,7 @@ import logger from '../utils/logger.js';
 const MultiImageModelSelector = () => {
   const { controlNetImage, multiImageModel, setMultiImageModel } = useImageGenerator();
 
-  // Check if we have multiple images (2+)
+  // Check if we have images (1+)
   // Handle both array format and single image format
   const getImageCount = () => {
     if (!controlNetImage) return 0;
@@ -17,20 +17,22 @@ const MultiImageModelSelector = () => {
   };
 
   const imageCount = getImageCount();
+  const hasImages = imageCount >= 1;
   const isMultipleImages = imageCount >= 2;
 
-  // Set default model when multiple images are first detected
+  // Set default model when images are first detected
   useEffect(() => {
-    if (isMultipleImages && !multiImageModel) {
-      logger.debug('Setting default multi-image model to flux-multi');
-      setMultiImageModel('flux-multi');
+    if (hasImages && !multiImageModel) {
+      const defaultModel = isMultipleImages ? 'flux-multi' : 'flux';
+      logger.debug('Setting default model', { defaultModel, imageCount });
+      setMultiImageModel(defaultModel);
     }
-  }, [isMultipleImages, multiImageModel, setMultiImageModel]);
+  }, [hasImages, isMultipleImages, multiImageModel, setMultiImageModel, imageCount]);
 
   // Log for debugging
   useEffect(() => {
     if (controlNetImage) {
-      logger.debug('MultiImageModelSelector - Image state', {
+      logger.debug('ModelSelector - Image state', {
         isArray: Array.isArray(controlNetImage),
         imageCount,
         isMultipleImages,
@@ -39,10 +41,30 @@ const MultiImageModelSelector = () => {
     }
   }, [controlNetImage, imageCount, isMultipleImages, multiImageModel]);
 
-  // Only show when multiple images (2+) are provided
-  if (!isMultipleImages) {
+  // Show when images are provided (1+)
+  if (!hasImages) {
     return null;
   }
+
+  // Determine model labels and current selection based on image count
+  const getModelLabels = () => {
+    if (isMultipleImages) {
+      return {
+        flux: 'FLUX Multi',
+        fluxDesc: '⚡ Fast multi-image blending and composition',
+        currentFluxModel: 'flux-multi'
+      };
+    } else {
+      return {
+        flux: 'FLUX',
+        fluxDesc: '⚡ Fast image editing and generation',
+        currentFluxModel: 'flux'
+      };
+    }
+  };
+
+  const labels = getModelLabels();
+  const isFluxSelected = multiImageModel === labels.currentFluxModel || (!multiImageModel && labels.currentFluxModel);
 
   return (
     <div className="space-y-2 p-3 bg-white/5 rounded-lg border border-white/10">
@@ -51,25 +73,25 @@ const MultiImageModelSelector = () => {
           Model Selection
         </span>
         <span className="text-xs text-purple-400 font-medium">
-          ({imageCount} images)
+          ({imageCount} {imageCount === 1 ? 'image' : 'images'})
         </span>
       </label>
       <div className="flex gap-2">
         <button
           type="button"
           onClick={() => {
-            logger.debug('Selected FLUX Multi model');
-            setMultiImageModel('flux-multi');
+            logger.debug('Selected FLUX model', { fluxModel: labels.currentFluxModel });
+            setMultiImageModel(labels.currentFluxModel);
           }}
           className={`flex-1 flex flex-col items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border transition-all ${
-            multiImageModel === 'flux-multi'
+            isFluxSelected
               ? 'bg-purple-500/20 border-purple-400 text-purple-300 shadow-lg shadow-purple-500/20'
               : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20'
           }`}
         >
           <Zap className="w-5 h-5" />
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-sm font-medium">FLUX Multi</span>
+            <span className="text-sm font-medium">{labels.flux}</span>
             <span className="text-xs text-gray-400">1 credit</span>
           </div>
         </button>
@@ -96,7 +118,7 @@ const MultiImageModelSelector = () => {
         <p className="text-xs text-gray-400">
           {multiImageModel === 'nano-banana-pro' 
             ? '✨ Advanced semantic editing with better quality and reasoning'
-            : '⚡ Fast multi-image blending and composition'}
+            : labels.fluxDesc}
         </p>
       </div>
     </div>

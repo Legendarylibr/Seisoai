@@ -314,9 +314,10 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       throw new Error('User identification required. Please provide walletAddress, userId, or email in advancedSettings.');
     }
 
-    // Determine model to use for multi-image editing
+    // Determine model to use for image editing (single or multi)
     let model = null;
-    if (isMultipleImages && multiImageModel === 'nano-banana-pro') {
+    if (hasRefImage && multiImageModel === 'nano-banana-pro') {
+      // Nano Banana Pro works for both single and multiple images
       model = 'nano-banana-pro';
     }
 

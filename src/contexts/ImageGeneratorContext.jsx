@@ -18,8 +18,8 @@ const initialState = {
   enableSafetyChecker: false,
   // Generation mode
   generationMode: 'flux-pro', // 'flux-pro', 'flux-multi', 'fast-sdxl'
-  // Model selection for multi-image editing
-  multiImageModel: 'flux-multi', // 'flux-multi' or 'nano-banana-pro'
+  // Model selection for image editing (single or multi)
+  multiImageModel: null, // 'flux', 'flux-multi', or 'nano-banana-pro' (null = default/auto)
   // ControlNet settings
   controlNetType: null,
   controlNetImage: null,

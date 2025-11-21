@@ -193,8 +193,9 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         : address;
       
       // Calculate credits based on model selection
+      const hasImages = !!controlNetImage;
       const isMultipleImages = Array.isArray(controlNetImage) && controlNetImage.length >= 2;
-      const isNanoBananaPro = isMultipleImages && multiImageModel === 'nano-banana-pro';
+      const isNanoBananaPro = hasImages && multiImageModel === 'nano-banana-pro';
       const creditsUsed = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro ($0.20), 1 for others
       
       logger.debug('Saving generation and deducting credits', { 
