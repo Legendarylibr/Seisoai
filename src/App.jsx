@@ -250,11 +250,46 @@ function AuthPrompt() {
             <h1 className="text-4xl md:text-5xl font-bold gradient-text mb-4">
               Welcome to Seiso AI
             </h1>
-            <p className="text-xl md:text-2xl text-gray-300 mb-3">
-              Create and edit high quality images with AI
+            <p className="text-xl md:text-2xl text-gray-300 mb-4">
+              Create and edit stunning images with AI
             </p>
-            <p className="text-gray-400 text-lg">
-              Choose how you'd like to sign in
+            
+            {/* What Seiso AI Does */}
+            <div className="glass-card rounded-xl p-6 mb-6 max-w-2xl mx-auto text-left">
+              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-400" />
+                What You Can Do
+              </h2>
+              <div className="space-y-3 text-gray-300">
+                <div className="flex items-start gap-3">
+                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
+                  <div>
+                    <span className="font-medium text-white">Text-to-Image:</span> Generate images from text descriptions
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
+                  <div>
+                    <span className="font-medium text-white">Image Editing:</span> Transform and enhance existing images
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
+                  <div>
+                    <span className="font-medium text-white">Image Blending:</span> Combine multiple images into one
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
+                  <div>
+                    <span className="font-medium text-white">Multiple Styles:</span> Choose from various artistic styles
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <p className="text-gray-400 text-lg mb-2">
+              Choose how you'd like to sign in to get started
             </p>
           </div>
 
@@ -462,6 +497,36 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
         <p className="text-gray-400 text-base md:text-lg">Create and edit stunning AI-generated images</p>
       </div>
 
+      {/* Quick Instructions */}
+      <div className="glass-card rounded-xl p-4 mb-3 max-w-3xl mx-auto slide-up">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-blue-500/20 rounded-lg flex-shrink-0">
+            <Sparkles className="w-4 h-4 text-blue-400" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-white mb-2">How to Use</h3>
+            <div className="space-y-1.5 text-xs text-gray-300">
+              <div className="flex items-start gap-2">
+                <span className="text-purple-400 font-medium">1.</span>
+                <span><strong>Upload images</strong> (optional): No image = generate new • 1 image = edit • 2+ images = blend</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-purple-400 font-medium">2.</span>
+                <span><strong>Enter a prompt</strong> (optional): Describe what you want to create or change</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-purple-400 font-medium">3.</span>
+                <span><strong>Choose a style</strong> (optional): Select an artistic style for your image</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-purple-400 font-medium">4.</span>
+                <span><strong>Click Generate</strong>: Your image will appear on the right</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* User Info - Email or Wallet */}
       <div className="glass-card rounded-xl rounded-b-none p-2.5 mb-0 slide-up">
         {isEmailAuth ? (
@@ -498,7 +563,7 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
                 <div>
                   <h2 className="text-sm md:text-base font-semibold text-white">Reference Image</h2>
                   <p className="text-xs text-gray-400">
-                    0 images: text-to-image • 1 image: edit • 2+ images: blend
+                    <span className="text-purple-300">0 images:</span> Generate new • <span className="text-purple-300">1 image:</span> Edit • <span className="text-purple-300">2+ images:</span> Blend
                   </p>
                 </div>
               </div>
@@ -515,14 +580,24 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
                   <span className="text-xs md:text-sm font-semibold text-white">
                     {hasReferenceImages ? 'Describe Changes' : 'Prompt'}
                   </span>
+                  <span className="text-xs text-gray-500">(optional)</span>
                 </label>
                 <textarea
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder={hasReferenceImages ? "Describe changes to make... (optional)" : "Enter your prompt... (optional)"}
-                  className="w-full p-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none text-sm transition-all duration-300 focus:bg-white/8"
+                  placeholder={
+                    hasReferenceImages 
+                      ? "e.g., 'make it more vibrant', 'add sunset colors', 'change to winter scene'..." 
+                      : "e.g., 'a futuristic city at night', 'a serene mountain landscape', 'a cute cat wearing sunglasses'..."
+                  }
+                  className="w-full p-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none text-sm transition-all duration-300 focus:bg-white/8"
                   rows={2}
                 />
+                {!hasReferenceImages && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 Tip: Be specific! Describe details like colors, mood, style, and composition
+                  </p>
+                )}
               </div>
 
               {/* Style Selection */}

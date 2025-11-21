@@ -200,7 +200,21 @@ export const EmailAuthProvider = ({ children }) => {
       if (result.success) {
         setEmail(email);
         setUserId(result.user.userId);
+        // Set credits immediately from signin response
+        if (result.user.credits !== undefined) {
+          setCredits(result.user.credits || 0);
+        }
+        if (result.user.totalCreditsEarned !== undefined) {
+          setTotalCreditsEarned(result.user.totalCreditsEarned || 0);
+        }
+        if (result.user.isNFTHolder !== undefined) {
+          setIsNFTHolder(result.user.isNFTHolder || false);
+        }
+        if (result.user.walletAddress) {
+          setLinkedWalletAddress(result.user.walletAddress);
+        }
         setIsAuthenticated(true);
+        // Also fetch fresh data to ensure everything is up to date
         await fetchUserData();
       }
       return result;
