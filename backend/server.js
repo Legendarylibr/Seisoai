@@ -5611,8 +5611,41 @@ app.post('/create-checkout-session', async (req, res) => {
     }
 
     // Get base URL from environment or request
-    const baseUrl = process.env.FRONTEND_URL || 
-                   (req.headers.origin || `http://${req.headers.host}`);
+    const isValidHttpUrl = (candidate) => {
+      if (!candidate || typeof candidate !== 'string') return false;
+      try {
+        const parsed = new URL(candidate);
+        return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+      } catch (err) {
+        return false;
+      }
+    };
+
+    const fallbackFrontendUrl = 'https://seisoai.com';
+    const envFrontendUrl = process.env.FRONTEND_URL;
+    const requestOrigin = req.headers.origin;
+    const inferredHost = req.headers.host ? `https://${req.headers.host}` : null;
+    let baseUrl = null;
+
+    if (isValidHttpUrl(envFrontendUrl)) {
+      baseUrl = envFrontendUrl;
+    } else if (isValidHttpUrl(requestOrigin)) {
+      baseUrl = requestOrigin;
+    } else if (isValidHttpUrl(inferredHost)) {
+      baseUrl = inferredHost;
+    } else {
+      baseUrl = fallbackFrontendUrl;
+    }
+
+    if (!isValidHttpUrl(baseUrl)) {
+      logger.warn('Invalid base URL detected for checkout session, falling back', {
+        envFrontendUrl,
+        requestOrigin,
+        inferredHost,
+        fallbackFrontendUrl
+      });
+      baseUrl = fallbackFrontendUrl;
+    }
 
     // Look up the price by lookup_key if it's not already a price ID
     let priceId = lookup_key;
