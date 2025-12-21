@@ -147,10 +147,13 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
   const [customPrompt, setCustomPrompt] = useState('');
   const walletContext = useSimpleWallet();
   const emailContext = useEmailAuth();
-  const { controlNetImage } = useImageGenerator();
+  const { controlNetImage, multiImageModel } = useImageGenerator();
   
   // Determine if user has reference images
   const hasReferenceImages = !!controlNetImage;
+  
+  // Hide prompt and style when Qwen is selected (layer extraction doesn't need them)
+  const isQwenSelected = multiImageModel === 'qwen-image-layered';
   
   // Use email auth if available, otherwise wallet
   const isEmailAuth = emailContext.isAuthenticated;
@@ -259,55 +262,57 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
               </div>
             </div>
 
-            {/* Prompt and Style Combined */}
-            <div className="glass-card rounded-none lg:rounded-bl-xl p-1.5 md:p-2 space-y-1.5">
-              {/* Custom Prompt */}
-              <div>
-                <label className="flex items-center gap-1 mb-1">
-                  <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                    {hasReferenceImages ? 'Describe Changes' : 'Prompt'}
-                  </span>
-                  <span className="text-xs" style={{ color: '#666666', fontStyle: 'italic' }}>(optional)</span>
-                </label>
-                <textarea
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder={
-                    hasReferenceImages 
-                      ? "e.g., 'make it more vibrant', 'add sunset colors'..." 
-                      : "e.g., 'a futuristic city at night', 'a serene mountain landscape'..."
-                  }
-                  className="w-full p-1.5 rounded resize-none text-xs transition-all duration-300"
-                  style={{
-                    background: '#ffffff',
-                    border: '2px inset #c0c0c0',
-                    color: '#000000',
-                    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.border = '2px inset #808080';
-                    e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.3)';
-                    e.target.style.background = '#fffffe';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.border = '2px inset #c0c0c0';
-                    e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-                    e.target.style.background = '#ffffff';
-                  }}
-                  rows={2}
-                />
-                {!hasReferenceImages && (
-                  <p className="text-xs mt-0.5" style={{ color: '#666666' }}>
-                    💡 Tip: Be specific with colors, mood, style
-                  </p>
-                )}
-              </div>
+            {/* Prompt and Style Combined - Hidden when Qwen is selected */}
+            {!isQwenSelected && (
+              <div className="glass-card rounded-none lg:rounded-bl-xl p-1.5 md:p-2 space-y-1.5">
+                {/* Custom Prompt */}
+                <div>
+                  <label className="flex items-center gap-1 mb-1">
+                    <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                      {hasReferenceImages ? 'Describe Changes' : 'Prompt'}
+                    </span>
+                    <span className="text-xs" style={{ color: '#666666', fontStyle: 'italic' }}>(optional)</span>
+                  </label>
+                  <textarea
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    placeholder={
+                      hasReferenceImages 
+                        ? "e.g., 'make it more vibrant', 'add sunset colors'..." 
+                        : "e.g., 'a futuristic city at night', 'a serene mountain landscape'..."
+                    }
+                    className="w-full p-1.5 rounded resize-none text-xs transition-all duration-300"
+                    style={{
+                      background: '#ffffff',
+                      border: '2px inset #c0c0c0',
+                      color: '#000000',
+                      boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.border = '2px inset #808080';
+                      e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.3)';
+                      e.target.style.background = '#fffffe';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.border = '2px inset #c0c0c0';
+                      e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+                      e.target.style.background = '#ffffff';
+                    }}
+                    rows={2}
+                  />
+                  {!hasReferenceImages && (
+                    <p className="text-xs mt-0.5" style={{ color: '#666666' }}>
+                      💡 Tip: Be specific with colors, mood, style
+                    </p>
+                  )}
+                </div>
 
-              {/* Style Selection */}
-              <div>
-                <StyleSelector />
+                {/* Style Selection */}
+                <div>
+                  <StyleSelector />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Generate Button - Mobile */}
             <div className="lg:hidden">

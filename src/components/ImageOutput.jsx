@@ -201,21 +201,26 @@ const ImageOutput = () => {
       return;
     }
     
-    // Validate prompt first
+    // Validate prompt first (skip validation for Qwen - it doesn't need a prompt)
+    const isQwenModel = selectedModel === 'qwen-image-layered';
     const trimmedPrompt = newPrompt.trim();
-    if (!trimmedPrompt) {
-      setError('Please enter a new prompt');
-      return;
-    }
+    
+    if (!isQwenModel) {
+      // Only validate prompt for non-Qwen models
+      if (!trimmedPrompt) {
+        setError('Please enter a new prompt');
+        return;
+      }
 
-    if (trimmedPrompt.length < 3) {
-      setError('Prompt must be at least 3 characters long');
-      return;
-    }
+      if (trimmedPrompt.length < 3) {
+        setError('Prompt must be at least 3 characters long');
+        return;
+      }
 
-    if (trimmedPrompt.length > 1000) {
-      setError('Prompt must be less than 1000 characters');
-      return;
+      if (trimmedPrompt.length > 1000) {
+        setError('Prompt must be less than 1000 characters');
+        return;
+      }
     }
     
     // Check if authenticated (email or wallet)
@@ -668,7 +673,9 @@ const ImageOutput = () => {
               </button>
             </div>
             <p className="text-gray-700 text-xs sm:text-sm mb-3 sm:mb-4">
-              Enter a new prompt to regenerate the image. The current output will be used as the reference image.
+              {selectedModel === 'qwen-image-layered' 
+                ? 'Extract RGBA layers from the current image. No prompt needed.'
+                : 'Enter a new prompt to regenerate the image. The current output will be used as the reference image.'}
             </p>
             {error && (
               <div className="mb-3 sm:mb-4 p-2 sm:p-3 bg-red-100 border border-red-300 rounded-lg">
@@ -828,24 +835,27 @@ const ImageOutput = () => {
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto min-h-0">
-              <textarea
-                value={newPrompt}
-                onChange={(e) => {
-                  setNewPrompt(e.target.value);
-                  setError(null);
-                }}
-                placeholder="Enter your new prompt here..."
-                className="w-full h-24 sm:h-32 px-3 sm:px-4 py-2 sm:py-3 bg-white border-2 border-gray-300 rounded-xl text-black text-sm sm:text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none transition-all duration-300"
-              />
-            </div>
+            {/* Prompt input - Hidden when Qwen is selected */}
+            {selectedModel !== 'qwen-image-layered' && (
+              <div className="flex-1 overflow-y-auto min-h-0">
+                <textarea
+                  value={newPrompt}
+                  onChange={(e) => {
+                    setNewPrompt(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="Enter your new prompt here..."
+                  className="w-full h-24 sm:h-32 px-3 sm:px-4 py-2 sm:py-3 bg-white border-2 border-gray-300 rounded-xl text-black text-sm sm:text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none transition-all duration-300"
+                />
+              </div>
+            )}
             <div className="flex gap-2 sm:gap-3 mt-4 sm:mt-6 flex-shrink-0">
               <button
                 onClick={handleRegenerateWithPrompt}
-                disabled={!newPrompt.trim() || isRegenerating || isGenerating}
+                disabled={(!newPrompt.trim() && selectedModel !== 'qwen-image-layered') || isRegenerating || isGenerating}
                 className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base py-2 sm:py-3"
               >
-                {isRegenerating ? 'Generating...' : 'Generate with New Prompt'}
+                {isRegenerating ? 'Generating...' : selectedModel === 'qwen-image-layered' ? 'Extract Layers' : 'Generate with New Prompt'}
               </button>
               <button
                 onClick={() => {
