@@ -6590,6 +6590,7 @@ app.post('/api/generations/add', async (req, res) => {
     });
     
     // Create generation object
+    // For free images, set creditsUsed to 0 immediately
     const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const generation = {
       id: generationId,
@@ -6599,7 +6600,7 @@ app.post('/api/generations/add', async (req, res) => {
       ...(videoUrl && { videoUrl }),
       ...(requestId && { requestId }),
       ...(status && { status }),
-      creditsUsed: creditsToDeduct,
+      creditsUsed: isFreeImage ? 0 : creditsToDeduct, // Set to 0 for free images
       timestamp: new Date()
     };
     
@@ -6610,7 +6611,7 @@ app.post('/api/generations/add', async (req, res) => {
       style: style || 'No Style',
       ...(imageUrl && { imageUrl }),
       ...(videoUrl && { videoUrl }),
-      creditsUsed: creditsToDeduct,
+      creditsUsed: isFreeImage ? 0 : creditsToDeduct, // Set to 0 for free images
       timestamp: new Date()
     };
     
@@ -6632,6 +6633,8 @@ app.post('/api/generations/add', async (req, res) => {
     logger.debug('Executing atomic update', {
       updateQuery,
       creditsToDeduct,
+      isFreeImage,
+      actualCreditsUsed: generation.creditsUsed,
       hasGeneration: !!generation,
       hasVideoUrl: !!videoUrl,
       hasRequestId: !!requestId,
@@ -6653,12 +6656,7 @@ app.post('/api/generations/add', async (req, res) => {
         totalCreditsSpent: creditsToDeduct
       };
     } else {
-      // For free images, increment IP-based free image counter
-      // Set creditsUsed to 0 for free images in the generation record
-      generation.creditsUsed = 0;
-      galleryItem.creditsUsed = 0;
-      
-      // Increment IP-based free image usage (atomic operation)
+      // For free images, increment IP-based free image counter (atomic operation)
       await IPFreeImage.findOneAndUpdate(
         { ipAddress: clientIP },
         { 
