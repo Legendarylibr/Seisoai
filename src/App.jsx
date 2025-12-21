@@ -13,6 +13,7 @@ import StripePaymentModal from './components/StripePaymentModal';
 import EmailSignIn from './components/EmailSignIn';
 import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
+import AuthPrompt from './components/AuthPrompt';
 import ImageGallery from './components/ImageGallery';
 import PricingPage from './components/PricingPage';
 import GenerateButton from './components/GenerateButton';
@@ -177,12 +178,12 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
     return <PricingPage />;
   }
 
-  // Show auth prompt if not authenticated (for other tabs)
-  if (!isConnected && !isAuthenticated) {
-    return <AuthPrompt onSwitchToWallet={() => {}} />;
-  }
+  // Allow UI access without authentication - users can see the interface and try to generate
+  // Authentication will be prompted when they try to generate if needed
+  // New users get 2 free images (IP-based), so we allow them to see the UI
 
   // If crypto wallet user has 0 credits, show crypto checkout modal (pay-per-credit)
+  // But only if they've used their free images (new users get 2 free images based on IP)
   if (isConnected && (credits === 0 || credits === null || credits === undefined) && !isLoading) {
     return (
       <>
@@ -214,14 +215,17 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   }
 
   // If email/Stripe user has 0 credits, show subscription pricing page
+  // But only if they've used their free images (new users get 2 free images based on IP)
   if (isAuthenticated && !isConnected && (credits === 0 || credits === null || credits === undefined) && !isLoading) {
     return <PricingPage />;
   }
 
-  // Show main content if authenticated and has credits
+  // Show main content - allow UI access even without authentication
+  // New users can see the interface and will be prompted to sign up when generating
+  // They'll get 2 free images (IP-based) after signing up
   return (
     <>
-      <AuthGuard requireCredits={activeTab === 'generate'}>
+      <AuthGuard requireCredits={false}>
         {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
         {activeTab === 'gallery' && <GalleryTab />}
       </AuthGuard>
@@ -229,253 +233,7 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   );
 }
 
-function AuthPrompt() {
-  const [authMode, setAuthMode] = useState(null); // 'email' or 'wallet'
-
-  // Show auth mode selection if not selected
-  if (!authMode) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh] px-4">
-        <div className="text-center max-w-2xl mx-auto slide-up">
-          {/* Hero Section */}
-          <div className="mb-10">
-            <div className="w-24 h-24 flex items-center justify-center mx-auto mb-8 animate-pulse">
-              <div className="glass-card p-4 rounded-2xl">
-                <img 
-                  src="/1d1c7555360a737bb22bbdfc2784655f.png" 
-                  alt="Seiso AI Logo" 
-                  className="w-16 h-16 object-contain"
-                />
-              </div>
-            </div>
-            <h1 className="text-4xl md:text-5xl font-bold gradient-text mb-4">
-              Welcome to Seiso AI
-            </h1>
-            <p className="text-xl md:text-2xl text-gray-300 mb-4">
-              Create and edit stunning images with AI
-            </p>
-            
-            {/* What Seiso AI Does */}
-            <div className="glass-card rounded-xl p-6 mb-6 max-w-2xl mx-auto text-left">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-purple-400" />
-                What You Can Do
-              </h2>
-              <div className="space-y-3 text-gray-300">
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <div>
-                    <span className="font-medium text-white">Text-to-Image:</span> Generate images from text descriptions
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <div>
-                    <span className="font-medium text-white">Image Editing:</span> Transform and enhance existing images
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <div>
-                    <span className="font-medium text-white">Image Blending:</span> Combine multiple images into one
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <div>
-                    <span className="font-medium text-white">Multiple Styles:</span> Choose from various artistic styles
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <p className="text-gray-400 text-lg mb-2">
-              Choose how you'd like to sign in to get started
-            </p>
-          </div>
-
-          {/* Auth Mode Selection */}
-          <div className="space-y-4 max-w-md mx-auto">
-            <button
-              onClick={() => setAuthMode('email')}
-              className="w-full flex items-center gap-4 p-5 rounded-xl glass-card card-hover group"
-            >
-              <Mail className="w-6 h-6 text-blue-400 group-hover:scale-110 transition-transform duration-300" />
-              <div className="flex-1 text-left">
-                <div className="font-semibold text-white text-lg mb-1">Sign in with Email</div>
-                <div className="text-sm text-gray-400">Use Stripe for payments</div>
-              </div>
-              <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
-            </button>
-
-            <button
-              onClick={() => setAuthMode('wallet')}
-              className="w-full flex items-center gap-4 p-5 rounded-xl glass-card card-hover group"
-            >
-              <Wallet className="w-6 h-6 text-purple-400 group-hover:scale-110 transition-transform duration-300" />
-              <div className="flex-1 text-left">
-                <div className="font-semibold text-white text-lg mb-1">Connect Wallet</div>
-                <div className="text-sm text-gray-400">Crypto payments & NFT discounts</div>
-              </div>
-              <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show email sign-in
-  if (authMode === 'email') {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh] px-4">
-        <div className="w-full max-w-md mx-auto">
-          <button
-            onClick={() => setAuthMode(null)}
-            className="mb-4 flex items-center gap-2 text-gray-400 hover:text-white transition-all duration-300"
-          >
-            <ArrowRight className="w-4 h-4 rotate-180" />
-            <span>Back</span>
-          </button>
-          <EmailSignIn onSwitchToWallet={() => setAuthMode('wallet')} />
-        </div>
-      </div>
-    );
-  }
-
-  // Show wallet connection (existing logic)
-  return <WalletPrompt onBack={() => setAuthMode(null)} />;
-}
-
-function WalletPrompt({ onBack }) {
-  const { connectWallet } = useSimpleWallet();
-  const [selectedChain, setSelectedChain] = useState(null);
-
-  const chainOptions = [
-    { id: 'evm', name: 'Ethereum', icon: '⟠', description: 'EVM Compatible Chains' },
-    { id: 'solana', name: 'Solana', icon: '◎', description: 'Solana Blockchain' }
-  ];
-
-  const evmWallets = [
-    { id: 'metamask', name: 'MetaMask', icon: '🦊' },
-    { id: 'rabby', name: 'Rabby', icon: '🐰' },
-    { id: 'coinbase', name: 'Coinbase Wallet', icon: '🔵' }
-  ];
-
-  const solanaWallets = [
-    { id: 'phantom', name: 'Phantom', icon: '👻' },
-    { id: 'solflare', name: 'Solflare', icon: '🔥' }
-  ];
-
-  const handleChainSelect = (chainId) => {
-    setSelectedChain(chainId);
-  };
-
-  const handleWalletSelect = async (walletId) => {
-    try {
-      await connectWallet(walletId);
-    } catch (error) {
-      console.error('Wallet connection failed:', error);
-    }
-  };
-
-  const handleBack = () => {
-    setSelectedChain(null);
-  };
-
-  return (
-    <div className="flex items-center justify-center min-h-[60vh] px-4">
-      <div className="text-center max-w-2xl mx-auto slide-up">
-        {/* Hero Section */}
-        <div className="mb-10">
-          <div className="w-24 h-24 flex items-center justify-center mx-auto mb-8 animate-pulse">
-            <div className="glass-card p-4 rounded-2xl">
-              <img 
-                src="/1d1c7555360a737bb22bbdfc2784655f.png" 
-                alt="Seiso AI Logo" 
-                className="w-16 h-16 object-contain"
-              />
-            </div>
-          </div>
-          <h1 className="text-4xl md:text-5xl font-bold gradient-text mb-4">
-            Connect Your Wallet
-          </h1>
-          <p className="text-xl md:text-2xl text-gray-300 mb-3">
-            Connect your crypto wallet to get started
-          </p>
-        </div>
-
-        {/* Back Button */}
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="mb-4 flex items-center gap-2 text-gray-400 hover:text-white transition-all duration-300 mx-auto"
-          >
-            <ArrowRight className="w-4 h-4 rotate-180" />
-            <span>Back to Sign In Options</span>
-          </button>
-        )}
-
-        {/* Chain Selection */}
-        {!selectedChain ? (
-          <div className="mt-4 space-y-4 max-w-md mx-auto">
-            {chainOptions.map((chain, index) => (
-              <button
-                key={chain.id}
-                onClick={() => handleChainSelect(chain.id)}
-                className="w-full flex items-center gap-4 p-5 rounded-xl glass-card card-hover group"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <span className="text-3xl group-hover:scale-110 transition-transform duration-300">{chain.icon}</span>
-                <div className="flex-1 text-left">
-                  <div className="font-semibold text-white text-lg mb-1">{chain.name}</div>
-                  <div className="text-sm text-gray-400">{chain.description}</div>
-                </div>
-                <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-6 slide-up">
-            <button
-              onClick={handleBack}
-              className="flex items-center gap-2 text-gray-400 hover:text-white transition-all duration-300 mx-auto group"
-            >
-              <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform duration-300" />
-              <span className="group-hover:text-white">Back to Blockchain Selection</span>
-            </button>
-
-            <div className="text-center glass-card p-6">
-              <h3 className="text-2xl font-semibold text-white mb-2">
-                {selectedChain === 'evm' ? '⟠ Ethereum Wallets' : '◎ Solana Wallets'}
-              </h3>
-              <p className="text-gray-400 text-base">
-                Choose your {selectedChain === 'evm' ? 'EVM' : 'Solana'} wallet
-              </p>
-            </div>
-
-            <div className="space-y-4 max-w-md mx-auto">
-              {(selectedChain === 'evm' ? evmWallets : solanaWallets).map((wallet, index) => (
-                <button
-                  key={wallet.id}
-                  onClick={() => handleWalletSelect(wallet.id)}
-                  className="w-full flex items-center gap-4 p-5 rounded-xl glass-card card-hover group"
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
-                  <span className="text-3xl group-hover:scale-110 transition-transform duration-300">{wallet.icon}</span>
-                  <div className="flex-1 text-left">
-                    <div className="font-semibold text-white text-lg">{wallet.name}</div>
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+// AuthPrompt and WalletPrompt moved to separate component file: src/components/AuthPrompt.jsx
 
 function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
   const [customPrompt, setCustomPrompt] = useState('');

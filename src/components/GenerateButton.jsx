@@ -119,22 +119,19 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       ? (emailContext.userId || emailContext.linkedWalletAddress) 
       : address;
     
+    // Require authentication to generate (but UI is accessible without auth)
     if (!isAuthenticated || !hasIdentifier) {
       if (isEmailAuth) {
-        setError('Please sign in with your email account');
+        setError('Please sign in with your email account to generate images. New users get 2 free images!');
       } else {
-        setError('Please connect your wallet first');
+        setError('Please connect your wallet or sign in with email to generate images. New users get 2 free images!');
       }
       return;
     }
 
-    // Check if user has credits (use available credits which considers both fields)
-    if (availableCredits <= 0) {
-      if (onShowTokenPayment) {
-        onShowTokenPayment();
-      }
-      return;
-    }
+    // Allow generation attempt even with 0 credits - backend will check if user is eligible for free image
+    // If they're not eligible (already used free image), backend will return an error
+    // We'll catch that error and show payment modal
 
     // Style is optional - can generate with just prompt and reference image
 
@@ -266,7 +263,17 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       }, 1000);
     } catch (error) {
       console.error('Generation error:', error);
-      setError(error.message || 'Failed to generate image. Please try again.');
+      const errorMessage = error.message || 'Failed to generate image. Please try again.';
+      
+      // If error is about insufficient credits and user is authenticated, show payment modal
+      if (errorMessage.includes('Insufficient credits') && isAuthenticated && onShowTokenPayment) {
+        // User has used their free images and needs to pay
+        setError('You\'ve used your free images! Please purchase credits to generate more.');
+        onShowTokenPayment();
+      } else {
+        setError(errorMessage);
+      }
+      
       setProgress(0);
       setCurrentStep('Error occurred');
     } finally {
@@ -281,8 +288,8 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   const getButtonText = () => {
     if (isGenerating) return 'Generating...';
     if (walletLoading) return 'Loading...';
-    if (!isConnected && !isEmailAuth) return 'Connect Wallet or Sign In First';
-    if (availableCredits <= 0) return 'Buy Credits to Generate';
+    if (!isConnected && !isEmailAuth) return 'Sign In to Generate (2 Free Images!)';
+    if (availableCredits <= 0) return 'Generate (2 Free Images!)';
     return 'Generate Image';
   };
 

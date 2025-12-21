@@ -2,6 +2,7 @@ import React from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { Wallet, CreditCard, AlertCircle } from 'lucide-react';
+import AuthPrompt from './AuthPrompt';
 
 const AuthGuard = ({ children, requireCredits = true, fallback = null }) => {
   const walletContext = useSimpleWallet();
@@ -49,34 +50,8 @@ const AuthGuard = ({ children, requireCredits = true, fallback = null }) => {
   const isEmailAuth = emailContext.isAuthenticated;
   
   if (!isConnected || (!address && !isEmailAuth)) {
-    // For email users, show different message
-    if (isEmailAuth) {
-      return fallback || children; // Email users should pass through
-    }
-    
-    // For wallet users, show wallet connection prompt
-    return fallback || (
-      <div className="flex items-center justify-center p-8">
-        <div className="text-center max-w-md">
-          <Wallet className="w-16 h-16 text-purple-400 mx-auto mb-6" />
-          <h3 className="text-2xl font-bold text-white mb-4">Wallet Required</h3>
-          <p className="text-gray-400 mb-6">
-            Please connect your wallet to access the image generation service.
-          </p>
-          <div className="space-y-3">
-            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-              <h4 className="font-semibold text-blue-400 mb-2">Why connect a wallet?</h4>
-              <ul className="text-sm text-gray-300 space-y-1">
-                <li>• Secure authentication</li>
-                <li>• Credit management</li>
-                <li>• Payment processing</li>
-                <li>• NFT/token discount verification</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    // Show AuthPrompt with both email and wallet options when not authenticated
+    return fallback || <AuthPrompt />;
   }
 
   // Always show the UI - credits will be checked at the component level
