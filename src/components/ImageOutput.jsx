@@ -249,20 +249,22 @@ const ImageOutput = () => {
       return;
     }
     
+    // Ensure we have a reference image
+    const referenceImageForGeneration = currentGeneration.referenceImage || 
+                                        currentGeneration.image || 
+                                        generatedImage;
+    
+    if (!referenceImageForGeneration) {
+      setError('No reference image available. Please generate an image first.');
+      return;
+    }
+    
     setIsRegenerating(true);
     setError(null);
     setShowPromptModal(false);
     
     try {
       setGenerating(true);
-      
-      // Use the generated image as the reference image for the new generation
-      // Preserve the selected model (multiImageModel) so the new prompt uses the same model
-      // Use the most current image as reference: prefer currentGeneration.referenceImage if available,
-      // otherwise use currentGeneration.image, otherwise fall back to generatedImage
-      const referenceImageForGeneration = currentGeneration.referenceImage || 
-                                          currentGeneration.image || 
-                                          generatedImage;
       
       const advancedSettings = {
         guidanceScale: currentGeneration.guidanceScale || guidanceScale,
@@ -417,7 +419,9 @@ const ImageOutput = () => {
         }
       }
       setError(errorMessage);
-      // Reopen modal to show error
+      // Reopen modal to show error and reinitialize selected model
+      const currentModel = multiImageModel || currentGeneration?.multiImageModel || 'flux';
+      setSelectedModel(currentModel);
       setShowPromptModal(true);
     } finally {
       setIsRegenerating(false);
