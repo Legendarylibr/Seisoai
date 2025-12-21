@@ -4768,7 +4768,7 @@ app.post('/api/nft/check-credits', async (req, res) => {
  */
 app.post('/api/nft/check-holdings', async (req, res) => {
   try {
-    const { walletAddress, collections } = req.body;
+    const { walletAddress } = req.body;
     
     if (!walletAddress) {
       return res.status(400).json({
@@ -4806,13 +4806,9 @@ app.post('/api/nft/check-holdings', async (req, res) => {
           { new: true }
         );
         
-        // Count ETH NFTs (chainId === '1') for credit calculation
-        // Grant 2 credits per ETH NFT (matching grant-eth-nft-credits.js script)
-        const ethNFTs = ownedCollections
-          .filter(c => (c?.chainId || '').toString() === '1')
-          .reduce((sum, c) => sum + (Array.isArray(c?.tokenIds) ? c.tokenIds.length : 0), 0);
-        
-        const creditsToGrant = ethNFTs * 2;
+        // Grant 5 credits to NFT holders (one-time, flat amount)
+        // NFT holders also get 5 free images (IP-based), so this gives them 5 credits + 5 free images
+        const creditsToGrant = 5;
         
         // Check if NFT credits have already been granted by looking for payment entry
         const nftGrantTxHash = `NFT_GRANT_${normalizedWalletForNFT}`;
@@ -4835,8 +4831,8 @@ app.post('/api/nft/check-holdings', async (req, res) => {
           creditsGranted = creditsToGrant;
           logger.info('NFT credits granted automatically', { 
             walletAddress: normalizedWalletForNFT,
-            ethNFTs,
-            creditsGranted 
+            creditsGranted,
+            note: 'NFT holders receive 5 credits + 5 free images (IP-based)'
           });
         } else if (hasBeenGranted) {
           logger.debug('NFT credits already granted', { walletAddress: normalizedWalletForNFT });
@@ -4861,8 +4857,7 @@ app.post('/api/nft/check-holdings', async (req, res) => {
         costPerCredit: isHolder ? 0.06 : 0.15,
         creditsPerUSDC: isHolder ? 16.67 : STANDARD_CREDITS_PER_USDC
       },
-      freeCredits: isHolder ? 10 : 0,
-      creditsGranted // Return how many credits were just granted
+      creditsGranted // Return how many credits were just granted (5 credits for NFT holders)
     });
     
   } catch (error) {

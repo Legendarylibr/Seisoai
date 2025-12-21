@@ -10,40 +10,21 @@ import ReferenceImageInput from './components/ReferenceImageInput';
 import MultiImageModelSelector from './components/MultiImageModelSelector';
 import TokenPaymentModal from './components/TokenPaymentModal';
 import StripePaymentModal from './components/StripePaymentModal';
-import EmailSignIn from './components/EmailSignIn';
 import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
-import AuthPrompt from './components/AuthPrompt';
 import ImageGallery from './components/ImageGallery';
 import PricingPage from './components/PricingPage';
 import GenerateButton from './components/GenerateButton';
-import { Grid, Sparkles, Wallet, ArrowRight, Image, Mail, CreditCard, DollarSign } from 'lucide-react';
+import { Grid, Sparkles, Image, DollarSign } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
-  const [showTokenPaymentModal, setShowTokenPaymentModal] = useState(false);
-  // const [showStripePaymentModal, setShowStripePaymentModal] = useState(false); // DISABLED - Stripe
 
   const tabs = [
     { id: 'generate', name: 'Generate', icon: Sparkles },
     { id: 'gallery', name: 'Gallery', icon: Grid },
     { id: 'pricing', name: 'Pricing', icon: DollarSign }
   ];
-
-  const [showStripePaymentModal, setShowStripePaymentModal] = useState(false);
-
-  // Check credits on mount and redirect to pricing if needed
-  // This will be handled in AppContent component
-
-  // Memoize callbacks to prevent unnecessary re-renders
-  const handleShowTokenPayment = useCallback(() => {
-    // Token payment modal opened
-    setShowTokenPaymentModal(true);
-  }, []);
-
-  const handleShowStripePayment = useCallback(() => {
-    setShowStripePaymentModal(true);
-  }, []);
 
   return (
     <SimpleWalletProvider>
@@ -53,8 +34,6 @@ function App() {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             tabs={tabs}
-            onShowTokenPayment={handleShowTokenPayment}
-            onShowStripePayment={handleShowStripePayment}
           />
         </ImageGeneratorProvider>
       </EmailAuthProvider>
@@ -62,7 +41,7 @@ function App() {
   );
 }
 
-function AppWithCreditsCheck({ activeTab, setActiveTab, tabs, onShowTokenPayment, onShowStripePayment }) {
+function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
   const { isConnected, credits: walletCredits, isLoading: walletLoading } = useSimpleWallet();
   const { isAuthenticated, credits: emailCredits, isLoading: emailLoading } = useEmailAuth();
   const [showTokenPaymentModal, setShowTokenPaymentModal] = useState(false);
@@ -139,13 +118,6 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs, onShowTokenPayment
 }
 
 function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
-  const { isConnected, credits: walletCredits, isLoading: walletLoading } = useSimpleWallet();
-  const { isAuthenticated, credits: emailCredits, isLoading: emailLoading } = useEmailAuth();
-
-  // Determine current credits based on auth method
-  const isEmailAuth = isAuthenticated && !isConnected;
-  const credits = isEmailAuth ? (emailCredits || 0) : (walletCredits || 0);
-  const isLoading = walletLoading || emailLoading;
 
   // Pricing page is accessible without auth (but checkout requires auth)
   if (activeTab === 'pricing') {
@@ -171,8 +143,6 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   );
 }
 
-// AuthPrompt and WalletPrompt moved to separate component file: src/components/AuthPrompt.jsx
-
 function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
   const [customPrompt, setCustomPrompt] = useState('');
   const walletContext = useSimpleWallet();
@@ -193,6 +163,27 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
         <h1 className="text-3xl md:text-4xl font-bold gradient-text mb-0.5">Seiso AI</h1>
         <p className="text-gray-400 text-base md:text-lg">Create and edit stunning AI-generated images</p>
       </div>
+
+      {/* User Info - Email or Wallet */}
+      <div className="glass-card rounded-xl rounded-b-none p-2.5 mb-0 slide-up">
+        {isEmailAuth ? (
+          <EmailUserInfo onShowStripePayment={onShowStripePayment} />
+        ) : (
+          <SimpleWalletConnect />
+        )}
+      </div>
+
+      {/* Credits Status Banner - Only for wallet users */}
+      {credits <= 0 && !isEmailAuth && (
+        <div className="glass-card bg-yellow-500/10 border-yellow-500/30 rounded-t-none rounded-b-none p-2.5 mb-0 animate-pulse">
+          <div className="flex items-center gap-2 text-center justify-center">
+            <div className="w-2.5 h-2.5 bg-yellow-400 rounded-full animate-pulse"></div>
+            <span className="text-yellow-300 text-xs md:text-sm font-medium">
+              No credits available - Click "Buy Credits" in the top right to purchase credits
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Quick Instructions */}
       <div className="glass-card rounded-xl p-4 mb-3 max-w-3xl mx-auto slide-up">
@@ -223,27 +214,6 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
           </div>
         </div>
       </div>
-
-      {/* User Info - Email or Wallet */}
-      <div className="glass-card rounded-xl rounded-b-none p-2.5 mb-0 slide-up">
-        {isEmailAuth ? (
-          <EmailUserInfo onShowStripePayment={onShowStripePayment} />
-        ) : (
-          <SimpleWalletConnect />
-        )}
-      </div>
-
-      {/* Credits Status Banner - Only for wallet users */}
-      {credits <= 0 && !isEmailAuth && (
-        <div className="glass-card bg-yellow-500/10 border-yellow-500/30 rounded-t-none rounded-b-none p-2.5 mb-0 animate-pulse">
-          <div className="flex items-center gap-2 text-center justify-center">
-            <div className="w-2.5 h-2.5 bg-yellow-400 rounded-full animate-pulse"></div>
-            <span className="text-yellow-300 text-xs md:text-sm font-medium">
-              No credits available - Click "Buy Credits" in the top right to purchase credits
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* Main Content - Improved Layout */}
       <div>
