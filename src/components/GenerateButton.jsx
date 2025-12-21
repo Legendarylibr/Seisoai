@@ -294,11 +294,11 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   };
 
   const getButtonIcon = () => {
-    if (isGenerating) return <div className="w-4 h-4 animate-spin text-lg">⏳</div>;
-    if (walletLoading) return <div className="w-4 h-4 animate-pulse text-lg">⏳</div>;
-    if (!isConnected && !isEmailAuth) return <div className="w-4 h-4 text-lg">🔗</div>;
-    if (availableCredits <= 0) return <div className="w-4 h-4 text-lg">💳</div>;
-    return <div className="w-4 h-4 text-lg">✨</div>;
+    if (isGenerating) return <span className="text-xs" style={{ color: '#000000' }}>⏳</span>;
+    if (walletLoading) return <span className="text-xs animate-pulse" style={{ color: '#000000' }}>⏳</span>;
+    if (!isConnected && !isEmailAuth) return <span className="text-xs" style={{ color: '#000000' }}>🔗</span>;
+    if (availableCredits <= 0) return <span className="text-xs" style={{ color: '#000000' }}>💳</span>;
+    return <span className="text-xs" style={{ color: '#000000' }}>✨</span>;
   };
 
   return (
@@ -308,17 +308,68 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           onClick={handleGenerate}
           disabled={isDisabled}
           aria-label={isGenerating ? 'Generating image...' : 'Generate AI image'}
-          className={`
-            w-full flex items-center justify-center gap-2 px-6 py-3 text-base font-semibold rounded-lg
-            transition-all duration-300 transform
-            ${isDisabled 
-              ? 'opacity-50 cursor-not-allowed bg-gray-600 text-gray-400' 
-              : (availableCredits <= 0)
-                ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-400 hover:to-orange-400 hover:shadow-xl hover:shadow-yellow-500/30 hover:scale-105'
-                : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400 hover:shadow-xl hover:shadow-purple-500/30 hover:scale-105'
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded transition-all duration-200"
+          style={isDisabled ? {
+            background: 'linear-gradient(to bottom, #c8c8c8, #b0b0b0)',
+            border: '2px inset #b8b8b8',
+            boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)',
+            color: '#666666',
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.5)',
+            cursor: 'not-allowed'
+          } : (availableCredits <= 0) ? {
+            background: 'linear-gradient(to bottom, #ffffcc, #ffffaa, #ffff99)',
+            border: '2px outset #ffffbb',
+            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 3px 6px rgba(0, 0, 0, 0.2)',
+            color: '#000000',
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.9)'
+          } : {
+            background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+            border: '2px outset #f0f0f0',
+            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)',
+            color: '#000000',
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+          }}
+          onMouseEnter={(e) => {
+            if (!isDisabled && availableCredits > 0) {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+              e.currentTarget.style.border = '2px outset #f8f8f8';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.35)';
+            } else if (!isDisabled && availableCredits <= 0) {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)';
+              e.currentTarget.style.border = '2px outset #ffffcc';
+              e.currentTarget.style.transform = 'translateY(-1px)';
             }
-            border border-white/20
-          `}
+          }}
+          onMouseLeave={(e) => {
+            if (!isDisabled && availableCredits > 0) {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)';
+            } else if (!isDisabled && availableCredits <= 0) {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #ffffcc, #ffffaa, #ffff99)';
+              e.currentTarget.style.border = '2px outset #ffffbb';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }
+          }}
+          onMouseDown={(e) => {
+            if (!isDisabled) {
+              e.currentTarget.style.border = '2px inset #d0d0d0';
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)';
+              e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+            }
+          }}
+          onMouseUp={(e) => {
+            if (!isDisabled && availableCredits > 0) {
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)';
+            } else if (!isDisabled && availableCredits <= 0) {
+              e.currentTarget.style.border = '2px outset #ffffbb';
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #ffffcc, #ffffaa, #ffff99)';
+            }
+          }}
         >
           {getButtonIcon()}
           <span>{getButtonText()}</span>
@@ -327,49 +378,68 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
 
       {/* Enhanced Progress Bar with Loading Steps */}
       {(isGenerating || isLoading) && (
-        <div className="w-full mt-4 space-y-3">
+        <div className="w-full mt-3 space-y-2">
           {/* Progress Header */}
-          <div className="flex justify-between items-center text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-              <span className="text-gray-300">{currentStep}</span>
+          <div className="flex justify-between items-center text-xs">
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full" style={{ 
+                background: '#000000',
+                boxShadow: '0 0 2px rgba(255, 255, 255, 0.8)',
+                animation: 'pulse 1.5s ease-in-out infinite'
+              }}></div>
+              <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{currentStep}</span>
             </div>
-            <span className="text-gray-400">
+            <span style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
               {timeRemaining > 0 ? `${timeRemaining}s remaining` : 'Almost done...'}
             </span>
           </div>
           
           {/* Progress Bar */}
-          <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden relative">
+          <div className="w-full rounded h-2.5 overflow-hidden relative" style={{
+            background: '#d0d0d0',
+            border: '2px inset #c0c0c0',
+            boxShadow: 'inset 2px 2px 0 rgba(0, 0, 0, 0.2)'
+          }}>
             <div 
-              className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 ease-out relative"
-              style={{ width: `${progress}%` }}
+              className="h-full transition-all duration-500 ease-out relative"
+              style={{ 
+                width: `${progress}%`,
+                background: 'linear-gradient(to bottom, #808080, #606060, #505050)',
+                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.3)'
+              }}
             >
               {/* Animated shimmer effect */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent" style={{
+                animation: 'shimmer 2s ease-in-out infinite'
+              }}></div>
             </div>
             {/* Progress percentage */}
-            <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-white">
+            <div className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ 
+              color: '#000000', 
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+            }}>
               {Math.round(progress)}%
             </div>
           </div>
           
           {/* Loading Steps Indicator */}
-          <div className="flex justify-center space-x-2">
-            {['Initializing', 'Processing', 'Generating', 'Enhancing', 'Finalizing'].map((step, index) => {
+          <div className="flex justify-center space-x-1.5">
+            {['Init', 'Process', 'Generate', 'Enhance', 'Finish'].map((step, index) => {
               const stepProgress = (index + 1) * 20;
               const isActive = progress >= stepProgress - 10;
               const isCompleted = progress >= stepProgress;
               
               return (
                 <div key={step} className="flex flex-col items-center">
-                  <div className={`
-                    w-2 h-2 rounded-full transition-all duration-300
-                    ${isCompleted ? 'bg-green-400' : isActive ? 'bg-purple-400 animate-pulse' : 'bg-gray-600'}
-                  `}></div>
-                  <span className={`text-xs mt-1 transition-colors duration-300 ${
-                    isCompleted ? 'text-green-400' : isActive ? 'text-purple-400' : 'text-gray-500'
-                  }`}>
+                  <div className="w-1.5 h-1.5 rounded-full transition-all duration-300" style={{
+                    background: isCompleted ? '#000000' : isActive ? '#000000' : '#c0c0c0',
+                    boxShadow: (isCompleted || isActive) ? '0 0 2px rgba(255, 255, 255, 0.8)' : 'none',
+                    opacity: isCompleted ? 1 : isActive ? 0.7 : 0.4
+                  }}></div>
+                  <span className="text-xs mt-0.5 transition-colors duration-300" style={{
+                    color: isCompleted ? '#000000' : isActive ? '#1a1a1a' : '#808080',
+                    textShadow: (isCompleted || isActive) ? '1px 1px 0 rgba(255, 255, 255, 0.6)' : 'none'
+                  }}>
                     {step}
                   </span>
                 </div>
@@ -378,7 +448,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           </div>
           
           {/* Status Message */}
-          <div className="text-xs text-gray-400 text-center">
+          <div className="text-xs text-center" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
             {generationMode === 'flux-multi' ? 'Creating multiple images...' : 'Creating your masterpiece...'}
           </div>
         </div>
