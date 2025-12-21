@@ -264,6 +264,18 @@ export const SimpleWalletProvider = ({ children }) => {
       setIsNFTHolder(isHolder);
       setNftCollections(collections);
       
+      // If credits were granted (from backend response), refresh credits immediately
+      if (result.creditsGranted && result.creditsGranted > 0) {
+        logger.info('NFT credits were granted, refreshing credit balance', { 
+          creditsGranted: result.creditsGranted,
+          walletAddress: normalizedAddress 
+        });
+        // Refresh credits to show the newly granted credits
+        await fetchCredits(normalizedAddress, 3, true).catch(error => {
+          logger.error('Failed to refresh credits after NFT grant', { error: error.message });
+        });
+      }
+      
       // Cache the result
       try {
         sessionStorage.setItem(cacheKey, JSON.stringify({

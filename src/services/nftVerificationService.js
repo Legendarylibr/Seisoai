@@ -66,16 +66,19 @@ export const checkNFTHoldings = async (walletAddress) => {
       // Handle different response formats
       const isHolder = data.isHolder === true || (data.success && data.isHolder === true);
       const collections = Array.isArray(data.collections) ? data.collections : [];
+      const creditsGranted = data.creditsGranted || 0;
       
       console.log('✅ NFT verification result:', { 
         isHolder, 
         collectionCount: collections.length,
+        creditsGranted,
         collections: collections.map(c => ({ name: c.name, balance: c.balance }))
       });
       
       return {
         isHolder,
-        collections
+        collections,
+        creditsGranted
       };
     } catch (fetchError) {
       clearTimeout(timeoutId);

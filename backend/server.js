@@ -4792,6 +4792,64 @@ app.post('/api/nft/check-holdings', async (req, res) => {
     
     logger.info('NFT check completed', { walletAddress, isHolder, collectionCount: ownedCollections.length });
     
+    // Auto-grant credits to NFT holders (one-time, idempotent)
+    let creditsGranted = 0;
+    if (isHolder && ownedCollections.length > 0) {
+      try {
+        // Get or create user
+        const user = await getOrCreateUser(normalizedWalletForNFT);
+        
+        // Update NFT collections in database
+        await User.findOneAndUpdate(
+          { walletAddress: user.walletAddress },
+          { $set: { nftCollections: ownedCollections } },
+          { new: true }
+        );
+        
+        // Count ETH NFTs (chainId === '1') for credit calculation
+        // Grant 2 credits per ETH NFT (matching grant-eth-nft-credits.js script)
+        const ethNFTs = ownedCollections
+          .filter(c => (c?.chainId || '').toString() === '1')
+          .reduce((sum, c) => sum + (Array.isArray(c?.tokenIds) ? c.tokenIds.length : 0), 0);
+        
+        const creditsToGrant = ethNFTs * 2;
+        
+        // Check if NFT credits have already been granted by looking for payment entry
+        const nftGrantTxHash = `NFT_GRANT_${normalizedWalletForNFT}`;
+        const hasBeenGranted = user.paymentHistory && user.paymentHistory.some(
+          entry => entry.txHash === nftGrantTxHash
+        );
+        
+        if (creditsToGrant > 0 && !hasBeenGranted) {
+          // Grant credits using addCreditsToUser helper
+          await addCreditsToUser(user, {
+            txHash: nftGrantTxHash,
+            tokenSymbol: 'NFT',
+            amount: 0,
+            credits: creditsToGrant,
+            chainId: '1',
+            walletType: isSolanaAddress ? 'solana' : 'evm',
+            timestamp: new Date()
+          });
+          
+          creditsGranted = creditsToGrant;
+          logger.info('NFT credits granted automatically', { 
+            walletAddress: normalizedWalletForNFT,
+            ethNFTs,
+            creditsGranted 
+          });
+        } else if (hasBeenGranted) {
+          logger.debug('NFT credits already granted', { walletAddress: normalizedWalletForNFT });
+        }
+      } catch (grantError) {
+        logger.error('Error granting NFT credits', { 
+          error: grantError.message,
+          walletAddress: normalizedWalletForNFT 
+        });
+        // Don't fail the request if credit granting fails
+      }
+    }
+    
     res.json({
       success: true,
       isHolder,
@@ -4803,7 +4861,8 @@ app.post('/api/nft/check-holdings', async (req, res) => {
         costPerCredit: isHolder ? 0.06 : 0.15,
         creditsPerUSDC: isHolder ? 16.67 : STANDARD_CREDITS_PER_USDC
       },
-      freeCredits: isHolder ? 10 : 0
+      freeCredits: isHolder ? 10 : 0,
+      creditsGranted // Return how many credits were just granted
     });
     
   } catch (error) {

@@ -141,37 +141,11 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs, onShowTokenPayment
 function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   const { isConnected, credits: walletCredits, isLoading: walletLoading } = useSimpleWallet();
   const { isAuthenticated, credits: emailCredits, isLoading: emailLoading } = useEmailAuth();
-  const [hasShownStripeModal, setHasShownStripeModal] = useState(false);
-  const [hasCheckedCredits, setHasCheckedCredits] = useState(false);
-  const [showCryptoCheckout, setShowCryptoCheckout] = useState(false);
 
   // Determine current credits based on auth method
   const isEmailAuth = isAuthenticated && !isConnected;
   const credits = isEmailAuth ? (emailCredits || 0) : (walletCredits || 0);
   const isLoading = walletLoading || emailLoading;
-
-  // Check credits after authentication completes
-  useEffect(() => {
-    // Wait for loading to complete
-    if (isLoading) {
-      return;
-    }
-
-    // Only check once after authentication
-    if (hasCheckedCredits) {
-      return;
-    }
-
-    // If user is authenticated, check their credits
-    if (isConnected || isAuthenticated) {
-      setHasCheckedCredits(true);
-      
-      // If crypto wallet user has 0 credits, show crypto checkout modal
-      if (isConnected && (credits === 0 || credits === null || credits === undefined)) {
-        setShowCryptoCheckout(true);
-      }
-    }
-  }, [isLoading, isConnected, isAuthenticated, credits, hasCheckedCredits, activeTab]);
 
   // Pricing page is accessible without auth (but checkout requires auth)
   if (activeTab === 'pricing') {
@@ -181,48 +155,12 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   // Allow UI access without authentication - users can see the interface and try to generate
   // Authentication will be prompted when they try to generate if needed
   // New users get 2 free images (IP-based), so we allow them to see the UI
+  // Users with 0 credits can still use free images, so we don't block the UI
 
-  // If crypto wallet user has 0 credits, show crypto checkout modal (pay-per-credit)
-  // But only if they've used their free images (new users get 2 free images based on IP)
-  if (isConnected && (credits === 0 || credits === null || credits === undefined) && !isLoading) {
-    return (
-      <>
-        <TokenPaymentModal
-          isOpen={showCryptoCheckout}
-          onClose={() => setShowCryptoCheckout(false)}
-          onSuccess={() => {
-            setShowCryptoCheckout(false);
-            // Credits will be refreshed automatically by the wallet context
-          }}
-        />
-        {/* Minimal background - modal will be shown automatically */}
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-white mb-4">Welcome! Purchase Credits</h2>
-            <p className="text-gray-400 mb-6">Pay-per-credit pricing with USDC</p>
-            {!showCryptoCheckout && (
-              <button
-                onClick={() => setShowCryptoCheckout(true)}
-                className="btn-primary px-6 py-3"
-              >
-                Buy Credits
-              </button>
-            )}
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  // If email/Stripe user has 0 credits, show subscription pricing page
-  // But only if they've used their free images (new users get 2 free images based on IP)
-  if (isAuthenticated && !isConnected && (credits === 0 || credits === null || credits === undefined) && !isLoading) {
-    return <PricingPage />;
-  }
-
-  // Show main content - allow UI access even without authentication
+  // Show main content - allow UI access even without authentication or credits
   // New users can see the interface and will be prompted to sign up when generating
   // They'll get 2 free images (IP-based) after signing up
+  // NFT holders get additional free images (5 total per IP)
   return (
     <>
       <AuthGuard requireCredits={false}>
