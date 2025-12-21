@@ -1,7 +1,7 @@
 // Discount calculation service for NFT and token-based benefits
 import { checkMultipleNFTs } from './nftService.js';
 import { checkMultipleTokens } from './tokenService.js';
-import { discountLogger as log } from '../utils/logger.js';
+import logger from '../utils/logger.js';
 
 // Base cost configuration - dynamic pricing
 const BASE_COST_PER_CREDIT = 0.15; // $0.15 per credit for regular users
@@ -104,13 +104,13 @@ const getCachedResult = (walletAddress, serviceType) => {
   const cached = cache.get(key);
   
   if (isCacheValid(cached)) {
-    log.debug('Cache hit', { key, walletAddress, serviceType });
+    logger.debug('Cache hit', { key, walletAddress, serviceType });
     return cached.data;
   }
   
   if (cached) {
     cache.delete(key);
-    log.debug('Cache expired', { key });
+    logger.debug('Cache expired', { key });
   }
   
   return null;
@@ -128,7 +128,7 @@ const setCachedResult = (walletAddress, serviceType, result) => {
     data: result,
     timestamp: Date.now()
   });
-  log.debug('Result cached', { key, walletAddress, serviceType });
+  logger.debug('Result cached', { key, walletAddress, serviceType });
 };
 
 /**
@@ -145,7 +145,7 @@ const checkRateLimit = (walletAddress) => {
   const validRequests = requests.filter(timestamp => now - timestamp < RATE_LIMIT_WINDOW);
   
   if (validRequests.length >= MAX_REQUESTS_PER_WINDOW) {
-    log.warn('Rate limit exceeded', { walletAddress, requestCount: validRequests.length });
+    logger.warn('Rate limit exceeded', { walletAddress, requestCount: validRequests.length });
     return false;
   }
   
@@ -169,7 +169,7 @@ const retryWithBackoff = async (fn, args, retries = MAX_RETRIES) => {
   } catch (error) {
     if (retries > 0) {
       const delay = RETRY_DELAY * (MAX_RETRIES - retries + 1);
-      log.warn(`Retrying in ${delay}ms`, { retriesLeft: retries - 1, error: error.message });
+      logger.warn(`Retrying in ${delay}ms`, { retriesLeft: retries - 1, error: error.message });
       await new Promise(resolve => setTimeout(resolve, delay));
       return retryWithBackoff(fn, args, retries - 1);
     }
@@ -221,7 +221,7 @@ const cleanupCache = () => {
       cache.delete(key);
     }
   }
-  log.debug('Cache cleanup completed', { remainingEntries: cache.size });
+  logger.debug('Cache cleanup completed', { remainingEntries: cache.size });
 };
 
 /**
@@ -237,7 +237,7 @@ const cleanupRateLimit = () => {
       rateLimitMap.set(key, validRequests);
     }
   }
-  log.debug('Rate limit cleanup completed', { remainingEntries: rateLimitMap.size });
+  logger.debug('Rate limit cleanup completed', { remainingEntries: rateLimitMap.size });
 };
 
 // Set up periodic cleanup
@@ -250,7 +250,7 @@ export const cleanup = () => {
   clearInterval(rateLimitCleanupInterval);
   cache.clear();
   rateLimitMap.clear();
-  log.info('Discount service cleanup completed');
+    logger.info('Discount service cleanup completed');
 };
 
 /**
@@ -274,7 +274,7 @@ export const calculateDiscount = async (walletAddress, serviceType, providers) =
 
   // Check rate limit
   if (!checkRateLimit(walletAddress)) {
-    log.warn('Rate limit exceeded for wallet', { walletAddress });
+    logger.warn('Rate limit exceeded for wallet', { walletAddress });
     return {
       hasDiscount: false,
       discountPercentage: 0,
@@ -288,11 +288,11 @@ export const calculateDiscount = async (walletAddress, serviceType, providers) =
   // Check cache first
   const cachedResult = getCachedResult(walletAddress, serviceType);
   if (cachedResult) {
-    log.info('Returning cached discount result', { walletAddress, serviceType });
+    logger.info('Returning cached discount result', { walletAddress, serviceType });
     return cachedResult;
   }
 
-  log.info('Calculating discount for wallet', { walletAddress, serviceType });
+  logger.info('Calculating discount for wallet', { walletAddress, serviceType });
 
   try {
     const allDiscounts = [
@@ -327,7 +327,7 @@ export const calculateDiscount = async (walletAddress, serviceType, providers) =
           costPerCredit = NFT_HOLDER_COST_PER_CREDIT;
         }
       } catch (error) {
-        log.warn('Failed to check NFT holdings for pricing', { error: error.message, walletAddress });
+        logger.warn('Failed to check NFT holdings for pricing', { error: error.message, walletAddress });
       }
     }
     
@@ -356,9 +356,9 @@ export const calculateDiscount = async (walletAddress, serviceType, providers) =
     if (nftContractsForDiscounts.length > 0) {
       try {
         nftResults = await retryWithBackoff(checkMultipleNFTs, [walletAddress, nftContractsForDiscounts, providers]);
-        log.debug('NFT check completed', { contractCount: nftContractsForDiscounts.length, resultsCount: nftResults.length });
+        logger.debug('NFT check completed', { contractCount: nftContractsForDiscounts.length, resultsCount: nftResults.length });
       } catch (error) {
-        log.error('Failed to check NFT holdings after retries', { error: error.message, walletAddress });
+        logger.error('Failed to check NFT holdings after retries', { error: error.message, walletAddress });
         nftResults = [];
       }
     }
@@ -376,9 +376,9 @@ export const calculateDiscount = async (walletAddress, serviceType, providers) =
     if (tokenContracts.length > 0) {
       try {
         tokenResults = await retryWithBackoff(checkMultipleTokens, [walletAddress, tokenContracts, providers]);
-        log.debug('Token check completed', { contractCount: tokenContracts.length, resultsCount: tokenResults.length });
+        logger.debug('Token check completed', { contractCount: tokenContracts.length, resultsCount: tokenResults.length });
       } catch (error) {
-        log.error('Failed to check token holdings after retries', { error: error.message, walletAddress });
+        logger.error('Failed to check token holdings after retries', { error: error.message, walletAddress });
         tokenResults = [];
       }
     }
@@ -431,7 +431,7 @@ export const calculateDiscount = async (walletAddress, serviceType, providers) =
     // Cache the result
     setCachedResult(walletAddress, serviceType, result);
     
-    log.info('Discount calculation completed', { 
+    logger.info('Discount calculation completed', { 
       walletAddress, 
       serviceType, 
       hasDiscount: result.hasDiscount, 
@@ -441,7 +441,7 @@ export const calculateDiscount = async (walletAddress, serviceType, providers) =
 
     return result;
   } catch (error) {
-    log.error('Error calculating discount', { error: error.message, walletAddress, serviceType });
+    logger.error('Error calculating discount', { error: error.message, walletAddress, serviceType });
     const errorResult = {
       hasDiscount: false,
       discountPercentage: 0,
@@ -490,7 +490,7 @@ export const addDiscountConfig = (discount, type) => {
   // Validate discount configuration
   const validation = validateDiscountConfig(discount);
   if (!validation.isValid) {
-    log.error('Invalid discount configuration', { errors: validation.errors, discount });
+    logger.error('Invalid discount configuration', { errors: validation.errors, discount });
     return {
       success: false,
       errors: validation.errors
@@ -506,7 +506,7 @@ export const addDiscountConfig = (discount, type) => {
   
   if (allDiscounts.some(d => d.id === discount.id)) {
     const error = `Discount with ID '${discount.id}' already exists`;
-    log.error('Duplicate discount ID', { id: discount.id });
+    logger.error('Duplicate discount ID', { id: discount.id });
     return {
       success: false,
       errors: [error]
@@ -522,20 +522,20 @@ export const addDiscountConfig = (discount, type) => {
       DISCOUNT_CONFIG.solanaDiscounts.push(discount);
     } else {
       const error = `Invalid discount type: ${type}`;
-      log.error('Invalid discount type', { type });
+      logger.error('Invalid discount type', { type });
       return {
         success: false,
         errors: [error]
       };
     }
 
-    log.info('Discount configuration added', { id: discount.id, type, name: discount.name });
+    logger.info('Discount configuration added', { id: discount.id, type, name: discount.name });
     return {
       success: true,
       discount
     };
   } catch (error) {
-    log.error('Error adding discount configuration', { error: error.message, discount });
+    logger.error('Error adding discount configuration', { error: error.message, discount });
     return {
       success: false,
       errors: [error.message]
@@ -567,7 +567,7 @@ export const removeDiscountConfig = (discountId, type) => {
       removed = DISCOUNT_CONFIG.solanaDiscounts.length < initialLength;
     } else {
       const error = `Invalid discount type: ${type}`;
-      log.error('Invalid discount type for removal', { type });
+      logger.error('Invalid discount type for removal', { type });
       return {
         success: false,
         errors: [error]
@@ -575,20 +575,20 @@ export const removeDiscountConfig = (discountId, type) => {
     }
 
     if (removed) {
-      log.info('Discount configuration removed', { id: discountId, type });
+      logger.info('Discount configuration removed', { id: discountId, type });
       return {
         success: true,
         removed: true
       };
     } else {
-      log.warn('Discount configuration not found for removal', { id: discountId, type });
+      logger.warn('Discount configuration not found for removal', { id: discountId, type });
       return {
         success: false,
         errors: [`Discount with ID '${discountId}' not found`]
       };
     }
   } catch (error) {
-    log.error('Error removing discount configuration', { error: error.message, discountId, type });
+    logger.error('Error removing discount configuration', { error: error.message, discountId, type });
     return {
       success: false,
       errors: [error.message]
@@ -670,7 +670,7 @@ export const clearCache = (pattern = null) => {
           cleared++;
         }
       }
-      log.info('Cache cleared with pattern', { pattern, cleared });
+      logger.info('Cache cleared with pattern', { pattern, cleared });
       return {
         success: true,
         cleared,
@@ -679,14 +679,14 @@ export const clearCache = (pattern = null) => {
     } else {
       const size = cache.size;
       cache.clear();
-      log.info('Cache cleared completely', { cleared: size });
+      logger.info('Cache cleared completely', { cleared: size });
       return {
         success: true,
         cleared: size
       };
     }
   } catch (error) {
-    log.error('Error clearing cache', { error: error.message, pattern });
+    logger.error('Error clearing cache', { error: error.message, pattern });
     return {
       success: false,
       errors: [error.message]
@@ -718,14 +718,14 @@ export const resetRateLimit = (walletAddress) => {
     const hadLimit = rateLimitMap.has(key);
     rateLimitMap.delete(key);
     
-    log.info('Rate limit reset', { walletAddress, hadLimit });
+    logger.info('Rate limit reset', { walletAddress, hadLimit });
     return {
       success: true,
       hadLimit,
       walletAddress
     };
   } catch (error) {
-    log.error('Error resetting rate limit', { error: error.message, walletAddress });
+    logger.error('Error resetting rate limit', { error: error.message, walletAddress });
     return {
       success: false,
       errors: [error.message]
@@ -764,6 +764,6 @@ export const validateAllDiscounts = () => {
     }
   }
   
-  log.info('Discount validation completed', results);
+  logger.info('Discount validation completed', results);
   return results;
 };
