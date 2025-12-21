@@ -2621,11 +2621,39 @@ ipFreeImageSchema.index({ lastUsed: 1 });
 
 const IPFreeImage = mongoose.model('IPFreeImage', ipFreeImageSchema);
 
+// Global free image counter for all users (drainable pools)
+const globalFreeImageSchema = new mongoose.Schema({
+  key: {
+    type: String,
+    required: true,
+    unique: true,
+    default: 'global'
+  },
+  totalFreeImagesUsed: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  totalFreeImagesUsedNFT: {
+    type: Number,
+    default: 0,
+    min: 0
+  }
+}, {
+  timestamps: true
+});
+
+const GlobalFreeImage = mongoose.model('GlobalFreeImage', globalFreeImageSchema);
+
 // Maximum free images allowed per IP address
 // NFT holders get 5 free images TOTAL (not per NFT), regular users get 2
 // If user has ANY NFTs (nftCollections.length > 0), they get the NFT holder limit
 const MAX_FREE_IMAGES_PER_IP_REGULAR = 2;
 const MAX_FREE_IMAGES_PER_IP_NFT = 5;
+
+// Global caps for total free images (drainable pools)
+const MAX_GLOBAL_FREE_IMAGES = 300; // For non-NFT holders
+const MAX_GLOBAL_FREE_IMAGES_NFT = 500; // For NFT holders
 
 // JWT Secret - REQUIRED in production, default only for development
 if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
@@ -2842,7 +2870,49 @@ function requireCredits(requiredCredits = 1) {
       // NFT holders get 5 free images TOTAL per IP, not 5 per NFT
       const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
       const maxFreeImages = isNFTHolder ? MAX_FREE_IMAGES_PER_IP_NFT : MAX_FREE_IMAGES_PER_IP_REGULAR;
-      const isEligibleForFreeImage = freeImagesUsedFromIP < maxFreeImages && requiredCredits === 1; // Only allow free image for single credit requests
+      
+      // Check global free image cap (drainable pools)
+      let isEligibleForFreeImage = false;
+      if (requiredCredits === 1 && freeImagesUsedFromIP < maxFreeImages) {
+        // Get or create global free image counter
+        let globalCounter = await GlobalFreeImage.findOne({ key: 'global' });
+        if (!globalCounter) {
+          globalCounter = new GlobalFreeImage({ 
+            key: 'global', 
+            totalFreeImagesUsed: 0,
+            totalFreeImagesUsedNFT: 0
+          });
+          await globalCounter.save();
+        }
+        
+        if (!isNFTHolder) {
+          // Check global cap for non-NFT holders
+          const totalFreeImagesUsed = globalCounter.totalFreeImagesUsed || 0;
+          if (totalFreeImagesUsed >= MAX_GLOBAL_FREE_IMAGES) {
+            logger.info('Global free image cap reached for regular users', {
+              totalFreeImagesUsed,
+              maxGlobalFreeImages: MAX_GLOBAL_FREE_IMAGES,
+              clientIP
+            });
+            isEligibleForFreeImage = false;
+          } else {
+            isEligibleForFreeImage = true;
+          }
+        } else {
+          // Check global cap for NFT holders
+          const totalFreeImagesUsedNFT = globalCounter.totalFreeImagesUsedNFT || 0;
+          if (totalFreeImagesUsedNFT >= MAX_GLOBAL_FREE_IMAGES_NFT) {
+            logger.info('Global free image cap reached for NFT holders', {
+              totalFreeImagesUsedNFT,
+              maxGlobalFreeImagesNFT: MAX_GLOBAL_FREE_IMAGES_NFT,
+              clientIP
+            });
+            isEligibleForFreeImage = false;
+          } else {
+            isEligibleForFreeImage = true;
+          }
+        }
+      }
       
       // Additional abuse prevention checks for free images (skip for NFT holders)
       if (isEligibleForFreeImage && availableCredits < requiredCredits && !isNFTHolder) {
@@ -2874,6 +2944,23 @@ function requireCredits(requiredCredits = 1) {
       }
       
       if (availableCredits < requiredCredits && !isEligibleForFreeImage) {
+        // Check if global cap was reached
+        let globalCapMessage = '';
+        let globalCapReached = false;
+        let globalCounter = await GlobalFreeImage.findOne({ key: 'global' });
+        
+        if (!isNFTHolder) {
+          if (globalCounter && globalCounter.totalFreeImagesUsed >= MAX_GLOBAL_FREE_IMAGES) {
+            globalCapMessage = ' The free image pool for regular users has been exhausted.';
+            globalCapReached = true;
+          }
+        } else {
+          if (globalCounter && globalCounter.totalFreeImagesUsedNFT >= MAX_GLOBAL_FREE_IMAGES_NFT) {
+            globalCapMessage = ' The free image pool for NFT holders has been exhausted.';
+            globalCapReached = true;
+          }
+        }
+        
         logger.warn('Insufficient credits for external API call', {
           userId: user.userId,
           email: user.email,
@@ -2882,11 +2969,14 @@ function requireCredits(requiredCredits = 1) {
           requiredCredits,
           freeImagesUsedFromIP,
           maxFreeImages,
-          isNFTHolder
+          isNFTHolder,
+          globalCapReached,
+          totalFreeImagesUsed: globalCounter?.totalFreeImagesUsed || 0,
+          totalFreeImagesUsedNFT: globalCounter?.totalFreeImagesUsedNFT || 0
         });
         return res.status(400).json({
           success: false,
-          error: `Insufficient credits. You have ${availableCredits} credits but need ${requiredCredits}. Please purchase credits first.`
+          error: `Insufficient credits. You have ${availableCredits} credits but need ${requiredCredits}. Please purchase credits first.${globalCapMessage}`
         });
       }
       
@@ -6589,7 +6679,50 @@ app.post('/api/generations/add', async (req, res) => {
     // NFT holders get 5 free images TOTAL per IP, not 5 per NFT
     const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
     const maxFreeImages = isNFTHolder ? MAX_FREE_IMAGES_PER_IP_NFT : MAX_FREE_IMAGES_PER_IP_REGULAR;
-    const isEligibleForFreeImage = freeImagesUsedFromIP < maxFreeImages && creditsToDeduct === 1; // Only allow free image for single credit requests
+    
+    // Check global free image cap (drainable pools)
+    let isEligibleForFreeImage = false;
+    if (creditsToDeduct === 1 && freeImagesUsedFromIP < maxFreeImages) {
+      // Get or create global free image counter
+      let globalCounter = await GlobalFreeImage.findOne({ key: 'global' });
+      if (!globalCounter) {
+        globalCounter = new GlobalFreeImage({ 
+          key: 'global', 
+          totalFreeImagesUsed: 0,
+          totalFreeImagesUsedNFT: 0
+        });
+        await globalCounter.save();
+      }
+      
+      if (!isNFTHolder) {
+        // Check global cap for non-NFT holders
+        const totalFreeImagesUsed = globalCounter.totalFreeImagesUsed || 0;
+        if (totalFreeImagesUsed >= MAX_GLOBAL_FREE_IMAGES) {
+          logger.info('Global free image cap reached for regular users', {
+            totalFreeImagesUsed,
+            maxGlobalFreeImages: MAX_GLOBAL_FREE_IMAGES,
+            clientIP
+          });
+          isEligibleForFreeImage = false;
+        } else {
+          isEligibleForFreeImage = true;
+        }
+      } else {
+        // Check global cap for NFT holders
+        const totalFreeImagesUsedNFT = globalCounter.totalFreeImagesUsedNFT || 0;
+        if (totalFreeImagesUsedNFT >= MAX_GLOBAL_FREE_IMAGES_NFT) {
+          logger.info('Global free image cap reached for NFT holders', {
+            totalFreeImagesUsedNFT,
+            maxGlobalFreeImagesNFT: MAX_GLOBAL_FREE_IMAGES_NFT,
+            clientIP
+          });
+          isEligibleForFreeImage = false;
+        } else {
+          isEligibleForFreeImage = true;
+        }
+      }
+    }
+    
     const isFreeImage = isEligibleForFreeImage && availableCredits < creditsToDeduct;
     
     logger.debug('Checking credits for generation', {
@@ -6720,15 +6853,52 @@ app.post('/api/generations/add', async (req, res) => {
         { upsert: true, new: true }
       );
       
-      logger.info('Using free image (IP-based)', {
-        userId: user.userId,
-        email: user.email,
-        walletAddress: user.walletAddress,
-        clientIP,
-        freeImagesUsedAfter: freeImagesUsedFromIP + 1,
-        maxFreeImages,
-        isNFTHolder
-      });
+      // Increment global free image counter (separate counters for NFT and non-NFT holders)
+      if (!isNFTHolder) {
+        await GlobalFreeImage.findOneAndUpdate(
+          { key: 'global' },
+          { $inc: { totalFreeImagesUsed: 1 } },
+          { upsert: true, new: true }
+        );
+        
+        // Get updated count for logging
+        const updatedGlobalCounter = await GlobalFreeImage.findOne({ key: 'global' });
+        const totalFreeImagesUsed = updatedGlobalCounter?.totalFreeImagesUsed || 0;
+        
+        logger.info('Using free image (IP-based, global counter incremented)', {
+          userId: user.userId,
+          email: user.email,
+          walletAddress: user.walletAddress,
+          clientIP,
+          freeImagesUsedAfter: freeImagesUsedFromIP + 1,
+          maxFreeImages,
+          isNFTHolder,
+          totalFreeImagesUsed,
+          remainingGlobalFreeImages: MAX_GLOBAL_FREE_IMAGES - totalFreeImagesUsed
+        });
+      } else {
+        await GlobalFreeImage.findOneAndUpdate(
+          { key: 'global' },
+          { $inc: { totalFreeImagesUsedNFT: 1 } },
+          { upsert: true, new: true }
+        );
+        
+        // Get updated count for logging
+        const updatedGlobalCounter = await GlobalFreeImage.findOne({ key: 'global' });
+        const totalFreeImagesUsedNFT = updatedGlobalCounter?.totalFreeImagesUsedNFT || 0;
+        
+        logger.info('Using free image (IP-based, NFT holder global counter incremented)', {
+          userId: user.userId,
+          email: user.email,
+          walletAddress: user.walletAddress,
+          clientIP,
+          freeImagesUsedAfter: freeImagesUsedFromIP + 1,
+          maxFreeImages,
+          isNFTHolder,
+          totalFreeImagesUsedNFT,
+          remainingGlobalFreeImagesNFT: MAX_GLOBAL_FREE_IMAGES_NFT - totalFreeImagesUsedNFT
+        });
+      }
     }
     
     // Only add to gallery if completed (has videoUrl/imageUrl) or if status is not queued/processing

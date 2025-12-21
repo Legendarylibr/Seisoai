@@ -13,32 +13,19 @@ const AuthPrompt = () => {
         <div className="text-center max-w-5xl mx-auto slide-up">
           {/* Compact Hero Section */}
           <div className="mb-4">
-            <div className="flex items-center justify-center gap-4 mb-3">
-              <div className="glass-card p-3 rounded-lg" style={{ 
-                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                border: '2px outset #f0f0f0',
-                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2)'
+            <div className="text-center mb-3">
+              <h1 className="text-3xl md:text-4xl font-bold mb-1" style={{ 
+                color: '#000000', 
+                textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
               }}>
-                <img 
-                  src="/1d1c7555360a737bb22bbdfc2784655f.png" 
-                  alt="Seiso AI Logo" 
-                  className="w-12 h-12 object-contain"
-                />
-              </div>
-              <div className="text-left">
-                <h1 className="text-3xl md:text-4xl font-bold mb-1" style={{ 
-                  color: '#000000', 
-                  textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
-                }}>
-                  Welcome to Seiso AI
-                </h1>
-                <p className="text-sm md:text-base" style={{ 
-                  color: '#1a1a1a', 
-                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
-                }}>
-                  Create and edit stunning AI-generated images
-                </p>
-              </div>
+                Welcome to Seiso AI
+              </h1>
+              <p className="text-sm md:text-base" style={{ 
+                color: '#1a1a1a', 
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+              }}>
+                Create and edit stunning AI-generated images
+              </p>
             </div>
           </div>
 
