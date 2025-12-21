@@ -345,37 +345,77 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div 
+        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded"
+        style={{
+          background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+          border: '2px outset #f0f0f0',
+          boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3)'
+        }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/10">
+        <div 
+          className="flex items-center justify-between p-6"
+          style={{
+            borderBottom: '2px inset #c0c0c0',
+            background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0)'
+          }}
+        >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-              <CreditCard className="w-5 h-5 text-white" />
+            <div 
+              className="w-10 h-10 rounded flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)'
+              }}
+            >
+              <CreditCard className="w-5 h-5" style={{ color: '#000000' }} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Buy Credits with Card</h2>
-              <p className="text-sm text-gray-400">Secure payment powered by Stripe</p>
+              <h2 className="text-lg font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Buy Credits with Card</h2>
+              <p className="text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Secure payment powered by Stripe</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className="p-2 rounded transition-all duration-200"
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)'
+            }}
+            onMouseDown={(e) => {
+              e.currentTarget.style.border = '2px inset #c0c0c0';
+              e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)';
+            }}
           >
-            <X className="w-5 h-5 text-gray-400" />
+            <X className="w-5 h-5" style={{ color: '#000000' }} />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6" style={{ background: 'linear-gradient(to bottom, #f0f0f0, #e8e8e8)' }}>
           {/* Current Credits */}
-          <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+          <div 
+            className="p-4 rounded"
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            }}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-300">Current Credits:</span>
-              <span className="text-lg font-semibold text-purple-400">
+              <span className="text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Current Credits:</span>
+              <span className="text-lg font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                 {credits}
               </span>
             </div>
             {isNFTHolder && (
-              <div className="mt-2 flex items-center gap-2 text-xs text-green-400">
+              <div className="mt-2 flex items-center gap-2 text-xs" style={{ color: '#006600', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                 <Star className="w-3 h-3" />
                 <span>NFT Holder - 20% bonus credits!</span>
               </div>
@@ -384,54 +424,95 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
 
           {/* Credit Packages */}
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-300">Choose a Package</h3>
+            <h3 className="text-sm font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Choose a Package</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {packages.map((pkg) => (
                 <button
                   key={pkg.id}
                   onClick={() => handlePackageSelect(pkg)}
-                  className={`p-4 rounded-lg border transition-all ${
-                    selectedPackage?.id === pkg.id
-                      ? 'border-purple-500 bg-purple-500/10'
-                      : 'border-white/20 hover:border-white/40 bg-white/5'
-                  }`}
+                  className="p-4 rounded transition-all duration-200"
+                  style={selectedPackage?.id === pkg.id ? {
+                    background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
+                    border: '2px inset #c0c0c0',
+                    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
+                    color: '#000000',
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  } : {
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                    color: '#000000',
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (selectedPackage?.id !== pkg.id) {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                      e.currentTarget.style.border = '2px outset #f8f8f8';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (selectedPackage?.id !== pkg.id) {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                    }
+                  }}
+                  onMouseDown={(e) => {
+                    if (selectedPackage?.id !== pkg.id) {
+                      e.currentTarget.style.border = '2px inset #c0c0c0';
+                      e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
+                    }
+                  }}
+                  onMouseUp={(e) => {
+                    if (selectedPackage?.id !== pkg.id) {
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }
+                  }}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-medium text-white">{pkg.name}</h4>
+                      <h4 className="font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{pkg.name}</h4>
                       {pkg.popular && (
-                        <span className="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded-full">
+                        <span 
+                          className="px-2 py-1 text-xs rounded"
+                          style={{
+                            background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0)',
+                            border: '2px outset #e0e0e0',
+                            color: '#000000',
+                            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                          }}
+                        >
                           Popular
                         </span>
                       )}
                     </div>
                     {pkg.savings && (
-                      <span className="text-xs text-green-400">
+                      <span className="text-xs" style={{ color: '#006600', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                         Save {pkg.savings}%
                       </span>
                     )}
                   </div>
                   
                   <div className="text-left">
-                    <div className="text-2xl font-bold text-white mb-1">
+                    <div className="text-2xl font-bold mb-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                       ${pkg.price}/month
                     </div>
-                    <div className="text-sm text-gray-400 mb-2">
+                    <div className="text-sm mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                       {pkg.description}
                     </div>
                     <div className="flex items-center gap-2 text-sm">
-                      <Coins className="w-4 h-4 text-purple-400" />
-                      <span className="text-purple-400 font-medium">
+                      <Coins className="w-4 h-4" style={{ color: '#000000' }} />
+                      <span className="font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                         {calculateCreditsFromUSD(pkg.price, isNFTHolder)} credits/month
                       </span>
                       {isNFTHolder && (
-                        <span className="text-green-400 text-xs">
+                        <span className="text-xs" style={{ color: '#006600', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                           (+20% NFT bonus)
                         </span>
                       )}
                       {pkg.savings && (
-                        <span className="text-blue-400 text-xs">
+                        <span className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                           ({pkg.savings}% savings)
                         </span>
                       )}
@@ -444,19 +525,26 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
 
           {/* Custom Amount */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-gray-300">Or Enter Custom Amount</h3>
+            <h3 className="text-sm font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Or Enter Custom Amount</h3>
             <div className="relative">
               <input
                 type="number"
                 value={customAmount}
                 onChange={(e) => handleCustomAmountChange(e.target.value)}
                 placeholder="Enter amount in USD"
-                className="w-full p-3 rounded-lg bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                className="w-full p-3 rounded text-sm"
+                style={{
+                  background: 'linear-gradient(to bottom, #ffffff, #f8f8f8)',
+                  border: '2px inset #c0c0c0',
+                  boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
+                  color: '#000000',
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                }}
                 step="0.01"
                 min="1"
                 max="1000"
               />
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-400">
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                 USD
               </div>
             </div>
@@ -464,14 +552,21 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
 
           {/* Credits Preview */}
           {getCreditsPreview() > 0 && (
-            <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+            <div 
+              className="p-4 rounded"
+              style={{
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+              }}
+            >
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-300">You'll receive:</span>
-                <span className="text-lg font-semibold text-purple-400">
+                <span className="text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>You'll receive:</span>
+                <span className="text-lg font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                   {getCreditsPreview()} Credits
                 </span>
               </div>
-              <div className="text-xs text-gray-400 mt-1">
+              <div className="text-xs mt-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                 ${getPrice()}/month USD • {(() => {
                   const amount = getPrice();
                   let rate = '3.33 credits/$';
@@ -486,12 +581,19 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
           )}
 
           {/* Payment Security Info */}
-          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+          <div 
+            className="p-4 rounded"
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            }}
+          >
             <div className="flex items-center gap-2 mb-2">
-              <Zap className="w-4 h-4 text-blue-400" />
-              <span className="text-sm font-semibold text-blue-400">Secure Payment</span>
+              <Zap className="w-4 h-4" style={{ color: '#000000' }} />
+              <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Secure Payment</span>
             </div>
-            <div className="text-xs text-gray-300">
+            <div className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
               <p className="mb-1">• Powered by Stripe - industry standard security</p>
               <p className="mb-1">• Your card details are never stored on our servers</p>
               <p>• Instant credit delivery after successful payment</p>
@@ -500,14 +602,32 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
 
           {/* Error Message */}
           {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
+            <div 
+              className="p-3 rounded text-sm"
+              style={{
+                background: 'linear-gradient(to bottom, #ffe0e0, #ffd0d0)',
+                border: '2px outset #ffc0c0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                color: '#000000',
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}
+            >
               {error}
             </div>
           )}
 
           {/* Success Message */}
           {success && (
-            <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-sm text-green-400 flex items-center gap-2">
+            <div 
+              className="p-3 rounded text-sm flex items-center gap-2"
+              style={{
+                background: 'linear-gradient(to bottom, #d0f0d0, #c0e0c0)',
+                border: '2px outset #e0e0e0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                color: '#000000',
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}
+            >
               <Check className="w-4 h-4" />
               Payment successful! Credits have been added to your account.
             </div>

@@ -212,9 +212,26 @@ import logger from '../utils/logger.js';
 
               {/* Credits Display */}
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20">
-                  <Coins className="w-4 h-4 text-purple-400" />
-                  <span className="text-sm font-semibold text-white">
+                <div 
+                  className="flex items-center gap-1.5 px-3 py-2 rounded transition-all duration-200"
+                  style={{
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                    e.currentTarget.style.border = '2px outset #f8f8f8';
+                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                    e.currentTarget.style.border = '2px outset #f0f0f0';
+                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                  }}
+                >
+                  <Coins className="w-4 h-4" style={{ color: '#000000' }} />
+                  <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                     {credits} credits
                   </span>
                 </div>
@@ -228,11 +245,37 @@ import logger from '../utils/logger.js';
                         onShowStripePayment();
                       }
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500/30 to-cyan-500/30 hover:from-blue-500/40 hover:to-cyan-500/40 rounded-lg border border-blue-500/40 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25"
-                    style={{ position: 'relative', zIndex: 999998 }}
+                    className="flex items-center gap-2 px-4 py-2 rounded transition-all duration-200"
+                    style={{ 
+                      position: 'relative', 
+                      zIndex: 999998,
+                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                      border: '2px outset #f0f0f0',
+                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                      color: '#000000',
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                      e.currentTarget.style.border = '2px outset #f8f8f8';
+                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }}
+                    onMouseDown={(e) => {
+                      e.currentTarget.style.border = '2px inset #c0c0c0';
+                      e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+                    }}
+                    onMouseUp={(e) => {
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }}
                   >
-                    <CreditCard className="w-4 h-4 text-blue-300" />
-                    <span className="text-sm font-semibold text-white">Buy Credits</span>
+                    <CreditCard className="w-4 h-4" style={{ color: '#000000' }} />
+                    <span className="text-sm font-semibold">Buy Credits</span>
                   </button>
                 ) : (
                   <button
@@ -242,11 +285,37 @@ import logger from '../utils/logger.js';
                         onShowTokenPayment();
                       }
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/30 to-pink-500/30 hover:from-purple-500/40 hover:to-pink-500/40 rounded-lg border border-purple-500/40 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25"
-                    style={{ position: 'relative', zIndex: 999998 }}
+                    className="flex items-center gap-2 px-4 py-2 rounded transition-all duration-200"
+                    style={{ 
+                      position: 'relative', 
+                      zIndex: 999998,
+                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                      border: '2px outset #f0f0f0',
+                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                      color: '#000000',
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                      e.currentTarget.style.border = '2px outset #f8f8f8';
+                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }}
+                    onMouseDown={(e) => {
+                      e.currentTarget.style.border = '2px inset #c0c0c0';
+                      e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+                    }}
+                    onMouseUp={(e) => {
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }}
                   >
-                    <Coins className="w-4 h-4 text-purple-300" />
-                    <span className="text-sm font-semibold text-white">Buy Credits</span>
+                    <Coins className="w-4 h-4" style={{ color: '#000000' }} />
+                    <span className="text-sm font-semibold">Buy Credits</span>
                   </button>
                 )}
               </div>
@@ -255,11 +324,36 @@ import logger from '../utils/logger.js';
               {!isEmailAuth && (
                 <button
                   onClick={disconnectWallet}
-                  className="flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg border border-red-500/30 transition-all duration-300 hover:scale-105"
+                  className="flex items-center gap-2 px-3 py-2 rounded transition-all duration-200"
                   title="Disconnect Wallet"
+                  style={{
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                    color: '#000000',
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                    e.currentTarget.style.border = '2px outset #f8f8f8';
+                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                    e.currentTarget.style.border = '2px outset #f0f0f0';
+                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                  }}
+                  onMouseDown={(e) => {
+                    e.currentTarget.style.border = '2px inset #c0c0c0';
+                    e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.border = '2px outset #f0f0f0';
+                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                  }}
                 >
-                  <LogOut className="w-4 h-4 text-red-400" />
-                  <span className="text-sm font-medium text-red-300 hidden lg:inline">
+                  <LogOut className="w-4 h-4" style={{ color: '#000000' }} />
+                  <span className="text-sm font-medium hidden lg:inline" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                     Disconnect
                   </span>
                 </button>
@@ -286,9 +380,16 @@ import logger from '../utils/logger.js';
             {isConnected ? (
               <>
                 {/* Combined Credits Card with Buy Button - Mobile */}
-                <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20">
-                  <Coins className="w-4 h-4 text-purple-400" />
-                  <span className="text-xs font-semibold text-white">
+                <div 
+                  className="flex items-center gap-2 px-3 py-2 rounded transition-all duration-200"
+                  style={{
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+                  }}
+                >
+                  <Coins className="w-4 h-4" style={{ color: '#000000' }} />
+                  <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                     {credits}
                   </span>
                   {/* Buy Credits Button - Show Stripe for email users, Token for wallet users */}
@@ -300,11 +401,25 @@ import logger from '../utils/logger.js';
                           onShowStripePayment();
                         }
                       }}
-                      className="ml-1 px-2 py-1 bg-blue-500/30 hover:bg-blue-500/40 rounded border border-blue-500/40 transition-all duration-200"
+                      className="ml-1 px-2 py-1 rounded transition-all duration-200"
                       title="Buy Credits"
-                      style={{ position: 'relative', zIndex: 999998 }}
+                      style={{ 
+                        position: 'relative', 
+                        zIndex: 999998,
+                        background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                        border: '2px outset #f0f0f0',
+                        boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+                      }}
+                      onMouseDown={(e) => {
+                        e.currentTarget.style.border = '2px inset #c0c0c0';
+                        e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+                      }}
+                      onMouseUp={(e) => {
+                        e.currentTarget.style.border = '2px outset #f0f0f0';
+                        e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                      }}
                     >
-                      <CreditCard className="w-3.5 h-3.5 text-blue-300" />
+                      <CreditCard className="w-3.5 h-3.5" style={{ color: '#000000' }} />
                     </button>
                   ) : (
                     <button
@@ -314,21 +429,48 @@ import logger from '../utils/logger.js';
                           onShowTokenPayment();
                         }
                       }}
-                      className="ml-1 px-2 py-1 bg-purple-500/30 hover:bg-purple-500/40 rounded border border-purple-500/40 transition-all duration-200"
+                      className="ml-1 px-2 py-1 rounded transition-all duration-200"
                       title="Buy Credits"
-                      style={{ position: 'relative', zIndex: 999998 }}
+                      style={{ 
+                        position: 'relative', 
+                        zIndex: 999998,
+                        background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                        border: '2px outset #f0f0f0',
+                        boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+                      }}
+                      onMouseDown={(e) => {
+                        e.currentTarget.style.border = '2px inset #c0c0c0';
+                        e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+                      }}
+                      onMouseUp={(e) => {
+                        e.currentTarget.style.border = '2px outset #f0f0f0';
+                        e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                      }}
                     >
-                      <Coins className="w-3.5 h-3.5 text-purple-300" />
+                      <Coins className="w-3.5 h-3.5" style={{ color: '#000000' }} />
                     </button>
                   )}
                 </div>
                 
                 <button
                   onClick={isEmailAuth ? signOut : disconnectWallet}
-                  className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg border border-red-500/30 transition-colors"
+                  className="p-2 rounded transition-all duration-200"
                   title={isEmailAuth ? "Sign Out" : "Disconnect"}
+                  style={{
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+                  }}
+                  onMouseDown={(e) => {
+                    e.currentTarget.style.border = '2px inset #c0c0c0';
+                    e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.border = '2px outset #f0f0f0';
+                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                  }}
                 >
-                  <LogOut className="w-4 h-4 text-red-400" />
+                  <LogOut className="w-4 h-4" style={{ color: '#000000' }} />
                 </button>
               </>
             ) : null}

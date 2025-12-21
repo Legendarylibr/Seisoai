@@ -1112,55 +1112,116 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
       }}
     >
       <div 
-        className="bg-gray-900 border border-white/20 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col"
+        className="w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col rounded"
         onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+          border: '2px outset #f0f0f0',
+          boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3)'
+        }}
       >
         {/* Compact Header */}
-        <div className="flex items-center justify-between p-3 border-b border-white/10">
+        <div 
+          className="flex items-center justify-between p-3"
+          style={{
+            borderBottom: '2px inset #c0c0c0',
+            background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0)'
+          }}
+        >
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-              <Coins className="w-4 h-4 text-white" />
+            <div 
+              className="w-8 h-8 rounded flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)'
+              }}
+            >
+              <Coins className="w-4 h-4" style={{ color: '#000000' }} />
             </div>
-            <h2 className="text-base font-semibold text-white">Buy Credits</h2>
+            <h2 className="text-base font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Buy Credits</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded transition-all duration-200"
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)'
+            }}
+            onMouseDown={(e) => {
+              e.currentTarget.style.border = '2px inset #c0c0c0';
+              e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)';
+            }}
           >
-            <X className="w-4 h-4 text-gray-400" />
+            <X className="w-4 h-4" style={{ color: '#000000' }} />
           </button>
         </div>
 
-        <div className="p-4 space-y-3 overflow-y-auto flex-1">
+        <div className="p-4 space-y-3 overflow-y-auto flex-1" style={{ background: 'linear-gradient(to bottom, #f0f0f0, #e8e8e8)' }}>
           {/* Current Credits - Compact */}
-          <div className="p-2.5 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+          <div 
+            className="p-2.5 rounded"
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            }}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-300">Current Credits:</span>
-              <span className="text-base font-semibold text-purple-400">
+              <span className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Current Credits:</span>
+              <span className="text-base font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                 {credits}
               </span>
             </div>
           </div>
 
           {/* Payment Method - Compact */}
-          <div className="w-full flex items-center justify-between p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/30">
+          <div 
+            className="w-full flex items-center justify-between p-2.5 rounded"
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            }}
+          >
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
+              <div 
+                className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                style={{
+                  background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0)',
+                  border: '2px outset #e0e0e0',
+                  color: '#000000',
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                }}
+              >
                 $
               </div>
               <div className="text-left">
-                <div className="text-xs font-semibold text-white">Pay with USDC</div>
-                <div className="text-[10px] text-blue-300">{walletType === 'solana' ? 'Solana' : 'EVM Chains'}</div>
+                <div className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Pay with USDC</div>
+                <div className="text-[10px]" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{walletType === 'solana' ? 'Solana' : 'EVM Chains'}</div>
               </div>
             </div>
-            <div className="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-semibold rounded-full">
+            <div 
+              className="px-2 py-0.5 text-[10px] font-semibold rounded"
+              style={{
+                background: 'linear-gradient(to bottom, #d0f0d0, #c0e0c0)',
+                border: '2px outset #e0e0e0',
+                color: '#000000',
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}
+            >
               Active
             </div>
           </div>
 
           {/* Amount Input - Compact */}
           <div>
-            <label className="block text-xs font-medium text-gray-300 mb-1.5">
+            <label className="block text-xs font-medium mb-1.5" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
               Amount (USDC)
             </label>
             <div className="relative">
@@ -1169,45 +1230,66 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
                 value={amount}
                 onChange={(e) => handleAmountChange(e.target.value)}
                 placeholder="Enter amount"
-                className="w-full p-2.5 pr-14 rounded-lg bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm"
+                className="w-full p-2.5 pr-14 rounded text-sm"
+                style={{
+                  background: 'linear-gradient(to bottom, #ffffff, #f8f8f8)',
+                  border: '2px inset #c0c0c0',
+                  boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
+                  color: '#000000',
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                }}
                 step="0.1"
                 min="1"
                 id="token-amount-input"
                 name="token-amount"
               />
-              <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-xs font-semibold text-blue-400">
+              <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                 USDC
               </div>
             </div>
-            <div className="text-[10px] text-gray-400 mt-1">
+            <div className="text-[10px] mt-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
               Minimum: 1 USDC
             </div>
           </div>
 
           {/* Credits Preview - Compact */}
-          <div className="p-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg">
+          <div 
+            className="p-3 rounded"
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            }}
+          >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-300">You'll receive:</span>
-              <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              <span className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>You'll receive:</span>
+              <span className="text-xl font-bold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                 {getCreditsPreview()} Credits
               </span>
             </div>
             <div className="flex items-center justify-between text-[10px]">
-              <span className="text-gray-400">Rate:</span>
-              <span className="text-purple-400 font-semibold">
+              <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Rate:</span>
+              <span className="font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                 1 USDC = {isNFTHolder ? '16.67' : '6.67'} Credits
-                {isNFTHolder && <span className="text-green-400 ml-1">(NFT)</span>}
+                {isNFTHolder && <span className="ml-1" style={{ color: '#006600' }}>(NFT)</span>}
               </span>
             </div>
           </div>
           
           {/* Payment Status - Compact */}
           {paymentStatus && (
-            <div className={`p-1.5 rounded text-[10px] ${
-              paymentStatus === 'confirmed' 
-                ? 'bg-green-500/20 text-green-400' 
-                : 'bg-yellow-500/20 text-yellow-400'
-            }`}>
+            <div 
+              className="p-1.5 rounded text-[10px]"
+              style={{
+                background: paymentStatus === 'confirmed' 
+                  ? 'linear-gradient(to bottom, #d0f0d0, #c0e0c0)'
+                  : 'linear-gradient(to bottom, #fff8d0, #ffe0c0)',
+                border: '2px outset #e0e0e0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)',
+                color: '#000000',
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}
+            >
               {paymentStatus === 'pending' && '⏳ Monitoring...'}
               {paymentStatus === 'detected' && '👀 Detected! Confirming...'}
               {paymentStatus === 'confirmed' && '✅ Confirmed! Credits added.'}
@@ -1216,17 +1298,45 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
 
           {/* Network Switching Options - Compact */}
           {networksWithUSDC.length > 0 && currentNetworkBalance === 0 && (
-            <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+            <div 
+              className="p-2.5 rounded"
+              style={{
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+              }}
+            >
               <div className="flex items-center gap-1.5 mb-2">
                 <span className="text-xs">💡</span>
-                <h3 className="text-blue-400 font-semibold text-xs">Switch Network</h3>
+                <h3 className="font-semibold text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Switch Network</h3>
               </div>
               <div className="space-y-1.5">
                 {networksWithUSDC.map((network) => (
                   <button
                     key={network.chainId}
                     onClick={() => switchToNetwork(network.chainId)}
-                    className="w-full flex items-center justify-between p-2 bg-white/5 hover:bg-white/10 border border-white/20 rounded-lg transition-colors text-left"
+                    className="w-full flex items-center justify-between p-2 rounded transition-all duration-200 text-left"
+                    style={{
+                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                      border: '2px outset #f0f0f0',
+                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                      color: '#000000',
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                    }}
+                    onMouseDown={(e) => {
+                      e.currentTarget.style.border = '2px inset #c0c0c0';
+                      e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
+                    }}
+                    onMouseUp={(e) => {
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }}
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-xs">
@@ -1236,11 +1346,11 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
                          network.chainId === 10 ? '🔴' : '🔵'}
                       </span>
                       <div>
-                        <div className="text-xs font-semibold text-white">{network.name}</div>
-                        <div className="text-[10px] text-gray-400">{network.balance.toFixed(2)} USDC</div>
+                        <div className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{network.name}</div>
+                        <div className="text-[10px]" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{network.balance.toFixed(2)} USDC</div>
                       </div>
                     </div>
-                    <span className="text-[10px] text-gray-400">→</span>
+                    <span className="text-[10px]" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>→</span>
                   </button>
                 ))}
               </div>
@@ -1249,17 +1359,37 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
 
           {/* Current Network Balance - Compact */}
           {currentNetworkBalance > 0 && (
-            <div className="p-2.5 bg-green-500/10 border border-green-500/20 rounded-lg">
+            <div 
+              className="p-2.5 rounded"
+              style={{
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+              }}
+            >
               <div className="flex items-center justify-between">
-                <span className="text-xs text-green-400 font-semibold">Balance:</span>
+                <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Balance:</span>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-bold text-green-400">{currentNetworkBalance.toFixed(2)} USDC</span>
+                  <span className="text-sm font-bold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{currentNetworkBalance.toFixed(2)} USDC</span>
                   <button
                     onClick={() => checkUSDCBalanceAcrossNetworks()}
-                    className="p-0.5 hover:bg-white/10 rounded transition-colors"
+                    className="p-0.5 rounded transition-all duration-200"
                     title="Refresh"
+                    style={{
+                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                      border: '2px outset #f0f0f0',
+                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)'
+                    }}
+                    onMouseDown={(e) => {
+                      e.currentTarget.style.border = '2px inset #c0c0c0';
+                      e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
+                    }}
+                    onMouseUp={(e) => {
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)';
+                    }}
                   >
-                    <RefreshCw className="w-3 h-3 text-green-400" />
+                    <RefreshCw className="w-3 h-3" style={{ color: '#000000' }} />
                   </button>
                 </div>
               </div>
@@ -1268,7 +1398,16 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
 
           {/* Error Message - Compact */}
           {error && (
-            <div className="p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400">
+            <div 
+              className="p-2 rounded text-xs"
+              style={{
+                background: 'linear-gradient(to bottom, #ffe0e0, #ffd0d0)',
+                border: '2px outset #ffc0c0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                color: '#000000',
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}
+            >
               {error}
             </div>
           )}

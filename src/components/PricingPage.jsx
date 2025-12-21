@@ -117,7 +117,7 @@ const PricingPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900 animated-bg py-12 px-4">
+    <div className="min-h-screen py-12 px-4" style={{ background: 'linear-gradient(to bottom, #d0d0d0, #c8c8c8, #b8b8b8)' }}>
       {/* Success Modal */}
       {successState && (
         <PaymentSuccessModal
@@ -137,12 +137,20 @@ const PricingPage = () => {
       {/* Error Message Banner */}
       {errorMessage && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-40 max-w-md w-full mx-4">
-          <div className="glass-card bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center gap-3 animate-slide-down">
-            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-            <p className="text-red-400 text-sm flex-1">{errorMessage}</p>
+          <div 
+            className="glass-card rounded-xl p-4 flex items-center gap-3 animate-slide-down"
+            style={{
+              background: 'linear-gradient(to bottom, #ffe0e0, #ffd0d0)',
+              border: '2px outset #ffc0c0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            }}
+          >
+            <AlertCircle className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
+            <p className="text-sm flex-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{errorMessage}</p>
             <button
               onClick={() => setErrorMessage(null)}
-              className="text-red-400 hover:text-red-300 transition-colors"
+              className="transition-colors"
+              style={{ color: '#000000' }}
             >
               <X className="w-4 h-4" />
             </button>
@@ -153,22 +161,45 @@ const PricingPage = () => {
       <div className="container mx-auto max-w-6xl">
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold gradient-text mb-4">
+          <h1 className="text-4xl md:text-5xl font-bold mb-4" style={{ color: '#000000', textShadow: '2px 2px 0 rgba(255, 255, 255, 0.8)' }}>
             Choose Your Plan
           </h1>
-          <p className="text-xl text-gray-300">
+          <p className="text-xl" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
             Select the perfect pack for your needs
           </p>
           {isAuthenticated && (
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
               <button
                 onClick={() => setShowSubscriptionManagement(true)}
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white/10 border border-white/20 text-white text-sm font-semibold hover:bg-white/15 transition-all w-full sm:w-auto"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded transition-all duration-200 w-full sm:w-auto"
+                style={{
+                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                  border: '2px outset #f0f0f0',
+                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                  color: '#000000',
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                  e.currentTarget.style.border = '2px outset #f8f8f8';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                  e.currentTarget.style.border = '2px outset #f0f0f0';
+                }}
+                onMouseDown={(e) => {
+                  e.currentTarget.style.border = '2px inset #c0c0c0';
+                  e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
+                }}
+                onMouseUp={(e) => {
+                  e.currentTarget.style.border = '2px outset #f0f0f0';
+                  e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
               >
                 <CreditCard className="w-4 h-4" />
                 Manage Subscription
               </button>
-              <p className="text-xs sm:text-sm text-gray-400">
+              <p className="text-xs sm:text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                 View plan details, billing dates, or cancel anytime.
               </p>
             </div>
@@ -233,23 +264,23 @@ const PricingPage = () => {
         {/* Additional Info */}
         <div className="mt-12 text-center space-y-4">
           <div className="glass-card rounded-xl p-6 max-w-2xl mx-auto">
-            <h3 className="text-lg font-semibold text-white mb-3">What's Included</h3>
+            <h3 className="text-lg font-semibold mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>What's Included</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-              <div className="flex items-center gap-2 text-gray-300">
-                <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+              <div className="flex items-center gap-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                <CheckCircle className="w-4 h-4 flex-shrink-0" style={{ color: '#006600' }} />
                 <span>All AI features</span>
               </div>
-              <div className="flex items-center gap-2 text-gray-300">
-                <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+              <div className="flex items-center gap-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                <CheckCircle className="w-4 h-4 flex-shrink-0" style={{ color: '#006600' }} />
                 <span>Cancel anytime</span>
               </div>
-              <div className="flex items-center gap-2 text-gray-300">
-                <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+              <div className="flex items-center gap-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                <CheckCircle className="w-4 h-4 flex-shrink-0" style={{ color: '#006600' }} />
                 <span>Secure payments</span>
               </div>
             </div>
           </div>
-          <p className="text-gray-400 text-sm">
+          <p className="text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
             All plans include access to all features. Cancel anytime. No hidden fees.
           </p>
         </div>

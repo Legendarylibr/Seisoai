@@ -42,13 +42,20 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
       <div className="glass-card rounded-xl p-6 space-y-6">
         {/* Header */}
         <div className="text-center">
-          <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Mail className="w-8 h-8 text-white" />
+          <div 
+            className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            }}
+          >
+            <Mail className="w-8 h-8" style={{ color: '#000000' }} />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">
+          <h2 className="text-2xl font-bold mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
             {isSignUp ? 'Create Account' : 'Sign In'}
           </h2>
-          <p className="text-gray-400 text-sm">
+          <p className="text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
             {isSignUp ? 'Sign up with email to get started' : 'Sign in with your email'}
           </p>
         </div>
@@ -58,17 +65,42 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
           <>
             <button
               onClick={onSwitchToWallet}
-              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 rounded-lg border border-purple-500/40 text-white transition-all duration-300 hover:scale-105"
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded transition-all duration-200"
+              style={{
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                color: '#000000',
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                e.currentTarget.style.border = '2px outset #f8f8f8';
+                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                e.currentTarget.style.border = '2px outset #f0f0f0';
+                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+              }}
+              onMouseDown={(e) => {
+                e.currentTarget.style.border = '2px inset #c0c0c0';
+                e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.border = '2px outset #f0f0f0';
+                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+              }}
             >
-              <Wallet className="w-5 h-5 text-purple-400" />
+              <Wallet className="w-5 h-5" style={{ color: '#000000' }} />
               <span className="font-semibold">Connect with Wallet Instead</span>
             </button>
             <div className="relative my-4">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-600"></div>
+                <div className="w-full border-t" style={{ borderColor: '#808080' }}></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-gray-900 text-gray-400">OR</span>
+                <span className="px-4" style={{ background: '#f8f8f8', color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>OR</span>
               </div>
             </div>
           </>
@@ -78,17 +110,24 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-medium mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
               Email
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: '#000000' }} />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="your@email.com"
-                className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-3 rounded"
+                style={{
+                  background: 'linear-gradient(to bottom, #ffffff, #f8f8f8)',
+                  border: '2px inset #c0c0c0',
+                  boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
+                  color: '#000000',
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                }}
                 required
               />
             </div>
@@ -96,24 +135,32 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
 
           {/* Password Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-medium mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: '#000000' }} />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-12 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+                className="w-full pl-10 pr-12 py-3 rounded"
+                style={{
+                  background: 'linear-gradient(to bottom, #ffffff, #f8f8f8)',
+                  border: '2px inset #c0c0c0',
+                  boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
+                  color: '#000000',
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                }}
                 required
                 minLength={6}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 transition-colors"
+                style={{ color: '#000000' }}
               >
                 {showPassword ? (
                   <EyeOff className="w-5 h-5" />
@@ -126,7 +173,16 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
 
           {/* Error Message */}
           {displayError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+            <div 
+              className="p-3 rounded text-sm"
+              style={{
+                background: 'linear-gradient(to bottom, #ffe0e0, #ffd0d0)',
+                border: '2px outset #ffc0c0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                color: '#000000',
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}
+            >
               {displayError}
             </div>
           )}
@@ -139,7 +195,10 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
           >
             {isLoading ? (
               <>
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div 
+                  className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin"
+                  style={{ borderColor: '#000000', borderTopColor: 'transparent' }}
+                ></div>
                 <span>{isSignUp ? 'Creating Account...' : 'Signing In...'}</span>
               </>
             ) : (
@@ -158,12 +217,19 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
               setIsSignUp(!isSignUp);
               setError('');
             }}
-            className="text-sm text-gray-400 hover:text-purple-400 transition-colors"
+            className="text-sm transition-colors"
+            style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.textDecoration = 'underline';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.textDecoration = 'none';
+            }}
           >
             {isSignUp ? (
-              <>Already have an account? <span className="text-purple-400 font-semibold">Sign In</span></>
+              <>Already have an account? <span className="font-semibold underline">Sign In</span></>
             ) : (
-              <>Don't have an account? <span className="text-purple-400 font-semibold">Sign Up</span></>
+              <>Don't have an account? <span className="font-semibold underline">Sign Up</span></>
             )}
           </button>
         </div>
