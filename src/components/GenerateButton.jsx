@@ -288,11 +288,11 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   const isDisabled = isGenerating || walletLoading || (!isConnected && !isEmailAuth);
   
   const getButtonText = () => {
-    if (isGenerating) return 'Generating...';
+    if (isGenerating) return multiImageModel === 'qwen-image-layered' ? 'Extracting Layers...' : 'Generating...';
     if (walletLoading) return 'Loading...';
     if (!isConnected && !isEmailAuth) return 'Sign In to Generate (2 Free Images!)';
     if (availableCredits <= 0) return 'Generate (2 Free Images!)';
-    return 'Generate Image';
+    return multiImageModel === 'qwen-image-layered' ? 'Extract Layers' : 'Generate Image';
   };
 
   const getButtonIcon = () => {
