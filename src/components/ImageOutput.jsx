@@ -26,7 +26,8 @@ const ImageOutput = () => {
     numImages,
     enableSafetyChecker,
     generationMode,
-    controlNetImage
+    controlNetImage,
+    multiImageModel
   } = useImageGenerator();
 
   const { 
@@ -237,18 +238,26 @@ const ImageOutput = () => {
       setGenerating(true);
       
       // Use the generated image as the reference image for the new generation
+      // Preserve the selected model (multiImageModel) so the new prompt uses the same model
       const advancedSettings = {
         guidanceScale: currentGeneration.guidanceScale || guidanceScale,
         imageSize: currentGeneration.imageSize || imageSize,
         numImages: currentGeneration.numImages || numImages,
         enableSafetyChecker: currentGeneration.enableSafetyChecker || enableSafetyChecker,
         generationMode: currentGeneration.generationMode || generationMode,
+        multiImageModel: multiImageModel || currentGeneration.multiImageModel, // Preserve selected model
         walletAddress: isEmailAuth ? undefined : address, // Pass wallet address for wallet users
         userId: isEmailAuth ? emailContext.userId : undefined, // Pass userId for email users
         email: isEmailAuth ? emailContext.email : undefined, // Pass email for email users
         isNFTHolder: isNFTHolder || false,
         referenceImageDimensions: currentGeneration.referenceImageDimensions
       };
+      
+      logger.debug('Regenerating with new prompt', {
+        newPrompt: newPrompt.trim(),
+        multiImageModel: advancedSettings.multiImageModel,
+        hasReferenceImage: !!referenceImageForGeneration
+      });
       
       logger.info('Starting regeneration with new prompt');
       // Use the most current image as reference: prefer currentGeneration.referenceImage if available,
@@ -296,13 +305,23 @@ const ImageOutput = () => {
         // Handle both single image (string) and multiple images (array)
         const imageUrlForSave = isArray ? result[0] : result;
         
+        // Calculate credits based on selected model
+        const selectedModel = multiImageModel || currentGeneration.multiImageModel;
+        const creditsUsed = selectedModel === 'nano-banana-pro' ? 2 : 1; // 2 credits for Nano Banana Pro, 1 for Flux
+        
         deductionResult = await addGeneration(userIdentifier, {
           prompt: newPrompt.trim(),
           style: currentGeneration.style ? currentGeneration.style.name : 'No Style',
           imageUrl: imageUrlForSave, // Use first image if array, or the single image
-          creditsUsed: 1, // 1 credit per generation
+          creditsUsed: creditsUsed, // Use calculated credits based on model
           userId: isEmailAuth ? emailContext.userId : undefined, // Include userId for email users
           email: isEmailAuth ? emailContext.email : undefined // Include email for email users
+        });
+        
+        logger.debug('Credits calculated for regeneration', {
+          selectedModel,
+          creditsUsed,
+          remainingCredits: deductionResult.remainingCredits
         });
         logger.info('Generation saved and credits deducted', {
           success: deductionResult.success,
@@ -355,6 +374,7 @@ const ImageOutput = () => {
         image: resultImageUrl, // Use first image for backward compatibility
         prompt: newPrompt.trim(),
         referenceImage: newReferenceImage, // New output becomes reference for next generation
+        multiImageModel: multiImageModel || currentGeneration.multiImageModel, // Preserve model selection
         timestamp: new Date().toISOString()
       });
       

@@ -1655,8 +1655,9 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
     
     if (isNanoBananaPro) {
       // Nano Banana Pro API format
+      // Styles are already included in the prompt from the frontend
       requestBody = {
-        prompt: prompt.trim()
+        prompt: prompt.trim() // Prompt includes style if selected
       };
       
       // For Nano Banana Pro, use image_urls for multiple images or single image

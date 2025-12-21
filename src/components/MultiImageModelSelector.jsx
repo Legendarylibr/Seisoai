@@ -67,32 +67,57 @@ const MultiImageModelSelector = () => {
   const isFluxSelected = multiImageModel === labels.currentFluxModel || (!multiImageModel && labels.currentFluxModel);
 
   return (
-    <div className="space-y-2 p-3 bg-white/5 rounded-lg border border-white/10">
+    <div className="space-y-1.5 p-2 rounded" style={{ 
+      background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
+      border: '2px outset #e8e8e8',
+      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 4px 8px rgba(0, 0, 0, 0.2)'
+    }}>
       <label className="flex items-center gap-1.5">
-        <span className="text-xs md:text-sm font-semibold text-white">
+        <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
           Model Selection
         </span>
-        <span className="text-xs text-purple-400 font-medium">
+        <span className="text-xs font-medium" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
           ({imageCount} {imageCount === 1 ? 'image' : 'images'})
         </span>
       </label>
-      <div className="flex gap-2">
+      <div className="flex gap-1.5">
         <button
           type="button"
           onClick={() => {
             logger.debug('Selected FLUX model', { fluxModel: labels.currentFluxModel });
             setMultiImageModel(labels.currentFluxModel);
           }}
-          className={`flex-1 flex flex-col items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border transition-all ${
-            isFluxSelected
-              ? 'bg-purple-500/20 border-purple-400 text-purple-300 shadow-lg shadow-purple-500/20'
-              : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20'
-          }`}
+          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all"
+          style={isFluxSelected ? {
+            background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
+            border: '2px inset #c0c0c0',
+            boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
+            color: '#000000',
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+          } : {
+            background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+            border: '2px outset #f0f0f0',
+            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+            color: '#000000',
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+          }}
+          onMouseEnter={(e) => {
+            if (!isFluxSelected) {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+              e.currentTarget.style.border = '2px outset #f8f8f8';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isFluxSelected) {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+            }
+          }}
         >
-          <Zap className="w-5 h-5" />
+          <Zap className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-sm font-medium">{labels.flux}</span>
-            <span className="text-xs text-gray-400">1 credit</span>
+            <span className="text-xs font-bold">{labels.flux}</span>
+            <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>1 credit</span>
           </div>
         </button>
         <button
@@ -101,21 +126,42 @@ const MultiImageModelSelector = () => {
             logger.debug('Selected Nano Banana Pro model');
             setMultiImageModel('nano-banana-pro');
           }}
-          className={`flex-1 flex flex-col items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border transition-all ${
-            multiImageModel === 'nano-banana-pro'
-              ? 'bg-purple-500/20 border-purple-400 text-purple-300 shadow-lg shadow-purple-500/20'
-              : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20'
-          }`}
+          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all"
+          style={multiImageModel === 'nano-banana-pro' ? {
+            background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
+            border: '2px inset #c0c0c0',
+            boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
+            color: '#000000',
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+          } : {
+            background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+            border: '2px outset #f0f0f0',
+            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+            color: '#000000',
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+          }}
+          onMouseEnter={(e) => {
+            if (multiImageModel !== 'nano-banana-pro') {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+              e.currentTarget.style.border = '2px outset #f8f8f8';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (multiImageModel !== 'nano-banana-pro') {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+            }
+          }}
         >
-          <Sparkles className="w-5 h-5" />
+          <Sparkles className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-sm font-medium">Nano Banana Pro</span>
-            <span className="text-xs text-gray-400">2 credits</span>
+            <span className="text-xs font-bold">Nano Banana Pro</span>
+            <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>2 credits</span>
           </div>
         </button>
       </div>
-      <div className="pt-1 border-t border-white/10">
-        <p className="text-xs text-gray-400">
+      <div className="pt-1 border-t" style={{ borderColor: '#d0d0d0' }}>
+        <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
           {multiImageModel === 'nano-banana-pro' 
             ? '✨ Advanced semantic editing with better quality and reasoning'
             : labels.fluxDesc}
