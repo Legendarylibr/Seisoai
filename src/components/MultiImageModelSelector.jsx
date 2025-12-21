@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
-import { Sparkles, Zap } from 'lucide-react';
+import { Sparkles, Zap, Layers } from 'lucide-react';
 import logger from '../utils/logger.js';
 
 const MultiImageModelSelector = () => {
@@ -80,14 +80,14 @@ const MultiImageModelSelector = () => {
           ({imageCount} {imageCount === 1 ? 'image' : 'images'})
         </span>
       </label>
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 flex-wrap">
         <button
           type="button"
           onClick={() => {
             logger.debug('Selected FLUX model', { fluxModel: labels.currentFluxModel });
             setMultiImageModel(labels.currentFluxModel);
           }}
-          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all"
+          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all min-w-[80px]"
           style={isFluxSelected ? {
             background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
             border: '2px inset #c0c0c0',
@@ -117,6 +117,7 @@ const MultiImageModelSelector = () => {
           <Zap className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
           <div className="flex flex-col items-center gap-0.5">
             <span className="text-xs font-bold">{labels.flux}</span>
+            <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Generate or edit</span>
             <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>1 credit</span>
           </div>
         </button>
@@ -126,7 +127,7 @@ const MultiImageModelSelector = () => {
             logger.debug('Selected Nano Banana Pro model');
             setMultiImageModel('nano-banana-pro');
           }}
-          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all"
+          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all min-w-[80px]"
           style={multiImageModel === 'nano-banana-pro' ? {
             background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
             border: '2px inset #c0c0c0',
@@ -156,15 +157,58 @@ const MultiImageModelSelector = () => {
           <Sparkles className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
           <div className="flex flex-col items-center gap-0.5">
             <span className="text-xs font-bold">Nano Banana Pro</span>
+            <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Edit</span>
             <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>2 credits</span>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            logger.debug('Selected Qwen Image Layered model');
+            setMultiImageModel('qwen-image-layered');
+          }}
+          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all min-w-[80px]"
+          style={multiImageModel === 'qwen-image-layered' ? {
+            background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
+            border: '2px inset #c0c0c0',
+            boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
+            color: '#000000',
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+          } : {
+            background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+            border: '2px outset #f0f0f0',
+            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+            color: '#000000',
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+          }}
+          onMouseEnter={(e) => {
+            if (multiImageModel !== 'qwen-image-layered') {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+              e.currentTarget.style.border = '2px outset #f8f8f8';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (multiImageModel !== 'qwen-image-layered') {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+            }
+          }}
+        >
+          <Layers className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-xs font-bold">Qwen</span>
+            <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Extract by layer</span>
+            <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>1 credit</span>
           </div>
         </button>
       </div>
       <div className="pt-1 border-t" style={{ borderColor: '#d0d0d0' }}>
         <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
-          {multiImageModel === 'nano-banana-pro' 
-            ? '✨ Advanced semantic editing with better quality and reasoning'
-            : labels.fluxDesc}
+          {multiImageModel === 'qwen-image-layered'
+            ? '🎨 Extract by layer - Extract RGBA layers from the image (returns multiple layers)'
+            : multiImageModel === 'nano-banana-pro' 
+            ? '✨ Edit - Advanced semantic editing with better quality and reasoning'
+            : `⚡ Generate and edit - ${labels.fluxDesc}`}
         </p>
       </div>
     </div>

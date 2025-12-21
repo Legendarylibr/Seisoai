@@ -193,14 +193,15 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       const hasImages = !!controlNetImage;
       const isMultipleImages = Array.isArray(controlNetImage) && controlNetImage.length >= 2;
       const isNanoBananaPro = hasImages && multiImageModel === 'nano-banana-pro';
-      const creditsUsed = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro ($0.20), 1 for others
+      const isQwen = hasImages && multiImageModel === 'qwen-image-layered';
+      const creditsUsed = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro ($0.20), 1 for others (FLUX and Qwen)
       
       logger.debug('Saving generation and deducting credits', { 
         userIdentifier, 
         isEmailAuth, 
         currentCredits: availableCredits,
         creditsUsed,
-        model: isNanoBananaPro ? 'nano-banana-pro' : 'flux'
+        model: isQwen ? 'qwen-image-layered' : (isNanoBananaPro ? 'nano-banana-pro' : 'flux')
       });
       
       let deductionResult = null;
@@ -258,6 +259,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           numImages,
           enableSafetyChecker,
           generationMode,
+          multiImageModel: multiImageModel, // Store model selection for regeneration
           timestamp: new Date().toISOString()
         });
       }, 1000);

@@ -1586,7 +1586,8 @@ const requireCreditsForModel = () => {
       const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
       const isSingleImage = image_url || (image_urls && image_urls.length === 1);
       const isNanoBananaPro = model === 'nano-banana-pro' && (isMultipleImages || isSingleImage);
-      const requiredCredits = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro ($0.20), 1 for others
+      const isQwen = model === 'qwen-image-layered' && (isMultipleImages || isSingleImage);
+      const requiredCredits = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro ($0.20), 1 for others (FLUX and Qwen)
       
       // Store required credits for use in handler
       req.requiredCreditsForModel = requiredCredits;
@@ -1812,6 +1813,171 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
   } catch (error) {
     logger.error('Image generation proxy error', { error: error.message, stack: error.stack });
     res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to generate image') });
+  }
+});
+
+/**
+ * Layer extraction endpoint - Qwen Image Layered
+ * Documentation: https://fal.ai/models/fal-ai/qwen-image-layered/api
+ * SECURITY: Requires credits check before making external API calls
+ * 1 credit required for layer extraction
+ */
+app.post('/api/extract-layers', freeImageRateLimiter, requireCredits(1), async (req, res) => {
+  try {
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+    }
+
+    const {
+      image_url,
+      prompt = '',
+      num_layers = 4,
+      num_inference_steps = 28,
+      guidance_scale = 5,
+      seed,
+      negative_prompt = '',
+      enable_safety_checker = true,
+      output_format = 'png',
+      acceleration = 'regular'
+    } = req.body;
+
+    // Validate required inputs
+    if (!image_url || typeof image_url !== 'string' || image_url.trim() === '') {
+      return res.status(400).json({ success: false, error: 'image_url is required and must be a non-empty string' });
+    }
+
+    // SECURITY: Validate URL to prevent SSRF attacks
+    const imageUrl = image_url.trim();
+    const isValidUrl = (url) => {
+      if (url.startsWith('data:')) return true;
+      try {
+        const urlObj = new URL(url);
+        const hostname = urlObj.hostname.toLowerCase();
+        return hostname.includes('fal.ai') || 
+               hostname.includes('fal.media') ||
+               hostname.endsWith('.fal.ai') ||
+               hostname.endsWith('.fal.media');
+      } catch (e) {
+        return false;
+      }
+    };
+    
+    if (!isValidUrl(imageUrl)) {
+      logger.warn('Invalid image URL - potential SSRF attempt', { 
+        imageUrl: imageUrl.substring(0, 100),
+        userId: req.user?.userId,
+        email: req.user?.email,
+        walletAddress: req.user?.walletAddress,
+        ip: req.ip
+      });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid image_url. Only URLs from fal.ai/fal.media or data URIs are allowed.' 
+      });
+    }
+
+    // Build request body for Qwen Image Layered API
+    const requestBody = {
+      image_url: imageUrl,
+      num_layers: Math.max(1, Math.min(10, parseInt(num_layers) || 4)),
+      num_inference_steps: Math.max(1, Math.min(100, parseInt(num_inference_steps) || 28)),
+      guidance_scale: Math.max(1, Math.min(20, parseFloat(guidance_scale) || 5)),
+      enable_safety_checker: Boolean(enable_safety_checker),
+      output_format: output_format === 'webp' ? 'webp' : 'png',
+      acceleration: ['none', 'regular', 'high'].includes(acceleration) ? acceleration : 'regular'
+    };
+
+    // Add optional parameters
+    if (prompt && typeof prompt === 'string' && prompt.trim()) {
+      requestBody.prompt = prompt.trim();
+    }
+    if (negative_prompt && typeof negative_prompt === 'string' && negative_prompt.trim()) {
+      requestBody.negative_prompt = negative_prompt.trim();
+    }
+    if (seed !== undefined && seed !== null) {
+      const seedInt = parseInt(seed);
+      if (!isNaN(seedInt)) {
+        requestBody.seed = seedInt;
+      }
+    }
+
+    logger.info('Layer extraction request', {
+      hasImageUrl: !!requestBody.image_url,
+      numLayers: requestBody.num_layers,
+      userId: req.user?.userId,
+      email: req.user?.email,
+      walletAddress: req.user?.walletAddress
+    });
+
+    // Make request to fal.ai Qwen Image Layered API
+    // Using subscribe endpoint for synchronous response
+    const endpoint = 'https://fal.run/fal-ai/qwen-image-layered';
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      let errorData = null;
+      try {
+        errorData = await response.json();
+        if (errorData.detail) {
+          errorMessage = Array.isArray(errorData.detail)
+            ? errorData.detail.map(err => err.msg || err).join('; ')
+            : errorData.detail;
+        } else if (errorData.error) {
+          errorMessage = errorData.error;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } catch (parseError) {
+        const errorText = await response.text();
+        errorMessage = errorText || errorMessage;
+      }
+      
+      logger.error('Fal.ai layer extraction error', { status: response.status, errorMessage, errorData });
+      return res.status(response.status).json({ success: false, error: errorMessage });
+    }
+
+    const data = await response.json();
+    
+    // Qwen Image Layered returns: { images: [{ url: ... }, ...], seed, timings, has_nsfw_concepts }
+    // Extract all layer images
+    let images = [];
+    if (data.images && Array.isArray(data.images)) {
+      images = data.images.map(img => typeof img === 'string' ? { url: img } : img);
+    } else if (data.image && typeof data.image === 'string') {
+      images = [{ url: data.image }];
+    } else if (data.url && typeof data.url === 'string') {
+      images = [{ url: data.url }];
+    }
+    
+    if (images.length > 0) {
+      logger.info('Layer extraction successful', {
+        layerCount: images.length,
+        userId: req.user?.userId,
+        email: req.user?.email,
+        walletAddress: req.user?.walletAddress
+      });
+      res.json({ 
+        success: true, 
+        images: images,
+        seed: data.seed,
+        timings: data.timings,
+        has_nsfw_concepts: data.has_nsfw_concepts
+      });
+    } else {
+      logger.error('No layers in fal.ai response', { data });
+      return res.status(500).json({ success: false, error: 'No layers extracted' });
+    }
+  } catch (error) {
+    logger.error('Layer extraction proxy error', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to extract layers') });
   }
 });
 

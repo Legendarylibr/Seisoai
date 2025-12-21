@@ -3,8 +3,9 @@ import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
+import { extractLayers } from '../services/layerExtractionService';
 import { addGeneration } from '../services/galleryService';
-import { X, Sparkles, Zap } from 'lucide-react';
+import { X, Sparkles, Zap, Layers } from 'lucide-react';
 import logger from '../utils/logger.js';
 
 const ImageOutput = () => {
@@ -237,10 +238,16 @@ const ImageOutput = () => {
 
     // Check if user has credits based on selected model
     const modelForValidation = selectedModel || multiImageModel || currentGeneration.multiImageModel || 'flux';
-    const requiredCredits = modelForValidation === 'nano-banana-pro' ? 2 : 1;
+    const requiredCredits = modelForValidation === 'nano-banana-pro' ? 2 : 1; // Qwen also uses 1 credit
     
     if (availableCredits < requiredCredits) {
-      setError(`Insufficient credits. ${modelForValidation === 'nano-banana-pro' ? 'Nano Banana Pro requires 2 credits.' : 'FLUX requires 1 credit.'} You have ${availableCredits} credit${availableCredits !== 1 ? 's' : ''}.`);
+      let creditMessage = 'FLUX requires 1 credit.';
+      if (modelForValidation === 'nano-banana-pro') {
+        creditMessage = 'Nano Banana Pro requires 2 credits.';
+      } else if (modelForValidation === 'qwen-image-layered') {
+        creditMessage = 'Qwen Layer Extraction requires 1 credit.';
+      }
+      setError(`Insufficient credits. ${creditMessage} You have ${availableCredits} credit${availableCredits !== 1 ? 's' : ''}.`);
       return;
     }
 
@@ -288,12 +295,33 @@ const ImageOutput = () => {
       
       logger.info('Starting regeneration with new prompt');
       
-      const result = await generateImage(
-        currentGeneration.style,
-        trimmedPrompt,
-        advancedSettings,
-        referenceImageForGeneration // Use current output as reference image
-      );
+      // Check if Qwen layer extraction is selected
+      const isQwenModel = selectedModel === 'qwen-image-layered';
+      let result;
+      
+      if (isQwenModel) {
+        // Use layer extraction service for Qwen
+        logger.info('Using Qwen Image Layered for layer extraction');
+        const layerUrls = await extractLayers(referenceImageForGeneration, {
+          prompt: trimmedPrompt || undefined,
+          num_layers: 4,
+          walletAddress: isEmailAuth ? undefined : address,
+          userId: isEmailAuth ? emailContext.userId : undefined,
+          email: isEmailAuth ? emailContext.email : undefined
+        });
+        
+        // Return all layers as array
+        result = layerUrls;
+        logger.info('Layer extraction completed', { layerCount: layerUrls.length });
+      } else {
+        // Use regular image generation for FLUX and Nano Banana Pro
+        result = await generateImage(
+          currentGeneration.style,
+          trimmedPrompt,
+          advancedSettings,
+          referenceImageForGeneration // Use current output as reference image
+        );
+      }
       
       // Handle both single image (string) and multiple images (array)
       const isArray = Array.isArray(result);
@@ -329,7 +357,7 @@ const ImageOutput = () => {
         
         // Calculate credits based on selected model
         const modelForCredits = selectedModel || multiImageModel || currentGeneration.multiImageModel || 'flux';
-        const creditsUsed = modelForCredits === 'nano-banana-pro' ? 2 : 1; // 2 credits for Nano Banana Pro, 1 for Flux
+        const creditsUsed = modelForCredits === 'nano-banana-pro' ? 2 : 1; // 2 credits for Nano Banana Pro, 1 for Flux and Qwen
         
         deductionResult = await addGeneration(userIdentifier, {
           prompt: trimmedPrompt,
@@ -476,7 +504,14 @@ const ImageOutput = () => {
   }
 
   // Get all images to display (use generatedImages array if available, otherwise fallback to single generatedImage)
-  const imagesToDisplay = (generatedImages && generatedImages.length > 0) ? generatedImages : (generatedImage ? [generatedImage] : []);
+  // Handle both single image (string) and multiple images (array)
+  let imagesToDisplay = [];
+  if (generatedImages && generatedImages.length > 0) {
+    imagesToDisplay = generatedImages;
+  } else if (generatedImage) {
+    // If generatedImage is already an array, use it directly; otherwise wrap in array
+    imagesToDisplay = Array.isArray(generatedImage) ? generatedImage : [generatedImage];
+  }
   const hasMultipleImages = imagesToDisplay.length > 1;
 
   if (imagesToDisplay.length === 0) {
@@ -650,7 +685,7 @@ const ImageOutput = () => {
               <label className="block text-xs font-semibold mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                 Select Model
               </label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => {
@@ -659,7 +694,7 @@ const ImageOutput = () => {
                     setError(null); // Clear any previous errors
                     logger.debug('Selected FLUX model for regeneration', { fluxModel });
                   }}
-                  className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all"
+                  className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all min-w-[80px]"
                   style={(selectedModel === 'flux' || selectedModel === 'flux-multi' || (!selectedModel && (multiImageModel === 'flux' || multiImageModel === 'flux-multi' || !multiImageModel))) ? {
                     background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
                     border: '2px inset #c0c0c0',
@@ -691,6 +726,7 @@ const ImageOutput = () => {
                   <Zap className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
                   <div className="flex flex-col items-center gap-0.5">
                     <span className="text-xs font-bold">FLUX</span>
+                    <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Generate or edit</span>
                     <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>1 credit</span>
                   </div>
                 </button>
@@ -701,7 +737,7 @@ const ImageOutput = () => {
                     setError(null); // Clear any previous errors
                     logger.debug('Selected Nano Banana Pro model for regeneration');
                   }}
-                  className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all"
+                  className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all min-w-[80px]"
                   style={selectedModel === 'nano-banana-pro' || (!selectedModel && multiImageModel === 'nano-banana-pro') ? {
                     background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
                     border: '2px inset #c0c0c0',
@@ -733,15 +769,61 @@ const ImageOutput = () => {
                   <Sparkles className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
                   <div className="flex flex-col items-center gap-0.5">
                     <span className="text-xs font-bold">Nano Banana Pro</span>
+                    <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Edit</span>
                     <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>2 credits</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedModel('qwen-image-layered');
+                    setError(null); // Clear any previous errors
+                    logger.debug('Selected Qwen Image Layered model for regeneration');
+                  }}
+                  className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all min-w-[80px]"
+                  style={selectedModel === 'qwen-image-layered' ? {
+                    background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
+                    border: '2px inset #c0c0c0',
+                    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
+                    color: '#000000',
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+                  } : {
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                    color: '#000000',
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  }}
+                  onMouseEnter={(e) => {
+                    const isSelected = selectedModel === 'qwen-image-layered';
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                      e.currentTarget.style.border = '2px outset #f8f8f8';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    const isSelected = selectedModel === 'qwen-image-layered';
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                    }
+                  }}
+                >
+                  <Layers className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-xs font-bold">Qwen</span>
+                    <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Extract by layer</span>
+                    <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>1 credit</span>
                   </div>
                 </button>
               </div>
               <div className="pt-2 mt-2 border-t" style={{ borderColor: '#d0d0d0' }}>
                 <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
-                  {(selectedModel === 'nano-banana-pro' || (!selectedModel && multiImageModel === 'nano-banana-pro'))
-                    ? '✨ Advanced semantic editing with better quality and reasoning'
-                    : '⚡ Fast image editing and generation'}
+                  {selectedModel === 'qwen-image-layered'
+                    ? '🎨 Extract by layer - Extract RGBA layers from the image (returns multiple layers)'
+                    : (selectedModel === 'nano-banana-pro' || (!selectedModel && multiImageModel === 'nano-banana-pro'))
+                    ? '✨ Edit - Advanced semantic editing with better quality and reasoning'
+                    : '⚡ Generate and edit - Fast image editing and generation'}
                 </p>
               </div>
             </div>
