@@ -4,7 +4,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
-import { X, Sparkles } from 'lucide-react';
+import { X, Sparkles, Zap } from 'lucide-react';
 import logger from '../utils/logger.js';
 
 const ImageOutput = () => {
@@ -46,6 +46,7 @@ const ImageOutput = () => {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [newPrompt, setNewPrompt] = useState('');
+  const [selectedModel, setSelectedModel] = useState(null); // Model selected in modal
 
   const handleDownload = async (imageUrl = null) => {
     const imageToDownload = imageUrl || generatedImage;
@@ -199,6 +200,23 @@ const ImageOutput = () => {
       return;
     }
     
+    // Validate prompt first
+    const trimmedPrompt = newPrompt.trim();
+    if (!trimmedPrompt) {
+      setError('Please enter a new prompt');
+      return;
+    }
+
+    if (trimmedPrompt.length < 3) {
+      setError('Prompt must be at least 3 characters long');
+      return;
+    }
+
+    if (trimmedPrompt.length > 1000) {
+      setError('Prompt must be less than 1000 characters');
+      return;
+    }
+    
     // Check if authenticated (email or wallet)
     const isAuthenticated = isConnected || isEmailAuth;
     
@@ -217,16 +235,17 @@ const ImageOutput = () => {
       return;
     }
 
-    // Check if user has credits
-    if (availableCredits <= 0) {
-      setError('Insufficient credits. Please buy credits to generate.');
+    // Check if user has credits based on selected model
+    const modelForValidation = selectedModel || multiImageModel || currentGeneration.multiImageModel || 'flux';
+    const requiredCredits = modelForValidation === 'nano-banana-pro' ? 2 : 1;
+    
+    if (availableCredits < requiredCredits) {
+      setError(`Insufficient credits. ${modelForValidation === 'nano-banana-pro' ? 'Nano Banana Pro requires 2 credits.' : 'FLUX requires 1 credit.'} You have ${availableCredits} credit${availableCredits !== 1 ? 's' : ''}.`);
       return;
     }
 
-    if (!currentGeneration || !newPrompt.trim()) {
-      if (!newPrompt.trim()) {
-        setError('Please enter a new prompt');
-      }
+    if (!currentGeneration) {
+      setError('No generation found. Please generate an image first.');
       return;
     }
     
@@ -239,13 +258,19 @@ const ImageOutput = () => {
       
       // Use the generated image as the reference image for the new generation
       // Preserve the selected model (multiImageModel) so the new prompt uses the same model
+      // Use the most current image as reference: prefer currentGeneration.referenceImage if available,
+      // otherwise use currentGeneration.image, otherwise fall back to generatedImage
+      const referenceImageForGeneration = currentGeneration.referenceImage || 
+                                          currentGeneration.image || 
+                                          generatedImage;
+      
       const advancedSettings = {
         guidanceScale: currentGeneration.guidanceScale || guidanceScale,
         imageSize: currentGeneration.imageSize || imageSize,
         numImages: currentGeneration.numImages || numImages,
         enableSafetyChecker: currentGeneration.enableSafetyChecker || enableSafetyChecker,
         generationMode: currentGeneration.generationMode || generationMode,
-        multiImageModel: multiImageModel || currentGeneration.multiImageModel, // Preserve selected model
+        multiImageModel: selectedModel || multiImageModel || currentGeneration.multiImageModel, // Use selected model from modal
         walletAddress: isEmailAuth ? undefined : address, // Pass wallet address for wallet users
         userId: isEmailAuth ? emailContext.userId : undefined, // Pass userId for email users
         email: isEmailAuth ? emailContext.email : undefined, // Pass email for email users
@@ -254,21 +279,16 @@ const ImageOutput = () => {
       };
       
       logger.debug('Regenerating with new prompt', {
-        newPrompt: newPrompt.trim(),
+        newPrompt: trimmedPrompt,
         multiImageModel: advancedSettings.multiImageModel,
         hasReferenceImage: !!referenceImageForGeneration
       });
       
       logger.info('Starting regeneration with new prompt');
-      // Use the most current image as reference: prefer currentGeneration.referenceImage if available,
-      // otherwise use currentGeneration.image, otherwise fall back to generatedImage
-      const referenceImageForGeneration = currentGeneration.referenceImage || 
-                                          currentGeneration.image || 
-                                          generatedImage;
       
       const result = await generateImage(
         currentGeneration.style,
-        newPrompt.trim(),
+        trimmedPrompt,
         advancedSettings,
         referenceImageForGeneration // Use current output as reference image
       );
@@ -306,11 +326,11 @@ const ImageOutput = () => {
         const imageUrlForSave = isArray ? result[0] : result;
         
         // Calculate credits based on selected model
-        const selectedModel = multiImageModel || currentGeneration.multiImageModel;
-        const creditsUsed = selectedModel === 'nano-banana-pro' ? 2 : 1; // 2 credits for Nano Banana Pro, 1 for Flux
+        const modelForCredits = selectedModel || multiImageModel || currentGeneration.multiImageModel || 'flux';
+        const creditsUsed = modelForCredits === 'nano-banana-pro' ? 2 : 1; // 2 credits for Nano Banana Pro, 1 for Flux
         
         deductionResult = await addGeneration(userIdentifier, {
-          prompt: newPrompt.trim(),
+          prompt: trimmedPrompt,
           style: currentGeneration.style ? currentGeneration.style.name : 'No Style',
           imageUrl: imageUrlForSave, // Use first image if array, or the single image
           creditsUsed: creditsUsed, // Use calculated credits based on model
@@ -319,7 +339,7 @@ const ImageOutput = () => {
         });
         
         logger.debug('Credits calculated for regeneration', {
-          selectedModel,
+          selectedModel: modelForCredits,
           creditsUsed,
           remainingCredits: deductionResult.remainingCredits
         });
@@ -372,17 +392,33 @@ const ImageOutput = () => {
       setCurrentGeneration({
         ...currentGeneration,
         image: resultImageUrl, // Use first image for backward compatibility
-        prompt: newPrompt.trim(),
+        prompt: trimmedPrompt,
         referenceImage: newReferenceImage, // New output becomes reference for next generation
-        multiImageModel: multiImageModel || currentGeneration.multiImageModel, // Preserve model selection
+        multiImageModel: selectedModel || multiImageModel || currentGeneration.multiImageModel, // Preserve model selection
         timestamp: new Date().toISOString()
       });
       
       setNewPrompt(''); // Clear the prompt
       
     } catch (error) {
-      logger.error('Regeneration with prompt failed:', { error: error.message });
-      setError(error.message || 'Failed to regenerate image. Please try again.');
+      logger.error('Regeneration with prompt failed:', { error: error.message, stack: error.stack });
+      // Provide user-friendly error messages
+      let errorMessage = 'Failed to regenerate image. Please try again.';
+      if (error.message) {
+        const lowerMessage = error.message.toLowerCase();
+        if (lowerMessage.includes('invalid') || lowerMessage.includes('input')) {
+          errorMessage = 'Invalid prompt. Please check your input and try again.';
+        } else if (lowerMessage.includes('credits') || lowerMessage.includes('insufficient')) {
+          errorMessage = 'Insufficient credits. Please purchase more credits to continue.';
+        } else if (lowerMessage.includes('network') || lowerMessage.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      setError(errorMessage);
+      // Reopen modal to show error
+      setShowPromptModal(true);
     } finally {
       setIsRegenerating(false);
       setGenerating(false);
@@ -553,7 +589,12 @@ const ImageOutput = () => {
         </h4>
         <div className="flex gap-1.5 flex-wrap">
           <button
-            onClick={() => setShowPromptModal(true)}
+            onClick={() => {
+              // Initialize selected model to current model when opening modal
+              const currentModel = multiImageModel || currentGeneration?.multiImageModel || 'flux';
+              setSelectedModel(currentModel);
+              setShowPromptModal(true);
+            }}
             disabled={isRegenerating || isGenerating || (!isConnected && !isEmailAuth) || !currentGeneration || availableCredits <= 0}
             className="btn-primary flex items-center gap-1.5 text-xs px-2.5 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             title={availableCredits <= 0 ? 'Insufficient credits' : 'Regenerate with new prompt'}
@@ -571,28 +612,144 @@ const ImageOutput = () => {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-purple-500/20 rounded-lg">
-                  <Sparkles className="w-5 h-5 text-purple-400" />
+                  <Sparkles className="w-5 h-5 text-purple-600" />
                 </div>
-                <h3 className="text-xl font-semibold text-white">New Prompt Regeneration</h3>
+                <h3 className="text-xl font-semibold text-black">New Prompt Regeneration</h3>
               </div>
               <button
                 onClick={() => {
                   setShowPromptModal(false);
                   setNewPrompt('');
+                  setError(null);
+                  setSelectedModel(null);
                 }}
-                className="p-2 rounded-lg hover:bg-white/20 transition-all duration-300 hover:scale-110"
+                className="p-2 rounded-lg hover:bg-gray-200 transition-all duration-300 hover:scale-110"
               >
-                <X className="w-5 h-5 text-gray-400 hover:text-white" />
+                <X className="w-5 h-5 text-gray-600 hover:text-black" />
               </button>
             </div>
-            <p className="text-gray-300 text-sm mb-4">
+            <p className="text-gray-700 text-sm mb-4">
               Enter a new prompt to regenerate the image. The current output will be used as the reference image.
             </p>
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded-lg">
+                <p className="text-red-700 text-sm">{error}</p>
+              </div>
+            )}
+            
+            {/* Model Selection */}
+            <div className="mb-4 p-3 rounded-lg" style={{ 
+              background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
+              border: '2px outset #e8e8e8',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15)'
+            }}>
+              <label className="block text-xs font-semibold mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                Select Model
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fluxModel = 'flux'; // Single image regeneration uses flux
+                    setSelectedModel(fluxModel);
+                    setError(null); // Clear any previous errors
+                    logger.debug('Selected FLUX model for regeneration', { fluxModel });
+                  }}
+                  className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all"
+                  style={(selectedModel === 'flux' || selectedModel === 'flux-multi' || (!selectedModel && (multiImageModel === 'flux' || multiImageModel === 'flux-multi' || !multiImageModel))) ? {
+                    background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
+                    border: '2px inset #c0c0c0',
+                    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
+                    color: '#000000',
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+                  } : {
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                    color: '#000000',
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  }}
+                  onMouseEnter={(e) => {
+                    const isSelected = selectedModel === 'flux' || selectedModel === 'flux-multi' || (!selectedModel && (multiImageModel === 'flux' || multiImageModel === 'flux-multi' || !multiImageModel));
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                      e.currentTarget.style.border = '2px outset #f8f8f8';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    const isSelected = selectedModel === 'flux' || selectedModel === 'flux-multi' || (!selectedModel && (multiImageModel === 'flux' || multiImageModel === 'flux-multi' || !multiImageModel));
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                    }
+                  }}
+                >
+                  <Zap className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-xs font-bold">FLUX</span>
+                    <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>1 credit</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedModel('nano-banana-pro');
+                    setError(null); // Clear any previous errors
+                    logger.debug('Selected Nano Banana Pro model for regeneration');
+                  }}
+                  className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all"
+                  style={selectedModel === 'nano-banana-pro' || (!selectedModel && multiImageModel === 'nano-banana-pro') ? {
+                    background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
+                    border: '2px inset #c0c0c0',
+                    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
+                    color: '#000000',
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+                  } : {
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                    color: '#000000',
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  }}
+                  onMouseEnter={(e) => {
+                    const isSelected = selectedModel === 'nano-banana-pro' || (!selectedModel && multiImageModel === 'nano-banana-pro');
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                      e.currentTarget.style.border = '2px outset #f8f8f8';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    const isSelected = selectedModel === 'nano-banana-pro' || (!selectedModel && multiImageModel === 'nano-banana-pro');
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                    }
+                  }}
+                >
+                  <Sparkles className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-xs font-bold">Nano Banana Pro</span>
+                    <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>2 credits</span>
+                  </div>
+                </button>
+              </div>
+              <div className="pt-2 mt-2 border-t" style={{ borderColor: '#d0d0d0' }}>
+                <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
+                  {(selectedModel === 'nano-banana-pro' || (!selectedModel && multiImageModel === 'nano-banana-pro'))
+                    ? '✨ Advanced semantic editing with better quality and reasoning'
+                    : '⚡ Fast image editing and generation'}
+                </p>
+              </div>
+            </div>
+            
             <textarea
               value={newPrompt}
-              onChange={(e) => setNewPrompt(e.target.value)}
+              onChange={(e) => {
+                setNewPrompt(e.target.value);
+                setError(null);
+              }}
               placeholder="Enter your new prompt here..."
-              className="w-full h-32 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none transition-all duration-300 focus:bg-white/8"
+              className="w-full h-32 px-4 py-3 bg-white border-2 border-gray-300 rounded-xl text-black placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none transition-all duration-300"
             />
             <div className="flex gap-3 mt-6">
               <button
@@ -606,8 +763,11 @@ const ImageOutput = () => {
                 onClick={() => {
                   setShowPromptModal(false);
                   setNewPrompt('');
+                  setError(null);
+                  setSelectedModel(null);
                 }}
                 className="btn-secondary px-5"
+                style={{ color: '#000000', border: '2px outset #e0e0e0', background: 'linear-gradient(to bottom, #f0f0f0 0%, #e0e0e0 50%, #d0d0d0 100%)' }}
               >
                 Cancel
               </button>
