@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Calendar, DollarSign, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
+import logger from '../utils/logger.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -48,7 +49,7 @@ const SubscriptionManagement = ({ isOpen, onClose }) => {
         }
       }
     } catch (err) {
-      console.error('Error fetching subscription:', err);
+      logger.error('Error fetching subscription:', { error: err.message });
       setError('Failed to load subscription');
     } finally {
       setLoading(false);
@@ -95,7 +96,7 @@ const SubscriptionManagement = ({ isOpen, onClose }) => {
         setError(data.error || 'Failed to cancel subscription');
       }
     } catch (err) {
-      console.error('Error canceling subscription:', err);
+      logger.error('Error canceling subscription:', { error: err.message });
       setError('Failed to cancel subscription');
     } finally {
       setCanceling(false);

@@ -61,14 +61,18 @@ export const checkNFTHoldings = async (walletAddress) => {
       }
 
       const data = await response.json();
-      console.log('📥 NFT API response received:', data);
+      logger.debug('NFT API response received', { 
+        isHolder: data.isHolder, 
+        success: data.success,
+        creditsGranted: data.creditsGranted 
+      });
       
       // Handle different response formats
       const isHolder = data.isHolder === true || (data.success && data.isHolder === true);
       const collections = Array.isArray(data.collections) ? data.collections : [];
       const creditsGranted = data.creditsGranted || 0;
       
-      console.log('✅ NFT verification result:', { 
+      logger.info('NFT verification result', { 
         isHolder, 
         collectionCount: collections.length,
         creditsGranted,
@@ -83,15 +87,15 @@ export const checkNFTHoldings = async (walletAddress) => {
     } catch (fetchError) {
       clearTimeout(timeoutId);
       if (fetchError.name === 'AbortError') {
-        console.warn('NFT check timed out');
+        logger.warn('NFT check timed out', { walletAddress: normalizedAddress });
       } else {
-        console.error('NFT check request failed:', fetchError);
+        logger.error('NFT check request failed:', { error: fetchError.message, walletAddress: normalizedAddress });
       }
       return { isHolder: false, collections: [] };
     }
 
   } catch (error) {
-    console.error('Error checking NFT holdings:', error);
+    logger.error('Error checking NFT holdings:', { error: error.message, walletAddress });
     // Fail open - don't block user if verification fails
     return { isHolder: false, collections: [] };
   }

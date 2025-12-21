@@ -3,6 +3,7 @@ import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard, Mail, S
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import SubscriptionManagement from './SubscriptionManagement';
+import logger from '../utils/logger.js';
 
   const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment, onShowStripePayment }) => {
   const walletContext = useSimpleWallet();
@@ -39,7 +40,7 @@ import SubscriptionManagement from './SubscriptionManagement';
 
   // Safety check to prevent the error
   if (!tabs || !Array.isArray(tabs)) {
-    console.error('Navigation: tabs prop is missing or not an array', { tabs, activeTab, setActiveTab });
+    logger.error('Navigation: tabs prop is missing or not an array', { tabs, activeTab, hasSetActiveTab: !!setActiveTab });
     return (
       <header className="bg-black/20 backdrop-blur-md border-b border-white/10 sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">

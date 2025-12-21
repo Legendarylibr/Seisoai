@@ -223,7 +223,7 @@ export const hasMinimumBalance = async (walletAddress, tokenAddress, chainId, pr
     
     return balance >= minimum;
   } catch (error) {
-    console.error('Error checking minimum balance:', error);
+    logger.error('Error checking minimum balance:', { error: error.message, walletAddress, tokenAddress, chainId });
     return false;
   }
 };

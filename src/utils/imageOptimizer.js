@@ -2,6 +2,7 @@
  * Image optimization utility to reduce payload size for API requests
  * Resizes and compresses images before sending to reduce transfer time
  */
+import logger from './logger.js';
 
 /**
  * Optimize an image data URI by resizing and compressing
@@ -54,18 +55,22 @@ export const optimizeImage = async (dataUri, options = {}) => {
         const optimizedSize = optimizedDataUri.length;
         const reduction = ((1 - optimizedSize / originalSize) * 100).toFixed(1);
         
-        console.log(`🖼️ Image optimized: ${(originalSize / 1024).toFixed(1)}KB → ${(optimizedSize / 1024).toFixed(1)}KB (${reduction}% reduction)`);
+        logger.debug('Image optimized', { 
+          originalSizeKB: (originalSize / 1024).toFixed(1), 
+          optimizedSizeKB: (optimizedSize / 1024).toFixed(1), 
+          reduction: `${reduction}%` 
+        });
         
         resolve(optimizedDataUri);
       } catch (error) {
-        console.error('Image optimization error:', error);
+        logger.error('Image optimization error:', { error: error.message });
         // Fallback to original if optimization fails
         resolve(dataUri);
       }
     };
 
     img.onerror = () => {
-      console.error('Failed to load image for optimization');
+      logger.error('Failed to load image for optimization');
       // Fallback to original if loading fails
       resolve(dataUri);
     };

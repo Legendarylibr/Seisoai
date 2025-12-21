@@ -110,7 +110,7 @@ const ImageOutput = () => {
         window.URL.revokeObjectURL(blobUrl);
       }
     } catch (error) {
-      console.error('Download failed:', error);
+      logger.error('Download failed:', { error: error.message });
       // Fallback to opening image in new tab for iOS
       const link = document.createElement('a');
       link.href = imageToDownload;
@@ -181,7 +181,7 @@ const ImageOutput = () => {
       });
       
     } catch (error) {
-      console.error('Regeneration failed:', error);
+      logger.error('Regeneration failed:', { error: error.message });
       setError(error.message || 'Failed to regenerate image. Please try again.');
     } finally {
       setIsRegenerating(false);
@@ -381,8 +381,7 @@ const ImageOutput = () => {
       setNewPrompt(''); // Clear the prompt
       
     } catch (error) {
-      console.error('Regeneration with prompt failed:', error);
-      logger.error('Regeneration with prompt failed', { error: error.message });
+      logger.error('Regeneration with prompt failed:', { error: error.message });
       setError(error.message || 'Failed to regenerate image. Please try again.');
     } finally {
       setIsRegenerating(false);
@@ -511,7 +510,7 @@ const ImageOutput = () => {
                 }}
                 loading="lazy"
                 onError={(e) => {
-                  console.error('Image failed to load:', imageUrl);
+                  logger.error('Image failed to load:', { imageUrl });
                   e.target.style.display = 'none';
                 }}
                 onLoad={() => {
@@ -535,7 +534,7 @@ const ImageOutput = () => {
             }}
             loading="lazy"
             onError={(e) => {
-              console.error('Image failed to load:', imagesToDisplay[0]);
+              logger.error('Image failed to load:', { imageUrl: imagesToDisplay[0] });
               setError('Failed to load image. Please try regenerating.');
               e.target.style.display = 'none';
             }}

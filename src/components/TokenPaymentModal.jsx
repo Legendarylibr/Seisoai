@@ -759,7 +759,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
             const creditData = await creditResponse.json();
             
             if (creditData.success) {
-              console.log('✅ Credits added!', creditData);
+              logger.info('Credits added successfully', { credits: creditData.credits, totalCredits: creditData.totalCredits });
               setError(`✅ Payment confirmed! ${creditData.credits} credits added. New balance: ${creditData.totalCredits} credits.`);
               setPaymentStatus('confirmed');
               
@@ -786,12 +786,12 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
               throw new Error(creditData.error || 'Failed to credit');
             }
           } catch (creditError) {
-            console.error('Error crediting:', creditError);
+            logger.error('Error crediting:', { error: creditError.message, transactionSignature });
             setError(`Transaction confirmed but crediting failed: ${creditError.message}`);
           }
           
         } catch (solanaError) {
-          console.error('❌ Solana transaction failed:', solanaError);
+          logger.error('Solana transaction failed:', { error: solanaError.message });
           
           // Show specific error message
           let errorMessage = 'Solana transaction failed. ';
@@ -951,7 +951,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
                 throw new Error(creditData.error || 'Failed to credit');
               }
             } catch (creditError) {
-              console.error('Error crediting:', creditError);
+              logger.error('Error crediting:', { error: creditError.message, transactionHash });
               setError(`Transaction confirmed but crediting failed: ${creditError.message}`);
             }
           } else {
@@ -959,7 +959,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
           }
           
         } catch (usdcError) {
-          console.error('❌ USDC transaction failed:', usdcError);
+          logger.error('USDC transaction failed:', { error: usdcError.message });
           
           if (usdcError.code === 4001 || usdcError.message.includes('User rejected') || usdcError.message.includes('user rejected')) {
             setError('Transaction cancelled by user.');
@@ -971,7 +971,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
         }
       }
     } catch (error) {
-      console.error('Error sending transaction:', error);
+      logger.error('Error sending transaction:', { error: error.message, walletType, amount });
       
       // Show specific error message based on error type
       let errorMessage = 'Transaction failed. ';
@@ -1065,7 +1065,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
         setError('No USDC transfer detected to the payment wallet. Please send the transaction first.');
       }
     } catch (error) {
-      console.error('[Payment] Error checking payment:', error);
+      logger.error('Error checking payment:', { error: error.message, walletAddress, amount });
       setCheckingPayment(false);
       setError('Error checking payment: ' + error.message);
     }

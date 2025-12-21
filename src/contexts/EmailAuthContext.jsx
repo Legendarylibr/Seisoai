@@ -73,8 +73,7 @@ export const EmailAuthProvider = ({ children }) => {
         setIsAuthenticated(true);
       }
     } catch (error) {
-      console.error('Error fetching user data:', error);
-      logger.error('Error fetching user data', { error: error.message });
+      logger.error('Error fetching user data:', { error: error.message });
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
@@ -136,8 +135,7 @@ export const EmailAuthProvider = ({ children }) => {
         await fetchUserData();
       }
     } catch (error) {
-      console.error('Error connecting wallet:', error);
-      logger.error('Error connecting wallet', { error: error.message });
+      logger.error('Error connecting wallet:', { error: error.message });
       throw error;
     }
   }, [walletAddress, connectWalletFromContext, checkNFTStatus, fetchUserData]);
@@ -163,8 +161,7 @@ export const EmailAuthProvider = ({ children }) => {
       
       await fetchUserData();
     } catch (error) {
-      console.error('Error disconnecting wallet:', error);
-      logger.error('Error disconnecting wallet', { error: error.message });
+      logger.error('Error disconnecting wallet:', { error: error.message });
     }
   }, [disconnectWalletFromContext, fetchUserData]);
 

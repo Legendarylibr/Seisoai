@@ -3,7 +3,6 @@
 
 import { generateImage as generateWithFAL } from './falService.js';
 import { generateImageWithFastAPI, isFastAPIAvailable } from './fastapiService.js';
-import { useSimpleWallet } from '../contexts/SimpleWalletContext.jsx';
 
 /**
  * Smart image generation that routes based on user status

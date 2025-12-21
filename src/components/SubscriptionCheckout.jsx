@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import TokenPaymentModal from './TokenPaymentModal';
+import logger from '../utils/logger.js';
 
 /**
  * SubscriptionCheckout Component
@@ -129,7 +130,7 @@ const SubscriptionCheckout = ({
         throw new Error('No checkout URL received');
       }
     } catch (error) {
-      console.error('Error creating checkout session:', error);
+      logger.error('Error creating checkout session:', { error: error.message });
       const errorMessage = error.message || 'Failed to start checkout';
       setError(errorMessage);
       if (onError) onError(errorMessage);

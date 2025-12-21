@@ -262,7 +262,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         });
       }, 1000);
     } catch (error) {
-      console.error('Generation error:', error);
+      logger.error('Generation error:', { error: error.message, stack: error.stack });
       const errorMessage = error.message || 'Failed to generate image. Please try again.';
       
       // If error is about insufficient credits and user is authenticated, show payment modal

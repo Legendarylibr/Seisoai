@@ -160,7 +160,7 @@ const ImageGallery = () => {
         window.URL.revokeObjectURL(blobUrl);
       }
     } catch (error) {
-      console.error('Download failed:', error);
+      logger.error('Download failed:', { error: error.message, url });
       // Fallback to opening in new tab
       const link = document.createElement('a');
       link.href = url;
@@ -279,7 +279,7 @@ const ImageGallery = () => {
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     loading="lazy"
                     onError={(e) => {
-                      console.error('Gallery item failed to load:', displayUrl);
+                      logger.error('Gallery item failed to load:', { imageUrl: displayUrl });
                       e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Crect fill="%23333" width="400" height="400"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em" font-family="sans-serif" font-size="14"%3EItem not available%3C/text%3E%3C/svg%3E';
                     }}
                   />
@@ -375,7 +375,7 @@ const ImageGallery = () => {
                   }}
                   loading="lazy"
                   onError={(e) => {
-                    console.error('Modal item failed to load:', selectedItem.imageUrl || selectedItem.image);
+                    logger.error('Modal item failed to load:', { imageUrl: selectedItem.imageUrl || selectedItem.image });
                     e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="600"%3E%3Crect fill="%23333" width="800" height="600"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em" font-family="sans-serif" font-size="16"%3EItem not available%3C/text%3E%3C/svg%3E';
                   }}
                 />

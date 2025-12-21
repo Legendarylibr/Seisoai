@@ -4,6 +4,7 @@ import PaymentSuccessModal from './PaymentSuccessModal';
 import SubscriptionManagement from './SubscriptionManagement';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { CheckCircle, AlertCircle, X, CreditCard } from 'lucide-react';
+import logger from '../utils/logger.js';
 
 /**
  * PricingPage Component
@@ -89,7 +90,7 @@ const PricingPage = () => {
             data.planPrice || (data.amount ? `$${data.amount}/month` : 'Activated')
           );
         } catch (error) {
-          console.error('Subscription verification failed:', error);
+          logger.error('Subscription verification failed:', { error: error.message });
           const message = error.message || 'Failed to verify subscription payment. Please contact support.';
           setErrorMessage(message);
           setTimeout(() => setErrorMessage(null), 6000);

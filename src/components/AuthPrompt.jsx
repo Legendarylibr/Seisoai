@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Mail, Wallet, ArrowRight, Sparkles, Zap, Gift } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import EmailSignIn from './EmailSignIn';
+import logger from '../utils/logger.js';
 
 const AuthPrompt = () => {
   const [authMode, setAuthMode] = useState(null); // 'email' or 'wallet'
@@ -261,7 +262,7 @@ function WalletPrompt({ onBack }) {
     try {
       await connectWallet(walletId);
     } catch (error) {
-      console.error('Wallet connection failed:', error);
+      logger.error('Wallet connection failed:', { walletId, error: error.message });
     }
   };
 

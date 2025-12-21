@@ -93,7 +93,7 @@ export const checkNFTOwnership = async (walletAddress, contractAddress, chainId,
       }
     }
   } catch (error) {
-    console.error('Error checking NFT ownership:', error);
+    logger.error('Error checking NFT ownership:', { error: error.message, contractAddress, walletAddress, chainId });
     throw new Error(`Failed to check NFT ownership: ${error.message}`);
   }
 };
@@ -158,7 +158,7 @@ export const checkSolanaNFTOwnership = async (walletAddress, mintAddress, solana
       type: 'Solana'
     };
   } catch (error) {
-    console.error('Error checking Solana NFT ownership:', error);
+    logger.error('Error checking Solana NFT ownership:', { error: error.message, walletAddress, mintAddress });
     throw new Error(`Failed to check Solana NFT ownership: ${error.message}`);
   }
 };
@@ -228,7 +228,7 @@ export const getNFTMetadata = async (contractAddress, tokenId, chainId, provider
       metadata
     };
   } catch (error) {
-    console.error('Error fetching NFT metadata:', error);
+    logger.error('Error fetching NFT metadata:', { error: error.message, contractAddress, tokenId, chainId });
     throw new Error(`Failed to fetch NFT metadata: ${error.message}`);
   }
 };

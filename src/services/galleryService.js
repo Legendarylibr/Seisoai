@@ -102,7 +102,7 @@ export const getGallery = async (identifier, page = 1, limit = 20, userId = null
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error fetching gallery:', error);
+    logger.error('Error fetching gallery:', { error: error.message, identifier, page, limit });
     throw error;
   }
 };
@@ -130,7 +130,7 @@ export const deleteGeneration = async (walletAddress, generationId) => {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error deleting generation:', error);
+    logger.error('Error deleting generation:', { error: error.message, walletAddress, generationId });
     throw error;
   }
 };
@@ -155,7 +155,7 @@ export const getGalleryStats = async (walletAddress) => {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error fetching gallery stats:', error);
+    logger.error('Error fetching gallery stats:', { error: error.message, walletAddress });
     throw error;
   }
 };
@@ -187,7 +187,7 @@ export const updateSettings = async (walletAddress, settings) => {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error updating settings:', error);
+    logger.error('Error updating settings:', { error: error.message, walletAddress, settings });
     throw error;
   }
 };

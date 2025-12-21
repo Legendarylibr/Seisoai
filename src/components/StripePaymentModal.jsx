@@ -11,6 +11,7 @@ import {
 } from '../services/stripeService';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { X, CreditCard, Coins, RefreshCw, Check, Star, Zap } from 'lucide-react';
+import logger from '../utils/logger.js';
 
 // Inner component that uses Stripe hooks
 const PaymentForm = ({ 
@@ -122,7 +123,7 @@ const PaymentForm = ({
         throw new Error(`Payment ${status}. Please try again.`);
       }
     } catch (err) {
-      console.error('Payment error:', err);
+      logger.error('Payment error:', { error: err.message });
       const originalMessage = err.message || 'Payment failed. Please try again.';
       const errorMessage = getEnhancedStripeError(originalMessage);
       setError(errorMessage);
@@ -214,7 +215,7 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
       }
       setStripe(stripeInstance);
     } catch (error) {
-      console.error('Error initializing Stripe:', error);
+      logger.error('Error initializing Stripe:', { error: error.message });
       setError('Failed to initialize payment system. Please use token payment instead.');
     }
   };
@@ -300,7 +301,7 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
 
       setClientSecret(intentResponse.clientSecret);
     } catch (error) {
-      console.error('Error creating payment intent:', error);
+      logger.error('Error creating payment intent:', { error: error.message });
       setError(error.message || 'Failed to initialize payment');
       setShowPaymentForm(false);
     }
