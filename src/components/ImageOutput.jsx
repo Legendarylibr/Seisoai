@@ -611,14 +611,14 @@ const ImageOutput = () => {
 
       {/* Prompt Modal for New Prompt Regeneration */}
       {showPromptModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="glass-card rounded-2xl p-6 md:p-8 max-w-md w-full mx-4 slide-up">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-500/20 rounded-lg">
-                  <Sparkles className="w-5 h-5 text-purple-600" />
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto">
+          <div className="glass-card rounded-2xl p-4 sm:p-6 md:p-8 max-w-md w-full mx-2 sm:mx-4 my-4 sm:my-8 max-h-[95vh] flex flex-col slide-up">
+            <div className="flex items-center justify-between mb-4 sm:mb-6 flex-shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-1.5 sm:p-2 bg-purple-500/20 rounded-lg">
+                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" />
                 </div>
-                <h3 className="text-xl font-semibold text-black">New Prompt Regeneration</h3>
+                <h3 className="text-lg sm:text-xl font-semibold text-black">New Prompt Regeneration</h3>
               </div>
               <button
                 onClick={() => {
@@ -632,17 +632,17 @@ const ImageOutput = () => {
                 <X className="w-5 h-5 text-gray-600 hover:text-black" />
               </button>
             </div>
-            <p className="text-gray-700 text-sm mb-4">
+            <p className="text-gray-700 text-xs sm:text-sm mb-3 sm:mb-4">
               Enter a new prompt to regenerate the image. The current output will be used as the reference image.
             </p>
             {error && (
-              <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded-lg">
-                <p className="text-red-700 text-sm">{error}</p>
+              <div className="mb-3 sm:mb-4 p-2 sm:p-3 bg-red-100 border border-red-300 rounded-lg">
+                <p className="text-red-700 text-xs sm:text-sm">{error}</p>
               </div>
             )}
             
             {/* Model Selection */}
-            <div className="mb-4 p-3 rounded-lg" style={{ 
+            <div className="mb-3 sm:mb-4 p-2 sm:p-3 rounded-lg flex-shrink-0" style={{ 
               background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
               border: '2px outset #e8e8e8',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15)'
@@ -746,20 +746,22 @@ const ImageOutput = () => {
               </div>
             </div>
             
-            <textarea
-              value={newPrompt}
-              onChange={(e) => {
-                setNewPrompt(e.target.value);
-                setError(null);
-              }}
-              placeholder="Enter your new prompt here..."
-              className="w-full h-32 px-4 py-3 bg-white border-2 border-gray-300 rounded-xl text-black placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none transition-all duration-300"
-            />
-            <div className="flex gap-3 mt-6">
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <textarea
+                value={newPrompt}
+                onChange={(e) => {
+                  setNewPrompt(e.target.value);
+                  setError(null);
+                }}
+                placeholder="Enter your new prompt here..."
+                className="w-full h-24 sm:h-32 px-3 sm:px-4 py-2 sm:py-3 bg-white border-2 border-gray-300 rounded-xl text-black text-sm sm:text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none transition-all duration-300"
+              />
+            </div>
+            <div className="flex gap-2 sm:gap-3 mt-4 sm:mt-6 flex-shrink-0">
               <button
                 onClick={handleRegenerateWithPrompt}
                 disabled={!newPrompt.trim() || isRegenerating || isGenerating}
-                className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base py-2 sm:py-3"
               >
                 {isRegenerating ? 'Generating...' : 'Generate with New Prompt'}
               </button>
@@ -770,7 +772,7 @@ const ImageOutput = () => {
                   setError(null);
                   setSelectedModel(null);
                 }}
-                className="btn-secondary px-5"
+                className="btn-secondary px-3 sm:px-5 text-sm sm:text-base py-2 sm:py-3"
                 style={{ color: '#000000', border: '2px outset #e0e0e0', background: 'linear-gradient(to bottom, #f0f0f0 0%, #e0e0e0 50%, #d0d0d0 100%)' }}
               >
                 Cancel
