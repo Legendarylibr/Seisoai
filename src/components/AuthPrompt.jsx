@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Wallet, ArrowRight, Sparkles } from 'lucide-react';
+import { Mail, Wallet, ArrowRight, Sparkles, Zap, Gift } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import EmailSignIn from './EmailSignIn';
 
@@ -9,89 +9,210 @@ const AuthPrompt = () => {
   // Show auth mode selection if not selected
   if (!authMode) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] px-4">
-        <div className="text-center max-w-2xl mx-auto slide-up">
-          {/* Hero Section */}
-          <div className="mb-10">
-            <div className="w-24 h-24 flex items-center justify-center mx-auto mb-8 animate-pulse">
-              <div className="glass-card p-4 rounded-2xl">
+      <div className="flex items-center justify-center min-h-[calc(100vh-200px)] px-4 py-4" style={{ position: 'relative', zIndex: 10 }}>
+        <div className="text-center max-w-5xl mx-auto slide-up">
+          {/* Compact Hero Section */}
+          <div className="mb-4">
+            <div className="flex items-center justify-center gap-4 mb-3">
+              <div className="glass-card p-3 rounded-lg" style={{ 
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2)'
+              }}>
                 <img 
                   src="/1d1c7555360a737bb22bbdfc2784655f.png" 
                   alt="Seiso AI Logo" 
-                  className="w-16 h-16 object-contain"
+                  className="w-12 h-12 object-contain"
                 />
               </div>
-            </div>
-            <h1 className="text-4xl md:text-5xl font-bold gradient-text mb-4">
-              Welcome to Seiso AI
-            </h1>
-            <p className="text-xl md:text-2xl text-gray-300 mb-4">
-              Create and edit stunning images with AI
-            </p>
-            
-            {/* What Seiso AI Does */}
-            <div className="glass-card rounded-xl p-6 mb-6 max-w-2xl mx-auto text-left">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-purple-400" />
-                What You Can Do
-              </h2>
-              <div className="space-y-3 text-gray-300">
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <div>
-                    <span className="font-medium text-white">Text-to-Image:</span> Generate images from text descriptions
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <div>
-                    <span className="font-medium text-white">Image Editing:</span> Transform and enhance existing images
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <div>
-                    <span className="font-medium text-white">Image Blending:</span> Combine multiple images into one
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <div>
-                    <span className="font-medium text-white">Multiple Styles:</span> Choose from various artistic styles
-                  </div>
-                </div>
+              <div className="text-left">
+                <h1 className="text-3xl md:text-4xl font-bold mb-1" style={{ 
+                  color: '#000000', 
+                  textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
+                }}>
+                  Welcome to Seiso AI
+                </h1>
+                <p className="text-sm md:text-base" style={{ 
+                  color: '#1a1a1a', 
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+                }}>
+                  Create and edit stunning AI-generated images
+                </p>
               </div>
             </div>
-            
-            <p className="text-gray-400 text-lg mb-2">
-              Choose how you'd like to sign in to get started
-            </p>
           </div>
 
-          {/* Auth Mode Selection */}
-          <div className="space-y-4 max-w-md mx-auto">
+          {/* Compact Main Content Grid */}
+          <div className="grid md:grid-cols-3 gap-3 mb-4">
+            {/* Features */}
+            <div className="glass-card rounded-lg p-3 text-left" style={{ 
+              background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
+              border: '2px outset #e8e8e8',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 4px 8px rgba(0, 0, 0, 0.2)'
+            }}>
+              <h2 className="text-sm font-bold mb-2 flex items-center gap-1" style={{ 
+                color: '#000000', 
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}>
+                <Sparkles className="w-4 h-4" style={{ color: '#000000' }} />
+                Features
+              </h2>
+              <div className="space-y-1.5 text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
+                <div>• <strong>Generate</strong> from text</div>
+                <div>• <strong>Edit</strong> existing images</div>
+                <div>• <strong>Blend</strong> 2+ images</div>
+                <div>• <strong>Multiple</strong> art styles</div>
+              </div>
+            </div>
+
+            {/* Free Benefits */}
+            <div className="glass-card rounded-lg p-3 text-left" style={{ 
+              background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
+              border: '2px outset #ffffbb',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.15)'
+            }}>
+              <h2 className="text-sm font-bold mb-2 flex items-center gap-1" style={{ 
+                color: '#000000', 
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}>
+                <Gift className="w-4 h-4" style={{ color: '#000000' }} />
+                Free Benefits
+              </h2>
+              <div className="space-y-1.5 text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
+                <div>• <strong>2 Free Images</strong> (all users)</div>
+                <div>• <strong>5 Free Credits</strong> (NFT holders)</div>
+                <div>• No credit card required</div>
+              </div>
+            </div>
+
+            {/* Quick Instructions */}
+            <div className="glass-card rounded-lg p-3 text-left" style={{ 
+              background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
+              border: '2px outset #e8e8e8',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 4px 8px rgba(0, 0, 0, 0.2)'
+            }}>
+              <h2 className="text-sm font-bold mb-2 flex items-center gap-1" style={{ 
+                color: '#000000', 
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}>
+                <Zap className="w-4 h-4" style={{ color: '#000000' }} />
+                How It Works
+              </h2>
+              <div className="space-y-1.5 text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
+                <div><strong>1.</strong> Upload (0=new, 1=edit, 2+=blend)</div>
+                <div><strong>2.</strong> Enter prompt (optional)</div>
+                <div><strong>3.</strong> Choose style (optional)</div>
+                <div><strong>4.</strong> Click Generate</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Compact Sign In Section */}
+          <div className="mb-3">
+            <h2 className="text-lg font-bold mb-2" style={{ 
+              color: '#000000', 
+              textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
+            }}>
+              Sign In to Get Started
+            </h2>
+          </div>
+
+          {/* Compact Auth Mode Selection */}
+          <div className="grid md:grid-cols-2 gap-3 max-w-3xl mx-auto">
             <button
               onClick={() => setAuthMode('email')}
-              className="w-full flex items-center gap-4 p-5 rounded-xl glass-card card-hover group"
+              className="w-full glass-card rounded-lg p-4 group transition-all duration-300"
+              style={{
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2)',
+                textAlign: 'left'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                e.currentTarget.style.border = '2px outset #f8f8f8';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 6px 12px rgba(0, 0, 0, 0.25)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                e.currentTarget.style.border = '2px outset #f0f0f0';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2)';
+              }}
             >
-              <Mail className="w-6 h-6 text-blue-400 group-hover:scale-110 transition-transform duration-300" />
-              <div className="flex-1 text-left">
-                <div className="font-semibold text-white text-lg mb-1">Sign in with Email</div>
-                <div className="text-sm text-gray-400">Use Stripe for payments</div>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded flex-shrink-0" style={{
+                  background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
+                  border: '2px outset #e0e0e0',
+                  boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
+                }}>
+                  <Mail className="w-5 h-5" style={{ color: '#000000' }} />
+                </div>
+                <div className="flex-1">
+                  <div className="font-bold text-base mb-1" style={{ 
+                    color: '#000000', 
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  }}>
+                    Sign in with Email
+                  </div>
+                  <div className="text-xs" style={{ 
+                    color: '#1a1a1a', 
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+                  }}>
+                    Monthly subscriptions • Credit card payments
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
               </div>
-              <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
             </button>
 
             <button
               onClick={() => setAuthMode('wallet')}
-              className="w-full flex items-center gap-4 p-5 rounded-xl glass-card card-hover group"
+              className="w-full glass-card rounded-lg p-4 group transition-all duration-300"
+              style={{
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2)',
+                textAlign: 'left'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                e.currentTarget.style.border = '2px outset #f8f8f8';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 6px 12px rgba(0, 0, 0, 0.25)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                e.currentTarget.style.border = '2px outset #f0f0f0';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2)';
+              }}
             >
-              <Wallet className="w-6 h-6 text-purple-400 group-hover:scale-110 transition-transform duration-300" />
-              <div className="flex-1 text-left">
-                <div className="font-semibold text-white text-lg mb-1">Connect Wallet</div>
-                <div className="text-sm text-gray-400">Crypto payments & NFT discounts</div>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded flex-shrink-0" style={{
+                  background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
+                  border: '2px outset #e0e0e0',
+                  boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
+                }}>
+                  <Wallet className="w-5 h-5" style={{ color: '#000000' }} />
+                </div>
+                <div className="flex-1">
+                  <div className="font-bold text-base mb-1" style={{ 
+                    color: '#000000', 
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  }}>
+                    Connect Crypto Wallet
+                  </div>
+                  <div className="text-xs" style={{ 
+                    color: '#1a1a1a', 
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+                  }}>
+                    Pay-per-credit • <strong>NFT: 5 free credits</strong>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
               </div>
-              <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
             </button>
           </div>
         </div>
@@ -102,11 +223,15 @@ const AuthPrompt = () => {
   // Show email sign-in
   if (authMode === 'email') {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] px-4">
+      <div className="flex items-center justify-center min-h-[60vh] px-4" style={{ position: 'relative', zIndex: 10 }}>
         <div className="w-full max-w-md mx-auto">
           <button
             onClick={() => setAuthMode(null)}
-            className="mb-4 flex items-center gap-2 text-gray-400 hover:text-white transition-all duration-300"
+            className="mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary"
+            style={{
+              color: '#000000',
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+            }}
           >
             <ArrowRight className="w-4 h-4 rotate-180" />
             <span>Back</span>
@@ -126,7 +251,7 @@ function WalletPrompt({ onBack }) {
   const [selectedChain, setSelectedChain] = useState(null);
 
   const chainOptions = [
-    { id: 'evm', name: 'Ethereum', icon: '⟠', description: 'EVM Compatible Chains' },
+    { id: 'evm', name: 'Ethereum', icon: '⟠', description: 'EVM Compatible Chains (Ethereum, Polygon, Base, Arbitrum, Optimism)' },
     { id: 'solana', name: 'Solana', icon: '◎', description: 'Solana Blockchain' }
   ];
 
@@ -158,12 +283,16 @@ function WalletPrompt({ onBack }) {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-[60vh] px-4">
+    <div className="flex items-center justify-center min-h-[60vh] px-4" style={{ position: 'relative', zIndex: 10 }}>
       <div className="w-full max-w-md mx-auto">
         {onBack && (
           <button
             onClick={onBack}
-            className="mb-4 flex items-center gap-2 text-gray-400 hover:text-white transition-all duration-300"
+            className="mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary"
+            style={{
+              color: '#000000',
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+            }}
           >
             <ArrowRight className="w-4 h-4 rotate-180" />
             <span>Back to Sign In Options</span>
@@ -171,11 +300,26 @@ function WalletPrompt({ onBack }) {
         )}
 
         {!selectedChain ? (
-          <div className="glass-card rounded-xl p-6 space-y-4">
+          <div className="glass-card rounded-xl p-6 space-y-4" style={{ 
+            background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
+            border: '2px outset #e8e8e8',
+            boxShadow: 'inset 3px 3px 0 rgba(255, 255, 255, 1), inset -3px -3px 0 rgba(0, 0, 0, 0.25), 0 6px 12px rgba(0, 0, 0, 0.2)'
+          }}>
             <div className="text-center mb-6">
-              <Wallet className="w-16 h-16 text-purple-400 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-white mb-2">Connect Wallet</h2>
-              <p className="text-gray-400">Choose your blockchain</p>
+              <div className="p-4 rounded inline-block mb-4" style={{
+                background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
+                border: '2px outset #e0e0e0',
+                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
+              }}>
+                <Wallet className="w-12 h-12" style={{ color: '#000000' }} />
+              </div>
+              <h2 className="text-2xl font-bold mb-2" style={{ 
+                color: '#000000', 
+                textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}>
+                Connect Wallet
+              </h2>
+              <p style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Choose your blockchain</p>
             </div>
 
             <div className="space-y-3">
@@ -183,34 +327,82 @@ function WalletPrompt({ onBack }) {
                 <button
                   key={chain.id}
                   onClick={() => handleChainSelect(chain.id)}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl glass-card card-hover group"
+                  className="w-full flex items-center gap-4 p-4 rounded-xl transition-all duration-300"
+                  style={{
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                    textAlign: 'left'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                    e.currentTarget.style.border = '2px outset #f8f8f8';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                    e.currentTarget.style.border = '2px outset #f0f0f0';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
                 >
                   <span className="text-2xl">{chain.icon}</span>
                   <div className="flex-1 text-left">
-                    <div className="font-semibold text-white">{chain.name}</div>
-                    <div className="text-sm text-gray-400">{chain.description}</div>
+                    <div className="font-semibold" style={{ 
+                      color: '#000000', 
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                    }}>
+                      {chain.name}
+                    </div>
+                    <div className="text-sm" style={{ 
+                      color: '#1a1a1a', 
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+                    }}>
+                      {chain.description}
+                    </div>
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          <div className="glass-card rounded-xl p-6 space-y-4">
+          <div className="glass-card rounded-xl p-6 space-y-4" style={{ 
+            background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
+            border: '2px outset #e8e8e8',
+            boxShadow: 'inset 3px 3px 0 rgba(255, 255, 255, 1), inset -3px -3px 0 rgba(0, 0, 0, 0.25), 0 6px 12px rgba(0, 0, 0, 0.2)'
+          }}>
             <button
               onClick={handleBack}
-              className="mb-2 flex items-center gap-2 text-gray-400 hover:text-white transition-all duration-300"
+              className="mb-2 flex items-center gap-2 transition-all duration-300 btn-secondary"
+              style={{
+                color: '#000000',
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}
             >
               <ArrowRight className="w-4 h-4 rotate-180" />
               <span>Back</span>
             </button>
 
             <div className="text-center mb-6">
-              <Wallet className="w-12 h-12 text-purple-400 mx-auto mb-3" />
-              <h2 className="text-xl font-bold text-white mb-2">
+              <div className="p-3 rounded inline-block mb-3" style={{
+                background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
+                border: '2px outset #e0e0e0',
+                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
+              }}>
+                <Wallet className="w-10 h-10" style={{ color: '#000000' }} />
+              </div>
+              <h2 className="text-xl font-bold mb-2" style={{ 
+                color: '#000000', 
+                textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}>
                 {selectedChain === 'evm' ? 'EVM Wallets' : 'Solana Wallets'}
               </h2>
-              <p className="text-gray-400 text-sm">Select your wallet</p>
+              <p className="text-sm" style={{ 
+                color: '#1a1a1a', 
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+              }}>
+                Select your wallet
+              </p>
             </div>
 
             <div className="space-y-3">
@@ -218,13 +410,34 @@ function WalletPrompt({ onBack }) {
                 <button
                   key={wallet.id}
                   onClick={() => handleWalletSelect(wallet.id)}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl glass-card card-hover group"
+                  className="w-full flex items-center gap-4 p-4 rounded-xl transition-all duration-300"
+                  style={{
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                    textAlign: 'left'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                    e.currentTarget.style.border = '2px outset #f8f8f8';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                    e.currentTarget.style.border = '2px outset #f0f0f0';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
                 >
                   <span className="text-2xl">{wallet.icon}</span>
                   <div className="flex-1 text-left">
-                    <div className="font-semibold text-white">{wallet.name}</div>
+                    <div className="font-semibold" style={{ 
+                      color: '#000000', 
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                    }}>
+                      {wallet.name}
+                    </div>
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
                 </button>
               ))}
             </div>

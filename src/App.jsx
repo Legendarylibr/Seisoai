@@ -80,7 +80,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900 animated-bg">
+    <div className="min-h-screen animated-bg" style={{ position: 'relative', zIndex: 0 }}>
       <Navigation 
         activeTab={currentTab} 
         setActiveTab={(tab) => {
@@ -158,14 +158,14 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
 
   return (
     <div className="fade-in">
-      {/* Professional Header */}
-      <div className="text-center py-0.5 mb-1">
-        <h1 className="text-3xl md:text-4xl font-bold gradient-text mb-0.5">Seiso AI</h1>
-        <p className="text-gray-400 text-base md:text-lg">Create and edit stunning AI-generated images</p>
+      {/* Compact Header */}
+      <div className="text-center py-0 mb-0.5">
+        <h1 className="text-2xl md:text-3xl font-bold gradient-text mb-0">Seiso AI</h1>
+        <p className="text-xs md:text-sm" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Create and edit stunning AI-generated images</p>
       </div>
 
       {/* User Info - Email or Wallet */}
-      <div className="glass-card rounded-xl rounded-b-none p-2.5 mb-0 slide-up">
+      <div className="glass-card rounded-lg rounded-b-none p-1.5 mb-0 slide-up">
         {isEmailAuth ? (
           <EmailUserInfo onShowStripePayment={onShowStripePayment} />
         ) : (
@@ -175,99 +175,130 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
 
       {/* Credits Status Banner - Only for wallet users */}
       {credits <= 0 && !isEmailAuth && (
-        <div className="glass-card bg-yellow-500/10 border-yellow-500/30 rounded-t-none rounded-b-none p-2.5 mb-0 animate-pulse">
-          <div className="flex items-center gap-2 text-center justify-center">
-            <div className="w-2.5 h-2.5 bg-yellow-400 rounded-full animate-pulse"></div>
-            <span className="text-yellow-300 text-xs md:text-sm font-medium">
-              No credits available - Click "Buy Credits" in the top right to purchase credits
+        <div className="glass-card rounded-t-none rounded-b-none p-1.5 mb-0" style={{
+          background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
+          border: '2px outset #ffffbb',
+          boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
+        }}>
+          <div className="flex items-center gap-1.5 text-center justify-center">
+            <div className="w-2 h-2 rounded-full" style={{ 
+              background: 'linear-gradient(to bottom, #ffcc00, #ffaa00)',
+              border: '1px solid #cc8800',
+              boxShadow: 'inset 1px 1px 0 rgba(255, 255, 200, 0.6), inset -1px -1px 0 rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.2)'
+            }}></div>
+            <span className="text-xs font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.9), 0 1px 1px rgba(0, 0, 0, 0.1)' }}>
+              No credits - Click "Buy Credits" to purchase
             </span>
           </div>
         </div>
       )}
 
-      {/* Quick Instructions */}
-      <div className="glass-card rounded-xl p-4 mb-3 max-w-3xl mx-auto slide-up">
-        <div className="flex items-start gap-3">
-          <div className="p-2 bg-blue-500/20 rounded-lg flex-shrink-0">
-            <Sparkles className="w-4 h-4 text-blue-400" />
+      {/* Compact Quick Instructions */}
+      <div className="glass-card rounded-lg p-2 mb-1.5 max-w-3xl mx-auto slide-up" style={{ position: 'relative', zIndex: 10 }}>
+        <div className="flex items-start gap-2">
+          <div className="p-1 rounded flex-shrink-0" style={{ 
+            background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+            border: '2px outset #f0f0f0',
+            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+          }}>
+            <Sparkles className="w-3 h-3" style={{ color: '#000000' }} />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-white mb-2">How to Use</h3>
-            <div className="space-y-1.5 text-xs text-gray-300">
-              <div className="flex items-start gap-2">
-                <span className="text-purple-400 font-medium">1.</span>
-                <span><strong>Upload images</strong> (optional): No image = generate new • 1 image = edit • 2+ images = blend</span>
+            <h3 className="text-xs font-semibold mb-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>How to Use</h3>
+            <div className="space-y-0.5 text-xs leading-tight" style={{ color: '#000000' }}>
+              <div className="flex items-start gap-1">
+                <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>1.</span>
+                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Upload</strong> (0=new, 1=edit, 2+=blend)</span>
               </div>
-              <div className="flex items-start gap-2">
-                <span className="text-purple-400 font-medium">2.</span>
-                <span><strong>Enter a prompt</strong> (optional): Describe what you want to create or change</span>
+              <div className="flex items-start gap-1">
+                <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>2.</span>
+                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Enter prompt</strong> (optional)</span>
               </div>
-              <div className="flex items-start gap-2">
-                <span className="text-purple-400 font-medium">3.</span>
-                <span><strong>Choose a style</strong> (optional): Select an artistic style for your image</span>
+              <div className="flex items-start gap-1">
+                <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>3.</span>
+                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Choose style</strong> (optional)</span>
               </div>
-              <div className="flex items-start gap-2">
-                <span className="text-purple-400 font-medium">4.</span>
-                <span><strong>Click Generate</strong>: Your image will appear on the right</span>
+              <div className="flex items-start gap-1">
+                <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>4.</span>
+                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Click Generate</strong></span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content - Improved Layout */}
+      {/* Main Content - Compact Layout */}
       <div>
-
-        {/* Main Generation Area - Prioritized */}
+        {/* Main Generation Area */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
-          {/* Input Image Section - Enhanced */}
+          {/* Input Image Section */}
           <div className="slide-up" style={{ animationDelay: '100ms' }}>
-            <div className="glass-card rounded-none lg:rounded-l-xl lg:rounded-tr-none p-2.5 md:p-3">
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="p-1 bg-purple-500/20 rounded-lg">
-                  <Image className="w-3.5 h-3.5 md:w-4 md:h-4 text-purple-400" />
+            <div className="glass-card rounded-none lg:rounded-l-xl lg:rounded-tr-none p-1.5 md:p-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="p-0.5 rounded" style={{ 
+                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                  border: '2px outset #f0f0f0',
+                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+                }}>
+                  <Image className="w-3 h-3 md:w-3.5 md:h-3.5" style={{ color: '#000000' }} />
                 </div>
                 <div>
-                  <h2 className="text-sm md:text-base font-semibold text-white">Reference Image</h2>
-                  <p className="text-xs text-gray-400">
-                    <span className="text-purple-300">0 images:</span> Generate new • <span className="text-purple-300">1 image:</span> Edit • <span className="text-purple-300">2+ images:</span> Blend
+                  <h2 className="text-xs md:text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Reference Image</h2>
+                  <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
+                    <span style={{ color: '#000000', fontWeight: 'bold' }}>0:</span> new • <span style={{ color: '#000000', fontWeight: 'bold' }}>1:</span> edit • <span style={{ color: '#000000', fontWeight: 'bold' }}>2+:</span> blend
                   </p>
                 </div>
               </div>
-              <div className="min-h-[120px] md:min-h-[140px]">
+              <div className="min-h-[100px] md:min-h-[120px]">
                 <ReferenceImageInput />
               </div>
               
-              {/* Multi-Image Model Selection - Show immediately after images */}
-              <div className="mt-2">
+              {/* Multi-Image Model Selection */}
+              <div className="mt-1">
                 <MultiImageModelSelector />
               </div>
             </div>
 
             {/* Prompt and Style Combined */}
-            <div className="glass-card rounded-none lg:rounded-bl-xl p-2.5 md:p-3 space-y-2">
+            <div className="glass-card rounded-none lg:rounded-bl-xl p-1.5 md:p-2 space-y-1.5">
               {/* Custom Prompt */}
               <div>
-                <label className="flex items-center gap-1.5 mb-1.5">
-                  <span className="text-xs md:text-sm font-semibold text-white">
+                <label className="flex items-center gap-1 mb-1">
+                  <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                     {hasReferenceImages ? 'Describe Changes' : 'Prompt'}
                   </span>
-                  <span className="text-xs text-gray-500">(optional)</span>
+                  <span className="text-xs" style={{ color: '#666666', fontStyle: 'italic' }}>(optional)</span>
                 </label>
                 <textarea
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
                   placeholder={
                     hasReferenceImages 
-                      ? "e.g., 'make it more vibrant', 'add sunset colors', 'change to winter scene'..." 
-                      : "e.g., 'a futuristic city at night', 'a serene mountain landscape', 'a cute cat wearing sunglasses'..."
+                      ? "e.g., 'make it more vibrant', 'add sunset colors'..." 
+                      : "e.g., 'a futuristic city at night', 'a serene mountain landscape'..."
                   }
-                  className="w-full p-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none text-sm transition-all duration-300 focus:bg-white/8"
+                  className="w-full p-1.5 rounded resize-none text-xs transition-all duration-300"
+                  style={{
+                    background: '#ffffff',
+                    border: '2px inset #c0c0c0',
+                    color: '#000000',
+                    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.border = '2px inset #808080';
+                    e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.3)';
+                    e.target.style.background = '#fffffe';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.border = '2px inset #c0c0c0';
+                    e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+                    e.target.style.background = '#ffffff';
+                  }}
                   rows={2}
                 />
                 {!hasReferenceImages && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    💡 Tip: Be specific! Describe details like colors, mood, style, and composition
+                  <p className="text-xs mt-0.5" style={{ color: '#666666' }}>
+                    💡 Tip: Be specific with colors, mood, style
                   </p>
                 )}
               </div>
@@ -280,7 +311,7 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
 
             {/* Generate Button - Mobile */}
             <div className="lg:hidden">
-              <div className="glass-card rounded-none p-2">
+              <div className="glass-card rounded-none p-1.5">
                 <GenerateButton 
                   customPrompt={customPrompt}
                   onShowTokenPayment={onShowTokenPayment}
@@ -289,16 +320,20 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
             </div>
           </div>
 
-          {/* Generated Image Output - Enhanced */}
+          {/* Generated Image Output */}
           <div className="slide-up" style={{ animationDelay: '200ms' }}>
-            <div className="glass-card rounded-none lg:rounded-r-xl lg:rounded-tl-none p-2.5 md:p-3 h-full">
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="p-1 bg-purple-500/20 rounded-lg">
-                  <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 text-purple-400" />
+            <div className="glass-card rounded-none lg:rounded-r-xl lg:rounded-tl-none p-1.5 md:p-2 h-full">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="p-0.5 rounded" style={{ 
+                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                  border: '2px outset #f0f0f0',
+                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+                }}>
+                  <Sparkles className="w-3 h-3 md:w-3.5 md:h-3.5" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
                 </div>
-                <h2 className="text-sm md:text-base font-semibold text-white">Generated Image</h2>
+                <h2 className="text-xs md:text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Generated Image</h2>
               </div>
-              <div className="min-h-[120px] md:min-h-[140px]">
+              <div className="min-h-[100px] md:min-h-[120px]">
                 <ImageOutput />
               </div>
             </div>
@@ -307,7 +342,7 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
 
         {/* Generate Button - Desktop */}
         <div className="hidden lg:flex justify-center mt-0">
-          <div className="glass-card rounded-none rounded-b-xl p-3 w-full max-w-lg slide-up" style={{ animationDelay: '300ms' }}>
+          <div className="glass-card rounded-none rounded-b-xl p-2 w-full max-w-lg slide-up" style={{ animationDelay: '300ms' }}>
             <GenerateButton 
               customPrompt={customPrompt}
               onShowTokenPayment={onShowTokenPayment}

@@ -4807,7 +4807,6 @@ app.post('/api/nft/check-holdings', async (req, res) => {
         );
         
         // Grant 5 credits to NFT holders (one-time, flat amount)
-        // NFT holders also get 5 free images (IP-based), so this gives them 5 credits + 5 free images
         const creditsToGrant = 5;
         
         // Check if NFT credits have already been granted by looking for payment entry
@@ -4832,7 +4831,7 @@ app.post('/api/nft/check-holdings', async (req, res) => {
           logger.info('NFT credits granted automatically', { 
             walletAddress: normalizedWalletForNFT,
             creditsGranted,
-            note: 'NFT holders receive 5 credits + 5 free images (IP-based)'
+            note: 'NFT holders receive 5 free credits'
           });
         } else if (hasBeenGranted) {
           logger.debug('NFT credits already granted', { walletAddress: normalizedWalletForNFT });

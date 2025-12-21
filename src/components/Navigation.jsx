@@ -60,12 +60,26 @@ import SubscriptionManagement from './SubscriptionManagement';
   }
 
   return (
-    <header className="bg-black/30 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[999997] shadow-lg" style={{ position: 'sticky' }}>
+    <header className="sticky top-0 z-[999997]" style={{ 
+      position: 'sticky',
+      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+      borderBottom: '2px outset #e8e8e8',
+      boxShadow: 
+        'inset 0 2px 0 rgba(255, 255, 255, 1), ' +
+        'inset 0 -2px 0 rgba(0, 0, 0, 0.2), ' +
+        '0 4px 8px rgba(0, 0, 0, 0.25), ' +
+        '0 2px 4px rgba(0, 0, 0, 0.15)'
+    }}>
       <div className="container mx-auto px-4 py-2">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3 group">
-            <div className="p-1.5 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl group-hover:from-purple-500/30 group-hover:to-pink-500/30 transition-all duration-300">
+            <div className="rounded transition-all duration-300" style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              padding: '6px',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            }}>
               <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-8 h-8 rounded-lg object-cover" />
             </div>
             <div>
@@ -84,9 +98,36 @@ import SubscriptionManagement from './SubscriptionManagement';
                   className={`
                     flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-300 group
                     ${activeTab === tab.id 
-                      ? 'bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-purple-200 border border-purple-500/40 shadow-lg shadow-purple-500/20' 
-                      : 'text-gray-300 hover:text-white hover:bg-white/10 hover:scale-105'
+                      ? '' 
+                      : ''
                     }
+                    style={activeTab === tab.id ? {
+                      background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
+                      color: '#000000',
+                      border: '2px inset #c0c0c0',
+                      boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+                    } : {
+                      color: '#000000',
+                      border: '2px outset #f0f0f0',
+                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (activeTab !== tab.id) {
+                        e.target.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                        e.target.style.border = '2px outset #f8f8f8';
+                        e.target.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (activeTab !== tab.id) {
+                        e.target.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                        e.target.style.border = '2px outset #f0f0f0';
+                        e.target.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                      }
+                    }}
                   `}
                 >
                   <Icon className={`w-4 h-4 transition-transform duration-300 ${activeTab === tab.id ? 'scale-110' : 'group-hover:scale-110'}`} />
@@ -101,9 +142,23 @@ import SubscriptionManagement from './SubscriptionManagement';
             <div className="hidden md:flex items-center space-x-3">
               {/* Wallet Address Display (only if wallet is connected) */}
               {address && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300">
-                  <Wallet className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs font-mono text-gray-300">
+                <div className="flex items-center gap-2 px-3 py-2 rounded transition-all duration-300" style={{
+                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                  border: '2px outset #f0f0f0',
+                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                  e.currentTarget.style.border = '2px outset #f8f8f8';
+                  e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                  e.currentTarget.style.border = '2px outset #f0f0f0';
+                  e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}>
+                  <Wallet className="w-4 h-4" style={{ color: '#000000' }} />
+                  <span className="text-xs font-mono" style={{ color: '#000000' }}>
                     {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : ''}
                   </span>
                 </div>
