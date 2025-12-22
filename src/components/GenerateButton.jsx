@@ -158,9 +158,19 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       };
 
       logger.info('Starting image generation');
+      
+      // Trim and validate prompt - only send if user actually entered something
+      // Empty or whitespace-only prompts should be treated as empty
+      const trimmedPrompt = customPrompt && typeof customPrompt === 'string' 
+        ? customPrompt.trim() 
+        : '';
+      
+      // Only pass non-empty prompts to generation
+      const promptToUse = trimmedPrompt.length > 0 ? trimmedPrompt : '';
+      
       const imageResult = await generateImage(
         selectedStyle || null,
-        customPrompt,
+        promptToUse,
         advancedSettings,
         controlNetImage
       );
@@ -206,8 +216,13 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       
       let deductionResult = null;
       try {
+        // Use trimmed prompt for saving, or fallback to style prompt if no custom prompt
+        const promptForHistory = trimmedPrompt.length > 0 
+          ? trimmedPrompt 
+          : (selectedStyle ? selectedStyle.prompt : 'No prompt');
+        
         deductionResult = await addGeneration(userIdentifier, {
-          prompt: customPrompt || (selectedStyle ? selectedStyle.prompt : 'No style selected'),
+          prompt: promptForHistory,
           style: selectedStyle ? selectedStyle.name : 'No Style',
           imageUrl,
           creditsUsed: creditsUsed, // Dynamic credits based on model
@@ -249,9 +264,14 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         
         // Store current generation details for explain/regenerate functionality
         // Use first image for currentGeneration.image (backward compatibility)
+        // Use trimmed prompt or fallback to style prompt
+        const promptForStorage = trimmedPrompt.length > 0 
+          ? trimmedPrompt 
+          : (selectedStyle ? selectedStyle.prompt : 'No prompt');
+        
         setCurrentGeneration({
           image: imageUrl,
-          prompt: customPrompt || (selectedStyle ? selectedStyle.prompt : 'No style selected'),
+          prompt: promptForStorage,
           style: selectedStyle,
           referenceImage: controlNetImage,
           guidanceScale,

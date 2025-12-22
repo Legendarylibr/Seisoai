@@ -364,8 +364,13 @@ const ImageOutput = () => {
         const modelForCredits = selectedModel || multiImageModel || currentGeneration.multiImageModel || 'flux';
         const creditsUsed = modelForCredits === 'nano-banana-pro' ? 2 : 1; // 2 credits for Nano Banana Pro, 1 for Flux and Qwen
         
+        // Only save non-empty prompts (or use style prompt as fallback)
+        const promptForHistory = trimmedPrompt.length > 0 
+          ? trimmedPrompt 
+          : (currentGeneration.style ? currentGeneration.style.prompt : 'No prompt');
+        
         deductionResult = await addGeneration(userIdentifier, {
-          prompt: trimmedPrompt,
+          prompt: promptForHistory,
           style: currentGeneration.style ? currentGeneration.style.name : 'No Style',
           imageUrl: imageUrlForSave, // Use first image if array, or the single image
           creditsUsed: creditsUsed, // Use calculated credits based on model
