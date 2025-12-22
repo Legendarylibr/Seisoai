@@ -210,15 +210,19 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
               </div>
               <div className="flex items-start gap-1">
                 <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>2.</span>
-                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Enter prompt</strong> (optional)</span>
+                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Select model</strong> (FLUX, Nano Banana Pro, or Qwen)</span>
               </div>
               <div className="flex items-start gap-1">
                 <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>3.</span>
-                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Choose style</strong> (optional)</span>
+                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Enter prompt</strong> (optional, not needed for Qwen)</span>
               </div>
               <div className="flex items-start gap-1">
                 <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>4.</span>
-                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Click Generate</strong></span>
+                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Choose style</strong> (optional, not needed for Qwen)</span>
+              </div>
+              <div className="flex items-start gap-1">
+                <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>5.</span>
+                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Click Generate</strong> (or Extract Layers for Qwen)</span>
               </div>
             </div>
           </div>

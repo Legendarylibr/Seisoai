@@ -174,6 +174,7 @@ const AuthPrompt = () => {
                 <div>• <strong>Generate</strong> from text</div>
                 <div>• <strong>Edit</strong> existing images</div>
                 <div>• <strong>Blend</strong> 2+ images</div>
+                <div>• <strong>Extract layers</strong> with Qwen</div>
                 <div>• <strong>Multiple</strong> art styles</div>
               </div>
             </div>
@@ -213,9 +214,10 @@ const AuthPrompt = () => {
               </h2>
               <div className="space-y-1 text-[10px]" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
                 <div><strong>1.</strong> Upload (0=new, 1=edit, 2+=blend)</div>
-                <div><strong>2.</strong> Enter prompt (optional)</div>
-                <div><strong>3.</strong> Choose style (optional)</div>
-                <div><strong>4.</strong> Click Generate</div>
+                <div><strong>2.</strong> Select model (FLUX, Nano Banana Pro, or Qwen)</div>
+                <div><strong>3.</strong> Enter prompt (optional, not needed for Qwen)</div>
+                <div><strong>4.</strong> Choose style (optional, not needed for Qwen)</div>
+                <div><strong>5.</strong> Click Generate (or Extract Layers for Qwen)</div>
               </div>
             </div>
           </div>
