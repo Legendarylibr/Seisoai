@@ -53,18 +53,13 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
   const credits = isEmailAuth ? (emailCredits || 0) : (walletCredits || 0);
   const isLoading = walletLoading || emailLoading;
 
-  // Redirect to pricing if authenticated but has 0 credits (only for email/Stripe users)
+  // Allow users to see UI even without credits - they can still use free images (IP-based)
+  // Removed redirect to pricing page - users can access all tabs regardless of credit balance
   useEffect(() => {
     if (isLoading) return;
     
-    // Only redirect email/Stripe users to pricing page
-    // Crypto wallet users will see the pay-per-credit modal instead
-    if (isAuthenticated && !isConnected && (credits === 0 || credits === null || credits === undefined)) {
-      if (currentTab !== 'pricing') {
-        setCurrentTab('pricing');
-        setActiveTab('pricing');
-      }
-    } else if ((isConnected || isAuthenticated) && credits > 0 && currentTab === 'pricing') {
+    // Only redirect to generate if user has credits and is on pricing page (optional convenience)
+    if ((isConnected || isAuthenticated) && credits > 0 && currentTab === 'pricing') {
       // If user has credits and is on pricing page, redirect to generate
       setCurrentTab('generate');
       setActiveTab('generate');
