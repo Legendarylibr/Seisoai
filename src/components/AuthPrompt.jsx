@@ -192,7 +192,7 @@ const AuthPrompt = () => {
                 Free Benefits
               </h2>
               <div className="space-y-1 text-[10px]" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
-                <div>• <strong>2 Free Images</strong> (all users)</div>
+                <div>• <strong>2 Credits</strong> (email users) / <strong>2 Free Images</strong> (wallet users)</div>
                 <div>• <strong>5 Free Credits</strong> (NFT holders)</div>
                 <div>• No credit card required</div>
               </div>

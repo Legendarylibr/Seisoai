@@ -2880,10 +2880,11 @@ async function getOrCreateUserByIdentifier(identifier, type = 'wallet') {
   if (type === 'email') {
     user = await User.findOne({ email: identifier.toLowerCase() });
     if (!user) {
+      // Give new email users 2 free credits
       user = new User({
         email: identifier.toLowerCase(),
-        credits: 0,
-        totalCreditsEarned: 0,
+        credits: 2,
+        totalCreditsEarned: 2,
         totalCreditsSpent: 0,
         hasUsedFreeImage: false,
         nftCollections: [],
@@ -2897,6 +2898,7 @@ async function getOrCreateUserByIdentifier(identifier, type = 'wallet') {
         }
       });
       await user.save();
+      logger.info('New email user created with 2 free credits', { email: user.email, credits: user.credits });
     }
   } else {
     // Wallet address (existing logic)
@@ -2936,11 +2938,12 @@ async function getUserFromRequest(req) {
     let user = await User.findOne({ userId });
     if (!user) {
       // Create user if they don't exist (for email users who haven't been created yet)
+      // Give new email users 2 free credits
       logger.info('Creating new user with userId', { userId });
       user = new User({
         userId,
-        credits: 0,
-        totalCreditsEarned: 0,
+        credits: 2,
+        totalCreditsEarned: 2,
         totalCreditsSpent: 0,
         hasUsedFreeImage: false,
         nftCollections: [],
@@ -2954,7 +2957,7 @@ async function getUserFromRequest(req) {
         }
       });
       await user.save();
-      logger.debug('New user created with userId', { userId, credits: user.credits });
+      logger.info('New email user created with 2 free credits', { userId, credits: user.credits });
     } else {
       logger.debug('User found by userId', { userId, credits: user.credits });
     }
@@ -2964,11 +2967,12 @@ async function getUserFromRequest(req) {
     let user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       // Create user if they don't exist (for email users who haven't been created yet)
+      // Give new email users 2 free credits
       logger.info('Creating new user with email', { email: normalizedEmail });
       user = new User({
         email: normalizedEmail,
-        credits: 0,
-        totalCreditsEarned: 0,
+        credits: 2,
+        totalCreditsEarned: 2,
         totalCreditsSpent: 0,
         hasUsedFreeImage: false,
         nftCollections: [],
@@ -2982,7 +2986,7 @@ async function getUserFromRequest(req) {
         }
       });
       await user.save();
-      logger.debug('New user created with email', { email: normalizedEmail, credits: user.credits });
+      logger.info('New email user created with 2 free credits', { email: normalizedEmail, credits: user.credits });
     } else {
       logger.debug('User found by email', { email: normalizedEmail, credits: user.credits });
     }
@@ -4270,12 +4274,12 @@ app.post('/api/auth/signup', async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Create user with 2 free credits for new email signups
     const user = new User({
       email: email.toLowerCase(),
       password: hashedPassword,
-      credits: 0,
-      totalCreditsEarned: 0,
+      credits: 2,
+      totalCreditsEarned: 2,
       totalCreditsSpent: 0,
       hasUsedFreeImage: false,
       nftCollections: [],
@@ -4290,6 +4294,8 @@ app.post('/api/auth/signup', async (req, res) => {
     });
 
     await user.save();
+    
+    logger.info('New email user created with 2 free credits', { email: user.email, userId: user.userId, credits: user.credits });
 
     // Ensure userId was generated (should be done by pre-save hook, but verify)
     if (!user.userId) {

@@ -122,7 +122,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     // Require authentication to generate (but UI is accessible without auth)
     if (!isAuthenticated || !hasIdentifier) {
       if (isEmailAuth) {
-        setError('Please sign in with your email account to generate images. New users get 2 free images!');
+        setError('Please sign in with your email account to generate images. New users get 2 credits!');
       } else {
         setError('Please connect your wallet or sign in with email to generate images. New users get 2 free images!');
       }
@@ -269,8 +269,8 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       
       // If error is about insufficient credits and user is authenticated, show payment modal
       if (errorMessage.includes('Insufficient credits') && isAuthenticated && onShowTokenPayment) {
-        // User has used their free images and needs to pay
-        setError('You\'ve used your free images! Please purchase credits to generate more.');
+        // User has used their credits and needs to pay
+        setError(isEmailAuth ? 'You\'ve used your credits! Please purchase more credits to generate more.' : 'You\'ve used your free images! Please purchase credits to generate more.');
         onShowTokenPayment();
       } else {
         setError(errorMessage);
@@ -290,8 +290,8 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   const getButtonText = () => {
     if (isGenerating) return multiImageModel === 'qwen-image-layered' ? 'Extracting Layers...' : 'Generating...';
     if (walletLoading) return 'Loading...';
-    if (!isConnected && !isEmailAuth) return 'Sign In to Generate (2 Free Images!)';
-    if (availableCredits <= 0) return 'Generate (2 Free Images!)';
+    if (!isConnected && !isEmailAuth) return 'Sign In to Generate (2 Credits!)';
+    if (availableCredits <= 0) return isEmailAuth ? 'Generate (2 Credits!)' : 'Generate (2 Free Images!)';
     return multiImageModel === 'qwen-image-layered' ? 'Extract Layers' : 'Generate Image';
   };
 
