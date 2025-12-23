@@ -310,8 +310,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   const getButtonText = () => {
     if (isGenerating) return multiImageModel === 'qwen-image-layered' ? 'Extracting Layers...' : 'Generating...';
     if (walletLoading) return 'Loading...';
-    if (!isConnected && !isEmailAuth) return 'Sign In to Generate (2 Credits!)';
-    if (availableCredits <= 0) return 'Generate (2 Credits!)';
+    if (!isConnected && !isEmailAuth) return 'Sign In to Generate';
     return multiImageModel === 'qwen-image-layered' ? 'Extract Layers' : 'Generate Image';
   };
 
@@ -319,7 +318,6 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     if (isGenerating) return <span className="text-xs" style={{ color: '#000000' }}>⏳</span>;
     if (walletLoading) return <span className="text-xs animate-pulse" style={{ color: '#000000' }}>⏳</span>;
     if (!isConnected && !isEmailAuth) return <span className="text-xs" style={{ color: '#000000' }}>🔗</span>;
-    if (availableCredits <= 0) return <span className="text-xs" style={{ color: '#000000' }}>💳</span>;
     return <span className="text-xs" style={{ color: '#000000' }}>✨</span>;
   };
 
@@ -338,12 +336,6 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
             color: '#666666',
             textShadow: '1px 1px 0 rgba(255, 255, 255, 0.5)',
             cursor: 'not-allowed'
-          } : (availableCredits <= 0) ? {
-            background: 'linear-gradient(to bottom, #ffffcc, #ffffaa, #ffff99)',
-            border: '2px outset #ffffbb',
-            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 3px 6px rgba(0, 0, 0, 0.2)',
-            color: '#000000',
-            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.9)'
           } : {
             background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
             border: '2px outset #f0f0f0',
@@ -352,27 +344,19 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
             textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
           }}
           onMouseEnter={(e) => {
-            if (!isDisabled && availableCredits > 0) {
+            if (!isDisabled) {
               e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
               e.currentTarget.style.border = '2px outset #f8f8f8';
               e.currentTarget.style.transform = 'translateY(-1px)';
               e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.35)';
-            } else if (!isDisabled && availableCredits <= 0) {
-              e.currentTarget.style.background = 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)';
-              e.currentTarget.style.border = '2px outset #ffffcc';
-              e.currentTarget.style.transform = 'translateY(-1px)';
             }
           }}
           onMouseLeave={(e) => {
-            if (!isDisabled && availableCredits > 0) {
+            if (!isDisabled) {
               e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
               e.currentTarget.style.border = '2px outset #f0f0f0';
               e.currentTarget.style.transform = 'translateY(0)';
               e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)';
-            } else if (!isDisabled && availableCredits <= 0) {
-              e.currentTarget.style.background = 'linear-gradient(to bottom, #ffffcc, #ffffaa, #ffff99)';
-              e.currentTarget.style.border = '2px outset #ffffbb';
-              e.currentTarget.style.transform = 'translateY(0)';
             }
           }}
           onMouseDown={(e) => {
@@ -383,13 +367,10 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
             }
           }}
           onMouseUp={(e) => {
-            if (!isDisabled && availableCredits > 0) {
+            if (!isDisabled) {
               e.currentTarget.style.border = '2px outset #f0f0f0';
               e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
               e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)';
-            } else if (!isDisabled && availableCredits <= 0) {
-              e.currentTarget.style.border = '2px outset #ffffbb';
-              e.currentTarget.style.background = 'linear-gradient(to bottom, #ffffcc, #ffffaa, #ffff99)';
             }
           }}
         >

@@ -1,15 +1,18 @@
 import React from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import { Wallet, LogOut } from 'lucide-react';
+import { Wallet, LogOut, Coins, RefreshCw } from 'lucide-react';
 
 const SimpleWalletConnect = () => {
   const {
     isConnected,
     address,
+    credits,
     isLoading,
     error,
     connectWallet,
-    disconnectWallet
+    disconnectWallet,
+    fetchCredits,
+    isNFTHolder
   } = useSimpleWallet();
 
   const formatAddress = (addr) => {
@@ -88,6 +91,56 @@ const SimpleWalletConnect = () => {
         </button>
       </div>
 
+      <div className="space-y-1 pt-1 border-t" style={{ borderColor: '#d0d0d0' }}>
+        <div className="flex items-center justify-between p-1 rounded" style={{ 
+          background: 'linear-gradient(to bottom, #f5f5f5, #eeeeee)',
+          border: '1px solid #d0d0d0'
+        }}>
+          <div className="flex items-center gap-1">
+            <Coins className="w-3 h-3" style={{ color: '#000000' }} />
+            <span className="text-xs font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Credits:</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="font-bold text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+              {credits}
+            </span>
+            <button
+              onClick={() => fetchCredits(address)}
+              className="p-0.5 rounded transition-all duration-300"
+              style={{
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
+              }}
+              title="Refresh credits"
+            >
+              <RefreshCw className="w-3 h-3" style={{ color: '#000000' }} />
+            </button>
+          </div>
+        </div>
+        
+        {/* Pricing Info */}
+        <div className="text-xs p-1 rounded" style={{ 
+          background: 'linear-gradient(to bottom, #f5f5f5, #eeeeee)',
+          border: '1px solid #d0d0d0',
+          color: '#1a1a1a'
+        }}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Pricing:</span>
+            <span className="font-semibold text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>${isNFTHolder ? '0.06' : '0.15'}/credit</span>
+          </div>
+          {isNFTHolder && (
+            <div className="flex items-center gap-1 text-xs mt-1 pt-1 border-t" style={{ 
+              borderColor: '#d0d0d0',
+              color: '#000000',
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+            }}>
+              <span>✨</span>
+              <span className="font-medium">NFT Holder Discount</span>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
