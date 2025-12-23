@@ -1811,6 +1811,48 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
     }
 
+    // Get user and required credits from middleware
+    const user = req.user;
+    const creditsToDeduct = req.requiredCredits || 1;
+    
+    // Build update query
+    const updateQuery = buildUserUpdateQuery(user);
+    if (!updateQuery) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User account must have wallet address, userId, or email' 
+      });
+    }
+    
+    // Deduct credits immediately when user clicks generate (before API call)
+    const previousCredits = user.credits || 0;
+    const updateResult = await User.findOneAndUpdate(
+      updateQuery,
+      { $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct } },
+      { new: true }
+    );
+    
+    if (!updateResult) {
+      logger.error('Failed to deduct credits - user not found', { updateQuery });
+      return res.status(400).json({
+        success: false,
+        error: 'Failed to deduct credits. User not found.'
+      });
+    }
+    
+    // Safety check: prevent negative credits
+    if (updateResult.credits < 0) {
+      await User.findOneAndUpdate(updateQuery, { $set: { credits: 0 } }, { new: true });
+      updateResult.credits = 0;
+    }
+    
+    logger.info('Credits deducted', {
+      userId: user.userId,
+      creditsDeducted: creditsToDeduct,
+      previousCredits,
+      remainingCredits: updateResult.credits
+    });
+
     const {
       prompt,
       style,
@@ -3106,6 +3148,23 @@ async function getOrCreateUserByIdentifier(identifier, type = 'wallet') {
  * Helper function to get user from request body (walletAddress, userId, or email)
  * Used for endpoints that need to identify user before making external API calls
  */
+/**
+ * Build update query for user based on wallet address, userId, or email
+ * Returns query object or null if no valid identifier
+ */
+function buildUserUpdateQuery(user) {
+  if (user.walletAddress) {
+    const isSolanaAddress = !user.walletAddress.startsWith('0x');
+    const normalizedWalletAddress = isSolanaAddress ? user.walletAddress : user.walletAddress.toLowerCase();
+    return { walletAddress: normalizedWalletAddress };
+  } else if (user.userId) {
+    return { userId: user.userId };
+  } else if (user.email) {
+    return { email: user.email.toLowerCase() };
+  }
+  return null;
+}
+
 async function getUserFromRequest(req) {
   const { walletAddress, userId, email } = req.body;
   
@@ -7293,58 +7352,18 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
       totalCreditsSpent: user.totalCreditsSpent
     });
     
-    // Check credits directly - credits is the spendable balance
-    // totalCreditsEarned is a lifetime total for tracking, not for spending
-    const availableCredits = user.credits || 0;
-    const creditsToDeduct = creditsUsed || 1; // Default to 1 credit if not specified
+    // Credits are already deducted in /api/generate/image endpoint
+    // This endpoint only adds the generation to history
+    const creditsUsedForHistory = creditsUsed || 1;
     
-    // Check if user has enough credits - generation only proceeds if they have proper number of credits
-    if (availableCredits < creditsToDeduct) {
-      logger.warn('Insufficient credits for generation', {
-        userId: user.userId,
-        email: user.email,
-        walletAddress: user.walletAddress,
-        availableCredits,
-        creditsToDeduct,
-        totalCreditsEarned: user.totalCreditsEarned
-      });
-      return res.status(400).json({
-        success: false,
-        error: `Insufficient credits. You have ${availableCredits} credits but need ${creditsToDeduct}`
-      });
-    }
-    
-    // Build query for user update
-    // SECURITY: Build query using authenticated user's identifier
-    let updateQuery;
-    if (user.walletAddress) {
-      const isSolanaAddress = !user.walletAddress.startsWith('0x');
-      const normalizedWalletAddress = isSolanaAddress ? user.walletAddress : user.walletAddress.toLowerCase();
-      updateQuery = { walletAddress: normalizedWalletAddress };
-    } else if (user.userId) {
-      updateQuery = { userId: user.userId };
-    } else if (user.email) {
-      updateQuery = { email: user.email.toLowerCase() };
-    } else {
+    // Build update query
+    const updateQuery = buildUserUpdateQuery(user);
+    if (!updateQuery) {
       return res.status(400).json({ 
         success: false, 
         error: 'User account must have wallet address, userId, or email' 
       });
     }
-
-    // Deduct credits and add generation in a SINGLE atomic operation to prevent conflicts
-    const previousCredits = user.credits || 0;
-    const previousTotalSpent = user.totalCreditsSpent || 0;
-    
-    logger.debug('Before credit deduction', {
-      previousCredits,
-      previousTotalSpent,
-      creditsToDeduct,
-      availableCredits,
-      userId: user.userId,
-      email: user.email,
-      walletAddress: user.walletAddress
-    });
     
     // Create generation object
     const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -7356,48 +7375,28 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
       ...(videoUrl && { videoUrl }),
       ...(requestId && { requestId }),
       ...(status && { status }),
-      creditsUsed: creditsToDeduct,
+      creditsUsed: creditsUsedForHistory,
       timestamp: new Date()
     };
     
-    // Create gallery item (only add to gallery if completed, or if it's an image)
-    const galleryItem = {
-      id: generationId,
-      prompt: prompt || 'No prompt',
-      style: style || 'No Style',
-      ...(imageUrl && { imageUrl }),
-      ...(videoUrl && { videoUrl }),
-      creditsUsed: creditsToDeduct,
-      timestamp: new Date()
-    };
-    
-    // Use atomic update to do BOTH credit deduction AND add generation in one operation
-    // This prevents race conditions and ensures credits are always deducted
-    // DO NOT call user.save() after this - it would overwrite the atomic update!
-    
-    logger.debug('Executing atomic update', {
-      updateQuery,
-      creditsToDeduct,
-      actualCreditsUsed: generation.creditsUsed,
-      hasGeneration: !!generation,
-      hasVideoUrl: !!videoUrl,
-      hasRequestId: !!requestId,
-      status: status || 'completed'
-    });
-    
-    // Build update object - deduct credits and add generation
+    // Build update object - only add generation to history (credits already deducted)
     const updateObj = {
       $push: {
         generationHistory: generation
-      },
-      $inc: { 
-        credits: -creditsToDeduct,
-        totalCreditsSpent: creditsToDeduct
       }
     };
     
-    // Only add to gallery if completed (has videoUrl/imageUrl) or if status is not queued/processing
+    // Add to gallery if completed
     if (status !== 'queued' && status !== 'processing' && (videoUrl || imageUrl)) {
+      const galleryItem = {
+        id: generationId,
+        prompt: prompt || 'No prompt',
+        style: style || 'No Style',
+        ...(imageUrl && { imageUrl }),
+        ...(videoUrl && { videoUrl }),
+        creditsUsed: creditsUsedForHistory,
+        timestamp: new Date()
+      };
       updateObj.$push.gallery = galleryItem;
     }
     
@@ -7407,83 +7406,25 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
       { new: true }
     );
     
-    logger.debug('Atomic update result', {
-      found: !!updateResult,
-      returnedCredits: updateResult?.credits,
-      returnedTotalSpent: updateResult?.totalCreditsSpent,
-      generationHistoryLength: updateResult?.generationHistory?.length,
-      galleryLength: updateResult?.gallery?.length
-    });
-    
     if (!updateResult) {
-      logger.error('Failed to update user - user not found', { updateQuery });
-      // Try to find the user to see if it exists
-      const checkUser = await User.findOne(updateQuery);
-      logger.error('User check after failed update', {
-        exists: !!checkUser,
-        updateQuery,
-        foundUserId: checkUser?.userId,
-        foundEmail: checkUser?.email,
-        foundWalletAddress: checkUser?.walletAddress
+      logger.error('Failed to add generation to history - user not found', { updateQuery });
+      return res.status(400).json({
+        success: false,
+        error: 'Failed to add generation. User not found.'
       });
-      throw new Error(`Failed to update user credits. User not found in database.`);
     }
     
-    // Ensure credits don't go negative (shouldn't happen due to availableCredits check, but safety)
-    if (updateResult.credits < 0) {
-      logger.warn('Credits went negative, correcting to 0', { updateQuery, credits: updateResult.credits });
-      await User.findOneAndUpdate(
-        updateQuery,
-        { $set: { credits: 0 } },
-        { new: true }
-      );
-      updateResult.credits = 0;
-    }
-    
-    logger.info('Atomic update completed', {
-      newCredits: updateResult.credits,
-      newTotalSpent: updateResult.totalCreditsSpent,
-      generationId,
-      previousCredits,
-      creditsDeducted: creditsToDeduct
-    });
-    
-    // Refetch to verify everything saved correctly
-    const savedUser = await User.findOne(updateQuery);
-    logger.debug('Verified saved credits', {
-      savedCredits: savedUser?.credits,
-      savedTotalSpent: savedUser?.totalCreditsSpent,
-      generationHistoryCount: savedUser?.generationHistory?.length,
-      galleryCount: savedUser?.gallery?.length,
-      matchExpected: savedUser?.credits === updateResult.credits,
-      creditsActuallyDeducted: previousCredits - (savedUser?.credits || 0)
-    });
-    
-    // Use updateResult for response
-    const finalCredits = updateResult.credits;
-    
-    logger.info('Generation added to history and credits deducted', {
+    logger.info('Generation added to history', {
       userId: user.userId,
-      email: user.email,
-      walletAddress: user.walletAddress,
       generationId,
-      creditsUsed: creditsToDeduct,
-      previousCredits,
-      newCredits: finalCredits,
-      savedCredits: savedUser?.credits,
-      totalCreditsSpent: updateResult.totalCreditsSpent,
-      creditsActuallyDeducted: previousCredits - finalCredits
+      creditsUsed: creditsUsedForHistory
     });
-    
-    const message = `Generation added to history. ${creditsToDeduct} credit(s) deducted. Remaining: ${finalCredits} credits.`;
     
     res.json({
       success: true,
       generationId,
-      remainingCredits: finalCredits,
-      creditsDeducted: creditsToDeduct,
-      previousCredits: previousCredits,
-      message
+      remainingCredits: updateResult.credits,
+      message: 'Generation added to history.'
     });
   } catch (error) {
     logger.error('Error adding generation:', { error: error.message, stack: error.stack });
