@@ -165,9 +165,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     }
 
     // Calculate credits that will be deducted (matches backend logic)
-    const hasImages = !!controlNetImage;
-    const isMultipleImages = Array.isArray(controlNetImage) && controlNetImage.length >= 2;
-    const isNanoBananaPro = hasImages && multiImageModel === 'nano-banana-pro';
+    const isNanoBananaPro = multiImageModel === 'nano-banana-pro';
     const creditsToDeduct = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro, 1 for others
 
     // Refresh credits BEFORE generation to show current balance
@@ -301,9 +299,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         : address;
       
       // Calculate credits used for history (matches backend deduction logic)
-      const hasImages = !!controlNetImage;
-      const isMultipleImages = Array.isArray(controlNetImage) && controlNetImage.length >= 2;
-      const isNanoBananaPro = hasImages && multiImageModel === 'nano-banana-pro';
+      const isNanoBananaPro = multiImageModel === 'nano-banana-pro';
       const creditsUsed = isNanoBananaPro ? 2 : 1;
       
       try {
