@@ -435,10 +435,14 @@ const ImageOutput = () => {
         
         // Update UI immediately with the remaining credits from the response
         if (deductionResult.remainingCredits !== undefined) {
-          if (!isEmailAuth && setCreditsManually) {
+          if (isEmailAuth && emailContext.setCreditsManually) {
+            // For email users, update credits directly
+            emailContext.setCreditsManually(deductionResult.remainingCredits);
+            logger.debug('Updated email user credits immediately', { remainingCredits: deductionResult.remainingCredits });
+          } else if (!isEmailAuth && setCreditsManually) {
             // For wallet users, update credits directly
             setCreditsManually(deductionResult.remainingCredits);
-            logger.debug('Updated wallet user credits', { remainingCredits: deductionResult.remainingCredits });
+            logger.debug('Updated wallet user credits immediately', { remainingCredits: deductionResult.remainingCredits });
           }
         }
         

@@ -171,7 +171,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     // Get current credits BEFORE refresh
     const currentCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
     
-    // Deduct credits IMMEDIATELY in UI when user clicks generate (before API call and refresh)
+    // Deduct credits IMMEDIATELY in UI when user clicks generate (before API call)
     // This gives instant feedback that credits are being used
     const newCredits = Math.max(0, currentCredits - creditsToDeduct);
     
@@ -191,21 +191,6 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         newCredits,
         isNanoBananaPro
       });
-    }
-
-    // Refresh credits AFTER immediate deduction to show current balance
-    // This ensures user sees their current credits before deduction, but deduction already shown
-    try {
-      if (isEmailAuth && emailContext.refreshCredits) {
-        await emailContext.refreshCredits();
-        logger.debug('Credits refreshed before generation', { credits: emailContext.credits });
-      } else if (!isEmailAuth && refreshCredits && address) {
-        await refreshCredits();
-        logger.debug('Credits refreshed before generation');
-      }
-    } catch (refreshError) {
-      logger.warn('Failed to refresh credits before generation', { error: refreshError.message });
-      // Continue with generation even if refresh fails
     }
 
     // Style is optional - can generate with just prompt and reference image
@@ -257,9 +242,14 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       const remainingCredits = imageResult.remainingCredits;
       
       // Update credits immediately from generate response for instant UI feedback
-      if (remainingCredits !== undefined && setCreditsManually) {
-        setCreditsManually(remainingCredits);
-        logger.debug('Credits updated immediately from generate response', { remainingCredits });
+      if (remainingCredits !== undefined) {
+        if (isEmailAuth && emailContext.setCreditsManually) {
+          emailContext.setCreditsManually(remainingCredits);
+          logger.debug('Email credits updated immediately from generate response', { remainingCredits });
+        } else if (!isEmailAuth && setCreditsManually) {
+          setCreditsManually(remainingCredits);
+          logger.debug('Wallet credits updated immediately from generate response', { remainingCredits });
+        }
       }
       
       // ALWAYS refresh credits from backend after generation to ensure accuracy

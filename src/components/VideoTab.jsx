@@ -275,6 +275,17 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                         remainingCredits: completeData.remainingCredits,
                         duration: completeData.duration
                       });
+                      
+                      // Update credits immediately from response for instant UI feedback
+                      if (completeData.remainingCredits !== undefined) {
+                        if (isEmailAuth && emailContext.setCreditsManually) {
+                          emailContext.setCreditsManually(completeData.remainingCredits);
+                          logger.debug('Email credits updated immediately from video response', { remainingCredits: completeData.remainingCredits });
+                        } else if (!isEmailAuth && walletContext.setCreditsManually) {
+                          walletContext.setCreditsManually(completeData.remainingCredits);
+                          logger.debug('Wallet credits updated immediately from video response', { remainingCredits: completeData.remainingCredits });
+                        }
+                      }
                     }
                   }
                 } catch (completeError) {
