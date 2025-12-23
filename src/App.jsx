@@ -122,19 +122,11 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   // Allow UI access without authentication - users can see the interface and try to generate
   // Authentication will be prompted when they try to generate if needed
   // New users get 2 credits when they sign up, so we allow them to see the UI
-  // Users with 0 credits can still see the UI and will be prompted to purchase credits
-
-  // Show main content - allow UI access even without authentication or credits
-  // New users can see the interface and will be prompted to sign up when generating
-  // They'll get 2 credits after signing up
-  // NFT holders get additional benefits
   return (
-    <>
-      <AuthGuard requireCredits={false}>
-        {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
-        {activeTab === 'gallery' && <GalleryTab />}
-      </AuthGuard>
-    </>
+    <AuthGuard requireCredits={false}>
+      {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
+      {activeTab === 'gallery' && <GalleryTab />}
+    </AuthGuard>
   );
 }
 

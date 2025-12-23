@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
@@ -6,8 +6,38 @@ import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
 import logger from '../utils/logger.js';
 
+// Constants for generation timing
+const GENERATION_TIMES = {
+  FLUX_PRO: 17.5,
+  FLUX_MULTI: 35,
+  DEFAULT: 17.5
+};
+
+// Constants for progress tracking
+const PROGRESS_CONFIG = {
+  INTERVAL_MS: 100,
+  COMPLETION_DELAY_MS: 1000,
+  MAX_PROGRESS_PERCENT: 75,
+  PROGRESS_MULTIPLIER: 80
+};
+
+// Helper function to sanitize error messages
+const sanitizeError = (error) => {
+  const message = error?.message || 'An unknown error occurred';
+  // Remove potential sensitive information and limit length
+  return message
+    .replace(/password|secret|key|token|api[_-]?key/gi, '[REDACTED]')
+    .substring(0, 200);
+};
+
+// Helper function to get prompt for display
+const getPromptForDisplay = (trimmedPrompt, selectedStyle) => {
+  return trimmedPrompt.length > 0 
+    ? trimmedPrompt 
+    : (selectedStyle ? selectedStyle.prompt : 'No prompt');
+};
+
 const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
-  // onShowStripePayment prop removed - Stripe disabled
   const {
     selectedStyle,
     isGenerating,
@@ -25,8 +55,6 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     setCurrentGeneration
   } = useImageGenerator();
   
-  // Generate button initialized
-
   const {
     isConnected,
     address,
@@ -48,29 +76,34 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   const [generationStartTime, setGenerationStartTime] = useState(null);
   const [currentStep, setCurrentStep] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  // Get estimated generation time based on mode - more realistic timing
-  const getEstimatedTime = () => {
-    switch (generationMode) {
-      case 'flux-pro':
-        return 17.5; // 17.5 seconds for Flux Pro
-      case 'flux-multi':
-        return 35; // 35 seconds for multiple images
-      default:
-        return 17.5;
-    }
-  };
+  const timeoutRef = useRef(null);
 
   // Progress tracking effect with loading steps
   useEffect(() => {
-    let interval;
+    let interval = null;
+    
     if ((isGenerating || isLoading) && generationStartTime) {
+      // Get estimated generation time based on mode - moved inside effect to fix dependency
+      const getEstimatedTime = () => {
+        switch (generationMode) {
+          case 'flux-pro':
+            return GENERATION_TIMES.FLUX_PRO;
+          case 'flux-multi':
+            return GENERATION_TIMES.FLUX_MULTI;
+          default:
+            return GENERATION_TIMES.DEFAULT;
+        }
+      };
+      
       const estimatedTime = getEstimatedTime();
       
       interval = setInterval(() => {
         const elapsed = (Date.now() - generationStartTime) / 1000;
         // More conservative progress - slower progression
-        const progressPercent = Math.min((elapsed / estimatedTime) * 80, 75); // Cap at 75% until complete
+        const progressPercent = Math.min(
+          (elapsed / estimatedTime) * PROGRESS_CONFIG.PROGRESS_MULTIPLIER, 
+          PROGRESS_CONFIG.MAX_PROGRESS_PERCENT
+        );
         const remaining = Math.max(estimatedTime - elapsed, 0);
         
         // Update progress and time
@@ -86,12 +119,12 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           setCurrentStep('Generating image...');
         } else if (progressPercent < 65) {
           setCurrentStep('Enhancing details...');
-        } else if (progressPercent < 75) {
+        } else if (progressPercent < PROGRESS_CONFIG.MAX_PROGRESS_PERCENT) {
           setCurrentStep('Finalizing...');
         } else {
           setCurrentStep('Almost complete...');
         }
-      }, 100);
+      }, PROGRESS_CONFIG.INTERVAL_MS);
     } else {
       setProgress(0);
       setTimeRemaining(0);
@@ -99,7 +132,9 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     }
     
     return () => {
-      if (interval) clearInterval(interval);
+      if (interval) {
+        clearInterval(interval);
+      }
     };
   }, [isGenerating, isLoading, generationStartTime, generationMode]);
 
@@ -165,12 +200,9 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         ? customPrompt.trim() 
         : '';
       
-      // Only pass non-empty prompts to generation
-      const promptToUse = trimmedPrompt.length > 0 ? trimmedPrompt : '';
-      
       const imageResult = await generateImage(
         selectedStyle || null,
-        promptToUse,
+        trimmedPrompt,
         advancedSettings,
         controlNetImage
       );
@@ -217,9 +249,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       let deductionResult = null;
       try {
         // Use trimmed prompt for saving, or fallback to style prompt if no custom prompt
-        const promptForHistory = trimmedPrompt.length > 0 
-          ? trimmedPrompt 
-          : (selectedStyle ? selectedStyle.prompt : 'No prompt');
+        const promptForHistory = getPromptForDisplay(trimmedPrompt, selectedStyle);
         
         deductionResult = await addGeneration(userIdentifier, {
           prompt: promptForHistory,
@@ -242,32 +272,43 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         }
         
         // Force immediate credit refresh to ensure UI is in sync with backend
-        logger.debug('Refreshing credits from backend');
-        if (refreshCredits && address) {
-          await refreshCredits();
-          logger.debug('Credits refreshed in UI from backend');
-          logger.info('Credits refreshed after generation', { address });
+        // Check if refreshCredits is available (works for both wallet and email)
+        if (refreshCredits) {
+          // For email users, refreshCredits might not need address
+          if (isEmailAuth) {
+            // Email context should handle refresh internally
+            await refreshCredits();
+          } else if (address) {
+            // Wallet users need address
+            await refreshCredits();
+          }
+          logger.info('Credits refreshed after generation', { 
+            address: address || emailContext.userId 
+          });
         } else {
-          logger.warn('Cannot refresh credits - missing refreshCredits or address');
+          logger.warn('Cannot refresh credits - refreshCredits function not available');
         }
       } catch (error) {
         logger.error('Error saving generation', { error: error.message, address });
-        setError(`Image generated but failed to save to history. Credits not deducted. Error: ${error.message}`);
+        const sanitizedError = sanitizeError(error);
+        setError(`Image generated but failed to save to history. Credits not deducted. ${sanitizedError}`);
         // Still show the image even if saving failed
       }
       
       // Wait a moment to show completion, then set the image and stop loading
-      setTimeout(() => {
+      // Clear any existing timeout before setting a new one
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      
+      timeoutRef.current = setTimeout(() => {
         // Pass the result (array or string) to setGeneratedImage
         setGeneratedImage(imageResult);
         setIsLoading(false);
         
         // Store current generation details for explain/regenerate functionality
         // Use first image for currentGeneration.image (backward compatibility)
-        // Use trimmed prompt or fallback to style prompt
-        const promptForStorage = trimmedPrompt.length > 0 
-          ? trimmedPrompt 
-          : (selectedStyle ? selectedStyle.prompt : 'No prompt');
+        const promptForStorage = getPromptForDisplay(trimmedPrompt, selectedStyle);
         
         setCurrentGeneration({
           image: imageUrl,
@@ -279,47 +320,80 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           numImages,
           enableSafetyChecker,
           generationMode,
-          multiImageModel: multiImageModel, // Store model selection for regeneration
+          multiImageModel, // Store model selection for regeneration
           timestamp: new Date().toISOString()
         });
-      }, 1000);
-    } catch (error) {
-      logger.error('Generation error:', { error: error.message, stack: error.stack });
-      const errorMessage = error.message || 'Failed to generate image. Please try again.';
+        
+        timeoutRef.current = null;
+      }, PROGRESS_CONFIG.COMPLETION_DELAY_MS);
+      } catch (error) {
+        logger.error('Generation error:', { error: error.message, stack: error.stack });
+        const errorMessage = error.message || 'Failed to generate image. Please try again.';
       
-      // If error is about insufficient credits and user is authenticated, show payment modal
-      if (errorMessage.includes('Insufficient credits') && isAuthenticated && onShowTokenPayment) {
-        // User has used their credits and needs to pay
-        setError('You\'ve used your credits! Please purchase more credits to generate more.');
-        onShowTokenPayment();
-      } else {
-        setError(errorMessage);
+        // If error is about insufficient credits and user is authenticated, show payment modal
+        if (errorMessage.includes('Insufficient credits') && isAuthenticated && onShowTokenPayment) {
+          // User has used their credits and needs to pay
+          setError('You\'ve used your credits! Please purchase more credits to generate more.');
+          onShowTokenPayment();
+        } else {
+          // Sanitize error message before displaying
+          const sanitizedError = sanitizeError(error);
+          setError(sanitizedError);
+        }
+      
+        setProgress(0);
+        setCurrentStep('Error occurred');
+      } finally {
+        setIsLoading(false);
+        setGenerating(false);
+        setGenerationStartTime(null);
       }
-      
-      setProgress(0);
-      setCurrentStep('Error occurred');
-    } finally {
-      setIsLoading(false);
-      setGenerating(false);
-      setGenerationStartTime(null);
-    }
-  };
+    };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   const isDisabled = isGenerating || walletLoading || (!isConnected && !isEmailAuth);
   
-  const getButtonText = () => {
+  // Memoize button text to avoid unnecessary recalculations
+  const buttonText = useMemo(() => {
     if (isGenerating) return multiImageModel === 'qwen-image-layered' ? 'Extracting Layers...' : 'Generating...';
     if (walletLoading) return 'Loading...';
     if (!isConnected && !isEmailAuth) return 'Sign In to Generate';
     return multiImageModel === 'qwen-image-layered' ? 'Extract Layers' : 'Generate Image';
-  };
+  }, [isGenerating, walletLoading, isConnected, isEmailAuth, multiImageModel]);
 
-  const getButtonIcon = () => {
+  // Memoize button icon to avoid unnecessary recalculations
+  const buttonIcon = useMemo(() => {
     if (isGenerating) return <span className="text-xs" style={{ color: '#000000' }}>⏳</span>;
     if (walletLoading) return <span className="text-xs animate-pulse" style={{ color: '#000000' }}>⏳</span>;
     if (!isConnected && !isEmailAuth) return <span className="text-xs" style={{ color: '#000000' }}>🔗</span>;
     return <span className="text-xs" style={{ color: '#000000' }}>✨</span>;
-  };
+  }, [isGenerating, walletLoading, isConnected, isEmailAuth]);
+
+  // Memoize button styles to avoid recreating objects on every render
+  const disabledButtonStyles = useMemo(() => ({
+    background: 'linear-gradient(to bottom, #c8c8c8, #b0b0b0)',
+    border: '2px inset #b8b8b8',
+    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)',
+    color: '#666666',
+    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.5)',
+    cursor: 'not-allowed'
+  }), []);
+
+  const enabledButtonStyles = useMemo(() => ({
+    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+    border: '2px outset #f0f0f0',
+    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)',
+    color: '#000000',
+    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+  }), []);
 
   return (
     <>
@@ -328,21 +402,11 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           onClick={handleGenerate}
           disabled={isDisabled}
           aria-label={isGenerating ? 'Generating image...' : 'Generate AI image'}
+          aria-busy={isGenerating || isLoading}
+          aria-live="polite"
+          role="button"
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded transition-all duration-200"
-          style={isDisabled ? {
-            background: 'linear-gradient(to bottom, #c8c8c8, #b0b0b0)',
-            border: '2px inset #b8b8b8',
-            boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)',
-            color: '#666666',
-            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.5)',
-            cursor: 'not-allowed'
-          } : {
-            background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-            border: '2px outset #f0f0f0',
-            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)',
-            color: '#000000',
-            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-          }}
+          style={isDisabled ? disabledButtonStyles : enabledButtonStyles}
           onMouseEnter={(e) => {
             if (!isDisabled) {
               e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
@@ -374,8 +438,8 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
             }
           }}
         >
-          {getButtonIcon()}
-          <span>{getButtonText()}</span>
+          {buttonIcon}
+          <span>{buttonText}</span>
         </button>
       </div>
 
@@ -456,8 +520,6 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           </div>
         </div>
       )}
-
-      {/* Payment Modal */}
     </>
   );
 };
