@@ -850,7 +850,23 @@ const ImageOutput = () => {
                     setError(null);
                   }}
                   placeholder="Enter your new prompt here..."
-                  className="w-full h-24 sm:h-32 px-3 sm:px-4 py-2 sm:py-3 bg-white border-2 border-gray-300 rounded-xl text-black text-sm sm:text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none transition-all duration-300"
+                  className="w-full h-24 sm:h-32 px-3 sm:px-4 py-2 sm:py-3 resize-none transition-all duration-300 text-sm sm:text-base"
+                  style={{
+                    background: '#ffffff',
+                    border: '2px inset #c0c0c0',
+                    color: '#000000',
+                    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.border = '2px inset #808080';
+                    e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.3)';
+                    e.target.style.background = '#fffffe';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.border = '2px inset #c0c0c0';
+                    e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+                    e.target.style.background = '#ffffff';
+                  }}
                 />
               </div>
             )}
@@ -858,7 +874,47 @@ const ImageOutput = () => {
               <button
                 onClick={handleRegenerateWithPrompt}
                 disabled={(!newPrompt.trim() && selectedModel !== 'qwen-image-layered') || isRegenerating || isGenerating}
-                className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base py-2 sm:py-3"
+                className="flex-1 text-sm sm:text-base py-2 sm:py-3 rounded transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={(!newPrompt.trim() && selectedModel !== 'qwen-image-layered') || isRegenerating || isGenerating ? {
+                  background: 'linear-gradient(to bottom, #c8c8c8, #b0b0b0)',
+                  border: '2px inset #b8b8b8',
+                  boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)',
+                  color: '#666666',
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.5)',
+                  cursor: 'not-allowed'
+                } : {
+                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                  border: '2px outset #f0f0f0',
+                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)',
+                  color: '#000000',
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                }}
+                onMouseEnter={(e) => {
+                  if (!((!newPrompt.trim() && selectedModel !== 'qwen-image-layered') || isRegenerating || isGenerating)) {
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                    e.currentTarget.style.border = '2px outset #f8f8f8';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!((!newPrompt.trim() && selectedModel !== 'qwen-image-layered') || isRegenerating || isGenerating)) {
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                    e.currentTarget.style.border = '2px outset #f0f0f0';
+                  }
+                }}
+                onMouseDown={(e) => {
+                  if (!((!newPrompt.trim() && selectedModel !== 'qwen-image-layered') || isRegenerating || isGenerating)) {
+                    e.currentTarget.style.border = '2px inset #d0d0d0';
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)';
+                    e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+                  }
+                }}
+                onMouseUp={(e) => {
+                  if (!((!newPrompt.trim() && selectedModel !== 'qwen-image-layered') || isRegenerating || isGenerating)) {
+                    e.currentTarget.style.border = '2px outset #f0f0f0';
+                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)';
+                  }
+                }}
               >
                 {isRegenerating ? 'Generating...' : selectedModel === 'qwen-image-layered' ? 'Extract Layers' : 'Generate with New Prompt'}
               </button>
@@ -869,8 +925,30 @@ const ImageOutput = () => {
                   setError(null);
                   setSelectedModel(null);
                 }}
-                className="btn-secondary px-3 sm:px-5 text-sm sm:text-base py-2 sm:py-3"
-                style={{ color: '#000000', border: '2px outset #e0e0e0', background: 'linear-gradient(to bottom, #f0f0f0 0%, #e0e0e0 50%, #d0d0d0 100%)' }}
+                className="px-3 sm:px-5 text-sm sm:text-base py-2 sm:py-3 rounded transition-all duration-200"
+                style={{ 
+                  color: '#000000', 
+                  border: '2px outset #f0f0f0', 
+                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                  e.currentTarget.style.border = '2px outset #f8f8f8';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                  e.currentTarget.style.border = '2px outset #f0f0f0';
+                }}
+                onMouseDown={(e) => {
+                  e.currentTarget.style.border = '2px inset #c0c0c0';
+                  e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+                }}
+                onMouseUp={(e) => {
+                  e.currentTarget.style.border = '2px outset #f0f0f0';
+                  e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
               >
                 Cancel
               </button>

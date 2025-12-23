@@ -1634,11 +1634,16 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
     let endpoint;
     const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
     const isSingleImage = image_url || (image_urls && image_urls.length === 1);
-    const isNanoBananaPro = model === 'nano-banana-pro' && (isMultipleImages || isSingleImage);
+    const hasImages = isMultipleImages || isSingleImage;
+    const isNanoBananaPro = model === 'nano-banana-pro';
     
     if (isNanoBananaPro) {
-      // Nano Banana Pro selected (works for both single and multiple images)
-      endpoint = 'https://fal.run/fal-ai/nano-banana-pro/edit';
+      // Nano Banana Pro selected - use /edit endpoint when images are provided, base endpoint for prompt-only
+      if (hasImages) {
+        endpoint = 'https://fal.run/fal-ai/nano-banana-pro/edit';
+      } else {
+        endpoint = 'https://fal.run/fal-ai/nano-banana-pro';
+      }
     } else if (isMultipleImages) {
       // Multiple images - use multi model
       endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/max/multi';
@@ -1678,6 +1683,11 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       // Nano Banana Pro supports resolution parameter (1K, 2K, 4K)
       // Default to 1K if not specified
       requestBody.resolution = '1K';
+      
+      // Add num_images for prompt-only generation
+      if (!hasImages && numImages) {
+        requestBody.num_images = numImages;
+      }
     } else {
       // FLUX Kontext API format
       requestBody = {

@@ -271,6 +271,16 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
                       {hasReferenceImages ? 'Describe Changes' : 'Prompt'}
                     </span>
                     <span className="text-xs" style={{ color: '#666666', fontStyle: 'italic' }}>(optional)</span>
+                    {!hasReferenceImages && multiImageModel === 'nano-banana-pro' && (
+                      <span className="text-xs font-bold ml-1 px-1.5 py-0.5 rounded" style={{ 
+                        background: 'linear-gradient(to bottom, #ffffcc, #ffffaa, #ffff99)',
+                        border: '1px solid #cccc00',
+                        color: '#000000',
+                        textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                      }}>
+                        ✨ Text-to-Image
+                      </span>
+                    )}
                   </label>
                   <textarea
                     value={customPrompt}
@@ -278,6 +288,8 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
                     placeholder={
                       hasReferenceImages 
                         ? "e.g., 'make it more vibrant', 'add sunset colors'..." 
+                        : multiImageModel === 'nano-banana-pro'
+                        ? "✨ Text-to-Image: e.g., 'a futuristic city at night', 'a serene mountain landscape'..."
                         : "e.g., 'a futuristic city at night', 'a serene mountain landscape'..."
                     }
                     className="w-full p-1.5 rounded resize-none text-xs transition-all duration-300"
@@ -300,8 +312,10 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
                     rows={2}
                   />
                   {!hasReferenceImages && (
-                    <p className="text-xs mt-0.5" style={{ color: '#666666' }}>
-                      💡 Tip: Be specific with colors, mood, style
+                    <p className="text-xs mt-0.5" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
+                      {multiImageModel === 'nano-banana-pro' 
+                        ? '✨ Nano Banana Pro supports text-to-image generation - describe what you want to create!'
+                        : '💡 Tip: Be specific with colors, mood, style'}
                     </p>
                   )}
                 </div>

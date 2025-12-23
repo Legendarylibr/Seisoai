@@ -170,38 +170,75 @@ import logger from '../utils/logger.js';
                 <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={() => setShowUserDropdown(!showUserDropdown)}
-                    className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300"
+                    className="flex items-center gap-2 px-3 py-2 rounded transition-all duration-300"
+                    style={{
+                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                      border: '2px outset #f0f0f0',
+                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                      e.currentTarget.style.border = '2px outset #f8f8f8';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                    }}
                   >
-                    <Mail className="w-4 h-4 text-blue-400" />
-                    <span className="text-xs text-gray-300">
+                    <Mail className="w-4 h-4" style={{ color: '#000000' }} />
+                    <span className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                       {emailContext.email}
                     </span>
-                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-3 h-3 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`} style={{ color: '#000000' }} />
                   </button>
 
                   {/* Dropdown Menu */}
                   {showUserDropdown && (
-                    <div className="absolute right-0 mt-2 w-56 bg-gray-900/95 backdrop-blur-xl rounded-lg border border-white/10 shadow-xl z-50 overflow-hidden">
+                    <div className="absolute right-0 mt-2 w-56 rounded z-50 overflow-hidden" style={{
+                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                      border: '2px outset #e8e8e8',
+                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3)'
+                    }}>
                       <div className="py-1">
                         <button
                           onClick={() => {
                             setShowSubscriptionManagement(true);
                             setShowUserDropdown(false);
                           }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
+                          style={{
+                            color: '#000000',
+                            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'linear-gradient(to bottom, #e8e8e8, #d8d8d8, #d0d0d0)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
                         >
-                          <Settings className="w-4 h-4 text-blue-400" />
+                          <Settings className="w-4 h-4" style={{ color: '#000000' }} />
                           <span>Manage Subscription</span>
                         </button>
-                        <div className="border-t border-white/10 my-1"></div>
+                        <div className="border-t my-1" style={{ borderColor: '#d0d0d0' }}></div>
                         <button
                           onClick={() => {
                             signOut();
                             setShowUserDropdown(false);
                           }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-red-300 hover:bg-red-500/10 transition-colors"
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
+                          style={{
+                            color: '#000000',
+                            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'linear-gradient(to bottom, #e8e8e8, #d8d8d8, #d0d0d0)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
                         >
-                          <LogOut className="w-4 h-4 text-red-400" />
+                          <LogOut className="w-4 h-4" style={{ color: '#000000' }} />
                           <span>Sign Out</span>
                         </button>
                       </div>
@@ -364,9 +401,30 @@ import logger from '../utils/logger.js';
           {/* Mobile Menu Button */}
           <button
             onClick={() => setShowMobileMenu(!showMobileMenu)}
-            className="md:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className="md:hidden p-2 rounded transition-all duration-200"
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+              e.currentTarget.style.border = '2px outset #f8f8f8';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+            }}
+            onMouseDown={(e) => {
+              e.currentTarget.style.border = '2px inset #c0c0c0';
+              e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+            }}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#000000' }}>
               {showMobileMenu ? (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               ) : (
@@ -479,10 +537,11 @@ import logger from '../utils/logger.js';
 
         {/* Mobile Navigation Menu */}
         {showMobileMenu && (
-          <div className="md:hidden border-t border-white/10 pt-4 mt-4 px-4 pb-4 slide-up">
+          <div className="md:hidden border-t pt-4 mt-4 px-4 pb-4 slide-up" style={{ borderColor: '#d0d0d0' }}>
             <nav className="flex flex-col space-y-2">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
@@ -490,15 +549,34 @@ import logger from '../utils/logger.js';
                       setActiveTab(tab.id);
                       setShowMobileMenu(false);
                     }}
-                    className={`
-                      flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300
-                      ${activeTab === tab.id 
-                        ? 'bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-purple-200 border border-purple-500/40 shadow-lg shadow-purple-500/20' 
-                        : 'text-gray-300 hover:text-white hover:bg-white/10'
+                    className="flex items-center gap-3 px-4 py-3 rounded transition-all duration-300"
+                    style={isActive ? {
+                      background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
+                      color: '#000000',
+                      border: '2px inset #c0c0c0',
+                      boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+                    } : {
+                      color: '#000000',
+                      border: '2px outset #f0f0f0',
+                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                        e.currentTarget.style.border = '2px outset #f8f8f8';
                       }
-                    `}
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                        e.currentTarget.style.border = '2px outset #f0f0f0';
+                      }
+                    }}
                   >
-                    <Icon className="w-5 h-5" />
+                    <Icon className="w-5 h-5" style={{ color: '#000000' }} />
                     <span className="font-semibold">{tab.name}</span>
                   </button>
                 );
@@ -507,15 +585,30 @@ import logger from '../utils/logger.js';
               {/* Subscription Management for Email Users */}
               {isEmailAuth && (
                 <>
-                  <div className="border-t border-white/10 my-2"></div>
+                  <div className="border-t my-2" style={{ borderColor: '#d0d0d0' }}></div>
                   <button
                     onClick={() => {
                       setShowSubscriptionManagement(true);
                       setShowMobileMenu(false);
                     }}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-300"
+                    className="flex items-center gap-3 px-4 py-3 rounded transition-all duration-300"
+                    style={{
+                      color: '#000000',
+                      border: '2px outset #f0f0f0',
+                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                      e.currentTarget.style.border = '2px outset #f8f8f8';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                      e.currentTarget.style.border = '2px outset #f0f0f0';
+                    }}
                   >
-                    <Settings className="w-5 h-5 text-blue-400" />
+                    <Settings className="w-5 h-5" style={{ color: '#000000' }} />
                     <span className="font-semibold">Manage Subscription</span>
                   </button>
                 </>
