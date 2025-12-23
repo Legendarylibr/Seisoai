@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
-import { Mail, LogOut, Coins, RefreshCw, Wallet, CreditCard } from 'lucide-react';
-import SubscriptionManagement from './SubscriptionManagement';
+import { Mail, LogOut, Coins, RefreshCw, Wallet } from 'lucide-react';
 
 const EmailUserInfo = ({ onShowStripePayment }) => {
   const { 
@@ -13,7 +12,6 @@ const EmailUserInfo = ({ onShowStripePayment }) => {
     signOut,
     connectWallet
   } = useEmailAuth();
-  const [showSubscriptionManagement, setShowSubscriptionManagement] = useState(false);
 
   const formatAddress = (addr) => {
     if (!addr) return '';
@@ -104,21 +102,7 @@ const EmailUserInfo = ({ onShowStripePayment }) => {
           </div>
         )}
 
-        {/* Subscription Management */}
-        <button
-          onClick={() => setShowSubscriptionManagement(true)}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs rounded transition-all duration-200 btn-secondary"
-        >
-          <CreditCard className="w-3 h-3" style={{ color: '#000000' }} />
-          <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Manage Subscription</span>
-        </button>
       </div>
-
-      {/* Subscription Management Modal */}
-      <SubscriptionManagement
-        isOpen={showSubscriptionManagement}
-        onClose={() => setShowSubscriptionManagement(false)}
-      />
     </div>
   );
 };

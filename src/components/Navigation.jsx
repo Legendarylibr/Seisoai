@@ -18,25 +18,30 @@ import logger from '../utils/logger.js';
   const signOut = emailContext.signOut;
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showCreditsDropdown, setShowCreditsDropdown] = useState(false);
   const [showSubscriptionManagement, setShowSubscriptionManagement] = useState(false);
   const dropdownRef = useRef(null);
+  const creditsDropdownRef = useRef(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowUserDropdown(false);
       }
+      if (creditsDropdownRef.current && !creditsDropdownRef.current.contains(event.target)) {
+        setShowCreditsDropdown(false);
+      }
     };
 
-    if (showUserDropdown) {
+    if (showUserDropdown || showCreditsDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showUserDropdown]);
+  }, [showUserDropdown, showCreditsDropdown]);
 
   // Safety check to prevent the error
   if (!tabs || !Array.isArray(tabs)) {
@@ -205,27 +210,6 @@ import logger from '../utils/logger.js';
                       <div className="py-1">
                         <button
                           onClick={() => {
-                            setShowSubscriptionManagement(true);
-                            setShowUserDropdown(false);
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
-                          style={{
-                            color: '#000000',
-                            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'linear-gradient(to bottom, #e8e8e8, #d8d8d8, #d0d0d0)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          <Settings className="w-4 h-4" style={{ color: '#000000' }} />
-                          <span>Manage Subscription</span>
-                        </button>
-                        <div className="border-t my-1" style={{ borderColor: '#d0d0d0' }}></div>
-                        <button
-                          onClick={() => {
                             signOut();
                             setShowUserDropdown(false);
                           }}
@@ -250,9 +234,10 @@ import logger from '../utils/logger.js';
                 </div>
               )}
 
-              {/* Credits Display */}
-              <div className="flex items-center gap-2">
-                <div 
+              {/* Credits Display with Dropdown */}
+              <div className="relative" ref={creditsDropdownRef}>
+                <button
+                  onClick={() => setShowCreditsDropdown(!showCreditsDropdown)}
                   className="flex items-center gap-1.5 px-3 py-2 rounded transition-all duration-200"
                   style={{
                     background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
@@ -274,7 +259,74 @@ import logger from '../utils/logger.js';
                   <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                     {credits} credits
                   </span>
-                </div>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showCreditsDropdown ? 'rotate-180' : ''}`} style={{ color: '#000000' }} />
+                </button>
+
+                {/* Credits Dropdown Menu */}
+                {showCreditsDropdown && (
+                  <div className="absolute right-0 mt-2 w-56 rounded z-50 overflow-hidden" style={{
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #e8e8e8',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3)'
+                  }}>
+                    <div className="py-1">
+                      {/* Manage Subscription - Only show for email users */}
+                      {isEmailAuth && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setShowSubscriptionManagement(true);
+                              setShowCreditsDropdown(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
+                            style={{
+                              color: '#000000',
+                              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'linear-gradient(to bottom, #e8e8e8, #d8d8d8, #d0d0d0)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            <Settings className="w-4 h-4" style={{ color: '#000000' }} />
+                            <span>Manage Subscription</span>
+                          </button>
+                          <div className="border-t my-1" style={{ borderColor: '#d0d0d0' }}></div>
+                        </>
+                      )}
+                      {/* Refresh Credits */}
+                      <button
+                        onClick={() => {
+                          if (isEmailAuth) {
+                            emailContext.refreshCredits();
+                          } else {
+                            walletContext.fetchCredits();
+                          }
+                          setShowCreditsDropdown(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
+                        style={{
+                          color: '#000000',
+                          textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'linear-gradient(to bottom, #e8e8e8, #d8d8d8, #d0d0d0)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        <RefreshCw className="w-4 h-4" style={{ color: '#000000' }} />
+                        <span>Refresh Credits</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-2">
                 
                 {/* Buy Credits Button - Show Stripe for email users, Token for wallet users */}
                 {isEmailAuth && onShowStripePayment ? (
