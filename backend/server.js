@@ -8056,15 +8056,42 @@ const startServer = async (port = process.env.PORT || 3001) => {
     throw error;
   }
   
+  // Security: Determine host binding based on environment
+  // - Production/Cloud (Railway, etc.): Use 0.0.0.0 (required for cloud platforms)
+  // - Development: Use 127.0.0.1 for better security (only localhost access)
+  // - Can be overridden with HOST environment variable
+  const isCloudEnvironment = !!(
+    process.env.RAILWAY_ENVIRONMENT ||
+    process.env.VERCEL ||
+    process.env.HEROKU ||
+    process.env.RENDER ||
+    process.env.FLY_APP_NAME ||
+    process.env.PORT // If PORT is set, likely in cloud environment
+  );
+  
+  const bindHost = process.env.HOST || (
+    isCloudEnvironment || process.env.NODE_ENV === 'production'
+      ? '0.0.0.0'  // Required for cloud platforms
+      : '127.0.0.1'  // Safer for local development
+  );
+  
+  logger.info('Server binding configuration', {
+    host: bindHost,
+    port: serverPort,
+    environment: process.env.NODE_ENV || 'development',
+    isCloudEnvironment
+  });
+  
   return new Promise((resolve, reject) => {
-    const server = app.listen(serverPort, '0.0.0.0', () => {
+    const server = app.listen(serverPort, bindHost, () => {
       logger.info(`AI Image Generator API running on port ${serverPort}`);
       logger.info(`MongoDB connected: ${mongoose.connection.readyState === 1 ? 'Yes' : 'No'}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info('Server started successfully', {
+        host: bindHost,
         port: serverPort,
-        healthCheck: `http://0.0.0.0:${serverPort}/api/health`,
-        localhostHealthCheck: `http://localhost:${serverPort}/api/health`
+        healthCheck: `http://${bindHost === '0.0.0.0' ? 'localhost' : bindHost}:${serverPort}/api/health`,
+        networkAccess: bindHost === '0.0.0.0' ? 'all interfaces' : 'localhost only'
       });
       
       // Health check endpoint is ready - no need to verify with fetch

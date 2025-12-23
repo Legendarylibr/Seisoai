@@ -8,9 +8,30 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// Security: Determine host binding based on environment
+// - Production/Cloud (Railway, etc.): Use 0.0.0.0 (required for cloud platforms)
+// - Development: Use 127.0.0.1 for better security (only localhost access)
+// - Can be overridden with HOST environment variable
+const isCloudEnvironment = !!(
+  process.env.RAILWAY_ENVIRONMENT ||
+  process.env.VERCEL ||
+  process.env.HEROKU ||
+  process.env.RENDER ||
+  process.env.FLY_APP_NAME ||
+  process.env.PORT // If PORT is set, likely in cloud environment
+);
+
+const bindHost = process.env.HOST || (
+  isCloudEnvironment || process.env.NODE_ENV === 'production'
+    ? '0.0.0.0'  // Required for cloud platforms
+    : '127.0.0.1'  // Safer for local development
+);
+
 console.log('Environment variables:');
 console.log('PORT:', process.env.PORT);
 console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('HOST:', bindHost);
+console.log('Network Access:', bindHost === '0.0.0.0' ? 'all interfaces' : 'localhost only');
 
 // Serve static files from the dist directory with long cache for assets
 app.use(
@@ -80,8 +101,10 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Frontend server running on port ${PORT}`);
+app.listen(PORT, bindHost, () => {
+  console.log(`Frontend server running on ${bindHost}:${PORT}`);
   console.log(`Serving static files from: ${path.join(__dirname, 'dist')}`);
-  console.log(`Health check available at: http://localhost:${PORT}/health`);
+  const accessUrl = bindHost === '0.0.0.0' ? `http://localhost:${PORT}` : `http://${bindHost}:${PORT}`;
+  console.log(`Health check available at: ${accessUrl}/health`);
+  console.log(`Network access: ${bindHost === '0.0.0.0' ? 'all interfaces (cloud mode)' : 'localhost only (local mode)'}`);
 });
