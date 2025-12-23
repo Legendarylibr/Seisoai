@@ -3794,7 +3794,7 @@ async function getOrCreateUser(walletAddress) {
     {
       $setOnInsert: {
         walletAddress: normalizedAddress,
-        credits: 2, // Give new wallet users 2 free credits (same as email users)
+        credits: 2, // Give new wallet users 2 credits (same as email users)
         totalCreditsEarned: 2,
         totalCreditsSpent: 0,
         hasUsedFreeImage: false,
@@ -3831,7 +3831,7 @@ async function getOrCreateUser(walletAddress) {
   
   // Log if this was a new user creation
   if (latestUser.createdAt && Date.now() - new Date(latestUser.createdAt).getTime() < 2000) {
-    logger.info('New wallet user created with 2 free credits', { 
+    logger.info('New wallet user created with 2 credits', { 
       walletAddress: normalizedAddress, 
       isSolana: isSolanaAddress, 
       credits: latestUser.credits,

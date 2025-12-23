@@ -179,25 +179,6 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
           )}
         </div>
 
-        {/* Credits Status Banner - Only for wallet users */}
-        {credits <= 0 && !isEmailAuth && (
-          <div className="glass-card rounded-t-none rounded-b-none p-1.5 mb-0" style={{
-            background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
-            border: '2px outset #ffffbb',
-            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
-          }}>
-            <div className="flex items-center gap-1.5 text-center justify-center">
-              <div className="w-2 h-2 rounded-full" style={{ 
-                background: 'linear-gradient(to bottom, #ffcc00, #ffaa00)',
-                border: '1px solid #cc8800',
-                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 200, 0.6), inset -1px -1px 0 rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.2)'
-              }}></div>
-              <span className="text-xs font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.9), 0 1px 1px rgba(0, 0, 0, 0.1)' }}>
-                No credits - Click "Buy Credits" to purchase
-              </span>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Main Content - Compact Layout */}

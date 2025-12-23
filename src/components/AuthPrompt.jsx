@@ -147,7 +147,7 @@ const AuthPrompt = () => {
                     color: '#1a1a1a', 
                     textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
                   }}>
-                    Pay-per-credit • <strong>NFT: 5 free credits</strong>
+                    Pay-per-credit • <strong>NFT: 5 credits</strong>
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
@@ -194,7 +194,7 @@ const AuthPrompt = () => {
               </h2>
               <div className="space-y-1 text-[10px]" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
                 <div>• <strong>2 Credits</strong> for all new users</div>
-                <div>• <strong>5 Free Credits</strong> (NFT holders)</div>
+                <div>• <strong>5 Credits</strong> (NFT holders)</div>
                 <div>• No credit card required</div>
               </div>
             </div>
