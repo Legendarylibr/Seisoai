@@ -168,8 +168,33 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     const isNanoBananaPro = multiImageModel === 'nano-banana-pro';
     const creditsToDeduct = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro, 1 for others
 
-    // Refresh credits BEFORE generation to show current balance
-    // This ensures user sees their current credits before deduction
+    // Get current credits BEFORE refresh
+    const currentCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
+    
+    // Deduct credits IMMEDIATELY in UI when user clicks generate (before API call and refresh)
+    // This gives instant feedback that credits are being used
+    const newCredits = Math.max(0, currentCredits - creditsToDeduct);
+    
+    if (isEmailAuth && emailContext.setCreditsManually) {
+      emailContext.setCreditsManually(newCredits);
+      logger.debug('Email credits deducted immediately in UI', { 
+        previousCredits: currentCredits, 
+        creditsDeducted: creditsToDeduct, 
+        newCredits,
+        isNanoBananaPro
+      });
+    } else if (!isEmailAuth && setCreditsManually) {
+      setCreditsManually(newCredits);
+      logger.debug('Wallet credits deducted immediately in UI', { 
+        previousCredits: currentCredits, 
+        creditsDeducted: creditsToDeduct, 
+        newCredits,
+        isNanoBananaPro
+      });
+    }
+
+    // Refresh credits AFTER immediate deduction to show current balance
+    // This ensures user sees their current credits before deduction, but deduction already shown
     try {
       if (isEmailAuth && emailContext.refreshCredits) {
         await emailContext.refreshCredits();
@@ -181,27 +206,6 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     } catch (refreshError) {
       logger.warn('Failed to refresh credits before generation', { error: refreshError.message });
       // Continue with generation even if refresh fails
-    }
-
-    // Deduct credits IMMEDIATELY in UI when user clicks generate (before API call)
-    // This gives instant feedback that credits are being used
-    const currentCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
-    const newCredits = Math.max(0, currentCredits - creditsToDeduct);
-    
-    if (isEmailAuth && emailContext.setCreditsManually) {
-      emailContext.setCreditsManually(newCredits);
-      logger.debug('Email credits deducted immediately in UI', { 
-        previousCredits: currentCredits, 
-        creditsDeducted: creditsToDeduct, 
-        newCredits 
-      });
-    } else if (!isEmailAuth && setCreditsManually) {
-      setCreditsManually(newCredits);
-      logger.debug('Wallet credits deducted immediately in UI', { 
-        previousCredits: currentCredits, 
-        creditsDeducted: creditsToDeduct, 
-        newCredits 
-      });
     }
 
     // Style is optional - can generate with just prompt and reference image
