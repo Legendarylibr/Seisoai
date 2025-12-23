@@ -1934,26 +1934,35 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
     // Handle both FLUX and Nano Banana Pro response formats
     // FLUX returns: { images: [{ url: ... }, ...] }
     // Nano Banana Pro returns: { images: [{ url: ... }, ...] } or similar format
-    let images = [];
+    // Extract only clean URLs, removing any metadata
+    let imageUrls = [];
     if (data.images && Array.isArray(data.images)) {
-      images = data.images;
+      imageUrls = data.images.map(img => {
+        if (typeof img === 'string') {
+          return img;
+        } else if (img && img.url) {
+          return img.url;
+        }
+        return null;
+      }).filter(url => url !== null);
     } else if (data.image && typeof data.image === 'string') {
       // Single image as string
-      images = [{ url: data.image }];
+      imageUrls = [data.image];
     } else if (data.url && typeof data.url === 'string') {
       // Single image URL
-      images = [{ url: data.url }];
+      imageUrls = [data.url];
     }
     
-    if (images.length > 0) {
+    if (imageUrls.length > 0) {
       logger.info('Image generation successful', {
         model: isNanoBananaPro ? 'nano-banana-pro' : 'flux',
-        imageCount: images.length,
+        imageCount: imageUrls.length,
         userId: req.user?.userId,
         email: req.user?.email,
         walletAddress: req.user?.walletAddress
       });
-      res.json({ success: true, images: images });
+      // Return only clean URLs, no metadata
+      res.json({ success: true, images: imageUrls });
     } else {
       logger.error('No images in AI service response', { 
         service: 'fal.ai',
@@ -2107,29 +2116,34 @@ app.post('/api/extract-layers', freeImageRateLimiter, requireCredits(1), async (
     const data = await response.json();
     
     // Qwen Image Layered returns: { images: [{ url: ... }, ...], seed, timings, has_nsfw_concepts }
-    // Extract all layer images
-    let images = [];
+    // Extract only clean URLs, removing any metadata
+    let imageUrls = [];
     if (data.images && Array.isArray(data.images)) {
-      images = data.images.map(img => typeof img === 'string' ? { url: img } : img);
+      imageUrls = data.images.map(img => {
+        if (typeof img === 'string') {
+          return img;
+        } else if (img && img.url) {
+          return img.url;
+        }
+        return null;
+      }).filter(url => url !== null);
     } else if (data.image && typeof data.image === 'string') {
-      images = [{ url: data.image }];
+      imageUrls = [data.image];
     } else if (data.url && typeof data.url === 'string') {
-      images = [{ url: data.url }];
+      imageUrls = [data.url];
     }
     
-    if (images.length > 0) {
+    if (imageUrls.length > 0) {
       logger.info('Layer extraction successful', {
-        layerCount: images.length,
+        layerCount: imageUrls.length,
         userId: req.user?.userId,
         email: req.user?.email,
         walletAddress: req.user?.walletAddress
       });
+      // Return only clean URLs, no metadata
       res.json({ 
         success: true, 
-        images: images,
-        seed: data.seed,
-        timings: data.timings,
-        has_nsfw_concepts: data.has_nsfw_concepts
+        images: imageUrls
       });
     } else {
       logger.error('No layers in AI service response', { service: 'fal.ai' });

@@ -100,6 +100,41 @@ const ImageGallery = () => {
   // Show all items (no filtering)
   const filteredHistory = galleryItems;
 
+  // Helper function to strip metadata from image by converting through canvas
+  const stripImageMetadata = (imageUrl) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          
+          // Convert to blob without metadata
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Failed to convert image to blob'));
+            }
+          }, 'image/png');
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      img.onerror = () => {
+        reject(new Error('Failed to load image'));
+      };
+      
+      img.src = imageUrl;
+    });
+  };
+
   const handleDownload = async (url, styleName, isVideo = false) => {
     if (!url) return;
     
@@ -117,9 +152,15 @@ const ImageGallery = () => {
       };
       const filename = getNextSeisoFilename();
 
-      // Fetch the file as a blob to handle CORS issues
-      const response = await fetch(url);
-      const blob = await response.blob();
+      let blob;
+      if (isVideo) {
+        // For videos, fetch as-is (can't strip metadata from videos easily)
+        const response = await fetch(url);
+        blob = await response.blob();
+      } else {
+        // For images, strip metadata by converting through canvas
+        blob = await stripImageMetadata(url);
+      }
       
       // Create a blob URL
       const blobUrl = window.URL.createObjectURL(blob);
@@ -161,7 +202,32 @@ const ImageGallery = () => {
       }
     } catch (error) {
       logger.error('Download failed:', { error: error.message, url });
-      // Fallback to opening in new tab
+      // Fallback: for images, try to strip metadata; for videos, direct download
+      if (!isVideo) {
+        try {
+          const cleanBlob = await stripImageMetadata(url);
+          const blobUrl = window.URL.createObjectURL(cleanBlob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          try {
+            const key = 'seiso_download_index';
+            const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+            const next = current + 1;
+            localStorage.setItem(key, String(next));
+            link.download = `seiso${next}.png`;
+          } catch (_) {
+            link.download = `seiso${Date.now()}.png`;
+          }
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => window.URL.revokeObjectURL(blobUrl), 100);
+          return;
+        } catch (fallbackError) {
+          logger.error('Fallback download failed:', { error: fallbackError.message });
+        }
+      }
+      // Final fallback: direct link
       const link = document.createElement('a');
       link.href = url;
       try {

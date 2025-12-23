@@ -49,6 +49,41 @@ const ImageOutput = () => {
   const [newPrompt, setNewPrompt] = useState('');
   const [selectedModel, setSelectedModel] = useState(null); // Model selected in modal
 
+  // Helper function to strip metadata from image by converting through canvas
+  const stripImageMetadata = (imageUrl) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          
+          // Convert to blob without metadata
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Failed to convert image to blob'));
+            }
+          }, 'image/png');
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      img.onerror = () => {
+        reject(new Error('Failed to load image'));
+      };
+      
+      img.src = imageUrl;
+    });
+  };
+
   const handleDownload = async (imageUrl = null) => {
     const imageToDownload = imageUrl || generatedImage;
     if (!imageToDownload || isDownloading) return;
@@ -69,12 +104,11 @@ const ImageOutput = () => {
       };
       const filename = getNextSeisoFilename();
 
-      // Fetch the image as a blob to handle CORS issues
-      const response = await fetch(imageToDownload);
-      const blob = await response.blob();
+      // Strip metadata by converting through canvas
+      const cleanBlob = await stripImageMetadata(imageToDownload);
       
-      // Create a blob URL
-      const blobUrl = window.URL.createObjectURL(blob);
+      // Create a blob URL from the clean image
+      const blobUrl = window.URL.createObjectURL(cleanBlob);
       
       // Detect iOS
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -113,22 +147,28 @@ const ImageOutput = () => {
       }
     } catch (error) {
       logger.error('Download failed:', { error: error.message });
-      // Fallback to opening image in new tab for iOS
-      const link = document.createElement('a');
-      link.href = imageToDownload;
+      // Fallback: try to strip metadata and download
       try {
-        const key = 'seiso_download_index';
-        const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
-        const next = current + 1;
-        localStorage.setItem(key, String(next));
-        link.download = `seiso${next}.png`;
-      } catch (_) {
-        link.download = `seiso${Date.now()}.png`;
+        const cleanBlob = await stripImageMetadata(imageToDownload);
+        const blobUrl = window.URL.createObjectURL(cleanBlob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        try {
+          const key = 'seiso_download_index';
+          const current = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+          const next = current + 1;
+          localStorage.setItem(key, String(next));
+          link.download = `seiso${next}.png`;
+        } catch (_) {
+          link.download = `seiso${Date.now()}.png`;
+        }
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 100);
+      } catch (fallbackError) {
+        logger.error('Fallback download failed:', { error: fallbackError.message });
       }
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
     } finally {
       setIsDownloading(false);
     }
