@@ -210,14 +210,25 @@ const AuthPrompt = () => {
                 textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
               }}>
                 <Sparkles className="w-3 h-3" style={{ color: '#000000' }} />
-                How It Works
+                How to Use
               </h2>
-              <div className="space-y-1 text-[10px]" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
-                <div><strong>1.</strong> Upload (0=new, 1=edit, 2+=blend)</div>
-                <div><strong>2.</strong> Select model (FLUX, Nano Banana Pro, or Qwen)</div>
-                <div><strong>3.</strong> Enter prompt (optional, not needed for Qwen)</div>
-                <div><strong>4.</strong> Choose style (optional, not needed for Qwen)</div>
-                <div><strong>5.</strong> Click Generate (or Extract Layers for Qwen)</div>
+              <div className="space-y-0.5 text-[10px] leading-tight" style={{ color: '#000000' }}>
+                <div className="flex items-start gap-1">
+                  <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>1.</span>
+                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Text to Image:</strong> Type a description, choose a style (optional), and click Generate.</span>
+                </div>
+                <div className="flex items-start gap-1">
+                  <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>2.</span>
+                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>With Reference Image:</strong> Upload 1 image, add a prompt describing changes, and click Generate.</span>
+                </div>
+                <div className="flex items-start gap-1">
+                  <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>3.</span>
+                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Multiple Reference Images:</strong> Upload 2+ images, select FLUX or Nano Banana Pro, and click Generate to blend them.</span>
+                </div>
+                <div className="flex items-start gap-1">
+                  <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>4.</span>
+                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Layer Extract:</strong> Upload an image, select Qwen model, and click "Extract Layers" to separate into individual layers.</span>
+                </div>
               </div>
             </div>
           </div>
