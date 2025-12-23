@@ -319,6 +319,9 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     if (multiImageModel === 'nano-banana-pro') {
       // Nano Banana Pro works for prompt-only, single, and multiple images
       model = 'nano-banana-pro';
+    } else if (!hasRefImage && multiImageModel === 'flux') {
+      // FLUX for text-to-image generation
+      model = 'flux';
     }
 
     // Call backend endpoint which checks credits before making external API call

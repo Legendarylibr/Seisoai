@@ -270,7 +270,9 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
                     <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                       {hasReferenceImages ? 'Describe Changes' : 'Prompt'}
                     </span>
-                    <span className="text-xs" style={{ color: '#666666', fontStyle: 'italic' }}>(optional)</span>
+                    {hasReferenceImages && (
+                      <span className="text-xs" style={{ color: '#666666', fontStyle: 'italic' }}>(optional)</span>
+                    )}
                     {!hasReferenceImages && multiImageModel === 'nano-banana-pro' && (
                       <span className="text-xs font-bold ml-1 px-1.5 py-0.5 rounded" style={{ 
                         background: 'linear-gradient(to bottom, #ffffcc, #ffffaa, #ffff99)',

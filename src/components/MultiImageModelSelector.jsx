@@ -61,8 +61,11 @@ const MultiImageModelSelector = () => {
   const labels = getModelLabels();
   const isFluxSelected = multiImageModel === labels.currentFluxModel || (!multiImageModel && labels.currentFluxModel);
   
-  // When no images, only show nano-banana-pro for prompt-only generation
+  // When no images, show FLUX and nano-banana-pro for prompt-only generation
   if (!hasImages) {
+    const isFluxSelectedForTextToImage = multiImageModel === 'flux' || !multiImageModel;
+    const isNanoBananaProSelected = multiImageModel === 'nano-banana-pro';
+    
     return (
       <div className="space-y-1.5 p-2 rounded" style={{ 
         background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
@@ -81,11 +84,11 @@ const MultiImageModelSelector = () => {
           <button
             type="button"
             onClick={() => {
-              logger.debug('Selected Nano Banana Pro model');
-              setMultiImageModel('nano-banana-pro');
+              logger.debug('Selected FLUX model for text-to-image');
+              setMultiImageModel('flux');
             }}
             className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all min-w-[80px]"
-            style={multiImageModel === 'nano-banana-pro' ? {
+            style={isFluxSelectedForTextToImage ? {
               background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
               border: '2px inset #c0c0c0',
               boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
@@ -99,13 +102,53 @@ const MultiImageModelSelector = () => {
               textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
             }}
             onMouseEnter={(e) => {
-              if (multiImageModel !== 'nano-banana-pro') {
+              if (!isFluxSelectedForTextToImage) {
                 e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
                 e.currentTarget.style.border = '2px outset #f8f8f8';
               }
             }}
             onMouseLeave={(e) => {
-              if (multiImageModel !== 'nano-banana-pro') {
+              if (!isFluxSelectedForTextToImage) {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                e.currentTarget.style.border = '2px outset #f0f0f0';
+              }
+            }}
+          >
+            <Zap className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-xs font-bold">FLUX</span>
+              <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Generate</span>
+              <span className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>1 credit</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              logger.debug('Selected Nano Banana Pro model');
+              setMultiImageModel('nano-banana-pro');
+            }}
+            className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all min-w-[80px]"
+            style={isNanoBananaProSelected ? {
+              background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
+              border: '2px inset #c0c0c0',
+              boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
+              color: '#000000',
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+            } : {
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+              color: '#000000',
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+            }}
+            onMouseEnter={(e) => {
+              if (!isNanoBananaProSelected) {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                e.currentTarget.style.border = '2px outset #f8f8f8';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isNanoBananaProSelected) {
                 e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
                 e.currentTarget.style.border = '2px outset #f0f0f0';
               }
@@ -121,9 +164,11 @@ const MultiImageModelSelector = () => {
         </div>
         <div className="pt-1 border-t" style={{ borderColor: '#d0d0d0' }}>
           <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
-            {multiImageModel === 'nano-banana-pro' 
+            {isNanoBananaProSelected
               ? '✨ Generate - Advanced text-to-image generation with better quality and reasoning'
-              : '✨ Select Nano Banana Pro for advanced text-to-image generation'}
+              : isFluxSelectedForTextToImage
+              ? '⚡ Generate - Fast text-to-image generation'
+              : '⚡ Select FLUX or Nano Banana Pro for text-to-image generation'}
           </p>
         </div>
       </div>
