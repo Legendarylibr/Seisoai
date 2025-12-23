@@ -84,11 +84,71 @@ app.use(helmet({
       frameSrc: ["'self'", "https://js.stripe.com", "https://checkout.stripe.com", "https://hooks.stripe.com"],
     },
   },
-  crossOriginEmbedderPolicy: false
+  crossOriginEmbedderPolicy: false,
+  // Hide server information from headers
+  hidePoweredBy: true,
+  // Prevent information leakage through referrer
+  referrerPolicy: {
+    policy: "strict-origin-when-cross-origin"
+  },
+  // Additional security headers
+  xssFilter: true,
+  noSniff: true,
+  frameguard: {
+    action: 'sameorigin'
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
 }));
 
 // Compression middleware
 app.use(compression());
+
+// Additional security headers to prevent information leakage
+app.use((req, res, next) => {
+  // Remove any server identification headers
+  res.removeHeader('X-Powered-By');
+  res.removeHeader('Server');
+  
+  // Prevent information leakage through referrer
+  if (!res.getHeader('Referrer-Policy')) {
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  }
+  
+  // Prevent MIME type sniffing
+  if (!res.getHeader('X-Content-Type-Options')) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+  
+  // XSS Protection (legacy but still useful)
+  if (!res.getHeader('X-XSS-Protection')) {
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+  }
+  
+  // Permissions Policy (formerly Feature Policy)
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  
+  // Don't expose API endpoints in error responses
+  // This prevents crawlers from discovering endpoints through error messages
+  const originalJson = res.json;
+  res.json = function(data) {
+    // Sanitize error responses in production
+    if (process.env.NODE_ENV === 'production' && data && typeof data === 'object') {
+      if (data.error && typeof data.error === 'string') {
+        // Remove any API endpoint references from error messages
+        data.error = data.error.replace(/\/api\/[^\s]+/g, '[endpoint]');
+        // Remove any file paths
+        data.error = data.error.replace(/\/[^\s]+\.[a-z]+/gi, '[file]');
+      }
+    }
+    return originalJson.call(this, data);
+  };
+  
+  next();
+});
 
 
 // Input validation utilities
@@ -1502,7 +1562,7 @@ app.post('/api/wan-animate/submit', wanSubmitLimiter, requireCredits(2), async (
       });
       return res.status(response.status).json({ 
         success: false, 
-        error: `API response parse error: ${responseText.substring(0, 200)}` 
+        error: getSafeErrorMessage(new Error('API response parse error'), 'Failed to parse API response. Please try again.') 
       });
     }
     
@@ -1781,9 +1841,10 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
           apiKeyPrefix: FAL_API_KEY ? FAL_API_KEY.substring(0, 10) + '...' : 'none',
           apiKeyStartsWith: FAL_API_KEY ? (FAL_API_KEY.startsWith('fal_') ? 'fal_' : 'other') : 'none'
         });
+        // Don't expose API key details or configuration info
         return res.status(401).json({ 
           success: false, 
-          error: `FAL_API_KEY authentication failed (${response.status}). ${errorMessage}. Please check your FAL_API_KEY in backend.env - it should start with 'fal_' and be a valid fal.ai API key.`
+          error: getSafeErrorMessage(new Error('API authentication failed'), 'Authentication failed. Please contact support.')
         });
       }
       
@@ -2074,9 +2135,10 @@ app.get('/api/wan-animate/status/:requestId', wanStatusLimiter, async (req, res)
           responseText: responseText.substring(0, 200),
           url
         });
+        // Don't expose external API response details - use safe error message
         return res.status(405).json({ 
           success: false, 
-          error: `Method not allowed. The API endpoint may have changed. Response: ${responseText.substring(0, 200)}` 
+          error: getSafeErrorMessage(new Error('Method not allowed'), 'The API endpoint may have changed. Please try again later.')
         });
       }
       
@@ -2133,7 +2195,7 @@ app.get('/api/wan-animate/status/:requestId', wanStatusLimiter, async (req, res)
       });
       return res.status(500).json({ 
         success: false, 
-        error: `Invalid JSON response from Wan-animate API: ${parseError.message}. Response: ${responseText.substring(0, 200)}` 
+        error: getSafeErrorMessage(parseError, 'Invalid JSON response from API. Please try again.') 
       });
     }
 
@@ -2230,9 +2292,10 @@ app.get('/api/wan-animate/result/:requestId', wanResultLimiter, async (req, res)
           responseText: responseText.substring(0, 200),
           url
         });
+        // Don't expose external API response details - use safe error message
         return res.status(405).json({ 
           success: false, 
-          error: `Method not allowed. The API endpoint may have changed. Response: ${responseText.substring(0, 200)}` 
+          error: getSafeErrorMessage(new Error('Method not allowed'), 'The API endpoint may have changed. Please try again later.')
         });
       }
       
@@ -2328,7 +2391,7 @@ app.get('/api/wan-animate/result/:requestId', wanResultLimiter, async (req, res)
       });
       return res.status(500).json({ 
         success: false, 
-        error: `Invalid JSON response from Wan-animate API: ${parseError.message}. Response: ${responseText.substring(0, 200)}` 
+        error: getSafeErrorMessage(parseError, 'Invalid JSON response from API. Please try again.') 
       });
     }
 
@@ -4036,6 +4099,21 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
 // API Routes
 
 /**
+ * Serve robots.txt to prevent crawlers from indexing sensitive endpoints
+ * This should be served before other routes to ensure crawlers can find it
+ */
+app.get('/robots.txt', (req, res) => {
+  const robotsPath = path.join(__dirname, '..', 'public', 'robots.txt');
+  res.type('text/plain');
+  res.sendFile(robotsPath, (err) => {
+    if (err) {
+      // If file doesn't exist, send a basic robots.txt
+      res.send('User-agent: *\nDisallow: /api/\n');
+    }
+  });
+});
+
+/**
  * Health check - Railway compatible
  * Always returns 200 as long as the server is running
  * Database connection status is informational only
@@ -4047,51 +4125,42 @@ app.get('/api/health', (req, res) => {
     const dbState = mongoose.connection.readyState;
     const dbStatus = dbState === 1 ? 'connected' : dbState === 2 ? 'connecting' : 'disconnected';
     
-    // Get CORS configuration (synchronous)
-    const allowedOriginsList = process.env.ALLOWED_ORIGINS 
-      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-      : [];
-    
-    // Check critical environment variables for signup
+    // Check critical environment variables for signup (but don't expose which ones are missing)
     const criticalVars = {
       MONGODB_URI: !!process.env.MONGODB_URI,
       JWT_SECRET: !!process.env.JWT_SECRET,
       SESSION_SECRET: !!process.env.SESSION_SECRET
     };
-    const missingCritical = Object.entries(criticalVars)
-      .filter(([_, exists]) => !exists)
-      .map(([name]) => name);
+    const hasAllCritical = Object.values(criticalVars).every(v => v);
     
+    // Minimal health response - don't expose sensitive configuration details
     const health = {
-      status: missingCritical.length > 0 ? 'degraded' : 'healthy',
+      status: hasAllCritical && dbState === 1 ? 'healthy' : 'degraded',
       timestamp: new Date().toISOString(),
-      signupAvailable: dbState === 1 && criticalVars.MONGODB_URI && criticalVars.JWT_SECRET,
-      missingEnvVars: missingCritical.length > 0 ? missingCritical : undefined,
-      uptime: process.uptime(),
-      environment: process.env.NODE_ENV || 'development',
-      database: dbStatus,
-      port: process.env.PORT || 3001,
-      version: '1.0.0',
-      cors: {
-        allowedOriginsCount: allowedOriginsList.length,
-        allowedOrigins: allowedOriginsList.length > 0 ? allowedOriginsList : ['localhost (any port)', 'any origin (ALLOWED_ORIGINS not set)'],
-        credentials: true
-      }
+      // Only expose basic status, not detailed configuration
+      database: dbStatus === 'connected' ? 'connected' : 'disconnected',
+      // Don't expose: environment, port, version, CORS config, missing env vars, etc.
     };
     
-    // Always return 200 - server is healthy if it can respond
-    // Database connection can happen asynchronously and shouldn't fail healthcheck
-    res.status(200).json(health);
+    // In production, return even less information
+    if (process.env.NODE_ENV === 'production') {
+      // Ultra-minimal response for production
+      res.status(200).json({
+        status: health.status,
+        timestamp: health.timestamp
+      });
+    } else {
+      // Development can have slightly more info, but still sanitized
+      res.status(200).json(health);
+    }
   } catch (error) {
     // Even if there's an error, try to return something
     // This ensures Railway knows the server is running
     logger.error('Health check error:', error);
     res.status(200).json({
       status: 'healthy',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      note: 'Health check had minor error but server is running',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      timestamp: new Date().toISOString()
+      // Don't expose error details or uptime in production
     });
   }
 });
@@ -4102,13 +4171,27 @@ app.get('/api/health', (req, res) => {
  * This endpoint itself validates CORS, so you can see if your origin is allowed
  */
 app.get('/api/cors-info', (req, res) => {
+  // Security: Don't expose sensitive CORS configuration details
+  // Only return minimal information about current request
+  const origin = req.headers.origin;
+  
+  // In production, return minimal info only
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(200).json({
+      message: 'CORS validation is working',
+      currentRequest: {
+        hasOrigin: !!origin,
+        // Don't expose actual origin or validation details
+      }
+    });
+  }
+  
+  // Development mode can have slightly more info for debugging, but still sanitized
   const allowedOriginsList = process.env.ALLOWED_ORIGINS 
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
     : [];
   
-  const origin = req.headers.origin;
   let wouldBeAllowed = 'unknown';
-  let validationDetails = {};
   
   if (!origin) {
     wouldBeAllowed = 'yes (no origin - handled by middleware)';
@@ -4125,42 +4208,27 @@ app.get('/api/cors-info', (req, res) => {
     if (isLocalhost) {
       wouldBeAllowed = 'yes (localhost - always allowed)';
     } else if (allowedOriginsList.length === 0) {
-      wouldBeAllowed = 'yes (ALLOWED_ORIGINS not set - permissive mode)';
+      wouldBeAllowed = 'yes (permissive mode)';
     } else if (isAllowedOrigin) {
       wouldBeAllowed = 'yes (in allowed list)';
     } else {
       wouldBeAllowed = 'no (not in allowed list)';
     }
-    
-    validationDetails = {
-      isLocalhost,
-      isAllowedOrigin,
-      originLower,
-      checkedAgainst: allowedOriginsList
-    };
   }
   
+  // In development, return structure compatible with test scripts but don't expose raw env vars
   const corsInfo = {
     environment: process.env.NODE_ENV || 'development',
     allowedOrigins: {
-      raw: process.env.ALLOWED_ORIGINS || 'not set',
-      parsed: allowedOriginsList,
+      // Don't expose raw ALLOWED_ORIGINS value, but provide count and mode for debugging
       count: allowedOriginsList.length,
       mode: allowedOriginsList.length === 0 ? 'permissive (allows any origin)' : 'restrictive (only listed origins)',
-      note: allowedOriginsList.length === 0 
-        ? '⚠️ WARNING: ALLOWED_ORIGINS not set - allowing ALL origins (not recommended for production)'
-        : '✅ ALLOWED_ORIGINS is set - only listed origins are allowed'
+      // Only show parsed list in development, not the raw env var
+      parsed: allowedOriginsList.length > 0 ? allowedOriginsList : []
     },
-    localhost: {
-      allowed: true,
-      note: 'localhost and 127.0.0.1 are always allowed on any port'
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     currentRequest: {
-      origin: origin || 'no origin header',
-      wouldBeAllowed,
-      validationDetails
+      hasOrigin: !!origin,
+      wouldBeAllowed
     },
     verification: {
       message: 'If you can see this response, CORS validation is working!',
