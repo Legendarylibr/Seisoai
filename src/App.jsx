@@ -167,7 +167,7 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
             <p className="text-xs md:text-sm" style={{ 
               color: '#ffffff', 
               textShadow: '3px 3px 0 rgba(0, 0, 0, 0.8), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.5)'
-            }}>Create and edit stunning AI-generated images</p>
+            }}>Generate, edit, and extract images by layer</p>
           </div>
 
         {/* User Info - Email or Wallet */}
