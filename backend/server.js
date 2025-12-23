@@ -7298,131 +7298,7 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
     const availableCredits = user.credits || 0;
     const creditsToDeduct = creditsUsed || 1; // Default to 1 credit if not specified
     
-    // Check if user is eligible for credits (based on IP usage and global limits)
-    const clientIP = extractClientIP(req);
-    let ipFreeImageRecord = await IPFreeImage.findOne({ ipAddress: clientIP });
-    if (!ipFreeImageRecord) {
-      ipFreeImageRecord = new IPFreeImage({
-        ipAddress: clientIP,
-        freeImagesUsed: 0
-      });
-      await ipFreeImageRecord.save();
-    }
-    
-    const freeImagesUsedFromIP = ipFreeImageRecord.freeImagesUsed || 0;
-    
-    // Check if user is NFT holder (has ANY NFTs - not counting how many)
-    const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-    const maxFreeImages = isNFTHolder ? MAX_FREE_IMAGES_PER_IP_NFT : MAX_FREE_IMAGES_PER_IP_REGULAR;
-    const creditsToAdd = isNFTHolder ? 5 : 2; // NFT holders get 5 credits, regular users get 2
-    
-    // Check global credit cap (drainable pools)
-    let isEligibleForCredits = false;
-    if (freeImagesUsedFromIP < maxFreeImages) {
-      // Get or create global counter
-      let globalCounter = await GlobalFreeImage.findOne({ key: 'global' });
-      if (!globalCounter) {
-        globalCounter = new GlobalFreeImage({ 
-          key: 'global', 
-          totalFreeImagesUsed: 0,
-          totalFreeImagesUsedNFT: 0
-        });
-        await globalCounter.save();
-      }
-      
-      if (!isNFTHolder) {
-        // Check global cap for non-NFT holders
-        const totalFreeImagesUsed = globalCounter.totalFreeImagesUsed || 0;
-        if (totalFreeImagesUsed < MAX_GLOBAL_FREE_IMAGES) {
-          isEligibleForCredits = true;
-        }
-      } else {
-        // Check global cap for NFT holders
-        const totalFreeImagesUsedNFT = globalCounter.totalFreeImagesUsedNFT || 0;
-        if (totalFreeImagesUsedNFT < MAX_GLOBAL_FREE_IMAGES_NFT) {
-          isEligibleForCredits = true;
-        }
-      }
-    }
-    
-    logger.debug('Checking credits for generation', {
-      userId: user.userId,
-      email: user.email,
-      walletAddress: user.walletAddress,
-      credits: user.credits,
-      totalCreditsEarned: user.totalCreditsEarned,
-      availableCredits,
-      creditsToDeduct,
-      clientIP,
-      freeImagesUsedFromIP,
-      maxFreeImages,
-      isNFTHolder,
-      isEligibleForCredits,
-      creditsToAdd
-    });
-    
-    // If user has insufficient credits and is eligible, add credits to their account
-    if (availableCredits < creditsToDeduct && isEligibleForCredits) {
-      // Build query for user update
-      let updateQuery;
-      if (user.walletAddress) {
-        const isSolanaAddress = !user.walletAddress.startsWith('0x');
-        const normalizedWalletAddress = isSolanaAddress ? user.walletAddress : user.walletAddress.toLowerCase();
-        updateQuery = { walletAddress: normalizedWalletAddress };
-      } else if (user.userId) {
-        updateQuery = { userId: user.userId };
-      } else if (user.email) {
-        updateQuery = { email: user.email.toLowerCase() };
-      }
-      
-      // Add credits to user account
-      await User.findOneAndUpdate(
-        updateQuery,
-        { $inc: { credits: creditsToAdd } },
-        { new: true }
-      );
-      
-      // Update IP usage counter
-      await IPFreeImage.findOneAndUpdate(
-        { ipAddress: clientIP },
-        { 
-          $inc: { freeImagesUsed: 1 },
-          $set: { lastUsed: new Date() }
-        },
-        { upsert: true, new: true }
-      );
-      
-      // Update global counter
-      if (!isNFTHolder) {
-        await GlobalFreeImage.findOneAndUpdate(
-          { key: 'global' },
-          { $inc: { totalFreeImagesUsed: 1 } },
-          { upsert: true, new: true }
-        );
-      } else {
-        await GlobalFreeImage.findOneAndUpdate(
-          { key: 'global' },
-          { $inc: { totalFreeImagesUsedNFT: 1 } },
-          { upsert: true, new: true }
-        );
-      }
-      
-      // Refetch user to get updated credits
-      const updatedUser = await User.findOne(updateQuery);
-      user.credits = updatedUser?.credits || user.credits;
-      availableCredits = user.credits || 0;
-      
-      logger.info('Credits added to account', {
-        userId: user.userId,
-        email: user.email,
-        walletAddress: user.walletAddress,
-        creditsAdded: creditsToAdd,
-        newCredits: availableCredits,
-        isNFTHolder
-      });
-    }
-    
-    // Check if user has enough credits after potential credit addition
+    // Check if user has enough credits - generation only proceeds if they have proper number of credits
     if (availableCredits < creditsToDeduct) {
       logger.warn('Insufficient credits for generation', {
         userId: user.userId,
@@ -7435,6 +7311,24 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
       return res.status(400).json({
         success: false,
         error: `Insufficient credits. You have ${availableCredits} credits but need ${creditsToDeduct}`
+      });
+    }
+    
+    // Build query for user update
+    // SECURITY: Build query using authenticated user's identifier
+    let updateQuery;
+    if (user.walletAddress) {
+      const isSolanaAddress = !user.walletAddress.startsWith('0x');
+      const normalizedWalletAddress = isSolanaAddress ? user.walletAddress : user.walletAddress.toLowerCase();
+      updateQuery = { walletAddress: normalizedWalletAddress };
+    } else if (user.userId) {
+      updateQuery = { userId: user.userId };
+    } else if (user.email) {
+      updateQuery = { email: user.email.toLowerCase() };
+    } else {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User account must have wallet address, userId, or email' 
       });
     }
 
@@ -7480,22 +7374,6 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
     // Use atomic update to do BOTH credit deduction AND add generation in one operation
     // This prevents race conditions and ensures credits are always deducted
     // DO NOT call user.save() after this - it would overwrite the atomic update!
-    // SECURITY: Build query using authenticated user's identifier
-    let updateQuery;
-    if (user.walletAddress) {
-      const isSolanaAddress = !user.walletAddress.startsWith('0x');
-      const normalizedWalletAddress = isSolanaAddress ? user.walletAddress : user.walletAddress.toLowerCase();
-      updateQuery = { walletAddress: normalizedWalletAddress };
-    } else if (user.userId) {
-      updateQuery = { userId: user.userId };
-    } else if (user.email) {
-      updateQuery = { email: user.email.toLowerCase() };
-    } else {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'User account must have wallet address, userId, or email' 
-      });
-    }
     
     logger.debug('Executing atomic update', {
       updateQuery,
