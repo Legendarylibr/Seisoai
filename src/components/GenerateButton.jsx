@@ -207,19 +207,31 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         controlNetImage
       );
 
-      // Handle both single image (string) and multiple images (array)
-      const isArray = Array.isArray(imageResult);
-      const imageUrl = isArray ? imageResult[0] : imageResult;
+      // Extract images and credits from response (always returns object with images array)
+      if (!imageResult || typeof imageResult !== 'object' || !Array.isArray(imageResult.images)) {
+        throw new Error('Invalid response format from generation service');
+      }
       
-      // Ensure we have a valid image URL or array
-      if (!imageResult || (typeof imageResult !== 'string' && !Array.isArray(imageResult))) {
-        throw new Error('No image URL returned from generation service');
+      const imageUrls = imageResult.images;
+      const imageUrl = imageUrls[0];
+      const remainingCredits = imageResult.remainingCredits;
+      
+      // Update credits immediately from generate response (credits already deducted in backend)
+      if (remainingCredits !== undefined && setCreditsManually) {
+        setCreditsManually(remainingCredits);
+        logger.debug('Credits updated from generate response', { remainingCredits });
+      } else if (refreshCredits) {
+        // Fallback: refresh if manual update not available
+        if (isEmailAuth || address) {
+          await refreshCredits();
+        }
       }
 
       logger.info('Image generation completed successfully', { 
         hasImageUrl: !!imageUrl,
-        isMultiple: isArray,
-        imageCount: isArray ? imageResult.length : 1
+        isMultiple: imageUrls.length > 1,
+        imageCount: imageUrls.length,
+        remainingCredits
       });
       
       // Clear any existing errors since image generation succeeded
@@ -228,75 +240,32 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       setCurrentStep('Complete!');
       setProgress(100); // Complete the progress bar
       
-      // Save generation to backend and deduct credits IMMEDIATELY after image is returned
-      // This happens automatically - no manual trigger needed
-      // Use wallet address if available, otherwise use userId for email users
+      // Save generation to history (credits already deducted in /api/generate/image)
       const userIdentifier = isEmailAuth 
         ? (emailContext.linkedWalletAddress || emailContext.userId) 
         : address;
       
-      // Calculate credits based on model selection
+      // Calculate credits used for history (matches backend deduction logic)
       const hasImages = !!controlNetImage;
       const isMultipleImages = Array.isArray(controlNetImage) && controlNetImage.length >= 2;
       const isNanoBananaPro = hasImages && multiImageModel === 'nano-banana-pro';
-      const isQwen = hasImages && multiImageModel === 'qwen-image-layered';
-      const creditsUsed = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro ($0.20), 1 for others (FLUX and Qwen)
+      const creditsUsed = isNanoBananaPro ? 2 : 1;
       
-      logger.debug('Saving generation and deducting credits', { 
-        userIdentifier, 
-        isEmailAuth, 
-        currentCredits: availableCredits,
-        creditsUsed,
-        model: isQwen ? 'qwen-image-layered' : (isNanoBananaPro ? 'nano-banana-pro' : 'flux')
-      });
-      
-      let deductionResult = null;
       try {
-        // Use trimmed prompt for saving, or fallback to style prompt if no custom prompt
         const promptForHistory = getPromptForDisplay(trimmedPrompt, selectedStyle);
         
-        deductionResult = await addGeneration(userIdentifier, {
+        await addGeneration(userIdentifier, {
           prompt: promptForHistory,
           style: selectedStyle ? selectedStyle.name : 'No Style',
           imageUrl,
-          creditsUsed: creditsUsed, // Dynamic credits based on model
-          userId: isEmailAuth ? emailContext.userId : undefined, // Include userId for email users
-          email: isEmailAuth ? emailContext.email : undefined // Include email for email users
+          creditsUsed, // For history tracking only
+          userId: isEmailAuth ? emailContext.userId : undefined,
+          email: isEmailAuth ? emailContext.email : undefined
         });
-        logger.info('Generation saved and credits deducted', {
-          success: deductionResult.success,
-          remainingCredits: deductionResult.remainingCredits,
-          address
-        });
-        
-        // Update UI immediately with the remaining credits from the response
-        if (deductionResult.remainingCredits !== undefined && setCreditsManually) {
-          logger.debug('Updating UI credits', { remainingCredits: deductionResult.remainingCredits });
-          setCreditsManually(deductionResult.remainingCredits);
-        }
-        
-        // Force immediate credit refresh to ensure UI is in sync with backend
-        // Check if refreshCredits is available (works for both wallet and email)
-        if (refreshCredits) {
-          // For email users, refreshCredits might not need address
-          if (isEmailAuth) {
-            // Email context should handle refresh internally
-            await refreshCredits();
-          } else if (address) {
-            // Wallet users need address
-            await refreshCredits();
-          }
-          logger.info('Credits refreshed after generation', { 
-            address: address || emailContext.userId 
-          });
-        } else {
-          logger.warn('Cannot refresh credits - refreshCredits function not available');
-        }
+        logger.debug('Generation saved to history');
       } catch (error) {
-        logger.error('Error saving generation', { error: error.message, address });
-        // Don't set error if image was successfully generated - just log it
-        // The image will still be displayed, and credits will be deducted on next refresh
-        // Setting an error here would cause the flash of error screen
+        logger.error('Error saving generation to history', { error: error.message });
+        // Don't fail - image was already generated successfully
       }
       
       // Wait a moment to show completion, then set the image and stop loading
@@ -306,8 +275,8 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       }
       
       timeoutRef.current = setTimeout(() => {
-        // Pass the result (array or string) to setGeneratedImage
-        setGeneratedImage(imageResult);
+        // Pass the image(s) to setGeneratedImage (handle both single and multiple)
+        setGeneratedImage(imageUrls.length > 1 ? imageUrls : imageUrl);
         setIsLoading(false);
         
         // Store current generation details for explain/regenerate functionality

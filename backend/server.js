@@ -1807,11 +1807,7 @@ const requireCreditsForModel = () => {
 // Apply free image rate limiter to image generation endpoint
 app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), async (req, res) => {
   try {
-    if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
-    }
-
-    // Get user and required credits from middleware
+    // Deduct credits IMMEDIATELY when user clicks generate (first thing, before any other processing)
     const user = req.user;
     const creditsToDeduct = req.requiredCredits || 1;
     
@@ -1824,7 +1820,7 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       });
     }
     
-    // Deduct credits immediately when user clicks generate (before API call)
+    // Deduct credits immediately (atomic operation)
     const previousCredits = user.credits || 0;
     const updateResult = await User.findOneAndUpdate(
       updateQuery,
@@ -1846,12 +1842,17 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       updateResult.credits = 0;
     }
     
-    logger.info('Credits deducted', {
+    logger.info('Credits deducted immediately on generate click', {
       userId: user.userId,
       creditsDeducted: creditsToDeduct,
       previousCredits,
       remainingCredits: updateResult.credits
     });
+    
+    // Now check API key and proceed with generation
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
+    }
 
     const {
       prompt,
@@ -2069,10 +2070,16 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
         imageCount: imageUrls.length,
         userId: req.user?.userId,
         email: req.user?.email,
-        walletAddress: req.user?.walletAddress
+        walletAddress: req.user?.walletAddress,
+        remainingCredits: updateResult.credits
       });
-      // Return only clean URLs, no metadata
-      res.json({ success: true, images: imageUrls });
+      // Return images and remaining credits (credits already deducted)
+      res.json({ 
+        success: true, 
+        images: imageUrls,
+        remainingCredits: updateResult.credits,
+        creditsDeducted: creditsToDeduct
+      });
     } else {
       logger.error('No images in AI service response', { 
         service: 'fal.ai',
@@ -3273,149 +3280,22 @@ function requireCredits(requiredCredits = 1) {
         });
       }
       
-      // Check if user has enough credits OR if they're eligible for free images based on IP
+      // Check if user has enough credits (generation ALWAYS requires credits)
+      // Credits displayed on screen = user.credits (this is what we check)
       const availableCredits = user.credits || 0;
-      const clientIP = extractClientIP(req);
       
-      // Check IP-based free image usage (prevents abuse across multiple accounts)
-      let ipFreeImageRecord = await IPFreeImage.findOne({ ipAddress: clientIP });
-      if (!ipFreeImageRecord) {
-        ipFreeImageRecord = new IPFreeImage({
-          ipAddress: clientIP,
-          freeImagesUsed: 0
-        });
-        await ipFreeImageRecord.save();
-      }
-      
-      const freeImagesUsedFromIP = ipFreeImageRecord.freeImagesUsed || 0;
-      
-      // Check if user is NFT holder (has ANY NFTs - not counting how many)
-      // NFT holders get 5 free images TOTAL per IP, not 5 per NFT
-      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-      const maxFreeImages = isNFTHolder ? MAX_FREE_IMAGES_PER_IP_NFT : MAX_FREE_IMAGES_PER_IP_REGULAR;
-      
-      // Check global free image cap (drainable pools)
-      let isEligibleForFreeImage = false;
-      if (requiredCredits === 1 && freeImagesUsedFromIP < maxFreeImages) {
-        // Get or create global free image counter
-        let globalCounter = await GlobalFreeImage.findOne({ key: 'global' });
-        if (!globalCounter) {
-          globalCounter = new GlobalFreeImage({ 
-            key: 'global', 
-            totalFreeImagesUsed: 0,
-            totalFreeImagesUsedNFT: 0
-          });
-          await globalCounter.save();
-        }
-        
-        if (!isNFTHolder) {
-          // Check global cap for non-NFT holders
-          const totalFreeImagesUsed = globalCounter.totalFreeImagesUsed || 0;
-          if (totalFreeImagesUsed >= MAX_GLOBAL_FREE_IMAGES) {
-            logger.info('Global free image cap reached for regular users', {
-              totalFreeImagesUsed,
-              maxGlobalFreeImages: MAX_GLOBAL_FREE_IMAGES,
-              clientIP
-            });
-            isEligibleForFreeImage = false;
-          } else {
-            isEligibleForFreeImage = true;
-          }
-        } else {
-          // Check global cap for NFT holders
-          const totalFreeImagesUsedNFT = globalCounter.totalFreeImagesUsedNFT || 0;
-          if (totalFreeImagesUsedNFT >= MAX_GLOBAL_FREE_IMAGES_NFT) {
-            logger.info('Global free image cap reached for NFT holders', {
-              totalFreeImagesUsedNFT,
-              maxGlobalFreeImagesNFT: MAX_GLOBAL_FREE_IMAGES_NFT,
-              clientIP
-            });
-            isEligibleForFreeImage = false;
-          } else {
-            isEligibleForFreeImage = true;
-          }
-        }
-      }
-      
-      // Additional abuse prevention checks for free images (skip for NFT holders)
-      if (isEligibleForFreeImage && availableCredits < requiredCredits && !isNFTHolder) {
-        // Check disposable email (only for email users)
-        if (user.email && isDisposableEmail(user.email)) {
-          logger.warn('Disposable email detected for free image request', {
-            email: user.email,
-            clientIP
-          });
-          return res.status(400).json({
-            success: false,
-            error: 'Temporary email addresses are not allowed. Please use a permanent email address.'
-          });
-        }
-        
-        // Check account age (must be at least 2 minutes old) - skip for NFT holders
-        const accountAgeCheck = checkAccountAge(user);
-        if (!accountAgeCheck.allowed) {
-          logger.warn('Account too new for free image', {
-            userId: user.userId,
-            email: user.email,
-            accountAge: accountAgeCheck.reason
-          });
-          return res.status(400).json({
-            success: false,
-            error: accountAgeCheck.reason
-          });
-        }
-      }
-      
-      if (availableCredits < requiredCredits && !isEligibleForFreeImage) {
-        // Check if global cap was reached
-        let globalCapMessage = '';
-        let globalCapReached = false;
-        let globalCounter = await GlobalFreeImage.findOne({ key: 'global' });
-        
-        if (!isNFTHolder) {
-          if (globalCounter && globalCounter.totalFreeImagesUsed >= MAX_GLOBAL_FREE_IMAGES) {
-            globalCapMessage = ' The free image pool for regular users has been exhausted.';
-            globalCapReached = true;
-          }
-        } else {
-          if (globalCounter && globalCounter.totalFreeImagesUsedNFT >= MAX_GLOBAL_FREE_IMAGES_NFT) {
-            globalCapMessage = ' The free image pool for NFT holders has been exhausted.';
-            globalCapReached = true;
-          }
-        }
-        
-        logger.warn('Insufficient credits for external API call', {
+      if (availableCredits < requiredCredits) {
+        logger.warn('Insufficient credits for generation', {
           userId: user.userId,
           email: user.email,
           walletAddress: user.walletAddress,
           availableCredits,
           requiredCredits,
-          freeImagesUsedFromIP,
-          maxFreeImages,
-          isNFTHolder,
-          globalCapReached,
-          totalFreeImagesUsed: globalCounter?.totalFreeImagesUsed || 0,
-          totalFreeImagesUsedNFT: globalCounter?.totalFreeImagesUsedNFT || 0
+          displayedCredits: availableCredits // Matches what's shown on screen
         });
         return res.status(400).json({
           success: false,
-          error: `Insufficient credits. You have ${availableCredits} credits but need ${requiredCredits}. Please purchase credits first.${globalCapMessage}`
-        });
-      }
-      
-      // If using free image, mark it in the request for later tracking
-      if (isEligibleForFreeImage) {
-        req.isUsingFreeImage = true;
-        req.clientIP = clientIP;
-        logger.info('User eligible for free image (IP-based)', {
-          userId: user.userId,
-          email: user.email,
-          walletAddress: user.walletAddress,
-          clientIP,
-          freeImagesUsedFromIP,
-          maxFreeImages,
-          isNFTHolder,
-          browserFingerprint: generateBrowserFingerprint(req)
+          error: `Insufficient credits. You have ${availableCredits} credit${availableCredits !== 1 ? 's' : ''} but need ${requiredCredits}. Please purchase credits first.`
         });
       }
       

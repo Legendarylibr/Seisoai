@@ -378,9 +378,11 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     }
 
     const data = await response.json();
-    logger.debug('Text-only API response received', { 
+    logger.debug('API response received', { 
       hasImages: !!data.images,
-      imageCount: data.images?.length || 0
+      imageCount: data.images?.length || 0,
+      hasRemainingCredits: data.remainingCredits !== undefined,
+      remainingCredits: data.remainingCredits
     });
     
     if (data.images && Array.isArray(data.images) && data.images.length > 0) {
@@ -389,23 +391,21 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
         numImagesRequested: numImages,
         numImagesReceived: data.images.length,
         isMultiImage: isMultipleImages,
-        referenceImageCount: imageCount
+        referenceImageCount: imageCount,
+        remainingCredits: data.remainingCredits,
+        creditsDeducted: data.creditsDeducted
       });
       
       // Extract all image URLs
       const imageUrls = data.images.map(img => img.url || img);
       
-      // If only one image was requested or only one was generated, return single URL
-      // Otherwise return array of URLs for multiple images
-      if (numImages === 1 || imageUrls.length === 1) {
-        return imageUrls[0];
-      } else {
-        logger.debug('Multiple images generated', {
-          totalImages: imageUrls.length,
-          allImageUrls: imageUrls
-        });
-        return imageUrls; // Return array of URLs
-      }
+      // Always return object with images and credits info for consistency
+      return {
+        images: imageUrls,
+        imageUrl: imageUrls[0], // First image for backward compatibility
+        remainingCredits: data.remainingCredits,
+        creditsDeducted: data.creditsDeducted
+      };
     } else {
       throw new Error('No image generated');
     }
