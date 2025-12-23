@@ -272,16 +272,6 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
                     {hasReferenceImages && (
                       <span className="text-[10px]" style={{ color: '#666666', fontStyle: 'italic' }}>(optional)</span>
                     )}
-                    {!hasReferenceImages && multiImageModel === 'nano-banana-pro' && (
-                      <span className="text-[10px] font-bold ml-0.5 px-1 py-0.5 rounded" style={{ 
-                        background: 'linear-gradient(to bottom, #ffffcc, #ffffaa, #ffff99)',
-                        border: '1px solid #cccc00',
-                        color: '#000000',
-                        textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                      }}>
-                        ✨ Text-to-Image
-                      </span>
-                    )}
                   </label>
                   <textarea
                     value={customPrompt}
