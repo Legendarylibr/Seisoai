@@ -257,7 +257,14 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
   };
 
   const validatePayment = () => {
-    if (!selectedPackage && !customAmount) {
+    // For email users, require package selection (no custom amount)
+    if (isEmailAuth && !selectedPackage) {
+      setError('Please select a package');
+      return false;
+    }
+    
+    // For wallet users, allow either package or custom amount
+    if (!isEmailAuth && !selectedPackage && !customAmount) {
       setError('Please select a package or enter a custom amount');
       return false;
     }
@@ -523,32 +530,34 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
             </div>
           </div>
 
-          {/* Custom Amount */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Or Enter Custom Amount</h3>
-            <div className="relative">
-              <input
-                type="number"
-                value={customAmount}
-                onChange={(e) => handleCustomAmountChange(e.target.value)}
-                placeholder="Enter amount in USD"
-                className="w-full p-3 rounded text-sm"
-                style={{
-                  background: 'linear-gradient(to bottom, #ffffff, #f8f8f8)',
-                  border: '2px inset #c0c0c0',
-                  boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
-                  color: '#000000',
-                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                }}
-                step="0.01"
-                min="1"
-                max="1000"
-              />
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                USD
+          {/* Custom Amount - Only show for wallet users, not email users */}
+          {!isEmailAuth && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Or Enter Custom Amount</h3>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={customAmount}
+                  onChange={(e) => handleCustomAmountChange(e.target.value)}
+                  placeholder="Enter amount in USD"
+                  className="w-full p-3 rounded text-sm"
+                  style={{
+                    background: 'linear-gradient(to bottom, #ffffff, #f8f8f8)',
+                    border: '2px inset #c0c0c0',
+                    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
+                    color: '#000000',
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  }}
+                  step="0.01"
+                  min="1"
+                  max="1000"
+                />
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                  USD
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Credits Preview */}
           {getCreditsPreview() > 0 && (
