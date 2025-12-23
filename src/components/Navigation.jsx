@@ -63,8 +63,8 @@ import logger from '../utils/logger.js';
   return (
     <header className="sticky top-0 z-[999997]" style={{ 
       position: 'sticky',
-      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-      borderBottom: '2px outset #e8e8e8',
+      background: 'linear-gradient(to bottom, #e8e8f0, #d8d8e8, #d0d0d8)',
+      borderBottom: '2px outset #e0e0e8',
       boxShadow: 
         'inset 0 2px 0 rgba(255, 255, 255, 1), ' +
         'inset 0 -2px 0 rgba(0, 0, 0, 0.2), ' +
@@ -84,7 +84,10 @@ import logger from '../utils/logger.js';
               <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-8 h-8 rounded-lg object-cover" />
             </div>
             <div>
-              <h1 className="text-xl font-bold gradient-text">Seiso AI</h1>
+              <h1 className="text-xl font-bold" style={{ 
+                color: '#000000', 
+                textShadow: '3px 3px 0 rgba(255, 255, 255, 1), 2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 2px rgba(0, 0, 0, 0.3)'
+              }}>Seiso AI</h1>
             </div>
           </div>
 

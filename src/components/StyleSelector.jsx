@@ -21,7 +21,13 @@ const StyleSelector = () => {
   });
 
   return (
-    <div className="w-full space-y-2">
+    <div className="w-full space-y-2" style={{ 
+      background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
+      border: '2px outset #ffffbb',
+      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)',
+      padding: '0.5rem',
+      borderRadius: '0.5rem'
+    }}>
       {/* Style Selection Header */}
       <div className="flex items-center gap-2 mb-2">
         <div className="p-1 rounded" style={{ 

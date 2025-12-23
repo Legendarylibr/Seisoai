@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Wallet, ArrowRight, Sparkles, Zap, Gift } from 'lucide-react';
+import { Mail, Wallet, ArrowRight, Sparkles, Link2, Calendar } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import EmailSignIn from './EmailSignIn';
 import logger from '../utils/logger.js';
@@ -10,41 +10,41 @@ const AuthPrompt = () => {
   // Show auth mode selection if not selected
   if (!authMode) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-120px)] px-4 py-2" style={{ position: 'relative', zIndex: 10 }}>
+      <div className="flex items-center justify-center min-h-[calc(100vh-120px)] px-4 py-6" style={{ position: 'relative', zIndex: 10 }}>
         <div className="text-center max-w-5xl mx-auto slide-up">
-          {/* Compact Hero Section */}
-          <div className="mb-2">
-            <div className="text-center mb-2">
-              <h1 className="text-2xl md:text-3xl font-bold mb-0.5" style={{ 
-                color: '#000000', 
-                textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
+          {/* Hero Section */}
+          <div className="mb-6">
+            <div className="text-center mb-6">
+              <h1 className="text-2xl md:text-3xl font-bold mb-2" style={{ 
+                color: '#ffffff', 
+                textShadow: '4px 4px 0 rgba(0, 0, 0, 0.8), 3px 3px 0 rgba(0, 0, 0, 0.8), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.5)'
               }}>
                 Welcome to Seiso AI
               </h1>
               <p className="text-xs md:text-sm" style={{ 
-                color: '#1a1a1a', 
-                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+                color: '#ffffff', 
+                textShadow: '3px 3px 0 rgba(0, 0, 0, 0.8), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.5)'
               }}>
-                Create and edit stunning AI-generated images
+                Generate, edit, and extract images by layer
               </p>
             </div>
           </div>
 
-          {/* Sign In Section - Moved Above Instructions */}
-          <div className="mb-2">
-            <h2 className="text-base font-bold mb-1.5" style={{ 
-              color: '#000000', 
-              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+          {/* Sign In Section */}
+          <div className="mb-4">
+            <h2 className="text-base font-bold mb-3" style={{ 
+              color: '#ffffff', 
+              textShadow: '3px 3px 0 rgba(0, 0, 0, 0.8), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.5)'
             }}>
               Sign In to Get Started
             </h2>
           </div>
 
-          {/* Compact Auth Mode Selection */}
-          <div className="grid md:grid-cols-2 gap-2 max-w-3xl mx-auto mb-2">
+          {/* Auth Mode Selection */}
+          <div className="grid md:grid-cols-2 gap-3 max-w-3xl mx-auto mb-6">
             <button
               onClick={() => setAuthMode('email')}
-              className="w-full glass-card rounded-lg p-2.5 group transition-all duration-300"
+              className="w-full rounded-lg p-4 group transition-all duration-300"
               style={{
                 background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
                 border: '2px outset #f0f0f0',
@@ -72,35 +72,35 @@ const AuthPrompt = () => {
                 e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
               }}
             >
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded flex-shrink-0" style={{
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded flex-shrink-0" style={{
                   background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
                   border: '2px outset #e0e0e0',
                   boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
                 }}>
-                  <Mail className="w-4 h-4" style={{ color: '#000000' }} />
+                  <Mail className="w-5 h-5" style={{ color: '#000000' }} />
                 </div>
                 <div className="flex-1">
-                  <div className="font-bold text-sm mb-0.5" style={{ 
+                  <div className="font-bold text-sm mb-1" style={{ 
                     color: '#000000', 
                     textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
                   }}>
                     Sign in with Email
                   </div>
-                  <div className="text-[10px]" style={{ 
+                  <div className="text-xs" style={{ 
                     color: '#1a1a1a', 
                     textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
                   }}>
                     Monthly subscriptions • Credit card payments
                   </div>
                 </div>
-                <ArrowRight className="w-4 h-4 flex-shrink-0" style={{ color: '#000000' }} />
+                <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
               </div>
             </button>
 
             <button
               onClick={() => setAuthMode('wallet')}
-              className="w-full glass-card rounded-lg p-2.5 group transition-all duration-300"
+              className="w-full rounded-lg p-4 group transition-all duration-300"
               style={{
                 background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
                 border: '2px outset #f0f0f0',
@@ -128,46 +128,46 @@ const AuthPrompt = () => {
                 e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
               }}
             >
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded flex-shrink-0" style={{
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded flex-shrink-0" style={{
                   background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
                   border: '2px outset #e0e0e0',
                   boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
                 }}>
-                  <Wallet className="w-4 h-4" style={{ color: '#000000' }} />
+                  <Wallet className="w-5 h-5" style={{ color: '#000000' }} />
                 </div>
                 <div className="flex-1">
-                  <div className="font-bold text-sm mb-0.5" style={{ 
+                  <div className="font-bold text-sm mb-1" style={{ 
                     color: '#000000', 
                     textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
                   }}>
                     Connect Crypto Wallet
                   </div>
-                  <div className="text-[10px]" style={{ 
+                  <div className="text-xs" style={{ 
                     color: '#1a1a1a', 
                     textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
                   }}>
                     Pay-per-credit • <strong>NFT: 5 free credits</strong>
                   </div>
                 </div>
-                <ArrowRight className="w-4 h-4 flex-shrink-0" style={{ color: '#000000' }} />
+                <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
               </div>
             </button>
           </div>
 
-          {/* Compact Main Content Grid - Moved Below Sign In */}
-          <div className="grid md:grid-cols-3 gap-2">
+          {/* Main Content Grid */}
+          <div className="grid md:grid-cols-3 gap-3">
             {/* Features */}
-            <div className="glass-card rounded-lg p-2 text-left" style={{ 
+            <div className="rounded-lg p-3 text-left" style={{ 
               background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
               border: '2px outset #e8e8e8',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
             }}>
-              <h2 className="text-xs font-bold mb-1 flex items-center gap-1" style={{ 
+              <h2 className="text-xs font-bold mb-2 flex items-center gap-1" style={{ 
                 color: '#000000', 
                 textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
               }}>
-                <Sparkles className="w-3 h-3" style={{ color: '#000000' }} />
+                <Link2 className="w-3 h-3" style={{ color: '#000000' }} />
                 Features
               </h2>
               <div className="space-y-1 text-[10px]" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
@@ -180,16 +180,16 @@ const AuthPrompt = () => {
             </div>
 
             {/* Free Benefits */}
-            <div className="glass-card rounded-lg p-2 text-left" style={{ 
+            <div className="rounded-lg p-3 text-left" style={{ 
               background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
               border: '2px outset #ffffbb',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
             }}>
-              <h2 className="text-xs font-bold mb-1 flex items-center gap-1" style={{ 
+              <h2 className="text-xs font-bold mb-2 flex items-center gap-1" style={{ 
                 color: '#000000', 
                 textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
               }}>
-                <Gift className="w-3 h-3" style={{ color: '#000000' }} />
+                <Calendar className="w-3 h-3" style={{ color: '#000000' }} />
                 Free Benefits
               </h2>
               <div className="space-y-1 text-[10px]" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
@@ -200,16 +200,16 @@ const AuthPrompt = () => {
             </div>
 
             {/* Quick Instructions */}
-            <div className="glass-card rounded-lg p-2 text-left" style={{ 
+            <div className="rounded-lg p-3 text-left" style={{ 
               background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
               border: '2px outset #e8e8e8',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
             }}>
-              <h2 className="text-xs font-bold mb-1 flex items-center gap-1" style={{ 
+              <h2 className="text-xs font-bold mb-2 flex items-center gap-1" style={{ 
                 color: '#000000', 
                 textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
               }}>
-                <Zap className="w-3 h-3" style={{ color: '#000000' }} />
+                <Sparkles className="w-3 h-3" style={{ color: '#000000' }} />
                 How It Works
               </h2>
               <div className="space-y-1 text-[10px]" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
@@ -230,7 +230,7 @@ const AuthPrompt = () => {
   if (authMode === 'email') {
     return (
       <div className="flex items-center justify-center min-h-[60vh] px-4" style={{ position: 'relative', zIndex: 10 }}>
-        <div className="w-full max-w-md mx-auto">
+        <div className="w-full max-w-md md:max-w-xl mx-auto">
           <button
             onClick={() => setAuthMode(null)}
             className="mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary"
@@ -290,50 +290,50 @@ function WalletPrompt({ onBack }) {
 
   return (
     <div className="flex items-center justify-center min-h-[60vh] px-4" style={{ position: 'relative', zIndex: 10 }}>
-      <div className="w-full max-w-md mx-auto">
+      <div className="w-full max-w-md md:max-w-xl mx-auto">
         {onBack && (
           <button
             onClick={onBack}
-            className="mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary"
+            className="mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary text-sm md:text-base"
             style={{
               color: '#000000',
               textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
             }}
           >
-            <ArrowRight className="w-4 h-4 rotate-180" />
+            <ArrowRight className="w-4 h-4 md:w-5 md:h-5 rotate-180" />
             <span>Back to Sign In Options</span>
           </button>
         )}
 
         {!selectedChain ? (
-          <div className="glass-card rounded-xl p-6 space-y-4" style={{ 
+          <div className="glass-card rounded-xl p-6 md:p-8 space-y-4 md:space-y-6" style={{ 
             background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
             border: '2px outset #e8e8e8',
             boxShadow: 'inset 3px 3px 0 rgba(255, 255, 255, 1), inset -3px -3px 0 rgba(0, 0, 0, 0.25), 0 6px 12px rgba(0, 0, 0, 0.2)'
           }}>
-            <div className="text-center mb-6">
-              <div className="p-4 rounded inline-block mb-4" style={{
+            <div className="text-center mb-6 md:mb-8">
+              <div className="p-4 md:p-5 rounded inline-block mb-4 md:mb-5" style={{
                 background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
                 border: '2px outset #e0e0e0',
                 boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
               }}>
-                <Wallet className="w-12 h-12" style={{ color: '#000000' }} />
+                <Wallet className="w-12 h-12 md:w-16 md:h-16" style={{ color: '#000000' }} />
               </div>
-              <h2 className="text-2xl font-bold mb-2" style={{ 
+              <h2 className="text-2xl md:text-3xl font-bold mb-2 md:mb-3" style={{ 
                 color: '#000000', 
                 textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
               }}>
                 Connect Wallet
               </h2>
-              <p style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Choose your blockchain</p>
+              <p className="text-sm md:text-base" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Choose your blockchain</p>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 md:space-y-4">
               {chainOptions.map((chain) => (
                 <button
                   key={chain.id}
                   onClick={() => handleChainSelect(chain.id)}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl transition-all duration-300"
+                  className="w-full flex items-center gap-4 md:gap-5 p-4 md:p-5 rounded-xl transition-all duration-300"
                   style={{
                     background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
                     border: '2px outset #f0f0f0',
@@ -351,59 +351,59 @@ function WalletPrompt({ onBack }) {
                     e.currentTarget.style.transform = 'translateY(0)';
                   }}
                 >
-                  <span className="text-2xl">{chain.icon}</span>
+                  <span className="text-2xl md:text-3xl">{chain.icon}</span>
                   <div className="flex-1 text-left">
-                    <div className="font-semibold" style={{ 
+                    <div className="font-semibold text-base md:text-lg" style={{ 
                       color: '#000000', 
                       textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
                     }}>
                       {chain.name}
                     </div>
-                    <div className="text-sm" style={{ 
+                    <div className="text-sm md:text-base" style={{ 
                       color: '#1a1a1a', 
                       textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
                     }}>
                       {chain.description}
                     </div>
                   </div>
-                  <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
+                  <ArrowRight className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0" style={{ color: '#000000' }} />
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          <div className="glass-card rounded-xl p-6 space-y-4" style={{ 
+          <div className="glass-card rounded-xl p-6 md:p-8 space-y-4 md:space-y-6" style={{ 
             background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
             border: '2px outset #e8e8e8',
             boxShadow: 'inset 3px 3px 0 rgba(255, 255, 255, 1), inset -3px -3px 0 rgba(0, 0, 0, 0.25), 0 6px 12px rgba(0, 0, 0, 0.2)'
           }}>
             <button
               onClick={handleBack}
-              className="mb-2 flex items-center gap-2 transition-all duration-300 btn-secondary"
+              className="mb-2 flex items-center gap-2 transition-all duration-300 btn-secondary text-sm md:text-base"
               style={{
                 color: '#000000',
                 textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
               }}
             >
-              <ArrowRight className="w-4 h-4 rotate-180" />
+              <ArrowRight className="w-4 h-4 md:w-5 md:h-5 rotate-180" />
               <span>Back</span>
             </button>
 
-            <div className="text-center mb-6">
-              <div className="p-3 rounded inline-block mb-3" style={{
+            <div className="text-center mb-6 md:mb-8">
+              <div className="p-3 md:p-4 rounded inline-block mb-3 md:mb-4" style={{
                 background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
                 border: '2px outset #e0e0e0',
                 boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
               }}>
-                <Wallet className="w-10 h-10" style={{ color: '#000000' }} />
+                <Wallet className="w-10 h-10 md:w-14 md:h-14" style={{ color: '#000000' }} />
               </div>
-              <h2 className="text-xl font-bold mb-2" style={{ 
+              <h2 className="text-xl md:text-2xl font-bold mb-2 md:mb-3" style={{ 
                 color: '#000000', 
                 textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
               }}>
                 {selectedChain === 'evm' ? 'EVM Wallets' : 'Solana Wallets'}
               </h2>
-              <p className="text-sm" style={{ 
+              <p className="text-sm md:text-base" style={{ 
                 color: '#1a1a1a', 
                 textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
               }}>
@@ -411,12 +411,12 @@ function WalletPrompt({ onBack }) {
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 md:space-y-4">
               {(selectedChain === 'evm' ? evmWallets : solanaWallets).map((wallet) => (
                 <button
                   key={wallet.id}
                   onClick={() => handleWalletSelect(wallet.id)}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl transition-all duration-300"
+                  className="w-full flex items-center gap-4 md:gap-5 p-4 md:p-5 rounded-xl transition-all duration-300"
                   style={{
                     background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
                     border: '2px outset #f0f0f0',
@@ -434,16 +434,16 @@ function WalletPrompt({ onBack }) {
                     e.currentTarget.style.transform = 'translateY(0)';
                   }}
                 >
-                  <span className="text-2xl">{wallet.icon}</span>
+                  <span className="text-2xl md:text-3xl">{wallet.icon}</span>
                   <div className="flex-1 text-left">
-                    <div className="font-semibold" style={{ 
+                    <div className="font-semibold text-base md:text-lg" style={{ 
                       color: '#000000', 
                       textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
                     }}>
                       {wallet.name}
                     </div>
                   </div>
-                  <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
+                  <ArrowRight className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0" style={{ color: '#000000' }} />
                 </button>
               ))}
             </div>

@@ -156,77 +156,48 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
 
   return (
     <div className="fade-in">
-      {/* Compact Header */}
-      <div className="text-center py-0 mb-0.5">
-        <h1 className="text-xl md:text-2xl font-bold gradient-text mb-0">Seiso AI</h1>
-        <p className="text-[10px] md:text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Create and edit stunning AI-generated images</p>
-      </div>
-
-      {/* User Info - Email or Wallet */}
-      <div className="glass-card rounded-lg rounded-b-none p-1 md:p-1.5 mb-0 slide-up">
-        {isEmailAuth ? (
-          <EmailUserInfo onShowStripePayment={onShowStripePayment} />
-        ) : (
-          <SimpleWalletConnect />
-        )}
-      </div>
-
-      {/* Credits Status Banner - Only for wallet users */}
-      {credits <= 0 && !isEmailAuth && (
-        <div className="glass-card rounded-t-none rounded-b-none p-1.5 mb-0" style={{
-          background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
-          border: '2px outset #ffffbb',
-          boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
-        }}>
-          <div className="flex items-center gap-1.5 text-center justify-center">
-            <div className="w-2 h-2 rounded-full" style={{ 
-              background: 'linear-gradient(to bottom, #ffcc00, #ffaa00)',
-              border: '1px solid #cc8800',
-              boxShadow: 'inset 1px 1px 0 rgba(255, 255, 200, 0.6), inset -1px -1px 0 rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.2)'
-            }}></div>
-            <span className="text-xs font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.9), 0 1px 1px rgba(0, 0, 0, 0.1)' }}>
-              No credits - Click "Buy Credits" to purchase
-            </span>
+      {/* Top Row - Header and User Info */}
+      <div className="mb-0">
+          {/* Compact Header */}
+          <div className="text-center py-0 mb-0.5">
+            <h1 className="text-2xl md:text-3xl font-bold mb-0" style={{ 
+              color: '#ffffff', 
+              textShadow: '4px 4px 0 rgba(0, 0, 0, 0.8), 3px 3px 0 rgba(0, 0, 0, 0.8), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.5)'
+            }}>Seiso AI</h1>
+            <p className="text-xs md:text-sm" style={{ 
+              color: '#ffffff', 
+              textShadow: '3px 3px 0 rgba(0, 0, 0, 0.8), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.5)'
+            }}>Create and edit stunning AI-generated images</p>
           </div>
+
+        {/* User Info - Email or Wallet */}
+        <div className="glass-card rounded-lg rounded-b-none p-1 md:p-1.5 mb-0 slide-up">
+          {isEmailAuth ? (
+            <EmailUserInfo onShowStripePayment={onShowStripePayment} />
+          ) : (
+            <SimpleWalletConnect />
+          )}
         </div>
-      )}
 
-      {/* Compact Quick Instructions */}
-      <div className="glass-card rounded-lg p-2 mb-1.5 max-w-3xl mx-auto slide-up" style={{ position: 'relative', zIndex: 10 }}>
-        <div className="flex items-start gap-2">
-          <div className="p-1 rounded flex-shrink-0" style={{ 
-            background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-            border: '2px outset #f0f0f0',
-            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+        {/* Credits Status Banner - Only for wallet users */}
+        {credits <= 0 && !isEmailAuth && (
+          <div className="glass-card rounded-t-none rounded-b-none p-1.5 mb-0" style={{
+            background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
+            border: '2px outset #ffffbb',
+            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
           }}>
-            <Sparkles className="w-3 h-3" style={{ color: '#000000' }} />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-xs font-semibold mb-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>How to Use</h3>
-            <div className="space-y-0.5 text-xs leading-tight" style={{ color: '#000000' }}>
-              <div className="flex items-start gap-1">
-                <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>1.</span>
-                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Upload</strong> (0=new, 1=edit, 2+=blend)</span>
-              </div>
-              <div className="flex items-start gap-1">
-                <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>2.</span>
-                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Select model</strong> (FLUX, Nano Banana Pro, or Qwen)</span>
-              </div>
-              <div className="flex items-start gap-1">
-                <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>3.</span>
-                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Enter prompt</strong> (optional, not needed for Qwen)</span>
-              </div>
-              <div className="flex items-start gap-1">
-                <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>4.</span>
-                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Choose style</strong> (optional, not needed for Qwen)</span>
-              </div>
-              <div className="flex items-start gap-1">
-                <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>5.</span>
-                <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Click Generate</strong> (or Extract Layers for Qwen)</span>
-              </div>
+            <div className="flex items-center gap-1.5 text-center justify-center">
+              <div className="w-2 h-2 rounded-full" style={{ 
+                background: 'linear-gradient(to bottom, #ffcc00, #ffaa00)',
+                border: '1px solid #cc8800',
+                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 200, 0.6), inset -1px -1px 0 rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.2)'
+              }}></div>
+              <span className="text-xs font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.9), 0 1px 1px rgba(0, 0, 0, 0.1)' }}>
+                No credits - Click "Buy Credits" to purchase
+              </span>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Main Content - Compact Layout */}
@@ -235,7 +206,53 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
           {/* Input Image Section */}
           <div className="slide-up" style={{ animationDelay: '100ms' }}>
-            <div className="glass-card rounded-none lg:rounded-l-xl lg:rounded-tr-none p-1 md:p-1.5">
+            {/* How to Use - Above Reference Image */}
+            <div className="rounded-none lg:rounded-tl-xl lg:rounded-tr-none p-2 rounded-b-none" style={{ 
+              background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
+              border: '2px outset #ffffbb',
+              borderBottom: 'none',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px 0 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
+            }}>
+              <div className="flex items-start gap-2">
+                <div className="p-1 rounded flex-shrink-0" style={{ 
+                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                  border: '2px outset #f0f0f0',
+                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+                }}>
+                  <Sparkles className="w-3 h-3" style={{ color: '#000000' }} />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xs font-semibold mb-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>How to Use</h3>
+                  <div className="space-y-0.5 text-xs leading-tight" style={{ color: '#000000' }}>
+                    <div className="flex items-start gap-1">
+                      <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>1.</span>
+                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Upload</strong> (0=new, 1=edit, 2+=blend)</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>2.</span>
+                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Select model</strong> (FLUX, Nano Banana Pro, or Qwen)</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>3.</span>
+                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Enter prompt</strong> (optional, not needed for Qwen)</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>4.</span>
+                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Choose style</strong> (optional, not needed for Qwen)</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>5.</span>
+                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Click Generate</strong> (or Extract Layers for Qwen)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="glass-card rounded-none p-1 md:p-1.5 rounded-t-none" style={{
+              borderTop: 'none',
+              boxShadow: 'inset 2px 0 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            }}>
               <div className="flex items-center gap-1 mb-0.5">
                 <div className="p-0.5 rounded" style={{ 
                   background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
@@ -263,7 +280,12 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
 
             {/* Prompt and Style Combined - Hidden when Qwen is selected */}
             {!isQwenSelected && (
-              <div className="glass-card rounded-none lg:rounded-bl-xl p-1 md:p-1.5 space-y-1">
+              <div className="rounded-none lg:rounded-bl-xl p-1 md:p-1.5 space-y-1 rounded-t-none" style={{ 
+                background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
+                border: '2px outset #ffffbb',
+                borderTop: 'none',
+                boxShadow: 'inset 2px 0 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
+              }}>
                 {/* Custom Prompt */}
                 <div>
                   <label className="flex items-center gap-0.5 mb-0.5">
@@ -341,8 +363,11 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
           </div>
 
           {/* Generated Image Output */}
-          <div className="slide-up" style={{ animationDelay: '200ms' }}>
-            <div className="glass-card rounded-none lg:rounded-r-xl lg:rounded-tl-none p-1.5 md:p-2 h-full">
+          <div className="slide-up space-y-0" style={{ animationDelay: '200ms' }}>
+            <div className="glass-card rounded-none lg:rounded-tr-xl lg:rounded-tl-none p-1.5 md:p-2 rounded-b-none" style={{
+              borderBottom: 'none',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px 0 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            }}>
               <div className="flex items-center gap-1.5 mb-1">
                 <div className="p-0.5 rounded" style={{ 
                   background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
@@ -353,20 +378,25 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
                 </div>
                 <h2 className="text-xs md:text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Generated Image</h2>
               </div>
-              <div className="min-h-[100px] md:min-h-[120px]">
+              <div className="min-h-[40px] md:min-h-[60px]">
                 <ImageOutput />
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Generate Button - Desktop */}
-        <div className="hidden lg:flex justify-center mt-0">
-          <div className="glass-card rounded-none rounded-b-xl p-2 w-full max-w-lg slide-up" style={{ animationDelay: '300ms' }}>
-            <GenerateButton 
-              customPrompt={customPrompt}
-              onShowTokenPayment={onShowTokenPayment}
-            />
+            
+            {/* Generate Button - Desktop (separate, right below Generated Image) */}
+            <div className="hidden lg:block">
+              <div className="rounded-none lg:rounded-br-xl lg:rounded-bl-none p-2 rounded-t-none" style={{ 
+                background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
+                border: '2px outset #ffffbb',
+                borderTop: 'none',
+                boxShadow: 'inset 2px 0 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
+              }}>
+                <GenerateButton 
+                  customPrompt={customPrompt}
+                  onShowTokenPayment={onShowTokenPayment}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>

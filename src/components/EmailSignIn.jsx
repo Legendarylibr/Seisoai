@@ -38,24 +38,24 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
   const displayError = error || authError;
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      <div className="glass-card rounded-xl p-6 space-y-6">
+    <div className="w-full max-w-md md:max-w-xl mx-auto">
+      <div className="glass-card rounded-xl p-6 md:p-8 space-y-6 md:space-y-8">
         {/* Header */}
         <div className="text-center">
           <div 
-            className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+            className="w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6"
             style={{
               background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
               border: '2px outset #f0f0f0',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
             }}
           >
-            <Mail className="w-8 h-8" style={{ color: '#000000' }} />
+            <Mail className="w-8 h-8 md:w-10 md:h-10" style={{ color: '#000000' }} />
           </div>
-          <h2 className="text-2xl font-bold mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+          <h2 className="text-2xl md:text-3xl font-bold mb-2 md:mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
             {isSignUp ? 'Create Account' : 'Sign In'}
           </h2>
-          <p className="text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+          <p className="text-sm md:text-base" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
             {isSignUp ? 'Sign up with email to get started' : 'Sign in with your email'}
           </p>
         </div>
@@ -65,7 +65,7 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
           <>
             <button
               onClick={onSwitchToWallet}
-              className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded transition-all duration-200"
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 md:py-4 rounded transition-all duration-200"
               style={{
                 background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
                 border: '2px outset #f0f0f0',
@@ -92,8 +92,8 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
                 e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
               }}
             >
-              <Wallet className="w-5 h-5" style={{ color: '#000000' }} />
-              <span className="font-semibold">Connect with Wallet Instead</span>
+              <Wallet className="w-5 h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
+              <span className="font-semibold text-sm md:text-base">Connect with Wallet Instead</span>
             </button>
             <div className="relative my-4">
               <div className="absolute inset-0 flex items-center">
@@ -107,20 +107,20 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
           {/* Email Input */}
           <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+            <label className="block text-sm md:text-base font-medium mb-2 md:mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
               Email
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: '#000000' }} />
+              <Mail className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="your@email.com"
-                className="w-full pl-10 pr-4 py-3 rounded"
+                className="w-full pl-10 md:pl-12 pr-4 md:pr-5 py-3 md:py-4 rounded text-sm md:text-base"
                 style={{
                   background: 'linear-gradient(to bottom, #ffffff, #f8f8f8)',
                   border: '2px inset #c0c0c0',
@@ -135,17 +135,17 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
 
           {/* Password Input */}
           <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+            <label className="block text-sm md:text-base font-medium mb-2 md:mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: '#000000' }} />
+              <Lock className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-12 py-3 rounded"
+                className="w-full pl-10 md:pl-12 pr-12 md:pr-14 py-3 md:py-4 rounded text-sm md:text-base"
                 style={{
                   background: 'linear-gradient(to bottom, #ffffff, #f8f8f8)',
                   border: '2px inset #c0c0c0',
@@ -159,13 +159,13 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 transition-colors"
+                className="absolute right-3 md:right-4 top-1/2 transform -translate-y-1/2 transition-colors"
                 style={{ color: '#000000' }}
               >
                 {showPassword ? (
-                  <EyeOff className="w-5 h-5" />
+                  <EyeOff className="w-5 h-5 md:w-6 md:h-6" />
                 ) : (
-                  <Eye className="w-5 h-5" />
+                  <Eye className="w-5 h-5 md:w-6 md:h-6" />
                 )}
               </button>
             </div>
@@ -174,7 +174,7 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
           {/* Error Message */}
           {displayError && (
             <div 
-              className="p-3 rounded text-sm"
+              className="p-3 md:p-4 rounded text-sm md:text-base"
               style={{
                 background: 'linear-gradient(to bottom, #ffe0e0, #ffd0d0)',
                 border: '2px outset #ffc0c0',
@@ -191,12 +191,12 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full btn-primary py-3 flex items-center justify-center gap-2"
+            className="w-full btn-primary py-3 md:py-4 flex items-center justify-center gap-2 text-sm md:text-base"
           >
             {isLoading ? (
               <>
                 <div 
-                  className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin"
+                  className="w-5 h-5 md:w-6 md:h-6 border-2 border-t-transparent rounded-full animate-spin"
                   style={{ borderColor: '#000000', borderTopColor: 'transparent' }}
                 ></div>
                 <span>{isSignUp ? 'Creating Account...' : 'Signing In...'}</span>
@@ -204,7 +204,7 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
             ) : (
               <>
                 <span>{isSignUp ? 'Create Account' : 'Sign In'}</span>
-                <ArrowRight className="w-5 h-5" />
+                <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
               </>
             )}
           </button>
@@ -217,7 +217,7 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
               setIsSignUp(!isSignUp);
               setError('');
             }}
-            className="text-sm transition-colors"
+            className="text-sm md:text-base transition-colors"
             style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}
             onMouseEnter={(e) => {
               e.currentTarget.style.textDecoration = 'underline';
