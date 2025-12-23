@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Wallet } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 
-const EmailSignIn = ({ onSwitchToWallet }) => {
+const EmailSignIn = () => {
   const { signIn, signUp, isLoading, error: authError } = useEmailAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -59,52 +59,6 @@ const EmailSignIn = ({ onSwitchToWallet }) => {
             {isSignUp ? 'Sign up with email to get started' : 'Sign in with your email'}
           </p>
         </div>
-
-        {/* Quick Switch to Wallet - Prominent Option */}
-        {onSwitchToWallet && (
-          <>
-            <button
-              onClick={onSwitchToWallet}
-              className="w-full flex items-center justify-center gap-3 px-4 py-3 md:py-4 rounded transition-all duration-200"
-              style={{
-                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                border: '2px outset #f0f0f0',
-                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-                color: '#000000',
-                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                e.currentTarget.style.border = '2px outset #f8f8f8';
-                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                e.currentTarget.style.border = '2px outset #f0f0f0';
-                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-              }}
-              onMouseDown={(e) => {
-                e.currentTarget.style.border = '2px inset #c0c0c0';
-                e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-              }}
-              onMouseUp={(e) => {
-                e.currentTarget.style.border = '2px outset #f0f0f0';
-                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-              }}
-            >
-              <Wallet className="w-5 h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
-              <span className="font-semibold text-sm md:text-base">Connect with Wallet Instead</span>
-            </button>
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t" style={{ borderColor: '#808080' }}></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4" style={{ background: '#f8f8f8', color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>OR</span>
-              </div>
-            </div>
-          </>
-        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">

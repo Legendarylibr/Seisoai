@@ -242,7 +242,7 @@ const AuthPrompt = () => {
             <ArrowRight className="w-4 h-4 rotate-180" />
             <span>Back</span>
           </button>
-          <EmailSignIn onSwitchToWallet={() => setAuthMode('wallet')} />
+          <EmailSignIn />
         </div>
       </div>
     );
