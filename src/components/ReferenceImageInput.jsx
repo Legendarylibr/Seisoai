@@ -176,10 +176,40 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
               }
             }}
           >
-          <Upload className="w-8 h-8 text-gray-400 mb-2" />
-          <p className="text-sm text-gray-300 mb-1">
-            Click to upload {singleImageOnly ? 'reference image' : 'image(s)'}
-          </p>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleClickUpload();
+            }}
+            className="px-3 py-1.5 rounded transition-all duration-200 mb-2"
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+              color: '#000000',
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
+              fontSize: '11px',
+              fontWeight: 'semibold'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+              e.currentTarget.style.border = '2px outset #f8f8f8';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+            }}
+            onMouseDown={(e) => {
+              e.currentTarget.style.border = '2px inset #c0c0c0';
+              e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+            }}
+          >
+            Upload image
+          </button>
           <p className="text-xs text-gray-500">JPG, PNG, WebP up to 10MB</p>
           {!singleImageOnly && (
             <p className="text-xs text-purple-400 mt-1">Ctrl/Cmd for multiple</p>
