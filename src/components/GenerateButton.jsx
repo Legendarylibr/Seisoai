@@ -164,9 +164,47 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       return;
     }
 
-    // Allow generation attempt even with 0 credits - backend will check if user is eligible for free image
-    // If they're not eligible (already used free image), backend will return an error
-    // We'll catch that error and show payment modal
+    // Calculate credits that will be deducted (matches backend logic)
+    const hasImages = !!controlNetImage;
+    const isMultipleImages = Array.isArray(controlNetImage) && controlNetImage.length >= 2;
+    const isNanoBananaPro = hasImages && multiImageModel === 'nano-banana-pro';
+    const creditsToDeduct = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro, 1 for others
+
+    // Refresh credits BEFORE generation to show current balance
+    // This ensures user sees their current credits before deduction
+    try {
+      if (isEmailAuth && emailContext.refreshCredits) {
+        await emailContext.refreshCredits();
+        logger.debug('Credits refreshed before generation', { credits: emailContext.credits });
+      } else if (!isEmailAuth && refreshCredits && address) {
+        await refreshCredits();
+        logger.debug('Credits refreshed before generation');
+      }
+    } catch (refreshError) {
+      logger.warn('Failed to refresh credits before generation', { error: refreshError.message });
+      // Continue with generation even if refresh fails
+    }
+
+    // Deduct credits IMMEDIATELY in UI when user clicks generate (before API call)
+    // This gives instant feedback that credits are being used
+    const currentCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
+    const newCredits = Math.max(0, currentCredits - creditsToDeduct);
+    
+    if (isEmailAuth && emailContext.setCreditsManually) {
+      emailContext.setCreditsManually(newCredits);
+      logger.debug('Email credits deducted immediately in UI', { 
+        previousCredits: currentCredits, 
+        creditsDeducted: creditsToDeduct, 
+        newCredits 
+      });
+    } else if (!isEmailAuth && setCreditsManually) {
+      setCreditsManually(newCredits);
+      logger.debug('Wallet credits deducted immediately in UI', { 
+        previousCredits: currentCredits, 
+        creditsDeducted: creditsToDeduct, 
+        newCredits 
+      });
+    }
 
     // Style is optional - can generate with just prompt and reference image
 
@@ -216,15 +254,32 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       const imageUrl = imageUrls[0];
       const remainingCredits = imageResult.remainingCredits;
       
-      // Update credits immediately from generate response (credits already deducted in backend)
+      // Update credits immediately from generate response for instant UI feedback
       if (remainingCredits !== undefined && setCreditsManually) {
         setCreditsManually(remainingCredits);
-        logger.debug('Credits updated from generate response', { remainingCredits });
-      } else if (refreshCredits) {
-        // Fallback: refresh if manual update not available
-        if (isEmailAuth || address) {
-          await refreshCredits();
-        }
+        logger.debug('Credits updated immediately from generate response', { remainingCredits });
+      }
+      
+      // ALWAYS refresh credits from backend after generation to ensure accuracy
+      // This ensures the display matches the backend state even if there were any discrepancies
+      if (isEmailAuth && emailContext.refreshCredits) {
+        await emailContext.refreshCredits();
+        logger.debug('Email user credits refreshed from backend after generation', { 
+          remainingCredits,
+          refreshedCredits: emailContext.credits 
+        });
+      } else if (!isEmailAuth && refreshCredits && address) {
+        await refreshCredits();
+        logger.debug('Wallet user credits refreshed from backend after generation', { 
+          remainingCredits 
+        });
+      } else {
+        logger.warn('Cannot refresh credits - missing refreshCredits function', { 
+          isEmailAuth,
+          hasEmailRefresh: !!emailContext.refreshCredits,
+          hasWalletRefresh: !!refreshCredits,
+          hasAddress: !!address
+        });
       }
 
       logger.info('Image generation completed successfully', { 
@@ -302,6 +357,19 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       } catch (error) {
         logger.error('Generation error:', { error: error.message, stack: error.stack });
         const errorMessage = error.message || 'Failed to generate image. Please try again.';
+      
+        // Always refresh credits after error (in case credits were deducted but generation failed)
+        try {
+          if (isEmailAuth && emailContext.refreshCredits) {
+            await emailContext.refreshCredits();
+            logger.debug('Credits refreshed after generation error', { credits: emailContext.credits });
+          } else if (!isEmailAuth && refreshCredits && address) {
+            await refreshCredits();
+            logger.debug('Credits refreshed after generation error');
+          }
+        } catch (refreshError) {
+          logger.warn('Failed to refresh credits after error', { error: refreshError.message });
+        }
       
         // If error is about insufficient credits and user is authenticated, show payment modal
         if (errorMessage.includes('Insufficient credits') && isAuthenticated && onShowTokenPayment) {

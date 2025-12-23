@@ -248,6 +248,11 @@ export const EmailAuthProvider = ({ children }) => {
     }
   }, [isAuthenticated, fetchUserData]);
 
+  // Function to manually set credits for instant UI updates (before backend confirmation)
+  const setCreditsManually = useCallback((newCredits) => {
+    setCredits(newCredits);
+  }, []);
+
   const value = {
     isAuthenticated,
     email,
@@ -266,7 +271,8 @@ export const EmailAuthProvider = ({ children }) => {
     connectWallet,
     disconnectWallet,
     refreshCredits,
-    fetchUserData
+    fetchUserData,
+    setCreditsManually
   };
 
   return (

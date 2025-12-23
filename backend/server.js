@@ -754,8 +754,8 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
           const nftMultiplier = isNFTHolder ? 1.2 : 1;
           const finalCredits = Math.floor(amount * baseRate * scalingMultiplier * nftMultiplier);
           
-          // Add credits
-          await addCreditsToUser(user, {
+          // Add credits (with idempotency check inside)
+          const paymentEntry = await addCreditsToUser(user, {
             txHash: paymentIntent.id,
             tokenSymbol: 'USD',
             amount,
@@ -765,12 +765,18 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
             paymentIntentId: paymentIntent.id
           });
           
-          logger.info('Credits added via webhook', {
-            paymentIntentId: paymentIntent.id,
-            userId: user.userId || null,
-            walletAddress: user.walletAddress || null,
-            credits: finalCredits
-          });
+          if (paymentEntry) {
+            logger.info('Credits added via webhook', {
+              paymentIntentId: paymentIntent.id,
+              userId: user.userId || null,
+              walletAddress: user.walletAddress || null,
+              credits: finalCredits
+            });
+          } else {
+            logger.info('Payment already processed - credits not added (idempotency)', {
+              paymentIntentId: paymentIntent.id
+            });
+          }
         } else if (user && isPaymentAlreadyProcessed(user, null, paymentIntent.id)) {
           logger.info('Payment already processed via webhook', {
             paymentIntentId: paymentIntent.id
@@ -1820,26 +1826,38 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       });
     }
     
-    // Deduct credits immediately (atomic operation)
+    // Atomic credit deduction with condition to prevent race conditions and negative credits
+    // Only deduct if user has enough credits (prevents abuse from concurrent requests)
     const previousCredits = user.credits || 0;
     const updateResult = await User.findOneAndUpdate(
-      updateQuery,
-      { $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct } },
+      {
+        ...updateQuery,
+        credits: { $gte: creditsToDeduct } // Only update if user has enough credits
+      },
+      { 
+        $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct } 
+      },
       { new: true }
     );
     
     if (!updateResult) {
-      logger.error('Failed to deduct credits - user not found', { updateQuery });
+      // User doesn't have enough credits or was modified between check and update (race condition)
+      // Refetch to get current credits
+      const currentUser = await User.findOne(updateQuery);
+      const currentCredits = currentUser?.credits || 0;
+      
+      logger.warn('Credit deduction failed - insufficient credits or race condition', {
+        updateQuery,
+        previousCredits,
+        currentCredits,
+        creditsToDeduct,
+        userId: user.userId
+      });
+      
       return res.status(400).json({
         success: false,
-        error: 'Failed to deduct credits. User not found.'
+        error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsToDeduct}.`
       });
-    }
-    
-    // Safety check: prevent negative credits
-    if (updateResult.credits < 0) {
-      await User.findOneAndUpdate(updateQuery, { $set: { credits: 0 } }, { new: true });
-      updateResult.credits = 0;
     }
     
     logger.info('Credits deducted immediately on generate click', {
@@ -3123,7 +3141,7 @@ async function getOrCreateUserByIdentifier(identifier, type = 'wallet') {
   if (type === 'email') {
     user = await User.findOne({ email: identifier.toLowerCase() });
     if (!user) {
-      // Give new email users 2 free credits
+      // Give new email users 2 free credits with atomic protection
       user = new User({
         email: identifier.toLowerCase(),
         credits: 2,
@@ -3141,6 +3159,26 @@ async function getOrCreateUserByIdentifier(identifier, type = 'wallet') {
         }
       });
       await user.save();
+      
+      // Atomic fallback: Ensure credits are set correctly (prevents abuse from concurrent requests)
+      const savedUser = await User.findOneAndUpdate(
+        {
+          _id: user._id,
+          credits: { $lt: 2 }, // Only update if credits are less than 2
+          createdAt: { $gte: new Date(Date.now() - 10000) } // Only if created within last 10 seconds
+        },
+        {
+          $set: {
+            credits: 2
+          },
+          $max: {
+            totalCreditsEarned: 2 // Ensure totalCreditsEarned is at least 2
+          }
+        },
+        { new: true }
+      );
+      
+      user = savedUser || user;
       logger.info('New email user created with 2 free credits', { email: user.email, credits: user.credits });
     }
   } else {
@@ -3227,7 +3265,7 @@ async function getUserFromRequest(req) {
     let user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       // Create user if they don't exist (for email users who haven't been created yet)
-      // Give new email users 2 free credits
+      // Give new email users 2 free credits with atomic protection
       logger.info('Creating new user with email', { email: normalizedEmail });
       user = new User({
         email: normalizedEmail,
@@ -3246,6 +3284,26 @@ async function getUserFromRequest(req) {
         }
       });
       await user.save();
+      
+      // Atomic fallback: Ensure credits are set correctly (prevents abuse from concurrent requests)
+      const savedUser = await User.findOneAndUpdate(
+        {
+          _id: user._id,
+          credits: { $lt: 2 }, // Only update if credits are less than 2
+          createdAt: { $gte: new Date(Date.now() - 10000) } // Only if created within last 10 seconds
+        },
+        {
+          $set: {
+            credits: 2
+          },
+          $max: {
+            totalCreditsEarned: 2 // Ensure totalCreditsEarned is at least 2
+          }
+        },
+        { new: true }
+      );
+      
+      user = savedUser || user;
       logger.info('New email user created with 2 free credits', { email: normalizedEmail, credits: user.credits });
     } else {
       logger.debug('User found by email', { email: normalizedEmail, credits: user.credits });
@@ -3445,7 +3503,7 @@ const calculateSubscriptionCredits = (user, amountInDollars) => {
   };
 };
 
-// Helper function to add credits and payment history to user
+// Helper function to add credits and payment history to user (with idempotency check)
 const addCreditsToUser = async (user, {
   txHash,
   tokenSymbol,
@@ -3457,6 +3515,18 @@ const addCreditsToUser = async (user, {
   paymentIntentId = null,
   subscriptionId = null
 }) => {
+  // Check if payment was already processed (idempotency - prevents duplicate credit grants)
+  const paymentId = paymentIntentId || txHash;
+  if (paymentId && isPaymentAlreadyProcessed(user, txHash, paymentIntentId)) {
+    logger.warn('Payment already processed - skipping credit addition', {
+      paymentId,
+      userId: user.userId,
+      email: user.email,
+      walletAddress: user.walletAddress
+    });
+    return null; // Return null to indicate already processed
+  }
+  
   user.credits += credits;
   user.totalCreditsEarned += credits;
   
@@ -3992,24 +4062,42 @@ async function getOrCreateUser(walletAddress) {
       const { ownedCollections, isHolder } = await checkNFTHoldingsForWallet(normalizedAddress);
       
       if (isHolder && ownedCollections.length > 0) {
-        // NFT holder: grant 5 credits total (3 more to make 5)
-        const creditsToGrant = 5 - latestUser.credits;
-        if (creditsToGrant > 0) {
-          latestUser.credits = 5;
-          latestUser.totalCreditsEarned = 5;
-          latestUser.nftCollections = ownedCollections;
-          await latestUser.save();
-          
-          logger.info('New NFT holder wallet user created with 5 credits', { 
+        // NFT holder: grant 5 credits total using atomic update to prevent abuse
+        // Only grant if user is new, recently created, and doesn't already have 5 credits
+        const nftUser = await User.findOneAndUpdate(
+          {
+            _id: latestUser._id,
+            credits: { $lt: 5 }, // Only update if credits are less than 5
+            createdAt: { $gte: new Date(Date.now() - 10000) } // Only if created within last 10 seconds
+          },
+          {
+            $set: {
+              credits: 5,
+              nftCollections: ownedCollections
+            },
+            $max: {
+              totalCreditsEarned: 5 // Ensure totalCreditsEarned is at least 5
+            }
+          },
+          { new: true }
+        );
+        
+        if (nftUser) {
+          logger.info('New NFT holder wallet user created with 5 credits (atomic update)', { 
             walletAddress: normalizedAddress, 
             isSolana: isSolanaAddress, 
-            credits: latestUser.credits,
-            totalCreditsEarned: latestUser.totalCreditsEarned,
+            credits: nftUser.credits,
+            totalCreditsEarned: nftUser.totalCreditsEarned,
             nftCollections: ownedCollections.length
+          });
+        } else {
+          logger.debug('NFT credit grant skipped - user may have been updated concurrently', {
+            walletAddress: normalizedAddress,
+            currentCredits: latestUser.credits
           });
         }
       } else {
-        // Regular user: keep 2 credits
+        // Regular user: keep 2 credits (already set during creation)
         logger.info('New wallet user created with 2 credits', { 
           walletAddress: normalizedAddress, 
           isSolana: isSolanaAddress, 
@@ -4034,20 +4122,44 @@ async function getOrCreateUser(walletAddress) {
   
   // Fallback: Ensure new users always have at least 2 credits if they somehow don't
   // This handles edge cases where timing checks might miss or credits weren't set properly
+  // Use atomic update with condition to prevent abuse (only grant if credits < 2 and user is new)
   if (isNewUser && latestUser.credits < 2) {
-    logger.warn('New user has less than 2 credits, fixing', {
-      normalizedAddress,
-      isSolana: isSolanaAddress,
-      currentCredits: latestUser.credits
-    });
-    latestUser.credits = 2;
-    latestUser.totalCreditsEarned = Math.max(latestUser.totalCreditsEarned || 0, 2);
-    await latestUser.save();
-    logger.info('Fixed new user credits to 2', {
-      normalizedAddress,
-      isSolana: isSolanaAddress,
-      credits: latestUser.credits
-    });
+    const accountAge = latestUser.createdAt ? Date.now() - new Date(latestUser.createdAt).getTime() : Infinity;
+    const isVeryNewUser = accountAge < 60000; // Only within 1 minute of creation
+    
+    if (isVeryNewUser) {
+      // Use atomic update to prevent race conditions and abuse
+      const fixedUser = await User.findOneAndUpdate(
+        {
+          _id: latestUser._id,
+          credits: { $lt: 2 }, // Only update if credits are still less than 2
+          createdAt: { $gte: new Date(Date.now() - 60000) } // Only if created within last minute
+        },
+        {
+          $set: {
+            credits: 2
+          },
+          $max: {
+            totalCreditsEarned: 2 // Ensure totalCreditsEarned is at least 2
+          }
+        },
+        { new: true }
+      );
+      
+      if (fixedUser) {
+        logger.info('Fixed new user credits to 2 (atomic update)', {
+          normalizedAddress,
+          isSolana: isSolanaAddress,
+          credits: fixedUser.credits
+        });
+      } else {
+        logger.debug('Credit fix skipped - user may have been updated concurrently or is not new', {
+          normalizedAddress,
+          currentCredits: latestUser.credits,
+          accountAge
+        });
+      }
+    }
   }
   
   // If user already had credits (granted before first connection), log it
@@ -4502,6 +4614,7 @@ app.post('/api/auth/signup', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create user with 2 free credits for new email signups
+    // Use atomic operation to prevent race conditions if multiple signups happen simultaneously
     const user = new User({
       email: email.toLowerCase(),
       password: hashedPassword,
@@ -4522,7 +4635,31 @@ app.post('/api/auth/signup', async (req, res) => {
 
     await user.save();
     
-    logger.info('New email user created with 2 free credits', { email: user.email, userId: user.userId, credits: user.credits });
+    // Atomic fallback: Ensure credits are set correctly (prevents abuse from concurrent requests)
+    // This is a safety check in case of race conditions during user creation
+    const savedUser = await User.findOneAndUpdate(
+      {
+        _id: user._id,
+        credits: { $lt: 2 }, // Only update if credits are less than 2
+        createdAt: { $gte: new Date(Date.now() - 10000) } // Only if created within last 10 seconds
+      },
+      {
+        $set: {
+          credits: 2
+        },
+        $max: {
+          totalCreditsEarned: 2 // Ensure totalCreditsEarned is at least 2
+        }
+      },
+      { new: true }
+    );
+    
+    const finalUser = savedUser || user;
+    logger.info('New email user created with 2 free credits', { 
+      email: finalUser.email, 
+      userId: finalUser.userId, 
+      credits: finalUser.credits 
+    });
 
     // Ensure userId was generated (should be done by pre-save hook, but verify)
     if (!user.userId) {
