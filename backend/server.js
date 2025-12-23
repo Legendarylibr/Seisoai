@@ -3787,14 +3787,19 @@ async function getOrCreateUser(walletAddress) {
   const isSolanaAddress = !walletAddress.startsWith('0x');
   const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
   
+  // Check if user already exists
+  const existingUser = await User.findOne({ walletAddress: normalizedAddress });
+  const isNewUser = !existingUser;
+  
   // Use findOneAndUpdate with upsert to make this atomic and prevent race conditions
   // This ensures that if credits were granted before user connects, they won't be lost
+  // Start with 2 credits for new users (will be updated to 5 if NFT holder)
   const user = await User.findOneAndUpdate(
     { walletAddress: normalizedAddress },
     {
       $setOnInsert: {
         walletAddress: normalizedAddress,
-        credits: 2, // Give new wallet users 2 credits (same as email users)
+        credits: 2, // Default: 2 credits for new users (will be updated to 5 if NFT holder)
         totalCreditsEarned: 2,
         totalCreditsSpent: 0,
         hasUsedFreeImage: false,
@@ -3829,18 +3834,56 @@ async function getOrCreateUser(walletAddress) {
     return user;
   }
   
-  // Log if this was a new user creation
-  if (latestUser.createdAt && Date.now() - new Date(latestUser.createdAt).getTime() < 2000) {
-    logger.info('New wallet user created with 2 credits', { 
-      walletAddress: normalizedAddress, 
-      isSolana: isSolanaAddress, 
-      credits: latestUser.credits,
-      totalCreditsEarned: latestUser.totalCreditsEarned
-    });
+  // If this is a new user, check NFT status and grant appropriate credits
+  // NFT holders get 5 credits, regular users get 2 credits
+  if (isNewUser && latestUser.createdAt && Date.now() - new Date(latestUser.createdAt).getTime() < 5000) {
+    try {
+      // Check NFT holdings for new users
+      const { ownedCollections, isHolder } = await checkNFTHoldingsForWallet(normalizedAddress);
+      
+      if (isHolder && ownedCollections.length > 0) {
+        // NFT holder: grant 5 credits total (3 more to make 5)
+        const creditsToGrant = 5 - latestUser.credits;
+        if (creditsToGrant > 0) {
+          latestUser.credits = 5;
+          latestUser.totalCreditsEarned = 5;
+          latestUser.nftCollections = ownedCollections;
+          await latestUser.save();
+          
+          logger.info('New NFT holder wallet user created with 5 credits', { 
+            walletAddress: normalizedAddress, 
+            isSolana: isSolanaAddress, 
+            credits: latestUser.credits,
+            totalCreditsEarned: latestUser.totalCreditsEarned,
+            nftCollections: ownedCollections.length
+          });
+        }
+      } else {
+        // Regular user: keep 2 credits
+        logger.info('New wallet user created with 2 credits', { 
+          walletAddress: normalizedAddress, 
+          isSolana: isSolanaAddress, 
+          credits: latestUser.credits,
+          totalCreditsEarned: latestUser.totalCreditsEarned
+        });
+      }
+    } catch (nftError) {
+      // If NFT check fails, user still gets 2 credits (default)
+      logger.warn('NFT check failed for new user, defaulting to 2 credits', { 
+        walletAddress: normalizedAddress,
+        error: nftError.message 
+      });
+      logger.info('New wallet user created with 2 credits (NFT check failed)', { 
+        walletAddress: normalizedAddress, 
+        isSolana: isSolanaAddress, 
+        credits: latestUser.credits,
+        totalCreditsEarned: latestUser.totalCreditsEarned
+      });
+    }
   }
   
   // If user already had credits (granted before first connection), log it
-  if (latestUser.credits > 2 && latestUser.createdAt && Date.now() - new Date(latestUser.createdAt).getTime() < 2000) {
+  if (latestUser.credits > 5 && latestUser.createdAt && Date.now() - new Date(latestUser.createdAt).getTime() < 2000) {
     logger.info('User created with existing credits (granted before first connection)', {
       walletAddress: normalizedAddress,
       credits: latestUser.credits
@@ -4796,39 +4839,13 @@ app.get('/api/users/:walletAddress', async (req, res) => {
     
     // When skipNFTs=true, optimize for speed - single query, no NFT checks
     if (skipNFTs === 'true') {
-      // Single optimized query - just get user data, no NFT checking
-      const user = await User.findOneAndUpdate(
-        { walletAddress: normalizedAddress },
-        { $set: { lastActive: new Date() } },
-        {
-          upsert: true,
-          new: true,
-          setDefaultsOnInsert: {
-            walletAddress: normalizedAddress,
-            credits: 0,
-            totalCreditsEarned: 0,
-            totalCreditsSpent: 0,
-            nftCollections: [],
-            paymentHistory: [],
-            generationHistory: [],
-            gallery: [],
-            settings: {
-              preferredStyle: null,
-              defaultImageSize: '1024x1024',
-              enableNotifications: true
-            }
-          }
-        }
-      );
+      // Use getOrCreateUser to ensure new users get 2 free credits
+      // This is faster than the full NFT check path but still grants credits properly
+      const user = await getOrCreateUser(normalizedAddress);
       
-      // Ensure totalCreditsEarned field exists
-      if (user.totalCreditsEarned == null) {
-        user.totalCreditsEarned = user.credits || 0;
-        if (user.totalCreditsSpent == null) {
-          user.totalCreditsSpent = 0;
-        }
-        await user.save();
-      }
+      // Update lastActive timestamp
+      user.lastActive = new Date();
+      await user.save();
       
       const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
       const userCredits = user.credits != null ? user.credits : 0;
@@ -5079,8 +5096,13 @@ app.post('/api/nft/check-holdings', async (req, res) => {
           { new: true }
         );
         
-        // Grant 5 credits to NFT holders (one-time, flat amount)
-        const creditsToGrant = 5;
+        // Grant credits to NFT holders to ensure they have 5 credits total (one-time, idempotent)
+        // New NFT holders get 5 credits immediately from getOrCreateUser
+        // Existing users with 2 credits will get 3 more to make 5 total
+        // If user already has 5 credits, no additional credits are granted
+        const targetCredits = 5;
+        const currentCredits = user.credits || 0;
+        const creditsToGrant = Math.max(0, targetCredits - currentCredits);
         
         // Check if NFT credits have already been granted by looking for payment entry
         const nftGrantTxHash = `NFT_GRANT_${normalizedWalletForNFT}`;
@@ -5104,10 +5126,17 @@ app.post('/api/nft/check-holdings', async (req, res) => {
           logger.info('NFT credits granted automatically', { 
             walletAddress: normalizedWalletForNFT,
             creditsGranted,
-            note: 'NFT holders receive 5 free credits'
+            currentCredits,
+            totalAfterGrant: currentCredits + creditsToGrant,
+            note: 'NFT holders receive 5 credits total'
           });
         } else if (hasBeenGranted) {
           logger.debug('NFT credits already granted', { walletAddress: normalizedWalletForNFT });
+        } else if (currentCredits >= targetCredits) {
+          logger.debug('NFT holder already has sufficient credits', { 
+            walletAddress: normalizedWalletForNFT,
+            currentCredits 
+          });
         }
       } catch (grantError) {
         logger.error('Error granting NFT credits', { 
