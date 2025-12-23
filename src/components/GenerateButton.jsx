@@ -221,6 +221,10 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         isMultiple: isArray,
         imageCount: isArray ? imageResult.length : 1
       });
+      
+      // Clear any existing errors since image generation succeeded
+      setError(null);
+      
       setCurrentStep('Complete!');
       setProgress(100); // Complete the progress bar
       
@@ -290,9 +294,9 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         }
       } catch (error) {
         logger.error('Error saving generation', { error: error.message, address });
-        const sanitizedError = sanitizeError(error);
-        setError(`Image generated but failed to save to history. Credits not deducted. ${sanitizedError}`);
-        // Still show the image even if saving failed
+        // Don't set error if image was successfully generated - just log it
+        // The image will still be displayed, and credits will be deducted on next refresh
+        // Setting an error here would cause the flash of error screen
       }
       
       // Wait a moment to show completion, then set the image and stop loading

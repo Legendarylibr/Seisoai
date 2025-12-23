@@ -213,6 +213,9 @@ const ImageOutput = () => {
       // Handle both single image (string) and multiple images (array)
       const isArray = Array.isArray(result);
       const imageUrl = isArray ? result[0] : result;
+      
+      // Clear any errors since image was successfully generated
+      setError(null);
       setGeneratedImage(result);
       
       // Update current generation with new details
@@ -458,9 +461,12 @@ const ImageOutput = () => {
         }
       } catch (error) {
         logger.error('Error saving generation', { error: error.message, userIdentifier, isEmailAuth });
-        setError(`Image generated but failed to save to history. Credits not deducted. Error: ${error.message}`);
-        // Still show the image even if saving failed
+        // Don't set error if image was successfully generated - just log it
+        // The image will still be displayed, and credits will be deducted on next refresh
       }
+      
+      // Clear any errors since image was successfully generated
+      setError(null);
       
       // Handle both single image (string) and multiple images (array)
       setGeneratedImage(result);
@@ -525,7 +531,10 @@ const ImageOutput = () => {
     );
   }
 
-  if (error) {
+  // Only show error screen if there's an error AND no generated image
+  // If there's a generated image, show it even if there's an error (error might be non-critical)
+  const hasGeneratedImage = (generatedImages && generatedImages.length > 0) || generatedImage;
+  if (error && !hasGeneratedImage) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-8">
         <div className="glass-card p-8 rounded-2xl text-center max-w-md slide-up">
@@ -585,6 +594,27 @@ const ImageOutput = () => {
 
   return (
     <div className="w-full space-y-2">
+      {/* Show error banner if there's both an error and a generated image */}
+      {error && hasGeneratedImage && (
+        <div className="glass-card rounded-lg p-3 mb-2 flex items-center justify-between gap-3 animate-slide-down" style={{
+          background: 'linear-gradient(to bottom, #ffe0e0, #ffd0d0)',
+          border: '2px outset #ffc0c0',
+          boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+        }}>
+          <div className="flex items-center gap-2 flex-1">
+            <div className="text-lg">⚠️</div>
+            <p className="text-sm flex-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{error}</p>
+          </div>
+          <button
+            onClick={() => setError(null)}
+            className="p-1 rounded hover:bg-red-200 transition-colors flex-shrink-0"
+            style={{ color: '#000000' }}
+            aria-label="Dismiss error"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-end mb-2 flex-wrap gap-1.5">
         <div className="flex gap-1.5 flex-wrap">
           {hasMultipleImages && (
