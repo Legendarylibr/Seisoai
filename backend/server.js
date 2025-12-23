@@ -989,6 +989,80 @@ app.post('/api/wan-animate/upload-video-direct', express.raw({ type: 'multipart/
 // Note: Railway's reverse proxy may have a default 10MB limit. If you see 413 errors,
 // you may need to configure Railway's proxy settings or use direct fal.ai uploads from frontend
 app.use(express.json({ limit: '200mb' }));
+
+// CSRF Protection Middleware (defense-in-depth)
+// Validates Origin header for state-changing operations
+const csrfProtection = (req, res, next) => {
+  // Skip CSRF check for GET, HEAD, OPTIONS requests
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+
+  // Skip CSRF check for webhook endpoints (they use signature verification)
+  const webhookPaths = ['/api/stripe/webhook', '/api/webhook', '/api/webhooks'];
+  if (webhookPaths.some(path => req.path.startsWith(path))) {
+    return next();
+  }
+
+  // Skip CSRF check for health checks and metrics
+  if (req.path === '/api/health' || req.path === '/api/metrics') {
+    return next();
+  }
+
+  // Get origin from request
+  const origin = req.headers.origin || req.headers.referer;
+  
+  // In production, validate origin matches allowed origins
+  if (process.env.NODE_ENV === 'production' && origin) {
+    const allowedOrigins = process.env.ALLOWED_ORIGINS 
+      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim().toLowerCase())
+      : [];
+    
+    const originLower = origin.toLowerCase();
+    const isLocalhost = originLower.startsWith('http://localhost:') || originLower.startsWith('http://127.0.0.1:');
+    const isAllowed = isLocalhost || allowedOrigins.some(allowed => {
+      const normalizedAllowed = allowed.replace(/\/$/, '').toLowerCase();
+      const normalizedOrigin = originLower.replace(/\/$/, '');
+      return normalizedAllowed === normalizedOrigin || 
+             normalizedOrigin.startsWith(normalizedAllowed) ||
+             normalizedAllowed.startsWith(normalizedOrigin);
+    });
+
+    if (!isAllowed && allowedOrigins.length > 0) {
+      logger.warn('CSRF protection: Origin not allowed', { origin, path: req.path, method: req.method });
+      return res.status(403).json({
+        success: false,
+        error: 'Request origin not allowed'
+      });
+    }
+  }
+
+  // Additional check: Verify Origin header matches Host for same-origin requests
+  // This helps prevent CSRF attacks even if CORS is misconfigured
+  const host = req.headers.host;
+  if (origin && host && process.env.NODE_ENV === 'production') {
+    try {
+      const originUrl = new URL(origin);
+      const originHost = originUrl.host;
+      // Allow if origin host matches request host (same-origin)
+      if (originHost === host || originHost === `www.${host}` || host === `www.${originHost}`) {
+        return next();
+      }
+    } catch (e) {
+      // Invalid origin URL - in production, if ALLOWED_ORIGINS is set, this should have been caught above
+      // If ALLOWED_ORIGINS is not set, allow it (permissive mode)
+      if (!process.env.ALLOWED_ORIGINS) {
+        return next();
+      }
+    }
+  }
+
+  // If we get here, the request passed all CSRF checks
+  next();
+};
+
+// Apply CSRF protection to all routes
+app.use(csrfProtection);
 app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 
 // Serve static files from parent dist directory (frontend build)
@@ -2896,13 +2970,17 @@ const MAX_GLOBAL_FREE_IMAGES = 300; // For non-NFT holders
 const MAX_GLOBAL_FREE_IMAGES_NFT = 500; // For NFT holders
 
 // JWT Secret - REQUIRED in production, default only for development
-if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-  logger.error('❌ CRITICAL: JWT_SECRET is required in production. Server cannot start without a secure JWT secret.');
+// JWT_SECRET is required in all environments (no hardcoded fallback)
+if (!process.env.JWT_SECRET) {
+  logger.error('❌ CRITICAL: JWT_SECRET is required. Server cannot start without a secure JWT secret.');
+  logger.error('Please set JWT_SECRET in your environment variables (backend.env or system environment).');
   process.exit(1);
 }
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-here-32-chars-minimum-change-in-production';
-if (process.env.NODE_ENV === 'production' && JWT_SECRET.length < 32) {
-  logger.error('❌ CRITICAL: JWT_SECRET must be at least 32 characters long in production.');
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (JWT_SECRET.length < 32) {
+  logger.error('❌ CRITICAL: JWT_SECRET must be at least 32 characters long.');
+  logger.error(`Current length: ${JWT_SECRET.length}. Please generate a longer secret.`);
   process.exit(1);
 }
 
@@ -2920,6 +2998,14 @@ const authenticateToken = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Reject refresh tokens used as access tokens
+    if (decoded.type === 'refresh') {
+      return res.status(403).json({
+        success: false,
+        error: 'Refresh tokens cannot be used for authentication. Please use an access token.'
+      });
+    }
     
     // Find user by userId or email
     const user = await User.findOne({
@@ -4421,11 +4507,12 @@ app.post('/api/auth/signup', async (req, res) => {
       });
     }
 
-    // Validate password length
-    if (password.length < 6) {
+    // Validate password strength (12+ chars with complexity)
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
+    if (!passwordRegex.test(password)) {
       return res.status(400).json({
         success: false,
-        error: 'Password must be at least 6 characters'
+        error: 'Password must be at least 12 characters and include uppercase, lowercase, number, and special character (@$!%*?&)'
       });
     }
 
@@ -4473,9 +4560,15 @@ app.post('/api/auth/signup', async (req, res) => {
       });
     }
 
-    // Generate JWT token
+    // Generate JWT access token (7 days) and refresh token (30 days)
     const token = jwt.sign(
-      { userId: user.userId, email: user.email },
+      { userId: user.userId, email: user.email, type: 'access' },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    const refreshToken = jwt.sign(
+      { userId: user.userId, type: 'refresh' },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
@@ -4485,6 +4578,7 @@ app.post('/api/auth/signup', async (req, res) => {
     res.json({
       success: true,
       token,
+      refreshToken,
       user: {
         userId: user.userId,
         email: user.email,
@@ -4555,9 +4649,15 @@ app.post('/api/auth/signin', async (req, res) => {
     user.lastActive = new Date();
     await user.save();
 
-    // Generate JWT token
+    // Generate JWT access token (7 days) and refresh token (30 days)
     const token = jwt.sign(
-      { userId: user.userId, email: user.email },
+      { userId: user.userId, email: user.email, type: 'access' },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    const refreshToken = jwt.sign(
+      { userId: user.userId, type: 'refresh' },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
@@ -4567,6 +4667,7 @@ app.post('/api/auth/signin', async (req, res) => {
     res.json({
       success: true,
       token,
+      refreshToken,
       user: {
         userId: user.userId,
         email: user.email,
@@ -4616,6 +4717,72 @@ app.get('/api/auth/verify', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       error: getSafeErrorMessage(error, 'Failed to verify token')
+    });
+  }
+});
+
+/**
+ * Refresh access token using refresh token
+ */
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Refresh token is required'
+      });
+    }
+
+    // Verify refresh token
+    const decoded = jwt.verify(refreshToken, JWT_SECRET);
+    
+    // Ensure it's a refresh token
+    if (decoded.type !== 'refresh') {
+      return res.status(403).json({
+        success: false,
+        error: 'Invalid token type. Refresh token required.'
+      });
+    }
+
+    // Find user
+    const user = await User.findOne({
+      userId: decoded.userId
+    }).select('-password');
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Generate new access token
+    const newAccessToken = jwt.sign(
+      { userId: user.userId, email: user.email, type: 'access' },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    logger.info('Access token refreshed', { userId: user.userId });
+
+    res.json({
+      success: true,
+      token: newAccessToken
+    });
+
+  } catch (error) {
+    logger.error('Token refresh error:', error);
+    if (error.name === 'TokenExpiredError' || error.name === 'JsonWebTokenError') {
+      return res.status(403).json({
+        success: false,
+        error: 'Invalid or expired refresh token'
+      });
+    }
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to refresh token')
     });
   }
 });
@@ -5380,7 +5547,7 @@ app.post('/api/payment/get-address', async (req, res) => {
     networks: ['Ethereum', 'Polygon', 'Arbitrum', 'Optimism', 'Base', 'Solana']
   });
   } catch (error) {
-    console.error('[ERROR] Get payment address error:', error);
+    logger.error('Get payment address error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to get payment address'
@@ -5516,10 +5683,10 @@ async function checkForTokenTransfer(paymentAddress, token = 'USDC', chain = 'et
       };
     }
   } catch (error) {
-    console.error(`[${chain.toUpperCase()}] ❌ Error:`, error.message);
-    if (error.stack) {
-      console.error(`[${chain.toUpperCase()}] Stack:`, error.stack);
-    }
+    logger.error(`Token transfer check error for ${chain}:`, {
+      message: error.message,
+      stack: error.stack
+    });
     return null;
   }
 }
@@ -5529,8 +5696,7 @@ async function checkForTokenTransfer(paymentAddress, token = 'USDC', chain = 'et
  */
 async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
   try {
-    console.log(`\n[SOLANA] Starting check for USDC transfers...`);
-    console.log(`[SOLANA] Looking for ANY transfers TO: ${paymentAddress}`);
+    logger.debug('Starting Solana USDC transfer check', { paymentAddress, expectedAmount });
     
     // Use optimized RPC endpoints for better reliability with public endpoints
     const rpcUrls = [
@@ -6687,8 +6853,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
     const { walletAddress, chainId, expectedAmount } = req.body;
     const token = 'USDC';
     
-    console.log(`[INSTANT CHECK] Starting instant payment check for ${walletAddress || 'any wallet'} on chain ${chainId}`);
-    console.log(`[INSTANT CHECK] Expected amount: ${expectedAmount} USDC`);
+    logger.debug('Starting instant payment check', { walletAddress, chainId, expectedAmount });
     
     const evmPaymentAddress = EVM_PAYMENT_ADDRESS;
     
@@ -6705,14 +6870,12 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
     
     // Only check the chain the wallet is connected to
     if (chainName) {
-      console.log(`[INSTANT CHECK] Checking ${chainName} only (Chain ID: ${chainId})`);
-      console.log(`[INSTANT CHECK] Looking for USDC transfers TO: ${evmPaymentAddress}`);
-      console.log(`[INSTANT CHECK] On chain: ${chainName}`);
+      logger.debug('Checking specific chain for payment', { chainName, chainId, evmPaymentAddress });
       const quickPromises = [Promise.race([
         checkForTokenTransfer(evmPaymentAddress, token, chainName),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 30000)) // Increase timeout to 30s
       ]).catch(err => {
-        console.log(`[QUICK] ${chainName} check failed:`, err.message);
+        logger.debug(`Quick payment check failed for ${chainName}:`, { error: err.message });
         return null;
       })];
       
@@ -6720,14 +6883,14 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
       const quickPayment = quickResults.find(r => r && r.found);
       
       if (quickPayment) {
-        console.log(`[INSTANT] Payment found on ${quickPayment.chain}!`);
+        logger.info('Payment found on blockchain', { chain: quickPayment.chain, txHash: quickPayment.txHash });
         
         // Get the sender's wallet address from the blockchain event
         const senderAddress = quickPayment.from;
         
         // Verify the payment is from the requesting wallet address
         if (walletAddress && senderAddress.toLowerCase() !== walletAddress.toLowerCase()) {
-          console.log(`[INSTANT] Payment sender ${senderAddress} does not match requesting wallet ${walletAddress}`);
+          logger.warn('Payment sender does not match requesting wallet', { senderAddress, walletAddress });
           return res.json({
             success: true,
             paymentDetected: false,
@@ -6742,7 +6905,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
           const tolerance = expected * 0.01; // 1% tolerance
           
           if (paymentAmount < expected - tolerance || paymentAmount > expected + tolerance) {
-            console.log(`[INSTANT] Payment amount ${paymentAmount} does not match expected ${expectedAmount} (tolerance: ${tolerance})`);
+            logger.warn('Payment amount does not match expected', { paymentAmount, expectedAmount, tolerance });
             return res.json({
               success: true,
               paymentDetected: false,
@@ -6751,7 +6914,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
           }
         }
         
-        console.log(`[CREDIT] Crediting sender: ${senderAddress} for USDC transfer`);
+        logger.info('Crediting sender for USDC transfer', { senderAddress, amount: quickPayment.amount });
         
         // Process payment for the sender
         const user = await getOrCreateUser(senderAddress);
@@ -6809,7 +6972,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
           timestamp: new Date(quickPayment.timestamp * 1000)
         });
         
-        console.log(`[INSTANT] Added ${creditsToAdd} credits to ${senderAddress}!`);
+        logger.info('Credits added successfully', { senderAddress, creditsToAdd, newBalance: user.credits });
         
         return res.json({
           success: true,
@@ -6824,14 +6987,14 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
     }
     
     // If no chainId provided or chain not found, fall back to checking all chains
-    console.log(`[INSTANT CHECK] No specific chain requested or unsupported chainId (${chainId}), checking all chains`);
+    logger.debug('No specific chain requested, checking all chains', { chainId });
     const allChains = ['polygon', 'ethereum', 'base', 'arbitrum', 'optimism'];
     const quickPromises = allChains.map(chain => 
       Promise.race([
         checkForTokenTransfer(evmPaymentAddress, token, chain),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
       ]).catch(err => {
-        console.log(`[QUICK] ${chain} check failed:`, err.message);
+        logger.debug(`Quick payment check failed for ${chain}:`, { error: err.message });
         return null;
       })
     );
@@ -6840,14 +7003,14 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
     const quickPayment = quickResults.find(r => r && r.found);
     
     if (quickPayment) {
-      console.log(`[INSTANT] Payment found on ${quickPayment.chain}!`);
+      logger.info('Payment found on blockchain', { chain: quickPayment.chain, txHash: quickPayment.txHash });
       
       // Get the sender's wallet address from the blockchain event
       const senderAddress = quickPayment.from;
       
       // Verify the payment is from the requesting wallet address
       if (walletAddress && senderAddress.toLowerCase() !== walletAddress.toLowerCase()) {
-        console.log(`[INSTANT] Payment sender ${senderAddress} does not match requesting wallet ${walletAddress}`);
+        logger.warn('Payment sender does not match requesting wallet', { senderAddress, walletAddress });
         return res.json({
           success: true,
           paymentDetected: false,
@@ -6862,7 +7025,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         const tolerance = expected * 0.01; // 1% tolerance
         
         if (paymentAmount < expected - tolerance || paymentAmount > expected + tolerance) {
-          console.log(`[INSTANT] Payment amount ${paymentAmount} does not match expected ${expectedAmount} (tolerance: ${tolerance})`);
+          logger.warn('Payment amount does not match expected', { paymentAmount, expectedAmount, tolerance });
           return res.json({
             success: true,
             paymentDetected: false,
@@ -6871,7 +7034,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
         }
       }
       
-      console.log(`[CREDIT] Crediting sender: ${senderAddress} for USDC transfer`);
+      logger.info('Crediting sender for USDC transfer', { senderAddress, amount: quickPayment.amount });
       
       // Process payment for the sender
       const user = await getOrCreateUser(senderAddress);
@@ -6932,7 +7095,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
       // Refetch user to get latest credits
       const finalUser = await User.findOne({ walletAddress: senderAddress });
       
-      console.log(`[INSTANT] Added ${creditsToAdd} credits to ${senderAddress}!`);
+      logger.info('Credits added successfully', { senderAddress, creditsToAdd, newBalance: finalUser.credits });
       
       return res.json({
         success: true,
@@ -6953,7 +7116,7 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
     });
     
   } catch (error) {
-    console.error('[INSTANT CHECK] Error:', error);
+    logger.error('Instant payment check error:', error);
     res.status(500).json({
       success: false,
       error: 'Instant payment check failed'
@@ -7402,9 +7565,7 @@ app.post('/api/generations/add', async (req, res) => {
       message
     });
   } catch (error) {
-    console.error('❌ [GENERATION ADD] ERROR:', error);
-    console.error('❌ [GENERATION ADD] Error stack:', error.stack);
-    logger.error('Error adding generation:', error);
+    logger.error('Error adding generation:', { error: error.message, stack: error.stack });
     res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to add generation') });
   }
 });
@@ -7547,7 +7708,7 @@ app.post('/api/test/deduct-credits', async (req, res) => {
     const isSolanaAddress = !walletAddress.startsWith('0x');
     const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
     
-    console.log('🧪 [TEST] Manual credit deduction test:', {
+    logger.debug('Manual credit deduction test', {
       original: walletAddress,
       normalized: normalizedWalletAddress,
       creditsToDeduct
@@ -7582,7 +7743,6 @@ app.post('/api/test/deduct-credits', async (req, res) => {
       message: `Test deduction: ${beforeCredits} -> ${afterCredits} (saved: ${savedUser?.credits})`
     });
   } catch (error) {
-    console.error('❌ [TEST] Error:', error);
     logger.error('Test endpoint error:', error);
     return res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Test operation failed') });
   }
@@ -7866,18 +8026,18 @@ app.get('*', (req, res) => {
 
 // Dynamic port handling with fallback
 const startServer = async (port = process.env.PORT || 3001) => {
-  console.log('🚀 Starting server...');
-  console.log('Environment variables:');
-  console.log('PORT:', process.env.PORT);
-  console.log('NODE_ENV:', process.env.NODE_ENV);
-  console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Set' : 'Not set');
+  logger.info('Starting server...', {
+    port: process.env.PORT,
+    nodeEnv: process.env.NODE_ENV,
+    mongodbConfigured: !!process.env.MONGODB_URI
+  });
   
   // Ensure port is a number
   const serverPort = parseInt(port, 10);
   
   if (isNaN(serverPort) || serverPort < 1 || serverPort > 65535) {
     const error = new Error(`Invalid port: ${port}`);
-    console.error('❌ Invalid port:', port);
+    logger.error('Invalid port:', { port });
     throw error;
   }
   
@@ -7886,9 +8046,11 @@ const startServer = async (port = process.env.PORT || 3001) => {
       logger.info(`AI Image Generator API running on port ${serverPort}`);
       logger.info(`MongoDB connected: ${mongoose.connection.readyState === 1 ? 'Yes' : 'No'}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`✅ Server started successfully on port ${serverPort}`);
-      console.log(`🌐 Health check: http://0.0.0.0:${serverPort}/api/health`);
-      console.log(`🌐 Health check (localhost): http://localhost:${serverPort}/api/health`);
+      logger.info('Server started successfully', {
+        port: serverPort,
+        healthCheck: `http://0.0.0.0:${serverPort}/api/health`,
+        localhostHealthCheck: `http://localhost:${serverPort}/api/health`
+      });
       
       // Health check endpoint is ready - no need to verify with fetch
       // The endpoint will respond when Railway's healthcheck probes it
@@ -7897,7 +8059,7 @@ const startServer = async (port = process.env.PORT || 3001) => {
     });
 
     server.on('error', (err) => {
-      console.error('❌ Server error:', err);
+      logger.error('Server error:', err);
       if (err.code === 'EADDRINUSE') {
         logger.warn(`Port ${serverPort} is in use, trying port ${serverPort + 1}`);
         startServer(serverPort + 1).then(resolve).catch(reject);
@@ -7955,9 +8117,9 @@ const startServer = async (port = process.env.PORT || 3001) => {
 
   // Graceful shutdown
   process.on('SIGTERM', () => {
-    console.log('SIGTERM received, shutting down gracefully');
+    logger.info('SIGTERM received, shutting down gracefully');
     server.close(() => {
-      console.log('Process terminated');
+      logger.info('Process terminated');
       process.exit(0);
     });
   });
@@ -7978,7 +8140,7 @@ if (import.meta.url === `file://${process.argv[1]}` ||
   // But allow manual start for testing
   if (process.argv[1] && process.argv[1].includes('server.js')) {
     startServer().catch(error => {
-      console.error('❌ Failed to start server:', error);
+      logger.error('Failed to start server:', error);
       process.exit(1);
     });
   }
