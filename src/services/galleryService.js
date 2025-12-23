@@ -36,7 +36,8 @@ export const addGeneration = async (identifier, generationData) => {
     const response = await fetch(`${API_URL}/api/generations/add`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token') || ''}`
       },
       body: JSON.stringify({
         walletAddress: isWalletAddress ? normalizedIdentifier : undefined,
@@ -47,7 +48,11 @@ export const addGeneration = async (identifier, generationData) => {
     });
 
     const responseText = await response.text();
-    logger.debug('Response from /api/generations/add', { status: response.status });
+    logger.debug('Response from /api/generations/add', { 
+      status: response.status,
+      statusText: response.statusText,
+      hasResponseText: !!responseText
+    });
 
     if (!response.ok) {
       let errorData;
@@ -56,8 +61,33 @@ export const addGeneration = async (identifier, generationData) => {
       } catch {
         errorData = { error: responseText || 'Failed to add generation' };
       }
-      logger.error('Backend error adding generation', { error: errorData.error, status: response.status });
-      throw new Error(errorData.error || `Failed to add generation: ${response.status} ${response.statusText}`);
+      
+      // Provide more specific error messages
+      let errorMessage = errorData.error || `Failed to add generation: ${response.status} ${response.statusText}`;
+      
+      if (response.status === 401 || response.status === 403) {
+        errorMessage = 'Authentication failed. Please sign in again.';
+        logger.warn('Authentication error when saving generation - token may be expired', { 
+          status: response.status,
+          identifier: normalizedIdentifier 
+        });
+      } else if (response.status === 404) {
+        errorMessage = 'User account not found. Please sign in again.';
+        logger.warn('User not found when saving generation', { 
+          identifier: normalizedIdentifier,
+          isWalletAddress 
+        });
+      } else if (response.status === 400) {
+        errorMessage = errorData.error || 'Invalid request. Missing required information.';
+      }
+      
+      logger.error('Backend error adding generation', { 
+        error: errorMessage, 
+        status: response.status,
+        errorData,
+        identifier: normalizedIdentifier
+      });
+      throw new Error(errorMessage);
     }
 
     const data = JSON.parse(responseText);
