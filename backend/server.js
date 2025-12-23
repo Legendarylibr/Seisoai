@@ -7298,7 +7298,7 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
     const availableCredits = user.credits || 0;
     const creditsToDeduct = creditsUsed || 1; // Default to 1 credit if not specified
     
-    // Check IP-based free image eligibility (prevents abuse across multiple accounts)
+    // Check if user is eligible for credits (based on IP usage and global limits)
     const clientIP = extractClientIP(req);
     let ipFreeImageRecord = await IPFreeImage.findOne({ ipAddress: clientIP });
     if (!ipFreeImageRecord) {
@@ -7312,14 +7312,14 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
     const freeImagesUsedFromIP = ipFreeImageRecord.freeImagesUsed || 0;
     
     // Check if user is NFT holder (has ANY NFTs - not counting how many)
-    // NFT holders get 5 free images TOTAL per IP, not 5 per NFT
     const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
     const maxFreeImages = isNFTHolder ? MAX_FREE_IMAGES_PER_IP_NFT : MAX_FREE_IMAGES_PER_IP_REGULAR;
+    const creditsToAdd = isNFTHolder ? 5 : 2; // NFT holders get 5 credits, regular users get 2
     
-    // Check global free image cap (drainable pools)
-    let isEligibleForFreeImage = false;
-    if (creditsToDeduct === 1 && freeImagesUsedFromIP < maxFreeImages) {
-      // Get or create global free image counter
+    // Check global credit cap (drainable pools)
+    let isEligibleForCredits = false;
+    if (freeImagesUsedFromIP < maxFreeImages) {
+      // Get or create global counter
       let globalCounter = await GlobalFreeImage.findOne({ key: 'global' });
       if (!globalCounter) {
         globalCounter = new GlobalFreeImage({ 
@@ -7333,33 +7333,17 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
       if (!isNFTHolder) {
         // Check global cap for non-NFT holders
         const totalFreeImagesUsed = globalCounter.totalFreeImagesUsed || 0;
-        if (totalFreeImagesUsed >= MAX_GLOBAL_FREE_IMAGES) {
-          logger.info('Global free image cap reached for regular users', {
-            totalFreeImagesUsed,
-            maxGlobalFreeImages: MAX_GLOBAL_FREE_IMAGES,
-            clientIP
-          });
-          isEligibleForFreeImage = false;
-        } else {
-          isEligibleForFreeImage = true;
+        if (totalFreeImagesUsed < MAX_GLOBAL_FREE_IMAGES) {
+          isEligibleForCredits = true;
         }
       } else {
         // Check global cap for NFT holders
         const totalFreeImagesUsedNFT = globalCounter.totalFreeImagesUsedNFT || 0;
-        if (totalFreeImagesUsedNFT >= MAX_GLOBAL_FREE_IMAGES_NFT) {
-          logger.info('Global free image cap reached for NFT holders', {
-            totalFreeImagesUsedNFT,
-            maxGlobalFreeImagesNFT: MAX_GLOBAL_FREE_IMAGES_NFT,
-            clientIP
-          });
-          isEligibleForFreeImage = false;
-        } else {
-          isEligibleForFreeImage = true;
+        if (totalFreeImagesUsedNFT < MAX_GLOBAL_FREE_IMAGES_NFT) {
+          isEligibleForCredits = true;
         }
       }
     }
-    
-    const isFreeImage = isEligibleForFreeImage && availableCredits < creditsToDeduct;
     
     logger.debug('Checking credits for generation', {
       userId: user.userId,
@@ -7373,23 +7357,80 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
       freeImagesUsedFromIP,
       maxFreeImages,
       isNFTHolder,
-      isEligibleForFreeImage,
-      isFreeImage
+      isEligibleForCredits,
+      creditsToAdd
     });
     
-    // Check if user has enough credits (unless this is a free image based on IP)
-    if (availableCredits < creditsToDeduct && !isFreeImage) {
+    // If user has insufficient credits and is eligible, add credits to their account
+    if (availableCredits < creditsToDeduct && isEligibleForCredits) {
+      // Build query for user update
+      let updateQuery;
+      if (user.walletAddress) {
+        const isSolanaAddress = !user.walletAddress.startsWith('0x');
+        const normalizedWalletAddress = isSolanaAddress ? user.walletAddress : user.walletAddress.toLowerCase();
+        updateQuery = { walletAddress: normalizedWalletAddress };
+      } else if (user.userId) {
+        updateQuery = { userId: user.userId };
+      } else if (user.email) {
+        updateQuery = { email: user.email.toLowerCase() };
+      }
+      
+      // Add credits to user account
+      await User.findOneAndUpdate(
+        updateQuery,
+        { $inc: { credits: creditsToAdd } },
+        { new: true }
+      );
+      
+      // Update IP usage counter
+      await IPFreeImage.findOneAndUpdate(
+        { ipAddress: clientIP },
+        { 
+          $inc: { freeImagesUsed: 1 },
+          $set: { lastUsed: new Date() }
+        },
+        { upsert: true, new: true }
+      );
+      
+      // Update global counter
+      if (!isNFTHolder) {
+        await GlobalFreeImage.findOneAndUpdate(
+          { key: 'global' },
+          { $inc: { totalFreeImagesUsed: 1 } },
+          { upsert: true, new: true }
+        );
+      } else {
+        await GlobalFreeImage.findOneAndUpdate(
+          { key: 'global' },
+          { $inc: { totalFreeImagesUsedNFT: 1 } },
+          { upsert: true, new: true }
+        );
+      }
+      
+      // Refetch user to get updated credits
+      const updatedUser = await User.findOne(updateQuery);
+      user.credits = updatedUser?.credits || user.credits;
+      availableCredits = user.credits || 0;
+      
+      logger.info('Credits added to account', {
+        userId: user.userId,
+        email: user.email,
+        walletAddress: user.walletAddress,
+        creditsAdded: creditsToAdd,
+        newCredits: availableCredits,
+        isNFTHolder
+      });
+    }
+    
+    // Check if user has enough credits after potential credit addition
+    if (availableCredits < creditsToDeduct) {
       logger.warn('Insufficient credits for generation', {
         userId: user.userId,
         email: user.email,
         walletAddress: user.walletAddress,
         availableCredits,
         creditsToDeduct,
-        totalCreditsEarned: user.totalCreditsEarned,
-        clientIP,
-        freeImagesUsedFromIP,
-        maxFreeImages,
-        isNFTHolder
+        totalCreditsEarned: user.totalCreditsEarned
       });
       return res.status(400).json({
         success: false,
@@ -7397,10 +7438,9 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
       });
     }
 
-    // Deduct credits (if not free) and add generation in a SINGLE atomic operation to prevent conflicts
+    // Deduct credits and add generation in a SINGLE atomic operation to prevent conflicts
     const previousCredits = user.credits || 0;
     const previousTotalSpent = user.totalCreditsSpent || 0;
-    const actualCreditsDeducted = isFreeImage ? 0 : creditsToDeduct;
     
     logger.debug('Before credit deduction', {
       previousCredits,
@@ -7413,7 +7453,6 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
     });
     
     // Create generation object
-    // For free images, set creditsUsed to 0 immediately
     const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const generation = {
       id: generationId,
@@ -7423,7 +7462,7 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
       ...(videoUrl && { videoUrl }),
       ...(requestId && { requestId }),
       ...(status && { status }),
-      creditsUsed: isFreeImage ? 0 : creditsToDeduct, // Set to 0 for free images
+      creditsUsed: creditsToDeduct,
       timestamp: new Date()
     };
     
@@ -7434,7 +7473,7 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
       style: style || 'No Style',
       ...(imageUrl && { imageUrl }),
       ...(videoUrl && { videoUrl }),
-      creditsUsed: isFreeImage ? 0 : creditsToDeduct, // Set to 0 for free images
+      creditsUsed: creditsToDeduct,
       timestamp: new Date()
     };
     
@@ -7461,7 +7500,6 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
     logger.debug('Executing atomic update', {
       updateQuery,
       creditsToDeduct,
-      isFreeImage,
       actualCreditsUsed: generation.creditsUsed,
       hasGeneration: !!generation,
       hasVideoUrl: !!videoUrl,
@@ -7469,78 +7507,16 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
       status: status || 'completed'
     });
     
-    // Build update object - only add to gallery if completed or if it's an image
-    // For free images, don't deduct credits but still mark as used
+    // Build update object - deduct credits and add generation
     const updateObj = {
       $push: {
         generationHistory: generation
-      }
-    };
-    
-    // Only deduct credits if this is not a free image
-    if (!isFreeImage) {
-      updateObj.$inc = { 
+      },
+      $inc: { 
         credits: -creditsToDeduct,
         totalCreditsSpent: creditsToDeduct
-      };
-    } else {
-      // For free images, increment IP-based free image counter (atomic operation)
-      await IPFreeImage.findOneAndUpdate(
-        { ipAddress: clientIP },
-        { 
-          $inc: { freeImagesUsed: 1 },
-          $set: { lastUsed: new Date() }
-        },
-        { upsert: true, new: true }
-      );
-      
-      // Increment global free image counter (separate counters for NFT and non-NFT holders)
-      if (!isNFTHolder) {
-        await GlobalFreeImage.findOneAndUpdate(
-          { key: 'global' },
-          { $inc: { totalFreeImagesUsed: 1 } },
-          { upsert: true, new: true }
-        );
-        
-        // Get updated count for logging
-        const updatedGlobalCounter = await GlobalFreeImage.findOne({ key: 'global' });
-        const totalFreeImagesUsed = updatedGlobalCounter?.totalFreeImagesUsed || 0;
-        
-        logger.info('Using free image (IP-based, global counter incremented)', {
-          userId: user.userId,
-          email: user.email,
-          walletAddress: user.walletAddress,
-          clientIP,
-          freeImagesUsedAfter: freeImagesUsedFromIP + 1,
-          maxFreeImages,
-          isNFTHolder,
-          totalFreeImagesUsed,
-          remainingGlobalFreeImages: MAX_GLOBAL_FREE_IMAGES - totalFreeImagesUsed
-        });
-      } else {
-        await GlobalFreeImage.findOneAndUpdate(
-          { key: 'global' },
-          { $inc: { totalFreeImagesUsedNFT: 1 } },
-          { upsert: true, new: true }
-        );
-        
-        // Get updated count for logging
-        const updatedGlobalCounter = await GlobalFreeImage.findOne({ key: 'global' });
-        const totalFreeImagesUsedNFT = updatedGlobalCounter?.totalFreeImagesUsedNFT || 0;
-        
-        logger.info('Using free image (IP-based, NFT holder global counter incremented)', {
-          userId: user.userId,
-          email: user.email,
-          walletAddress: user.walletAddress,
-          clientIP,
-          freeImagesUsedAfter: freeImagesUsedFromIP + 1,
-          maxFreeImages,
-          isNFTHolder,
-          totalFreeImagesUsedNFT,
-          remainingGlobalFreeImagesNFT: MAX_GLOBAL_FREE_IMAGES_NFT - totalFreeImagesUsedNFT
-        });
       }
-    }
+    };
     
     // Only add to gallery if completed (has videoUrl/imageUrl) or if status is not queued/processing
     if (status !== 'queued' && status !== 'processing' && (videoUrl || imageUrl)) {
@@ -7608,27 +7584,12 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
     // Use updateResult for response
     const finalCredits = updateResult.credits;
     
-    // Get updated IP free image count for message (if free image was used)
-    let updatedIPRecord = null;
-    let remainingFreeImages = 0;
-    if (isFreeImage) {
-      updatedIPRecord = await IPFreeImage.findOne({ ipAddress: clientIP });
-      const updatedFreeImagesUsed = updatedIPRecord?.freeImagesUsed || 0;
-      remainingFreeImages = Math.max(0, maxFreeImages - updatedFreeImagesUsed);
-    }
-    
     logger.info('Generation added to history and credits deducted', {
       userId: user.userId,
       email: user.email,
       walletAddress: user.walletAddress,
       generationId,
-      creditsUsed: isFreeImage ? 0 : creditsToDeduct,
-      isFreeImage,
-      clientIP,
-      freeImagesUsedFromIP: updatedIPRecord?.freeImagesUsed || freeImagesUsedFromIP,
-      remainingFreeImages,
-      maxFreeImages,
-      isNFTHolder,
+      creditsUsed: creditsToDeduct,
       previousCredits,
       newCredits: finalCredits,
       savedCredits: savedUser?.credits,
@@ -7636,17 +7597,14 @@ app.post('/api/generations/add', authenticateToken, async (req, res) => {
       creditsActuallyDeducted: previousCredits - finalCredits
     });
     
-    const message = isFreeImage 
-      ? `Generation added to history. This was a free image! ${remainingFreeImages} free image(s) remaining for your IP. Remaining credits: ${finalCredits}.`
-      : `Generation added to history. ${creditsToDeduct} credit(s) deducted. Remaining: ${finalCredits} credits.`;
+    const message = `Generation added to history. ${creditsToDeduct} credit(s) deducted. Remaining: ${finalCredits} credits.`;
     
     res.json({
       success: true,
       generationId,
       remainingCredits: finalCredits,
-      creditsDeducted: actualCreditsDeducted,
+      creditsDeducted: creditsToDeduct,
       previousCredits: previousCredits,
-      isFreeImage,
       message
     });
   } catch (error) {
