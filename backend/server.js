@@ -1787,11 +1787,8 @@ const requireCreditsForModel = () => {
   return async (req, res, next) => {
     try {
       // Determine required credits based on model selection
-      const { model, image_urls, image_url } = req.body;
-      const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
-      const isSingleImage = image_url || (image_urls && image_urls.length === 1);
-      const isNanoBananaPro = model === 'nano-banana-pro' && (isMultipleImages || isSingleImage);
-      const isQwen = model === 'qwen-image-layered' && (isMultipleImages || isSingleImage);
+      const { model } = req.body;
+      const isNanoBananaPro = model === 'nano-banana-pro';
       const requiredCredits = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro ($0.20), 1 for others (FLUX and Qwen)
       
       // Store required credits for use in handler
