@@ -4872,6 +4872,74 @@ app.post('/api/stripe/subscription/cancel', authenticateToken, async (req, res) 
 });
 
 /**
+ * Create Stripe billing portal session for subscription management
+ */
+app.post('/api/stripe/billing-portal', authenticateToken, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stripe is not configured'
+      });
+    }
+
+    const user = req.user;
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    
+    // Find Stripe customer ID
+    let customerId = null;
+    
+    // Try to find customer by email
+    try {
+      const customers = await stripe.customers.list({
+        email: user.email,
+        limit: 1
+      });
+
+      if (customers.data.length > 0) {
+        customerId = customers.data[0].id;
+      } else {
+        // If no customer found, return error
+        return res.status(404).json({
+          success: false,
+          error: 'No Stripe customer found. Please subscribe first.'
+        });
+      }
+    } catch (stripeError) {
+      logger.error('Error finding Stripe customer:', stripeError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to find customer account'
+      });
+    }
+
+    // Create billing portal session
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${baseUrl}`,
+    });
+
+    logger.info('Stripe billing portal session created', {
+      userId: user.userId || user._id.toString(),
+      email: user.email,
+      sessionId: session.id
+    });
+
+    res.json({
+      success: true,
+      url: session.url
+    });
+
+  } catch (error) {
+    logger.error('Billing portal session creation error:', error);
+    res.status(500).json({
+      success: false,
+      error: getSafeErrorMessage(error, 'Failed to create billing portal session')
+    });
+  }
+});
+
+/**
  * Get user data
  */
 app.get('/api/users/:walletAddress', async (req, res) => {

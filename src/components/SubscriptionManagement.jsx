@@ -9,7 +9,7 @@ const SubscriptionManagement = ({ isOpen, onClose }) => {
   const { email, refreshCredits } = useEmailAuth();
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [canceling, setCanceling] = useState(false);
+  const [openingPortal, setOpeningPortal] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
@@ -56,13 +56,9 @@ const SubscriptionManagement = ({ isOpen, onClose }) => {
     }
   };
 
-  const cancelSubscription = async () => {
-    if (!subscription || !window.confirm('Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.')) {
-      return;
-    }
-
+  const openBillingPortal = async () => {
     try {
-      setCanceling(true);
+      setOpeningPortal(true);
       setError(null);
       setSuccess(null);
 
@@ -72,34 +68,27 @@ const SubscriptionManagement = ({ isOpen, onClose }) => {
         return;
       }
 
-      const response = await fetch(`${API_URL}/api/stripe/subscription/cancel`, {
+      const response = await fetch(`${API_URL}/api/stripe/billing-portal`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          subscriptionId: subscription.id
-        })
+        }
       });
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
-        setSuccess('Subscription canceled successfully. You will continue to have access until the end of your billing period.');
-        setSubscription(data.subscription);
-        // Refresh credits in case they changed
-        if (refreshCredits) {
-          setTimeout(() => refreshCredits(), 1000);
-        }
+      if (response.ok && data.success && data.url) {
+        // Redirect to Stripe billing portal
+        window.location.href = data.url;
       } else {
-        setError(data.error || 'Failed to cancel subscription');
+        setError(data.error || 'Failed to open billing portal');
       }
     } catch (err) {
-      logger.error('Error canceling subscription:', { error: err.message });
-      setError('Failed to cancel subscription');
+      logger.error('Error opening billing portal:', { error: err.message });
+      setError('Failed to open billing portal');
     } finally {
-      setCanceling(false);
+      setOpeningPortal(false);
     }
   };
 
@@ -247,28 +236,28 @@ const SubscriptionManagement = ({ isOpen, onClose }) => {
               </div>
             </div>
 
-            {/* Cancel Button */}
-            {subscription.status === 'active' && !subscription.cancel_at_period_end && (
+            {/* Manage Subscription Button */}
+            {subscription.status === 'active' && (
               <div className="pt-4 border-t border-white/10">
                 <button
-                  onClick={cancelSubscription}
-                  disabled={canceling}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg text-red-300 font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={openBillingPortal}
+                  disabled={openingPortal}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg text-blue-300 font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {canceling ? (
+                  {openingPortal ? (
                     <>
                       <Loader className="w-4 h-4 animate-spin" />
-                      <span>Canceling...</span>
+                      <span>Opening...</span>
                     </>
                   ) : (
                     <>
-                      <X className="w-4 h-4" />
-                      <span>Cancel Subscription</span>
+                      <CreditCard className="w-4 h-4" />
+                      <span>Manage Subscription in Stripe</span>
                     </>
                   )}
                 </button>
                 <p className="text-xs text-gray-400 text-center mt-2">
-                  You will continue to have access until {formatDate(subscription.current_period_end)}
+                  Open Stripe's billing portal to cancel, update payment method, or view invoices
                 </p>
               </div>
             )}
