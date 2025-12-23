@@ -3,7 +3,7 @@ import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { Sparkles, Zap, Layers } from 'lucide-react';
 import logger from '../utils/logger.js';
 
-const MultiImageModelSelector = () => {
+const MultiImageModelSelector = ({ customPrompt = '' }) => {
   const { controlNetImage, multiImageModel, setMultiImageModel } = useImageGenerator();
 
   // Check if we have images (1+)
@@ -65,6 +65,8 @@ const MultiImageModelSelector = () => {
   if (!hasImages) {
     const isFluxSelectedForTextToImage = multiImageModel === 'flux' || !multiImageModel;
     const isNanoBananaProSelected = multiImageModel === 'nano-banana-pro';
+    const hasNoPrompt = !customPrompt || !customPrompt.trim();
+    const showTextToImageEmphasis = hasNoPrompt && isFluxSelectedForTextToImage;
     
     return (
       <div className="space-y-1 p-1.5 rounded" style={{ 
@@ -89,9 +91,15 @@ const MultiImageModelSelector = () => {
             }}
             className="flex-1 flex flex-row items-center justify-center gap-1 px-1.5 py-1 rounded transition-all min-w-[60px]"
             style={isFluxSelectedForTextToImage ? {
-              background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
-              border: '2px inset #c0c0c0',
-              boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
+              background: showTextToImageEmphasis 
+                ? 'linear-gradient(to bottom, #ffffcc, #ffffaa, #ffff99)'
+                : 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
+              border: showTextToImageEmphasis 
+                ? '2px inset #cccc00'
+                : '2px inset #c0c0c0',
+              boxShadow: showTextToImageEmphasis
+                ? 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)'
+                : 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
               color: '#000000',
               textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
             } : {
@@ -117,7 +125,14 @@ const MultiImageModelSelector = () => {
             <Zap className="w-3 h-3" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
             <div className="flex flex-col items-center gap-0">
               <span className="text-[10px] font-bold leading-tight">FLUX</span>
-              <span className="text-[9px] leading-tight" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>1 credit</span>
+              {showTextToImageEmphasis ? (
+                <span className="text-[9px] font-bold leading-tight" style={{ 
+                  color: '#000000', 
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' 
+                }}>Text to Image</span>
+              ) : (
+                <span className="text-[9px] leading-tight" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>1 credit</span>
+              )}
             </div>
           </button>
           <button
@@ -165,7 +180,9 @@ const MultiImageModelSelector = () => {
             {isNanoBananaProSelected
               ? '✨ Advanced text-to-image with better quality'
               : isFluxSelectedForTextToImage
-              ? '⚡ Fast text-to-image generation'
+              ? (showTextToImageEmphasis 
+                  ? '📝 Text to Image - Enter a prompt and click Generate'
+                  : '⚡ Fast text-to-image generation')
               : '⚡ Select FLUX or Nano Banana Pro'}
           </p>
         </div>

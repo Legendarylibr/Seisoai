@@ -207,23 +207,19 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
                   <div className="space-y-0.5 text-xs leading-tight" style={{ color: '#000000' }}>
                     <div className="flex items-start gap-1">
                       <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>1.</span>
-                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Upload</strong> (0=new, 1=edit, 2+=blend)</span>
+                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Text to Image:</strong> Type a description, choose a style (optional), and click Generate.</span>
                     </div>
                     <div className="flex items-start gap-1">
                       <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>2.</span>
-                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Select model</strong> (FLUX, Nano Banana Pro, or Qwen)</span>
+                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>With Reference Image:</strong> Upload 1 image, add a prompt describing changes, and click Generate.</span>
                     </div>
                     <div className="flex items-start gap-1">
                       <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>3.</span>
-                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Enter prompt</strong> (optional, not needed for Qwen)</span>
+                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Multiple Reference Images:</strong> Upload 2+ images, select FLUX or Nano Banana Pro, and click Generate to blend them.</span>
                     </div>
                     <div className="flex items-start gap-1">
                       <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>4.</span>
-                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Choose style</strong> (optional, not needed for Qwen)</span>
-                    </div>
-                    <div className="flex items-start gap-1">
-                      <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>5.</span>
-                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Click Generate</strong> (or Extract Layers for Qwen)</span>
+                      <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Layer Extract:</strong> Upload an image, select Qwen model, and click "Extract Layers" to separate into individual layers.</span>
                     </div>
                   </div>
                 </div>
@@ -255,7 +251,7 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
               
               {/* Multi-Image Model Selection */}
               <div className="mt-0.5">
-                <MultiImageModelSelector />
+                <MultiImageModelSelector customPrompt={customPrompt} />
               </div>
             </div>
 
