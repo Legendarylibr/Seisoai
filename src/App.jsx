@@ -53,7 +53,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
   const credits = isEmailAuth ? (emailCredits || 0) : (walletCredits || 0);
   const isLoading = walletLoading || emailLoading;
 
-  // Allow users to see UI even without credits - they can still use free images (IP-based)
+  // Allow users to see UI even without credits - new users get 2 credits
   // Removed redirect to pricing page - users can access all tabs regardless of credit balance
   useEffect(() => {
     if (isLoading) return;
@@ -121,13 +121,13 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
 
   // Allow UI access without authentication - users can see the interface and try to generate
   // Authentication will be prompted when they try to generate if needed
-  // New users get 2 free images (IP-based), so we allow them to see the UI
-  // Users with 0 credits can still use free images, so we don't block the UI
+  // New users get 2 credits when they sign up, so we allow them to see the UI
+  // Users with 0 credits can still see the UI and will be prompted to purchase credits
 
   // Show main content - allow UI access even without authentication or credits
   // New users can see the interface and will be prompted to sign up when generating
-  // They'll get 2 free images (IP-based) after signing up
-  // NFT holders get additional free images (5 total per IP)
+  // They'll get 2 credits after signing up
+  // NFT holders get additional benefits
   return (
     <>
       <AuthGuard requireCredits={false}>
