@@ -20,7 +20,8 @@ Once you have the URL, run:
 Or create it directly with Stripe CLI:
 
 ```bash
-export STRIPE_API_KEY=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
+# Set your Stripe Secret Key (get it from https://dashboard.stripe.com/apikeys)
+export STRIPE_API_KEY=sk_live_YOUR_ACTUAL_KEY_HERE
 
 stripe webhook_endpoints create \
   --url "https://YOUR-BACKEND-URL.up.railway.app/api/stripe/webhook" \

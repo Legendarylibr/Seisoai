@@ -7,11 +7,11 @@ If credits aren't being added, the most likely cause is that `STRIPE_WEBHOOK_SEC
 **Check:**
 1. Go to Railway Dashboard → Backend Service → Variables
 2. Verify `STRIPE_WEBHOOK_SECRET` exists
-3. Value should be: `whsec_TdMRww8Ja1L1zai06d4oIYhut9XECZCX`
+3. Value should start with `whsec_` (get it from Stripe Dashboard → Webhooks)
 
 **If missing, add it:**
 - Variable name: `STRIPE_WEBHOOK_SECRET`
-- Variable value: `whsec_TdMRww8Ja1L1zai06d4oIYhut9XECZCX`
+- Variable value: `whsec_YOUR_WEBHOOK_SECRET_HERE` (get from Stripe Dashboard)
 - Save and redeploy
 
 ## Check Webhook Delivery in Stripe

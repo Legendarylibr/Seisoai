@@ -4,7 +4,23 @@
 
 set -e
 
-STRIPE_API_KEY=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
+# Get Stripe API key from environment variable or prompt user
+if [ -z "$STRIPE_API_KEY" ]; then
+    echo "⚠️  STRIPE_API_KEY not found in environment"
+    echo "Please provide your Stripe Secret Key (starts with sk_live_...)"
+    read -p "Enter your Stripe Secret Key: " STRIPE_API_KEY
+    
+    if [ -z "$STRIPE_API_KEY" ]; then
+        echo "❌ Error: Stripe API key is required"
+        exit 1
+    fi
+fi
+
+# Validate key format
+if [[ ! "$STRIPE_API_KEY" =~ ^sk_(live|test)_ ]]; then
+    echo "❌ Error: Invalid Stripe key format. Must start with sk_live_ or sk_test_"
+    exit 1
+fi
 
 if [ -z "$1" ]; then
     echo "🚀 Stripe Webhook Endpoint Creator"

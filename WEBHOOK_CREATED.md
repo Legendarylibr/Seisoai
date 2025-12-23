@@ -14,8 +14,10 @@
 **IMPORTANT**: Add this to Railway as `STRIPE_WEBHOOK_SECRET`:
 
 ```
-whsec_TdMRww8Ja1L1zai06d4oIYhut9XECZCX
+whsec_YOUR_WEBHOOK_SECRET_HERE
 ```
+
+**Note**: Get the actual signing secret from Stripe Dashboard → Webhooks → Your endpoint → "Reveal" button
 
 ## 📝 Next Steps
 
@@ -23,7 +25,7 @@ whsec_TdMRww8Ja1L1zai06d4oIYhut9XECZCX
    - Go to Railway Dashboard → Your Backend Service → Variables
    - Add new variable:
      - **Name**: `STRIPE_WEBHOOK_SECRET`
-     - **Value**: `whsec_TdMRww8Ja1L1zai06d4oIYhut9XECZCX`
+     - **Value**: `whsec_YOUR_ACTUAL_SECRET_HERE` (from Stripe Dashboard)
    - Save
 
 2. **Verify `FRONTEND_URL` is set:**

@@ -49,7 +49,8 @@ You need to create a webhook endpoint in Stripe to receive subscription events:
 
 **Option B: Using Stripe CLI**
 ```bash
-export STRIPE_API_KEY=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
+# Set your Stripe Secret Key (get it from https://dashboard.stripe.com/apikeys)
+export STRIPE_API_KEY=sk_live_YOUR_ACTUAL_KEY_HERE
 
 stripe webhook_endpoints create \
   --url https://your-backend.up.railway.app/api/stripe/webhook \
@@ -60,7 +61,7 @@ stripe webhook_endpoints create \
 ### 2. Verify Railway Environment Variables
 
 Make sure your Railway backend service has:
-- ✅ `STRIPE_SECRET_KEY=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` (already set)
+- ✅ `STRIPE_SECRET_KEY=sk_live_YOUR_ACTUAL_KEY_HERE` (get from Stripe Dashboard)
 - ⚠️ `STRIPE_WEBHOOK_SECRET=whsec_...` (add after creating webhook)
 - ⚠️ `FRONTEND_URL=https://your-frontend-domain.com` (set your frontend URL)
 
