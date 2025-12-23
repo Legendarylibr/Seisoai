@@ -621,6 +621,74 @@ logger.info('CORS configuration', {
   credentials: true
 });
 
+// JWT Secret - REQUIRED in production, default only for development
+// JWT_SECRET is required in all environments (no hardcoded fallback)
+if (!process.env.JWT_SECRET) {
+  logger.error('❌ CRITICAL: JWT_SECRET is required. Server cannot start without a secure JWT secret.');
+  logger.error('Please set JWT_SECRET in your environment variables (backend.env or system environment).');
+  process.exit(1);
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (JWT_SECRET.length < 32) {
+  logger.error('❌ CRITICAL: JWT_SECRET must be at least 32 characters long.');
+  logger.error(`Current length: ${JWT_SECRET.length}. Please generate a longer secret.`);
+  process.exit(1);
+}
+
+// JWT Authentication Middleware
+// Note: Uses User model which is defined later, but that's fine since this function
+// is only called at request time, not during module initialization
+const authenticateToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Reject refresh tokens used as access tokens
+    if (decoded.type === 'refresh') {
+      return res.status(403).json({
+        success: false,
+        error: 'Refresh tokens cannot be used for authentication. Please use an access token.'
+      });
+    }
+    
+    // Find user by userId or email
+    // User model is defined later in the file, but available at runtime
+    const User = mongoose.model('User');
+    const user = await User.findOne({
+      $or: [
+        { userId: decoded.userId },
+        { email: decoded.email }
+      ]
+    }).select('-password'); // Don't return password
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    logger.error('JWT authentication error:', error);
+    return res.status(403).json({
+      success: false,
+      error: 'Invalid or expired token'
+    });
+  }
+};
+
 // Stripe webhook needs raw body - MUST be before express.json()
 app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
   // Check if Stripe is configured
@@ -2998,70 +3066,6 @@ const MAX_FREE_IMAGES_PER_IP_NFT = 5;
 // Global caps for total free images (drainable pools)
 const MAX_GLOBAL_FREE_IMAGES = 300; // For non-NFT holders
 const MAX_GLOBAL_FREE_IMAGES_NFT = 500; // For NFT holders
-
-// JWT Secret - REQUIRED in production, default only for development
-// JWT_SECRET is required in all environments (no hardcoded fallback)
-if (!process.env.JWT_SECRET) {
-  logger.error('❌ CRITICAL: JWT_SECRET is required. Server cannot start without a secure JWT secret.');
-  logger.error('Please set JWT_SECRET in your environment variables (backend.env or system environment).');
-  process.exit(1);
-}
-
-const JWT_SECRET = process.env.JWT_SECRET;
-if (JWT_SECRET.length < 32) {
-  logger.error('❌ CRITICAL: JWT_SECRET must be at least 32 characters long.');
-  logger.error(`Current length: ${JWT_SECRET.length}. Please generate a longer secret.`);
-  process.exit(1);
-}
-
-// JWT Authentication Middleware
-const authenticateToken = async (req, res, next) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication required'
-      });
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    
-    // Reject refresh tokens used as access tokens
-    if (decoded.type === 'refresh') {
-      return res.status(403).json({
-        success: false,
-        error: 'Refresh tokens cannot be used for authentication. Please use an access token.'
-      });
-    }
-    
-    // Find user by userId or email
-    const user = await User.findOne({
-      $or: [
-        { userId: decoded.userId },
-        { email: decoded.email }
-      ]
-    }).select('-password'); // Don't return password
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        error: 'User not found'
-      });
-    }
-
-    req.user = user;
-    next();
-  } catch (error) {
-    logger.error('JWT authentication error:', error);
-    return res.status(403).json({
-      success: false,
-      error: 'Invalid or expired token'
-    });
-  }
-};
 
 // Helper function to get or create user by email or wallet
 async function getOrCreateUserByIdentifier(identifier, type = 'wallet') {
