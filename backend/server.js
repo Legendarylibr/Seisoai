@@ -2665,7 +2665,8 @@ const userSchema = new mongoose.Schema({
     required: false,  // Allow for email-only users
     unique: true, 
     sparse: true,  // Allow multiple docs without walletAddress
-    lowercase: true,
+    // Note: lowercase is NOT set here - we normalize in code:
+    // EVM addresses are lowercased, Solana addresses stay as-is (case-sensitive)
     index: true
   },
   email: {
@@ -3787,9 +3788,22 @@ async function getOrCreateUser(walletAddress) {
   const isSolanaAddress = !walletAddress.startsWith('0x');
   const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
   
+  logger.debug('getOrCreateUser called', { 
+    originalAddress: walletAddress, 
+    normalizedAddress, 
+    isSolana: isSolanaAddress 
+  });
+  
   // Check if user already exists
   const existingUser = await User.findOne({ walletAddress: normalizedAddress });
   const isNewUser = !existingUser;
+  
+  logger.debug('User lookup result', { 
+    normalizedAddress, 
+    isNewUser, 
+    existingCredits: existingUser?.credits,
+    existingCreatedAt: existingUser?.createdAt 
+  });
   
   // Use findOneAndUpdate with upsert to make this atomic and prevent race conditions
   // This ensures that if credits were granted before user connects, they won't be lost
@@ -3836,7 +3850,21 @@ async function getOrCreateUser(walletAddress) {
   
   // If this is a new user, check NFT status and grant appropriate credits
   // NFT holders get 5 credits, regular users get 2 credits
-  if (isNewUser && latestUser.createdAt && Date.now() - new Date(latestUser.createdAt).getTime() < 5000) {
+  // Check both isNewUser flag and createdAt timestamp to ensure we catch new users
+  const timeSinceCreation = latestUser.createdAt ? Date.now() - new Date(latestUser.createdAt).getTime() : Infinity;
+  const isRecentlyCreated = timeSinceCreation < 10000; // 10 second window
+  
+  logger.debug('Checking if user should get initial credits', {
+    normalizedAddress,
+    isSolana: isSolanaAddress,
+    isNewUser,
+    hasCreatedAt: !!latestUser.createdAt,
+    timeSinceCreation,
+    isRecentlyCreated,
+    currentCredits: latestUser.credits
+  });
+  
+  if (isNewUser && latestUser.createdAt && isRecentlyCreated) {
     try {
       // Check NFT holdings for new users
       const { ownedCollections, isHolder } = await checkNFTHoldingsForWallet(normalizedAddress);
@@ -3880,6 +3908,24 @@ async function getOrCreateUser(walletAddress) {
         totalCreditsEarned: latestUser.totalCreditsEarned
       });
     }
+  }
+  
+  // Fallback: Ensure new users always have at least 2 credits if they somehow don't
+  // This handles edge cases where timing checks might miss or credits weren't set properly
+  if (isNewUser && latestUser.credits < 2) {
+    logger.warn('New user has less than 2 credits, fixing', {
+      normalizedAddress,
+      isSolana: isSolanaAddress,
+      currentCredits: latestUser.credits
+    });
+    latestUser.credits = 2;
+    latestUser.totalCreditsEarned = Math.max(latestUser.totalCreditsEarned || 0, 2);
+    await latestUser.save();
+    logger.info('Fixed new user credits to 2', {
+      normalizedAddress,
+      isSolana: isSolanaAddress,
+      credits: latestUser.credits
+    });
   }
   
   // If user already had credits (granted before first connection), log it
