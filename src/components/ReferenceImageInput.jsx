@@ -165,7 +165,7 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
         {!controlNetImage ? (
           <div
             onClick={handleClickUpload}
-            className="flex-1 border-2 border-dashed border-white/20 rounded-lg p-4 text-center cursor-pointer hover:border-purple-400/50 hover:bg-white/5 transition-all duration-200 flex flex-col items-center justify-center"
+            className="flex-1 border-2 border-dashed border-transparent rounded-lg p-4 text-center cursor-pointer hover:border-[#42a5f5]/60 hover:bg-white/5 transition-all duration-200 flex flex-col items-center justify-center"
             role="button"
             tabIndex={0}
             aria-label="Upload reference image"
@@ -212,7 +212,7 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
           </button>
           <p className="text-xs text-gray-500">JPG, PNG, WebP up to 10MB</p>
           {!singleImageOnly && (
-            <p className="text-xs text-purple-400 mt-1">Ctrl/Cmd for multiple</p>
+            <p className="text-xs mt-1" style={{ color: '#42a5f5' }}>Ctrl/Cmd for multiple</p>
           )}
         </div>
       ) : (
