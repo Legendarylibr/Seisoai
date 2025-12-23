@@ -2501,9 +2501,16 @@ app.get('/api/wan-animate/result/:requestId', wanResultLimiter, async (req, res)
  * Complete video generation - deduct credits based on duration and add to gallery
  * Called by frontend after video is successfully generated and duration is calculated
  */
-app.post('/api/wan-animate/complete', async (req, res) => {
+/**
+ * Wan Animate Complete - called when video generation is complete
+ * SECURITY: Requires authentication - uses authenticated user from token
+ */
+app.post('/api/wan-animate/complete', authenticateToken, async (req, res) => {
   try {
-    const { requestId, videoUrl, duration, walletAddress, userId, email } = req.body;
+    // SECURITY: Use authenticated user from token, ignore user identifiers in body
+    const user = req.user;
+    
+    const { requestId, videoUrl, duration } = req.body;
     
     if (!videoUrl) {
       return res.status(400).json({ success: false, error: 'videoUrl is required' });
@@ -2513,24 +2520,13 @@ app.post('/api/wan-animate/complete', async (req, res) => {
       return res.status(400).json({ success: false, error: 'duration is required and must be greater than 0' });
     }
     
-    // Get user
-    let user;
-    if (walletAddress) {
-      const isSolanaAddress = !walletAddress.startsWith('0x');
-      const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
-      user = await getOrCreateUser(normalizedWalletAddress);
-    } else if (userId) {
-      user = await User.findOne({ userId });
-      if (!user) {
-        return res.status(404).json({ success: false, error: 'User not found' });
-      }
-    } else if (email) {
-      user = await User.findOne({ email: email.toLowerCase() });
-      if (!user) {
-        return res.status(404).json({ success: false, error: 'User not found' });
-      }
-    } else {
-      return res.status(400).json({ success: false, error: 'walletAddress, userId, or email is required' });
+    // SECURITY: Verify user has wallet or email (required for generation tracking)
+    if (!user.walletAddress && !user.email) {
+      logger.error('User has no wallet or email for video completion', { userId: user.userId });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User account must have wallet address or email' 
+      });
     }
     
     // Calculate credits (2 credits per second, minimum 2 credits)
@@ -2573,16 +2569,21 @@ app.post('/api/wan-animate/complete', async (req, res) => {
       timestamp: new Date()
     };
     
-    // Build update query
+    // SECURITY: Build update query using authenticated user's identifier
     let updateQuery;
-    if (walletAddress) {
-      const isSolanaAddress = !walletAddress.startsWith('0x');
-      const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    if (user.walletAddress) {
+      const isSolanaAddress = !user.walletAddress.startsWith('0x');
+      const normalizedWalletAddress = isSolanaAddress ? user.walletAddress : user.walletAddress.toLowerCase();
       updateQuery = { walletAddress: normalizedWalletAddress };
-    } else if (userId) {
-      updateQuery = { userId };
-    } else if (email) {
-      updateQuery = { email: email.toLowerCase() };
+    } else if (user.userId) {
+      updateQuery = { userId: user.userId };
+    } else if (user.email) {
+      updateQuery = { email: user.email.toLowerCase() };
+    } else {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User account must have wallet address, userId, or email' 
+      });
     }
     
     // Atomic update: deduct credits and add to history/gallery
@@ -5191,6 +5192,8 @@ app.post('/api/stripe/billing-portal', authenticateToken, async (req, res) => {
 
 /**
  * Get user data
+ * SECURITY: Requires authentication and verifies user owns the wallet address
+ * If not authenticated, returns minimal public data only (credits, NFT status, pricing)
  */
 app.get('/api/users/:walletAddress', async (req, res) => {
   try {
@@ -5201,10 +5204,77 @@ app.get('/api/users/:walletAddress', async (req, res) => {
     const isSolanaAddress = !walletAddress.startsWith('0x');
     const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
     
+    // SECURITY: Check if user is authenticated
+    let authenticatedUser = null;
+    const authHeader = req.headers['authorization'];
+    if (authHeader) {
+      try {
+        const token = authHeader.split(' ')[1]; // Bearer TOKEN
+        if (token) {
+          const decoded = jwt.verify(token, JWT_SECRET);
+          authenticatedUser = await User.findOne({
+            $or: [
+              { userId: decoded.userId },
+              { email: decoded.email }
+            ]
+          }).select('-password');
+          
+          // SECURITY: Verify authenticated user owns this wallet address
+          if (authenticatedUser && authenticatedUser.walletAddress) {
+            const userWalletNormalized = authenticatedUser.walletAddress.toLowerCase();
+            const requestedWalletNormalized = normalizedAddress.toLowerCase();
+            if (userWalletNormalized !== requestedWalletNormalized) {
+              // User is authenticated but doesn't own this wallet - return minimal data only
+              authenticatedUser = null;
+              logger.warn('Authenticated user attempted to access different wallet', {
+                authenticatedWallet: authenticatedUser?.walletAddress,
+                requestedWallet: normalizedAddress,
+                userId: authenticatedUser?.userId
+              });
+            }
+          } else if (authenticatedUser && !authenticatedUser.walletAddress) {
+            // Email-only user trying to access wallet endpoint - not allowed
+            authenticatedUser = null;
+            logger.warn('Email-only user attempted to access wallet endpoint', {
+              userId: authenticatedUser?.userId,
+              email: authenticatedUser?.email
+            });
+          }
+        }
+      } catch (tokenError) {
+        // Invalid token - treat as unauthenticated
+        logger.debug('Invalid auth token in user data request', { error: tokenError.message });
+      }
+    }
+    
+    // SECURITY: If not authenticated, return minimal public data only
+    if (!authenticatedUser) {
+      // Get user for public data (credits, NFT status, pricing)
+      const user = await getOrCreateUser(normalizedAddress);
+      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      const userCredits = user.credits != null ? user.credits : 0;
+      
+      // Return minimal public data only (no history, no sensitive data)
+      return res.json({
+        success: true,
+        user: {
+          walletAddress: user.walletAddress,
+          credits: userCredits,
+          isNFTHolder: isNFTHolder,
+          pricing: {
+            costPerCredit: isNFTHolder ? 0.06 : 0.15,
+            creditsPerUSDC: isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC
+          }
+        },
+        // Indicate this is public data (limited)
+        publicData: true
+      });
+    }
+    
+    // SECURITY: User is authenticated and owns this wallet - return full data
     // When skipNFTs=true, optimize for speed - single query, no NFT checks
     if (skipNFTs === 'true') {
-      // Use getOrCreateUser to ensure new users get 2 free credits
-      // This is faster than the full NFT check path but still grants credits properly
+      // Use authenticated user's wallet address (already verified above)
       const user = await getOrCreateUser(normalizedAddress);
       
       // Update lastActive timestamp
@@ -5216,7 +5286,7 @@ app.get('/api/users/:walletAddress', async (req, res) => {
       const userTotalCreditsEarned = user.totalCreditsEarned != null ? user.totalCreditsEarned : 0;
       const userTotalCreditsSpent = user.totalCreditsSpent != null ? user.totalCreditsSpent : 0;
       
-      // Fast response for skipNFTs mode
+      // Fast response for skipNFTs mode - full data for authenticated owner
       return res.json({
         success: true,
         user: {
@@ -6703,7 +6773,7 @@ app.post('/api/subscription/verify', async (req, res) => {
     const metadata = session.metadata || {};
     let user = null;
 
-    // Try to get user from auth token first
+    // SECURITY: Prioritize auth token - most secure method
     const authHeader = req.headers['authorization'];
     if (authHeader) {
       try {
@@ -6718,6 +6788,15 @@ app.post('/api/subscription/verify', async (req, res) => {
           });
           if (user) {
             logger.info('User found via auth token', { userId: user.userId, email: user.email });
+            
+            // SECURITY: If userId provided in body, verify it matches authenticated user
+            if (userId && user.userId !== userId) {
+              logger.warn('userId in body does not match authenticated user', {
+                authenticatedUserId: user.userId,
+                providedUserId: userId
+              });
+              // Continue with authenticated user (ignore body userId)
+            }
           }
         }
       } catch (tokenError) {
@@ -6725,11 +6804,12 @@ app.post('/api/subscription/verify', async (req, res) => {
       }
     }
 
-    // Try userId from request body (custom userId field, not MongoDB _id)
+    // SECURITY: Only use userId from request body if no auth token (less secure fallback)
+    // This maintains backward compatibility but prioritizes authentication
     if (!user && userId) {
       user = await User.findOne({ userId });
       if (user) {
-        logger.info('User found via request userId', { userId });
+        logger.info('User found via request userId (no auth token)', { userId });
       } else {
         logger.warn('User not found by request userId', { userId });
       }
@@ -7143,21 +7223,23 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
 
 /**
  * Add generation to history
+ * SECURITY: Requires authentication - uses authenticated user from token
  */
-app.post('/api/generations/add', async (req, res) => {
+app.post('/api/generations/add', authenticateToken, async (req, res) => {
   try {
+    // SECURITY: Use authenticated user from token, ignore user identifiers in body
+    const user = req.user;
+    
     logger.debug('Generation add request received', {
-      hasWalletAddress: !!req.body?.walletAddress,
-      hasUserId: !!req.body?.userId,
-      hasEmail: !!req.body?.email,
+      authenticatedUserId: user.userId,
+      authenticatedEmail: user.email,
+      authenticatedWallet: user.walletAddress,
       hasImageUrl: !!req.body?.imageUrl,
+      hasVideoUrl: !!req.body?.videoUrl,
       creditsUsed: req.body?.creditsUsed
     });
 
     const { 
-      walletAddress, 
-      userId,
-      email,
       prompt, 
       style, 
       imageUrl, 
@@ -7175,48 +7257,13 @@ app.post('/api/generations/add', async (req, res) => {
         error: 'Missing required field: imageUrl or videoUrl is required'
       });
     }
-
-    // Support both wallet address and email/userId authentication
-    let user;
-    if (walletAddress) {
-      // Wallet-based user
-      const isSolanaAddress = !walletAddress.startsWith('0x');
-      const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
-      
-      logger.debug('Getting user by wallet address', {
-        originalWalletAddress: walletAddress,
-        normalizedWalletAddress: normalizedWalletAddress,
-        isSolana: isSolanaAddress
-      });
-      
-      user = await getOrCreateUser(normalizedWalletAddress);
-    } else if (userId) {
-      // Email-based user (userId format: email_xxxxx)
-      logger.debug('Getting user by userId', { userId });
-      user = await User.findOne({ userId });
-      if (!user) {
-        logger.error('User not found by userId', { userId });
-        return res.status(404).json({
-          success: false,
-          error: 'User not found'
-        });
-      }
-    } else if (email) {
-      // Email-based user (by email)
-      logger.debug('Getting user by email', { email });
-      user = await User.findOne({ email: email.toLowerCase() });
-      if (!user) {
-        logger.error('User not found by email', { email });
-        return res.status(404).json({
-          success: false,
-          error: 'User not found'
-        });
-      }
-    } else {
-      logger.error('Missing user identifier', { hasWalletAddress: !!walletAddress, hasUserId: !!userId, hasEmail: !!email });
+    
+    // SECURITY: Verify user has wallet or email (required for generation tracking)
+    if (!user.walletAddress && !user.email) {
+      logger.error('User has no wallet or email', { userId: user.userId });
       return res.status(400).json({
         success: false,
-        error: 'Missing user identifier: walletAddress, userId, or email is required'
+        error: 'User account must have wallet address or email'
       });
     }
     logger.debug('User found for generation', {
@@ -7376,16 +7423,21 @@ app.post('/api/generations/add', async (req, res) => {
     // Use atomic update to do BOTH credit deduction AND add generation in one operation
     // This prevents race conditions and ensures credits are always deducted
     // DO NOT call user.save() after this - it would overwrite the atomic update!
-    // Build query based on how we found the user
+    // SECURITY: Build query using authenticated user's identifier
     let updateQuery;
-    if (walletAddress) {
-      const isSolanaAddress = !walletAddress.startsWith('0x');
-      const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    if (user.walletAddress) {
+      const isSolanaAddress = !user.walletAddress.startsWith('0x');
+      const normalizedWalletAddress = isSolanaAddress ? user.walletAddress : user.walletAddress.toLowerCase();
       updateQuery = { walletAddress: normalizedWalletAddress };
-    } else if (userId) {
-      updateQuery = { userId };
-    } else if (email) {
-      updateQuery = { email: email.toLowerCase() };
+    } else if (user.userId) {
+      updateQuery = { userId: user.userId };
+    } else if (user.email) {
+      updateQuery = { email: user.email.toLowerCase() };
+    } else {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User account must have wallet address, userId, or email' 
+      });
     }
     
     logger.debug('Executing atomic update', {
