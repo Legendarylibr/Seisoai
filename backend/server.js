@@ -969,7 +969,7 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
 app.post('/api/wan-animate/upload-video-direct', express.raw({ type: 'multipart/form-data', limit: '200mb' }), async (req, res) => {
   try {
     if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
     }
 
     // For now, return error - use data URI endpoint instead
@@ -1090,7 +1090,7 @@ const FAL_API_KEY = process.env.FAL_API_KEY;
 app.post('/api/wan-animate/upload-video-direct', async (req, res) => {
   try {
     if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
     }
 
     // Handle multipart/form-data
@@ -1186,7 +1186,7 @@ app.post('/api/wan-animate/upload-video-direct', async (req, res) => {
 app.post('/api/wan-animate/upload-video', async (req, res) => {
   try {
     if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
     }
 
     const { videoDataUri } = req.body;
@@ -1291,7 +1291,7 @@ app.post('/api/wan-animate/upload-video', async (req, res) => {
 app.post('/api/wan-animate/upload-image', async (req, res) => {
   try {
     if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
     }
 
     const { imageDataUri } = req.body;
@@ -1400,8 +1400,8 @@ app.post('/api/wan-animate/upload-image', async (req, res) => {
 app.post('/api/wan-animate/submit', wanSubmitLimiter, requireCredits(2), async (req, res) => {
   try {
     if (!FAL_API_KEY) {
-      logger.error('FAL_API_KEY not configured');
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+      logger.error('AI service not configured');
+      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
     }
     
     // Extract input from request body (can be nested in 'input' or at root level)
@@ -1669,18 +1669,15 @@ app.post('/api/wan-animate/submit', wanSubmitLimiter, requireCredits(2), async (
                          errorMessage.toLowerCase().includes('authentication');
       
       if (isAuthError || isKeyError) {
-        logger.error('FAL_API_KEY authentication error', {
+        logger.error('AI service authentication failed', {
           status: response.status,
           errorMessage,
-          responseText: responseText.substring(0, 500),
-          hasApiKey: !!FAL_API_KEY && FAL_API_KEY.length > 0,
-          apiKeyLength: FAL_API_KEY ? FAL_API_KEY.length : 0,
-          apiKeyPrefix: FAL_API_KEY ? FAL_API_KEY.substring(0, 10) + '...' : 'none',
-          apiKeyStartsWith: FAL_API_KEY ? (FAL_API_KEY.startsWith('fal_') ? 'fal_' : 'other') : 'none'
+          service: 'fal.ai'
+          // Removed API key metadata to prevent information leakage
         });
         return res.status(401).json({ 
           success: false, 
-          error: `FAL_API_KEY authentication failed (${response.status}). ${errorMessage}. Please check your API key configuration in backend.env.`
+          error: getSafeErrorMessage(new Error('AI service authentication failed'), 'Image generation service unavailable. Please contact support.')
         });
       }
       
@@ -1743,7 +1740,7 @@ const requireCreditsForModel = () => {
 app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), async (req, res) => {
   try {
     if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
     }
 
     const {
@@ -1906,24 +1903,30 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
                          errorMessage.toLowerCase().includes('no user found');
       
       if (isAuthError || isKeyError) {
-        logger.error('FAL_API_KEY authentication error in image generation', {
+        logger.error('AI service authentication failed in image generation', {
           status: response.status,
           errorMessage,
-          errorData,
-          hasApiKey: !!FAL_API_KEY && FAL_API_KEY.length > 0,
-          apiKeyLength: FAL_API_KEY ? FAL_API_KEY.length : 0,
-          apiKeyPrefix: FAL_API_KEY ? FAL_API_KEY.substring(0, 10) + '...' : 'none',
-          apiKeyStartsWith: FAL_API_KEY ? (FAL_API_KEY.startsWith('fal_') ? 'fal_' : 'other') : 'none'
+          service: 'fal.ai'
+          // Removed API key metadata to prevent information leakage
         });
         // Don't expose API key details or configuration info
         return res.status(401).json({ 
           success: false, 
-          error: getSafeErrorMessage(new Error('API authentication failed'), 'Authentication failed. Please contact support.')
+          error: getSafeErrorMessage(new Error('AI service authentication failed'), 'Image generation service unavailable. Please contact support.')
         });
       }
       
-      logger.error('Fal.ai image generation error', { status: response.status, errorMessage, errorData });
-      return res.status(response.status).json({ success: false, error: errorMessage });
+      logger.error('AI service image generation error', { 
+        status: response.status, 
+        errorMessage, 
+        errorData,
+        service: 'fal.ai'
+      });
+      // Sanitize error message to prevent AI service information leakage
+      return res.status(response.status).json({ 
+        success: false, 
+        error: getSafeErrorMessage(new Error('AI service error'), 'Image generation failed. Please try again.')
+      });
     }
 
     const data = await response.json();
@@ -1952,7 +1955,10 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       });
       res.json({ success: true, images: images });
     } else {
-      logger.error('No images in fal.ai response', { data, model: isNanoBananaPro ? 'nano-banana-pro' : 'flux' });
+      logger.error('No images in AI service response', { 
+        service: 'fal.ai',
+        model: isNanoBananaPro ? 'nano-banana-pro' : 'flux' 
+      });
       return res.status(500).json({ success: false, error: 'No image generated' });
     }
   } catch (error) {
@@ -1970,7 +1976,7 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
 app.post('/api/extract-layers', freeImageRateLimiter, requireCredits(1), async (req, res) => {
   try {
     if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
     }
 
     const {
@@ -2085,8 +2091,17 @@ app.post('/api/extract-layers', freeImageRateLimiter, requireCredits(1), async (
         errorMessage = errorText || errorMessage;
       }
       
-      logger.error('Fal.ai layer extraction error', { status: response.status, errorMessage, errorData });
-      return res.status(response.status).json({ success: false, error: errorMessage });
+      logger.error('AI service layer extraction error', { 
+        status: response.status, 
+        errorMessage, 
+        errorData,
+        service: 'fal.ai'
+      });
+      // Sanitize error message to prevent AI service information leakage
+      return res.status(response.status).json({ 
+        success: false, 
+        error: getSafeErrorMessage(new Error('AI service error'), 'Layer extraction failed. Please try again.')
+      });
     }
 
     const data = await response.json();
@@ -2117,7 +2132,7 @@ app.post('/api/extract-layers', freeImageRateLimiter, requireCredits(1), async (
         has_nsfw_concepts: data.has_nsfw_concepts
       });
     } else {
-      logger.error('No layers in fal.ai response', { data });
+      logger.error('No layers in AI service response', { service: 'fal.ai' });
       return res.status(500).json({ success: false, error: 'No layers extracted' });
     }
   } catch (error) {
@@ -2131,7 +2146,7 @@ app.post('/api/extract-layers', freeImageRateLimiter, requireCredits(1), async (
 app.get('/api/wan-animate/status/:requestId', wanStatusLimiter, async (req, res) => {
   try {
     if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
     }
     const { requestId } = req.params;
     
@@ -2289,7 +2304,7 @@ app.get('/api/wan-animate/status/:requestId', wanStatusLimiter, async (req, res)
 app.get('/api/wan-animate/result/:requestId', wanResultLimiter, async (req, res) => {
   try {
     if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: 'FAL_API_KEY not configured' });
+      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
     }
     const { requestId } = req.params;
     
