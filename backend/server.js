@@ -4459,6 +4459,38 @@ app.get('/api/metrics', async (req, res) => {
 /**
  * Frontend logging endpoint
  */
+/**
+ * Frontend logging endpoint
+ * CORS: Handles OPTIONS preflight requests explicitly
+ */
+app.options('/api/logs', (req, res) => {
+  // Handle CORS preflight request - check if origin is allowed
+  const origin = req.headers.origin;
+  
+  // Check if origin should be allowed (same logic as CORS middleware)
+  const isLocalhost = origin && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'));
+  const allowedOriginsList = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim().toLowerCase())
+    : [];
+  const originLower = origin ? origin.toLowerCase() : '';
+  
+  const isAllowedOrigin = allowedOriginsList.some(allowed => {
+    const allowedLower = allowed.toLowerCase();
+    return allowedLower === originLower || 
+           allowedLower.replace(/\/$/, '') === originLower.replace(/\/$/, '');
+  });
+  
+  // Allow if localhost, in allowed list, or no ALLOWED_ORIGINS set
+  if (origin && (isLocalhost || isAllowedOrigin || allowedOriginsList.length === 0)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Max-Age', '86400');
+  res.sendStatus(200);
+});
+
 app.post('/api/logs', (req, res) => {
   try {
     const { level, message, data, timestamp, userAgent, url } = req.body;
