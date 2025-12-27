@@ -3191,6 +3191,40 @@ async function getOrCreateUserByIdentifier(identifier, type = 'wallet') {
  * Used for endpoints that need to identify user before making external API calls
  */
 /**
+ * Unified function to find user by wallet address OR email
+ * Makes it easy to reference users by either identifier
+ */
+async function findUserByIdentifier(walletAddress = null, email = null, userId = null) {
+  if (!walletAddress && !email && !userId) {
+    return null;
+  }
+
+  const query = { $or: [] };
+
+  if (walletAddress) {
+    const isSolanaAddress = !walletAddress.startsWith('0x');
+    const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    query.$or.push({ walletAddress: normalizedWalletAddress });
+  }
+
+  if (email) {
+    const normalizedEmail = email.toLowerCase();
+    query.$or.push({ email: normalizedEmail });
+  }
+
+  if (userId) {
+    query.$or.push({ userId: userId });
+  }
+
+  // If only one identifier, use direct query (more efficient)
+  if (query.$or.length === 1) {
+    return await User.findOne(query.$or[0]);
+  }
+
+  return await User.findOne(query);
+}
+
+/**
  * Build update query for user based on wallet address, userId, or email
  * Returns query object or null if no valid identifier
  */
@@ -3219,92 +3253,101 @@ async function getUserFromRequest(req) {
     email: email ? (email.substring(0, 10) + '...') : null
   });
   
+  // Easy unified lookup: find user by wallet OR email OR userId
+  // This makes it simple to reference users by any identifier
+  let user = await findUserByIdentifier(walletAddress, email, userId);
+  
+  // If user found, return it (whether found by wallet or email)
+  if (user) {
+    logger.debug('User found by identifier', { 
+      foundBy: walletAddress ? 'wallet' : email ? 'email' : 'userId',
+      hasWallet: !!user.walletAddress,
+      hasEmail: !!user.email,
+      userId: user?.userId,
+      credits: user?.credits
+    });
+    
+    // If walletAddress provided but user doesn't have one, create/update via getOrCreateUser
+    if (walletAddress && !user.walletAddress) {
+      const isSolanaAddress = !walletAddress.startsWith('0x');
+      const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+      user = await getOrCreateUser(normalizedWalletAddress, user.email || email);
+    }
+    
+    return user;
+  }
+  
+  // User not found - create new user based on what identifier was provided
   if (walletAddress) {
     const isSolanaAddress = !walletAddress.startsWith('0x');
     const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
-    const user = await getOrCreateUser(normalizedWalletAddress);
-    logger.debug('User found by wallet address', { 
+    const normalizedEmail = email ? email.toLowerCase() : null;
+    user = await getOrCreateUser(normalizedWalletAddress, normalizedEmail);
+    logger.debug('User created by wallet address', { 
       walletAddress: normalizedWalletAddress.substring(0, 10) + '...',
       userId: user?.userId,
-      credits: user?.credits 
+      credits: user?.credits,
+      email: !!user?.email
     });
-    return user;
-  } else if (userId) {
-    let user = await User.findOne({ userId });
-    if (!user) {
-      // Create user if they don't exist (for email users who haven't been created yet)
-      // Give new email users 2 free credits
-      logger.info('Creating new user with userId', { userId });
-      user = new User({
-        userId,
-        credits: 2,
-        totalCreditsEarned: 2,
-        totalCreditsSpent: 0,
-        hasUsedFreeImage: false,
-        nftCollections: [],
-        paymentHistory: [],
-        generationHistory: [],
-        gallery: [],
-        settings: {
-          preferredStyle: null,
-          defaultImageSize: '1024x1024',
-          enableNotifications: true
-        }
-      });
-      await user.save();
-      logger.info('New email user created with 2 free credits', { userId, credits: user.credits });
-    } else {
-      logger.debug('User found by userId', { userId, credits: user.credits });
-    }
     return user;
   } else if (email) {
     const normalizedEmail = email.toLowerCase();
-    let user = await User.findOne({ email: normalizedEmail });
-    if (!user) {
-      // Create user if they don't exist (for email users who haven't been created yet)
-      // Give new email users 2 free credits with atomic protection
-      logger.info('Creating new user with email', { email: normalizedEmail });
-      user = new User({
-        email: normalizedEmail,
-        credits: 2,
-        totalCreditsEarned: 2,
-        totalCreditsSpent: 0,
-        hasUsedFreeImage: false,
-        nftCollections: [],
-        paymentHistory: [],
-        generationHistory: [],
-        gallery: [],
-        settings: {
-          preferredStyle: null,
-          defaultImageSize: '1024x1024',
-          enableNotifications: true
-        }
-      });
-      await user.save();
-      
-      // Atomic fallback: Ensure credits are set correctly (prevents abuse from concurrent requests)
-      const savedUser = await User.findOneAndUpdate(
-        {
-          _id: user._id,
-          credits: { $lt: 2 }, // Only update if credits are less than 2
-          createdAt: { $gte: new Date(Date.now() - 10000) } // Only if created within last 10 seconds
-        },
-        {
-          $set: {
-            credits: 2
-          },
-          $max: {
-            totalCreditsEarned: 2 // Ensure totalCreditsEarned is at least 2
-          }
-        },
-        { new: true }
-      );
-      
-      user = savedUser || user;
-      logger.info('New email user created with 2 free credits', { email: normalizedEmail, credits: user.credits });
-    } else {
-      logger.debug('User found by email', { email: normalizedEmail, credits: user.credits });
-    }
+    logger.info('Creating new user with email', { email: normalizedEmail });
+    user = new User({
+      email: normalizedEmail,
+      credits: 2,
+      totalCreditsEarned: 2,
+      totalCreditsSpent: 0,
+      hasUsedFreeImage: false,
+      nftCollections: [],
+      paymentHistory: [],
+      generationHistory: [],
+      gallery: [],
+      settings: {
+        preferredStyle: null,
+        defaultImageSize: '1024x1024',
+        enableNotifications: true
+      }
+    });
+    await user.save();
+    
+    // Atomic fallback: Ensure credits are set correctly
+    const savedUser = await User.findOneAndUpdate(
+      {
+        _id: user._id,
+        credits: { $lt: 2 },
+        createdAt: { $gte: new Date(Date.now() - 10000) }
+      },
+      {
+        $set: { credits: 2 },
+        $max: { totalCreditsEarned: 2 }
+      },
+      { new: true }
+    );
+    
+    user = savedUser || user;
+    logger.info('New email user created with 2 free credits', { email: normalizedEmail, credits: user.credits });
+    return user;
+  } else if (userId) {
+    logger.info('Creating new user with userId', { userId });
+    user = new User({
+      userId,
+      credits: 2,
+      totalCreditsEarned: 2,
+      totalCreditsSpent: 0,
+      hasUsedFreeImage: false,
+      nftCollections: [],
+      paymentHistory: [],
+      generationHistory: [],
+      gallery: [],
+      settings: {
+        preferredStyle: null,
+        defaultImageSize: '1024x1024',
+        enableNotifications: true
+      }
+    });
+    await user.save();
+    logger.info('New email user created with 2 free credits', { userId, credits: user.credits });
     return user;
   }
   
@@ -3972,15 +4015,17 @@ const ERC20_ABI = [
 /**
  * Get or create user
  */
-async function getOrCreateUser(walletAddress) {
+async function getOrCreateUser(walletAddress, email = null) {
   // Detect wallet type: Solana addresses don't start with 0x
   const isSolanaAddress = !walletAddress.startsWith('0x');
   const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+  const normalizedEmail = email ? email.toLowerCase() : null;
   
   logger.debug('getOrCreateUser called', { 
     originalAddress: walletAddress, 
     normalizedAddress, 
-    isSolana: isSolanaAddress 
+    isSolana: isSolanaAddress,
+    hasEmail: !!normalizedEmail
   });
   
   // Check if user already exists
@@ -3991,8 +4036,54 @@ async function getOrCreateUser(walletAddress) {
     normalizedAddress, 
     isNewUser, 
     existingCredits: existingUser?.credits,
-    existingCreatedAt: existingUser?.createdAt 
+    existingCreatedAt: existingUser?.createdAt,
+    existingEmail: !!existingUser?.email
   });
+  
+  // Build update object - include email in $setOnInsert for new users, and in $set if updating existing user without email
+  const setOnInsertFields = {
+    walletAddress: normalizedAddress,
+    credits: 2, // Default: 2 credits for new users (will be updated to 5 if NFT holder)
+    totalCreditsEarned: 2,
+    totalCreditsSpent: 0,
+    hasUsedFreeImage: false,
+    nftCollections: [],
+    paymentHistory: [],
+    generationHistory: [],
+    gallery: [],
+    settings: {
+      preferredStyle: null,
+      defaultImageSize: '1024x1024',
+      enableNotifications: true
+    }
+  };
+  
+  // Add email to new user creation if provided
+  if (normalizedEmail) {
+    setOnInsertFields.email = normalizedEmail;
+  }
+  
+  // Build $set object for updates
+  const setFields = {
+    lastActive: new Date()
+  };
+  
+  // If email is provided and existing user doesn't have one, add it to $set
+  // Check if email already belongs to another user to prevent conflicts
+  if (normalizedEmail && existingUser && !existingUser.email) {
+    const emailUser = await User.findOne({ email: normalizedEmail });
+    if (emailUser && emailUser._id.toString() !== existingUser._id.toString()) {
+      logger.warn('Email already belongs to another user, skipping email assignment', {
+        walletAddress: normalizedAddress,
+        email: normalizedEmail,
+        existingUserId: existingUser._id.toString(),
+        emailUserId: emailUser._id.toString()
+      });
+      // Don't set email if it belongs to another user - preserve functionality
+    } else {
+      setFields.email = normalizedEmail;
+    }
+  }
   
   // Use findOneAndUpdate with upsert to make this atomic and prevent race conditions
   // This ensures that if credits were granted before user connects, they won't be lost
@@ -4000,25 +4091,8 @@ async function getOrCreateUser(walletAddress) {
   const user = await User.findOneAndUpdate(
     { walletAddress: normalizedAddress },
     {
-      $setOnInsert: {
-        walletAddress: normalizedAddress,
-        credits: 2, // Default: 2 credits for new users (will be updated to 5 if NFT holder)
-        totalCreditsEarned: 2,
-        totalCreditsSpent: 0,
-        hasUsedFreeImage: false,
-        nftCollections: [],
-        paymentHistory: [],
-        generationHistory: [],
-        gallery: [],
-        settings: {
-          preferredStyle: null,
-          defaultImageSize: '1024x1024',
-          enableNotifications: true
-        }
-      },
-      $set: {
-        lastActive: new Date()
-      }
+      $setOnInsert: setOnInsertFields,
+      $set: setFields
     },
     {
       upsert: true,
