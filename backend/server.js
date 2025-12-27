@@ -2982,7 +2982,7 @@ const userSchema = new mongoose.Schema({
     required: false,  // Only required for email users
     select: false  // Don't return password by default
   },
-  userId: {  // For email-based users (auto-generated)
+  userId: {  // Auto-generated for all users (email or wallet)
     type: String,
     unique: true,
     sparse: true,
@@ -3049,13 +3049,30 @@ userSchema.index({ createdAt: 1 });
 userSchema.index({ expiresAt: 1 });
 userSchema.index({ 'gallery.timestamp': 1 });
 
-// Generate unique userId for email users
+// Generate unique userId for all users (email or wallet)
 userSchema.pre('save', async function(next) {
-  if (this.isNew && this.email && !this.userId) {
+  if (this.isNew && !this.userId) {
     try {
-      // Generate userId from email hash
-      const hash = crypto.createHash('sha256').update(this.email).digest('hex').substring(0, 16);
-      this.userId = `email_${hash}`;
+      let hash;
+      let prefix;
+      
+      if (this.email) {
+        // Generate userId from email hash
+        hash = crypto.createHash('sha256').update(this.email.toLowerCase()).digest('hex').substring(0, 16);
+        prefix = 'email_';
+      } else if (this.walletAddress) {
+        // Generate userId from wallet address hash
+        const normalizedAddress = this.walletAddress.startsWith('0x') 
+          ? this.walletAddress.toLowerCase() 
+          : this.walletAddress;
+        hash = crypto.createHash('sha256').update(normalizedAddress).digest('hex').substring(0, 16);
+        prefix = 'wallet_';
+      } else {
+        // No email or wallet - skip userId generation
+        return next();
+      }
+      
+      this.userId = `${prefix}${hash}`;
     } catch (error) {
       logger.error('Error generating userId in pre-save hook', { error: error.message });
       // Don't block save, but log the error
@@ -4063,6 +4080,17 @@ async function getOrCreateUser(walletAddress, email = null) {
     setOnInsertFields.email = normalizedEmail;
   }
   
+  // Generate userId for new users (pre-save hook doesn't run on findOneAndUpdate with upsert)
+  // Email takes priority over wallet for userId generation
+  if (normalizedEmail) {
+    const hash = crypto.createHash('sha256').update(normalizedEmail).digest('hex').substring(0, 16);
+    setOnInsertFields.userId = `email_${hash}`;
+  } else {
+    // Wallet-only user - generate userId from wallet address
+    const hash = crypto.createHash('sha256').update(normalizedAddress).digest('hex').substring(0, 16);
+    setOnInsertFields.userId = `wallet_${hash}`;
+  }
+  
   // Build $set object for updates
   const setFields = {
     lastActive: new Date()
@@ -5005,7 +5033,22 @@ app.post('/api/auth/refresh', async (req, res) => {
  */
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const user = req.user;
+    // Refresh user data from database to get latest credits
+    // Use the authenticated user's identifier to find the latest data
+    const User = mongoose.model('User');
+    const user = await User.findOne({
+      $or: [
+        { userId: req.user.userId },
+        { email: req.user.email }
+      ]
+    }).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
     
     // Check NFT status if wallet is linked
     let isNFTHolder = false;
@@ -5018,8 +5061,8 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
       user: {
         userId: user.userId,
         email: user.email,
-        credits: user.credits,
-        totalCreditsEarned: user.totalCreditsEarned,
+        credits: user.credits || 0,
+        totalCreditsEarned: user.totalCreditsEarned || 0,
         walletAddress: user.walletAddress || null,
         isNFTHolder
       }

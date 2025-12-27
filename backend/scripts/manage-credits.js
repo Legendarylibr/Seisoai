@@ -1,39 +1,46 @@
 #!/usr/bin/env node
 /*
-  Manage credits for users by wallet address or email
+  Manage credits for users by wallet address, email, or userId
+  
+  Features:
+  - Uses atomic database operations (findOneAndUpdate) for reliable credit updates
+  - Automatically generates userId for all users (email or wallet)
+  - Automatically fixes missing userId for existing users
+  - Creates new users when adding credits if they don't exist
+  
   Usage: 
     node manage-credits.js --wallet <walletAddress> --add <credits>
     node manage-credits.js --email <email> --add <credits>
+    node manage-credits.js --userId <userId> --add <credits>
     node manage-credits.js --wallet <walletAddress> --set <credits>
     node manage-credits.js --email <email> --set <credits>
+    node manage-credits.js --userId <userId> --set <credits>
     node manage-credits.js --wallet <walletAddress> --subtract <credits>
     node manage-credits.js --email <email> --subtract <credits>
+    node manage-credits.js --userId <userId> --subtract <credits>
     node manage-credits.js --wallet <walletAddress> --show
     node manage-credits.js --email <email> --show
+    node manage-credits.js --userId <userId> --show
 */
 
-const path = require('path');
-const fs = require('fs');
-const mongoose = require('mongoose');
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import mongoose from 'mongoose';
+import crypto from 'crypto';
 
-// Load env
-(() => {
-  const repoRoot = path.resolve(__dirname, '..', '..');
-  const backendEnvPath = path.join(repoRoot, 'backend.env');
-  if (fs.existsSync(backendEnvPath)) {
-    try {
-      require('dotenv').config({ path: backendEnvPath });
-      console.log(`[env] Loaded environment from ${backendEnvPath}`);
-    } catch (e) {
-      console.warn('[env] Failed to load backend.env:', e.message);
-    }
-  }
-})();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment
+const envPath = path.join(__dirname, '..', '..', 'backend.env');
+dotenv.config({ path: envPath });
 
 // Parse command line arguments
 const args = process.argv.slice(2);
 let walletAddress = null;
 let email = null;
+let userId = null;
 let action = null;
 let credits = null;
 
@@ -43,6 +50,9 @@ for (let i = 0; i < args.length; i++) {
     i++;
   } else if (args[i] === '--email' && args[i + 1]) {
     email = args[i + 1];
+    i++;
+  } else if (args[i] === '--userId' && args[i + 1]) {
+    userId = args[i + 1];
     i++;
   } else if (args[i] === '--add' && args[i + 1]) {
     action = 'add';
@@ -62,15 +72,15 @@ for (let i = 0; i < args.length; i++) {
 }
 
 // Validation
-if (!walletAddress && !email) {
-  console.error('❌ Usage: node manage-credits.js --wallet <address> OR --email <email> [--add|--set|--subtract|--show] <credits>');
+if (!walletAddress && !email && !userId) {
+  console.error('❌ Usage: node manage-credits.js --wallet <address> OR --email <email> OR --userId <userId> [--add|--set|--subtract|--show] <credits>');
   console.error('\nExamples:');
   console.error('  node manage-credits.js --wallet 0x123... --add 10');
   console.error('  node manage-credits.js --email user@example.com --add 10');
+  console.error('  node manage-credits.js --userId email_830e0b10bcd6cd0f --add 10');
   console.error('  node manage-credits.js --wallet 0x123... --set 100');
   console.error('  node manage-credits.js --email user@example.com --subtract 5');
-  console.error('  node manage-credits.js --wallet 0x123... --show');
-  console.error('  node manage-credits.js --email user@example.com --show');
+  console.error('  node manage-credits.js --userId wallet_a1b2c3d4e5f6g7h8 --show');
   process.exit(1);
 }
 
@@ -114,6 +124,57 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
+// Generate userId for users (same logic as server.js)
+function generateUserId(email = null, walletAddress = null) {
+  let hash;
+  let prefix;
+  
+  if (email) {
+    // Generate userId from email hash
+    hash = crypto.createHash('sha256').update(email.toLowerCase()).digest('hex').substring(0, 16);
+    prefix = 'email_';
+  } else if (walletAddress) {
+    // Generate userId from wallet address hash
+    const normalizedAddress = walletAddress.startsWith('0x') 
+      ? walletAddress.toLowerCase() 
+      : walletAddress;
+    hash = crypto.createHash('sha256').update(normalizedAddress).digest('hex').substring(0, 16);
+    prefix = 'wallet_';
+  } else {
+    return null;
+  }
+  
+  return `${prefix}${hash}`;
+}
+
+// Ensure users have a userId (fixes missing userId for existing users)
+async function ensureUserId(user) {
+  if (user && !user.userId) {
+    const userId = generateUserId(user.email, user.walletAddress);
+    if (!userId) {
+      return user; // No email or wallet, can't generate userId
+    }
+    
+    // Check if userId already exists for another user
+    const existingUser = await User.findOne({ userId });
+    if (existingUser && existingUser._id.toString() !== user._id.toString()) {
+      console.warn(`⚠️  Warning: userId ${userId} already exists for another user, skipping userId assignment`);
+      return user;
+    }
+    // Set userId using atomic update
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: user._id },
+      { $set: { userId: userId } },
+      { new: true }
+    );
+    if (updatedUser && updatedUser.userId) {
+      console.log(`✅ Generated and set missing userId: ${updatedUser.userId}`);
+      return updatedUser;
+    }
+  }
+  return user;
+}
+
 async function main() {
   await mongoose.connect(MONGODB_URI, {
     maxPoolSize: 5,
@@ -121,35 +182,106 @@ async function main() {
   });
   console.log('✅ Connected to MongoDB\n');
 
-  // Easy unified lookup: find user by wallet OR email
+  // Easy unified lookup: find user by wallet OR email OR userId
   let identifier = '';
   let user = null;
+  let query = {};
   
   if (walletAddress) {
     const isSolanaAddress = !walletAddress.startsWith('0x');
     const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
-    // Try wallet first, then email if provided
-    user = await User.findOne({
+    // Try wallet first, then email or userId if provided
+    query = {
       $or: [
         { walletAddress: normalizedAddress },
-        ...(email ? [{ email: email.toLowerCase() }] : [])
+        ...(email ? [{ email: email.toLowerCase() }] : []),
+        ...(userId ? [{ userId: userId }] : [])
       ]
-    });
+    };
+    user = await User.findOne(query);
     identifier = `wallet ${walletAddress}`;
   } else if (email) {
     const normalizedEmail = email.toLowerCase();
-    // Try email first, then wallet if user has one
-    user = await User.findOne({ email: normalizedEmail });
+    query = {
+      $or: [
+        { email: normalizedEmail },
+        ...(userId ? [{ userId: userId }] : [])
+      ]
+    };
+    user = await User.findOne(query);
     identifier = `email ${email}`;
+  } else if (userId) {
+    query = { userId: userId };
+    user = await User.findOne(query);
+    identifier = `userId ${userId}`;
   }
   
   if (!user) {
-    console.error(`❌ User not found: ${identifier}`);
-    console.log('\n💡 Tip: Users can be referenced by either wallet address or email');
-    await mongoose.disconnect();
-    process.exit(1);
+    // If user doesn't exist and action is 'add', create the user
+    // Note: Cannot create user with only userId - need wallet or email
+    if (action === 'add' && (walletAddress || email)) {
+      console.log(`📝 User not found, creating new user for ${identifier}...`);
+      const normalizedEmail = email ? email.toLowerCase() : null;
+      const isSolanaAddress = walletAddress && !walletAddress.startsWith('0x');
+      const normalizedAddress = walletAddress ? (isSolanaAddress ? walletAddress : walletAddress.toLowerCase()) : null;
+      
+      // Generate userId for users before creating (email or wallet)
+      const userId = normalizedEmail 
+        ? generateUserId(normalizedEmail, null)
+        : (normalizedAddress ? generateUserId(null, normalizedAddress) : null);
+      
+      // Check if userId already exists
+      if (userId) {
+        const existingUserWithId = await User.findOne({ userId });
+        if (existingUserWithId) {
+          console.error(`❌ userId ${userId} already exists for another user!`);
+          await mongoose.disconnect();
+          process.exit(1);
+        }
+      }
+      
+      user = new User({
+        ...(normalizedAddress && { walletAddress: normalizedAddress }),
+        ...(normalizedEmail && { email: normalizedEmail }),
+        ...(userId && { userId: userId }),
+        credits: 0, // Start with 0, will add credits below
+        totalCreditsEarned: 0,
+        totalCreditsSpent: 0,
+        hasUsedFreeImage: false,
+        nftCollections: [],
+        paymentHistory: [],
+        generationHistory: [],
+        gallery: [],
+        settings: {
+          preferredStyle: null,
+          defaultImageSize: '1024x1024',
+          enableNotifications: true
+        }
+      });
+      await user.save();
+      
+      // Ensure userId is set (in case pre-save hook didn't run)
+      user = await ensureUserId(user);
+      
+      console.log(`✅ New user created!\n`);
+    } else {
+      if (action === 'add' && userId && !walletAddress && !email) {
+        console.error(`❌ Cannot create new user with only userId: ${identifier}`);
+        console.log('\n💡 Tip: To create a new user, use --wallet or --email with --add');
+        console.log('💡 Tip: userId can only be used to reference existing users');
+      } else {
+        console.error(`❌ User not found: ${identifier}`);
+        console.log('\n💡 Tip: Users can be referenced by wallet address, email, or userId');
+        console.log('💡 Tip: Use --add to create a new user automatically (requires --wallet or --email)');
+      }
+      await mongoose.disconnect();
+      process.exit(1);
+    }
   }
 
+  // Ensure email users have userId before proceeding
+  user = await ensureUserId(user);
+  
   const previousCredits = user.credits || 0;
   const previousEarned = user.totalCreditsEarned || 0;
   const previousSpent = user.totalCreditsSpent || 0;
@@ -168,34 +300,63 @@ async function main() {
     console.log('✅ Displaying user credits (no changes made)\n');
   } else if (action === 'add') {
     console.log(`➕ Adding ${credits} credits...`);
-    user.credits += credits;
-    user.totalCreditsEarned += credits;
-    await user.save();
+    // Use atomic update to ensure credits are added reliably
+    user = await User.findOneAndUpdate(
+      query,
+      {
+        $inc: { credits: credits, totalCreditsEarned: credits }
+      },
+      { new: true }
+    );
+    if (!user) {
+      console.error('❌ Failed to update user');
+      await mongoose.disconnect();
+      process.exit(1);
+    }
     console.log(`✅ Credits added!\n`);
   } else if (action === 'set') {
     console.log(`🔧 Setting credits to ${credits}...`);
     const difference = credits - previousCredits;
-    user.credits = credits;
+    const updateFields = { $set: { credits: credits } };
     if (difference > 0) {
       // If setting higher, add to total earned
-      user.totalCreditsEarned += difference;
+      updateFields.$inc = { totalCreditsEarned: difference };
     }
-    await user.save();
+    user = await User.findOneAndUpdate(
+      query,
+      updateFields,
+      { new: true }
+    );
+    if (!user) {
+      console.error('❌ Failed to update user');
+      await mongoose.disconnect();
+      process.exit(1);
+    }
     console.log(`✅ Credits set!\n`);
   } else if (action === 'subtract') {
     console.log(`➖ Subtracting ${credits} credits...`);
     if (previousCredits < credits) {
       console.warn(`⚠️  Warning: User only has ${previousCredits} credits, subtracting ${credits} will result in negative balance`);
     }
-    user.credits -= credits;
-    user.totalCreditsSpent += credits;
-    await user.save();
+    user = await User.findOneAndUpdate(
+      query,
+      {
+        $inc: { credits: -credits, totalCreditsSpent: credits }
+      },
+      { new: true }
+    );
+    if (!user) {
+      console.error('❌ Failed to update user');
+      await mongoose.disconnect();
+      process.exit(1);
+    }
     console.log(`✅ Credits subtracted!\n`);
   }
 
-  // Refetch to show final state
-  user = await User.findOne(query);
-
+  // Ensure userId is still set after updates
+  user = await ensureUserId(user);
+  
+  // Show final state (user is already updated from findOneAndUpdate)
   console.log(`📊 Updated User Info:`);
   console.log(`   Previous Credits: ${previousCredits}`);
   if (action === 'add') {
@@ -218,4 +379,3 @@ main().catch(async (err) => {
   try { await mongoose.disconnect(); } catch (_) {}
   process.exit(1);
 });
-
