@@ -263,25 +263,26 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
                 alt="Reference"
                 className="w-full h-full object-contain"
               />
+              {/* Always visible X button to remove image */}
+              <button
+                onClick={handleRemoveImage}
+                className="absolute top-1 right-1 p-1.5 bg-red-500/80 hover:bg-red-500 active:bg-red-600 rounded-full transition-colors z-10 shadow-lg touch-manipulation"
+                style={{ minWidth: '28px', minHeight: '28px' }}
+                title="Remove image"
+                aria-label="Remove reference image"
+              >
+                <X className="w-3.5 h-3.5 text-white" />
+              </button>
+              {/* Hover overlay with change option */}
               <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200">
-                <div className="flex gap-2">
-                    <button
-                      onClick={handleClickUpload}
-                      className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
-                      title="Change image"
-                      aria-label="Change reference image"
-                    >
-                      <Upload className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleRemoveImage}
-                      className="p-2 bg-red-500/20 rounded-full hover:bg-red-500/30 transition-colors"
-                      title="Remove image"
-                      aria-label="Remove reference image"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                </div>
+                <button
+                  onClick={handleClickUpload}
+                  className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+                  title="Change image"
+                  aria-label="Change reference image"
+                >
+                  <Upload className="w-4 h-4" />
+                </button>
               </div>
             </div>
           )}

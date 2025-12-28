@@ -233,7 +233,7 @@ function CollapsibleHowToUse() {
           <ChevronDown className="w-4 h-4" style={{ color: '#000000' }} />
         </div>
       </button>
-      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-48 opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'}`}>
+      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'}`}>
         <div className="space-y-1.5 text-xs leading-relaxed relative z-10" style={{ color: '#000000' }}>
           {[
             { num: '1', label: 'Text to Image:', desc: 'Type a description, choose a style, and click Generate.' },

@@ -117,9 +117,11 @@ const imageGeneratorReducer = (state, action) => {
       return { ...state, controlNetType: action.payload };
     
     case 'SET_CONTROL_NET_IMAGE':
+      // Handle both { image, dimensions } payload and direct image value
+      const imagePayload = action.payload?.image !== undefined ? action.payload.image : action.payload;
       return {
         ...state,
-        controlNetImage: action.payload?.image || action.payload,
+        controlNetImage: imagePayload,
         controlNetImageDimensions: action.payload?.dimensions || null
       };
     
