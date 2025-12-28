@@ -350,7 +350,7 @@ const ImageOutput = () => {
       if (isQwenModel) {
         // Use layer extraction service for Qwen
         logger.info('Using Qwen Image Layered for layer extraction');
-        const layerUrls = await extractLayers(referenceImageForGeneration, {
+        const layerResult = await extractLayers(referenceImageForGeneration, {
           prompt: trimmedPrompt || undefined,
           num_layers: 4,
           walletAddress: isEmailAuth ? undefined : address,
@@ -358,9 +358,9 @@ const ImageOutput = () => {
           email: isEmailAuth ? emailContext.email : undefined
         });
         
-        // Return all layers as array
-        result = layerUrls;
-        logger.info('Layer extraction completed', { layerCount: layerUrls.length });
+        // Return full result object (has images array, remainingCredits, etc.)
+        result = layerResult;
+        logger.info('Layer extraction completed', { layerCount: layerResult.images?.length || 0 });
       } else {
         // Use regular image generation for FLUX and Nano Banana Pro
         result = await generateImage(

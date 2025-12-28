@@ -19,7 +19,7 @@ import { API_URL } from '../utils/apiConfig.js';
  * @param {string} options.walletAddress - Wallet address for wallet users
  * @param {string} options.userId - User ID for email users
  * @param {string} options.email - Email for email users
- * @returns {Promise<Array>} Array of layer image URLs
+ * @returns {Promise<{images: string[], imageUrl: string, remainingCredits: number, creditsDeducted: number}>} Object with layer URLs and credit info
  */
 export const extractLayers = async (imageUrl, options = {}) => {
   if (!imageUrl || typeof imageUrl !== 'string') {
@@ -117,8 +117,13 @@ export const extractLayers = async (imageUrl, options = {}) => {
       seed: data.seed
     });
 
-    // Return array of layer URLs
-    return layerUrls;
+    // Return object with images array for consistency with falService
+    return {
+      images: layerUrls,
+      imageUrl: layerUrls[0],
+      remainingCredits: data.remainingCredits,
+      creditsDeducted: data.creditsDeducted
+    };
   } catch (error) {
     logger.error('Layer extraction error', { error: error.message, stack: error.stack });
     throw error;
