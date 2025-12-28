@@ -371,19 +371,34 @@ const ImageOutput = () => {
         );
       }
       
-      // Handle both single image (string) and multiple images (array)
-      const isArray = Array.isArray(result);
-      const imageUrl = isArray ? result[0] : result;
-      
-      // Ensure we have a valid image URL or array
-      if (!result || (typeof result !== 'string' && !Array.isArray(result))) {
+      // Handle result - can be string, array, or object with images property
+      let imageUrls;
+      if (typeof result === 'string') {
+        imageUrls = [result];
+      } else if (Array.isArray(result)) {
+        imageUrls = result;
+      } else if (result && typeof result === 'object' && result.images) {
+        // Handle object response format from generateImage: { images, imageUrl, remainingCredits, creditsDeducted }
+        imageUrls = Array.isArray(result.images) ? result.images : [result.images];
+      } else if (result && typeof result === 'object' && result.imageUrl) {
+        // Fallback to imageUrl property
+        imageUrls = [result.imageUrl];
+      } else {
         throw new Error('No image URL returned from generation service');
       }
+      
+      // Ensure we have at least one valid image
+      if (!imageUrls || imageUrls.length === 0 || !imageUrls[0]) {
+        throw new Error('No image URL returned from generation service');
+      }
+      
+      const isArray = imageUrls.length > 1;
+      const imageUrl = imageUrls[0];
 
       logger.info('Regeneration with new prompt completed successfully', { 
         hasImageUrl: !!imageUrl,
         isMultiple: isArray,
-        imageCount: isArray ? result.length : 1
+        imageCount: imageUrls.length
       });
       
       // Save generation to backend and deduct credits IMMEDIATELY after image is returned
@@ -400,8 +415,8 @@ const ImageOutput = () => {
       
       let deductionResult = null;
       try {
-        // Handle both single image (string) and multiple images (array)
-        const imageUrlForSave = isArray ? result[0] : result;
+        // Use first image URL for saving
+        const imageUrlForSave = imageUrls[0];
         
         // Calculate credits based on selected model
         const modelForCredits = selectedModel || multiImageModel || currentGeneration.multiImageModel || 'flux';
@@ -509,13 +524,13 @@ const ImageOutput = () => {
       // Clear any errors since image was successfully generated
       setError(null);
       
-      // Handle both single image (string) and multiple images (array)
-      setGeneratedImage(result);
+      // Set generated image - pass array if multiple, otherwise single URL
+      setGeneratedImage(isArray ? imageUrls : imageUrls[0]);
       
       // Update current generation with new details
-      const resultImageUrl = isArray ? result[0] : result;
+      const resultImageUrl = imageUrls[0];
       // Use the NEW result as the reference image for next generation
-      const newReferenceImage = isArray ? result[0] : result;
+      const newReferenceImage = imageUrls[0];
       setCurrentGeneration({
         ...currentGeneration,
         image: resultImageUrl, // Use first image for backward compatibility
