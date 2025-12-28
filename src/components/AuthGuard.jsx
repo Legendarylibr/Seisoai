@@ -11,7 +11,9 @@ const AuthGuard = ({ children, requireCredits = true, fallback = null }) => {
   // Check if authenticated via either method
   const isConnected = walletContext.isConnected || emailContext.isAuthenticated;
   const address = walletContext.address;
-  const credits = walletContext.credits || emailContext.credits;
+  const isEmailAuth = emailContext.isAuthenticated;
+  // Use credits from the active auth method (email or wallet)
+  const credits = isEmailAuth ? (emailContext.credits ?? 0) : (walletContext.credits ?? 0);
   const isLoading = walletContext.isLoading || emailContext.isLoading;
   const error = walletContext.error || emailContext.error;
 
@@ -47,8 +49,6 @@ const AuthGuard = ({ children, requireCredits = true, fallback = null }) => {
   }
 
   // Check if authenticated - support both email and wallet
-  const isEmailAuth = emailContext.isAuthenticated;
-  
   if (!isConnected || (!address && !isEmailAuth)) {
     // Show AuthPrompt with both email and wallet options when not authenticated
     return fallback || <AuthPrompt />;

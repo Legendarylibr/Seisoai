@@ -15,7 +15,7 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
   const emailContext = useEmailAuth();
   
   const isEmailAuth = emailContext.isAuthenticated;
-  const credits = isEmailAuth ? (emailContext.credits || 0) : (walletContext.credits || 0);
+  const credits = isEmailAuth ? (emailContext.credits ?? 0) : (walletContext.credits ?? 0);
   
   const [videoFile, setVideoFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);

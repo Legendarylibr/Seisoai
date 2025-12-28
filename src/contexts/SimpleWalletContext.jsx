@@ -7,6 +7,14 @@ const SimpleWalletContext = createContext();
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+// Warn if API_URL is still localhost in production
+if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && API_URL.includes('localhost')) {
+  logger.error('⚠️ VITE_API_URL is not set correctly for production!', {
+    currentAPI_URL: API_URL,
+    hostname: window.location.hostname,
+    expectedFormat: 'https://your-backend-domain.com'
+  });
+}
 
 export const SimpleWalletProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
@@ -83,34 +91,79 @@ export const SimpleWalletProvider = ({ children }) => {
         
         if (response.ok) {
           const data = await response.json();
-          const user = data.user || data;
-          
-          const currentCredits = Number(user.credits || data.credits || 0);
-          const rewardedAmount = Number(user.totalCreditsEarned || data.totalCreditsEarned || 0);
-          const spentAmount = Number(user.totalCreditsSpent || data.totalCreditsSpent || 0);
-          
-          logger.debug('Credits fetched successfully', { 
-            currentCredits, 
-            rewardedAmount, 
-            spentAmount,
+          logger.info('Wallet credits API response received', { 
+            hasData: !!data, 
+            hasSuccess: !!data?.success, 
+            hasUser: !!data?.user,
+            userCredits: data?.user?.credits,
+            fullResponse: JSON.stringify(data),
             API_URL 
           });
           
-          setCredits(currentCredits);
-          setTotalCreditsEarned(rewardedAmount);
-          setTotalCreditsSpent(spentAmount);
+          // Backend always returns { success: true, user: { credits, ... } }
+          // Extract from standard location: data.user
+          const user = data?.user || data;
           
-          // Cache result
-          try {
-            sessionStorage.setItem(cacheKey, JSON.stringify({
-              data: { credits: currentCredits, totalCreditsEarned: rewardedAmount, totalCreditsSpent: spentAmount },
-              timestamp: Date.now()
-            }));
-          } catch (e) {
-            // Ignore cache errors
+          // Extract raw values first to check what we're actually getting
+          const rawCredits = user?.credits ?? data?.user?.credits ?? data?.credits;
+          const rawTotalEarned = user?.totalCreditsEarned ?? data?.user?.totalCreditsEarned ?? data?.totalCreditsEarned;
+          const rawTotalSpent = user?.totalCreditsSpent ?? data?.user?.totalCreditsSpent ?? data?.totalCreditsSpent;
+          
+          // Convert to numbers, defaulting to 0 only if null/undefined
+          // Important: 0 is a valid credit value, so we use != null check
+          const currentCredits = rawCredits != null ? Number(rawCredits) : 0;
+          const rewardedAmount = rawTotalEarned != null ? Number(rawTotalEarned) : 0;
+          const spentAmount = rawTotalSpent != null ? Number(rawTotalSpent) : 0;
+          
+          logger.info('Wallet credits parsed from response', { 
+            currentCredits, 
+            rewardedAmount, 
+            spentAmount,
+            rawCredits,
+            rawTotalEarned,
+            rawTotalSpent,
+            creditsType: typeof rawCredits,
+            isNull: rawCredits === null,
+            isUndefined: rawCredits === undefined,
+            hasUser: !!user,
+            hasDataUser: !!data?.user,
+            API_URL 
+          });
+          
+          // Always update credits - 0 is a valid value
+          // Only skip if it's NaN (which shouldn't happen with proper Number conversion)
+          if (!isNaN(currentCredits)) {
+            setCredits(currentCredits);
+            logger.debug('Credits updated successfully', { currentCredits });
+          } else {
+            logger.warn('Invalid credits value (NaN), keeping current value', { 
+              rawCredits,
+              currentCredits 
+            });
           }
           
-          return currentCredits;
+          if (!isNaN(rewardedAmount)) {
+            setTotalCreditsEarned(rewardedAmount);
+          }
+          
+          if (!isNaN(spentAmount)) {
+            setTotalCreditsSpent(spentAmount);
+          }
+          
+          // Cache result only if we got valid data
+          if (!isNaN(currentCredits)) {
+            try {
+              sessionStorage.setItem(cacheKey, JSON.stringify({
+                data: { credits: currentCredits, totalCreditsEarned: rewardedAmount, totalCreditsSpent: spentAmount },
+                timestamp: Date.now()
+              }));
+            } catch (e) {
+              // Ignore cache errors
+            }
+          }
+          
+          // Return the credits we set (or 0 if invalid)
+          return isNaN(currentCredits) ? 0 : currentCredits;
         } else {
           // Log non-OK responses for debugging
           const errorText = await response.text().catch(() => 'Unable to read error response');
@@ -129,17 +182,30 @@ export const SimpleWalletProvider = ({ children }) => {
           }
         }
       } catch (error) {
+        const isNetworkError = error.name === 'TypeError' || error.message.includes('fetch') || error.message.includes('Failed to fetch');
+        const isCorsError = error.message.includes('CORS') || error.message.includes('cross-origin');
+        const isAbortError = error.name === 'AbortError';
+        
         logger.error('Error fetching credits', {
           error: error.message,
           errorName: error.name,
+          errorStack: error.stack?.substring(0, 200),
           API_URL,
           attempt,
-          isAbortError: error.name === 'AbortError',
-          willRetry: attempt < retries && error.name !== 'AbortError'
+          isAbortError,
+          isNetworkError,
+          isCorsError,
+          hostname: typeof window !== 'undefined' ? window.location.hostname : 'unknown',
+          url: `${API_URL}/api/users/${normalizedAddress}`,
+          willRetry: attempt < retries && !isAbortError
         });
         
-        if (error.name === 'AbortError' || attempt === retries) {
-          setCredits(0);
+        if (isAbortError || attempt === retries) {
+          // Only set credits to 0 if we've exhausted retries or it's an abort
+          // Don't set to 0 on network errors - keep last known value
+          if (isAbortError || (attempt === retries && !isNetworkError && !isCorsError)) {
+            setCredits(0);
+          }
           return 0;
         }
         await new Promise(resolve => setTimeout(resolve, 1000 * attempt));

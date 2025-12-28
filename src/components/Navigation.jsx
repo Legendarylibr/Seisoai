@@ -13,8 +13,9 @@ import logger from '../utils/logger.js';
   const isConnected = walletContext.isConnected || emailContext.isAuthenticated;
   const isEmailAuth = emailContext.isAuthenticated;
   const address = walletContext.address;
-  const credits = walletContext.credits || emailContext.credits || 0;
-  const totalCreditsEarned = walletContext.totalCreditsEarned || emailContext.totalCreditsEarned || 0;
+  // Use credits from the active auth method (email or wallet)
+  const credits = isEmailAuth ? (emailContext.credits ?? 0) : (walletContext.credits ?? 0);
+  const totalCreditsEarned = isEmailAuth ? (emailContext.totalCreditsEarned ?? 0) : (walletContext.totalCreditsEarned ?? 0);
   const disconnectWallet = walletContext.disconnectWallet;
   const signOut = emailContext.signOut;
   const [showMobileMenu, setShowMobileMenu] = useState(false);

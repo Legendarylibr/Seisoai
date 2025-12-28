@@ -69,7 +69,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   const isEmailAuth = emailContext.isAuthenticated;
   
   // Use credits from email auth if available, otherwise wallet
-  const availableCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
+  const availableCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
 
   const [progress, setProgress] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -168,7 +168,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     const creditsToDeduct = multiImageModel === 'nano-banana-pro' ? 2 : 1;
     
     // Optimistically update UI for instant feedback
-    const currentCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
+    const currentCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
     const newCredits = Math.max(0, currentCredits - creditsToDeduct);
     
     if (isEmailAuth && emailContext.setCreditsManually) {

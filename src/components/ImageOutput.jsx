@@ -235,7 +235,7 @@ const ImageOutput = () => {
   };
   
   // Use credits from email auth if available, otherwise wallet
-  const availableCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
+  const availableCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
 
   const handleRegenerateWithPrompt = async () => {
     // Prevent multiple simultaneous requests
