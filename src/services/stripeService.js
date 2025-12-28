@@ -3,7 +3,8 @@ import { loadStripe } from '@stripe/stripe-js';
 import logger from '../utils/logger.js';
 import { API_URL } from '../utils/apiConfig.js';
 
-// Initialize Stripe with error handling - only accepts live keys
+// Initialize Stripe with error handling
+// Accepts live keys in production, test or live keys in development
 const getStripePublishableKey = () => {
   const key = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
   if (!key || key.includes('your_stripe_publishable_key_here')) {
@@ -11,10 +12,25 @@ const getStripePublishableKey = () => {
     return null;
   }
   
-  // Validate that live key is being used
-  if (!key.startsWith('pk_live_')) {
-    logger.error('VITE_STRIPE_PUBLISHABLE_KEY must be a live key');
+  const isProduction = import.meta.env.PROD || import.meta.env.MODE === 'production';
+  const isLiveKey = key.startsWith('pk_live_');
+  const isTestKey = key.startsWith('pk_test_');
+  
+  // Validate key format
+  if (!isLiveKey && !isTestKey) {
+    logger.error('VITE_STRIPE_PUBLISHABLE_KEY has invalid format');
     return null;
+  }
+  
+  // In production, require live keys
+  if (isProduction && !isLiveKey) {
+    logger.error('VITE_STRIPE_PUBLISHABLE_KEY must be a live key (pk_live_...) in production');
+    return null;
+  }
+  
+  // Log key type for debugging
+  if (!isProduction && isTestKey) {
+    logger.info('Stripe configured with TEST key - ready for testing');
   }
   
   return key;

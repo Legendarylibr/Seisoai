@@ -107,6 +107,15 @@ app.use(helmet({
 // Compression middleware
 app.use(compression());
 
+// Request ID middleware for audit trails and debugging
+// Generates unique request ID for each request to trace through logs
+app.use((req, res, next) => {
+  const requestId = crypto.randomUUID();
+  req.requestId = requestId;
+  res.setHeader('X-Request-ID', requestId);
+  next();
+});
+
 // Additional security headers (supplement helmet - only add what helmet doesn't provide)
 // Note: helmet already handles X-Powered-By, Referrer-Policy, X-Content-Type-Options, X-XSS-Protection
 app.use((req, res, next) => {
@@ -5327,8 +5336,8 @@ app.post('/api/auth/signup', authRateLimiter, async (req, res) => {
       });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Hash password with cost factor 12 (recommended for 2024+)
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     // Create user with 2 free credits for new email signups
     // Use atomic operation to prevent race conditions if multiple signups happen simultaneously
@@ -6050,7 +6059,9 @@ app.get('/api/users/:walletAddress', async (req, res) => {
     const finalTotalEarned = freshUser?.totalCreditsEarned ?? userTotalCreditsEarned;
     const finalTotalSpent = freshUser?.totalCreditsSpent ?? userTotalCreditsSpent;
     
-    // Return user data with all fields
+    // SECURITY: Only return public data (credits, NFT status, pricing)
+    // Sensitive data (paymentHistory, gallery, settings) requires authentication
+    // Frontend should use /api/auth/me for full user data with authentication
     res.json({
       success: true,
       user: {
@@ -6059,10 +6070,8 @@ app.get('/api/users/:walletAddress', async (req, res) => {
         totalCreditsEarned: finalTotalEarned,
         totalCreditsSpent: finalTotalSpent,
         nftCollections: freshUser?.nftCollections || user.nftCollections || [],
-        paymentHistory: freshUser?.paymentHistory || user.paymentHistory || [],
-        generationHistory: freshUser?.generationHistory || user.generationHistory || [],
-        gallery: freshUser?.gallery || user.gallery || [],
-        settings: freshUser?.settings || user.settings || {},
+        // SECURITY: Removed sensitive data - use /api/auth/me for full data
+        // paymentHistory, generationHistory, gallery, settings now require auth
         lastActive: freshUser?.lastActive || user.lastActive,
         isNFTHolder: isNFTHolder,
         pricing: {
@@ -8294,13 +8303,30 @@ app.get('/api/gallery/:identifier', async (req, res) => {
 
 /**
  * Update user settings
+ * SECURITY: Requires authentication - user can only update their own settings
  */
-app.put('/api/users/:walletAddress/settings', async (req, res) => {
+app.put('/api/users/:walletAddress/settings', authenticateToken, async (req, res) => {
   try {
     const { walletAddress } = req.params;
     const { settings } = req.body;
     
-    const user = await getOrCreateUser(walletAddress);
+    // Normalize address for comparison
+    const isSolanaAddress = !walletAddress.startsWith('0x');
+    const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    
+    // SECURITY: Verify user owns this wallet address
+    if (req.user.walletAddress !== normalizedAddress) {
+      logger.warn('Unauthorized settings update attempt', {
+        requestedWallet: normalizedAddress,
+        authenticatedUser: req.user.userId || req.user.email
+      });
+      return res.status(403).json({
+        success: false,
+        error: 'You can only update your own settings'
+      });
+    }
+    
+    const user = await getOrCreateUser(normalizedAddress);
     user.settings = { ...user.settings, ...settings };
     await user.save();
     
@@ -8350,12 +8376,33 @@ app.get('/api/gallery/:walletAddress/stats', async (req, res) => {
 
 /**
  * Delete generation from gallery
+ * SECURITY: Requires authentication - user can only delete their own gallery items
  */
-app.delete('/api/gallery/:walletAddress/:generationId', async (req, res) => {
+app.delete('/api/gallery/:walletAddress/:generationId', authenticateToken, async (req, res) => {
   try {
     const { walletAddress, generationId } = req.params;
     
-    const user = await getOrCreateUser(walletAddress);
+    // Normalize address for comparison
+    const isSolanaAddress = !walletAddress.startsWith('0x');
+    const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    
+    // SECURITY: Verify user owns this wallet address or is the authenticated user
+    const userOwnsWallet = req.user.walletAddress === normalizedAddress;
+    const userIdMatch = req.user.userId && walletAddress.startsWith(req.user.userId);
+    
+    if (!userOwnsWallet && !userIdMatch) {
+      logger.warn('Unauthorized gallery delete attempt', {
+        requestedWallet: normalizedAddress,
+        generationId,
+        authenticatedUser: req.user.userId || req.user.email
+      });
+      return res.status(403).json({
+        success: false,
+        error: 'You can only delete your own gallery items'
+      });
+    }
+    
+    const user = await getOrCreateUser(normalizedAddress);
     user.gallery = user.gallery.filter(item => item.id !== generationId);
     await user.save();
     
@@ -8523,36 +8570,6 @@ const startServer = async (port = process.env.PORT || 3001) => {
     isCloudEnvironment
   });
   
-  return new Promise((resolve, reject) => {
-    const server = app.listen(serverPort, bindHost, () => {
-      logger.info(`AI Image Generator API running on port ${serverPort}`);
-      logger.info(`MongoDB connected: ${mongoose.connection.readyState === 1 ? 'Yes' : 'No'}`);
-      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      logger.info('Server started successfully', {
-        host: bindHost,
-        port: serverPort,
-        healthCheck: `http://${bindHost === '0.0.0.0' ? 'localhost' : bindHost}:${serverPort}/api/health`,
-        networkAccess: bindHost === '0.0.0.0' ? 'all interfaces' : 'localhost only'
-      });
-      
-      // Health check endpoint is ready - no need to verify with fetch
-      // The endpoint will respond when Railway's healthcheck probes it
-      
-      resolve(server);
-    });
-
-    server.on('error', (err) => {
-      logger.error('Server error:', err);
-      if (err.code === 'EADDRINUSE') {
-        logger.warn(`Port ${serverPort} is in use, trying port ${serverPort + 1}`);
-        startServer(serverPort + 1).then(resolve).catch(reject);
-      } else {
-        logger.error('Server error:', err);
-        reject(err);
-      }
-    });
-  });
-
   // Cleanup job: Remove gallery items older than 30 days
   const cleanupGallery = async () => {
     try {
@@ -8595,19 +8612,44 @@ const startServer = async (port = process.env.PORT || 3001) => {
     logger.info('Gallery cleanup job scheduled');
   };
 
-  // Start the cleanup schedule
-  scheduleCleanup();
+  return new Promise((resolve, reject) => {
+    const server = app.listen(serverPort, bindHost, () => {
+      logger.info(`AI Image Generator API running on port ${serverPort}`);
+      logger.info(`MongoDB connected: ${mongoose.connection.readyState === 1 ? 'Yes' : 'No'}`);
+      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info('Server started successfully', {
+        host: bindHost,
+        port: serverPort,
+        healthCheck: `http://${bindHost === '0.0.0.0' ? 'localhost' : bindHost}:${serverPort}/api/health`,
+        networkAccess: bindHost === '0.0.0.0' ? 'all interfaces' : 'localhost only'
+      });
+      
+      // Start the cleanup schedule after server is listening
+      scheduleCleanup();
+      
+      // Graceful shutdown handler
+      process.on('SIGTERM', () => {
+        logger.info('SIGTERM received, shutting down gracefully');
+        server.close(() => {
+          logger.info('Process terminated');
+          process.exit(0);
+        });
+      });
+      
+      resolve(server);
+    });
 
-  // Graceful shutdown
-  process.on('SIGTERM', () => {
-    logger.info('SIGTERM received, shutting down gracefully');
-    server.close(() => {
-      logger.info('Process terminated');
-      process.exit(0);
+    server.on('error', (err) => {
+      logger.error('Server error:', err);
+      if (err.code === 'EADDRINUSE') {
+        logger.warn(`Port ${serverPort} is in use, trying port ${serverPort + 1}`);
+        startServer(serverPort + 1).then(resolve).catch(reject);
+      } else {
+        logger.error('Server error:', err);
+        reject(err);
+      }
     });
   });
-
-  return server;
 };
 
 // Export the app and start function
