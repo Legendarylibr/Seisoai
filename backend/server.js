@@ -503,7 +503,7 @@ app.use((req, res, next) => {
         // Don't set wildcard to avoid security issues
       }
       res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Content-Type');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Cache-Control, Pragma');
       res.header('Access-Control-Max-Age', '86400');
       
       // Mark that CORS is already handled for this request
@@ -598,7 +598,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Stripe-Signature'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Stripe-Signature', 'Cache-Control', 'Pragma'],
   exposedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200
 };
@@ -1869,10 +1869,10 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       });
     }
     
-    logger.info('Credits deducted immediately on generate click', {
+    // Reduced logging for performance
+    logger.debug('Credits deducted', {
       userId: user.userId,
       creditsDeducted: creditsToDeduct,
-      previousCredits,
       remainingCredits: updateResult.credits
     });
     
@@ -1990,15 +1990,10 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       }
     }
 
-    logger.info('Image generation request', {
-      endpoint,
+    // Reduced logging for performance - only log essential info
+    logger.debug('Image generation request', {
       model: isNanoBananaPro ? 'nano-banana-pro' : 'flux',
-      hasImage: !!requestBody.image_url,
-      hasImages: !!requestBody.image_urls,
-      imageCount: requestBody.image_urls?.length || 0,
-      userId: req.user?.userId,
-      email: req.user?.email,
-      walletAddress: req.user?.walletAddress
+      userId: req.user?.userId
     });
 
     // Make request to fal.ai
@@ -2092,13 +2087,10 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
     }
     
     if (imageUrls.length > 0) {
-      logger.info('Image generation successful', {
+      // Reduced logging for performance
+      logger.debug('Image generation successful', {
         model: isNanoBananaPro ? 'nano-banana-pro' : 'flux',
-        imageCount: imageUrls.length,
-        userId: req.user?.userId,
-        email: req.user?.email,
-        walletAddress: req.user?.walletAddress,
-        remainingCredits: updateResult.credits
+        imageCount: imageUrls.length
       });
       // Return images and remaining credits (credits already deducted)
       res.json({ 
@@ -4716,7 +4708,7 @@ app.options('/api/logs', (req, res) => {
     res.header('Access-Control-Allow-Credentials', 'true');
   }
   res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, Pragma');
   res.header('Access-Control-Max-Age', '86400');
   res.sendStatus(200);
 });
@@ -5208,6 +5200,30 @@ app.post('/api/auth/refresh', async (req, res) => {
 /**
  * Get current user data (protected route)
  */
+// Handle OPTIONS preflight for /api/auth/me
+app.options('/api/auth/me', (req, res) => {
+  const origin = req.headers.origin;
+  const isLocalhost = origin && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'));
+  const allowedOriginsList = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim().toLowerCase())
+    : [];
+  const originLower = origin ? origin.toLowerCase() : '';
+  const isAllowedOrigin = allowedOriginsList.some(allowed => {
+    const allowedLower = allowed.toLowerCase();
+    return allowedLower === originLower || 
+           allowedLower.replace(/\/$/, '') === originLower.replace(/\/$/, '');
+  });
+  
+  if (origin && (isLocalhost || isAllowedOrigin || allowedOriginsList.length === 0)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, Pragma');
+  res.header('Access-Control-Max-Age', '86400');
+  res.sendStatus(200);
+});
+
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     // Refresh user data from database to get latest credits
@@ -5233,6 +5249,11 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
       isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
     }
 
+    // Set cache-control headers to prevent browser caching - ensures fresh data across devices
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     res.json({
       success: true,
       user: {
@@ -5559,6 +5580,11 @@ app.get('/api/users/:walletAddress', async (req, res) => {
       const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
       const userCredits = user.credits != null ? user.credits : 0;
       
+      // Set cache-control headers to prevent browser caching - ensures fresh data across devices
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      
       // Return minimal public data only (no history, no sensitive data)
       return res.json({
         success: true,
@@ -5590,6 +5616,11 @@ app.get('/api/users/:walletAddress', async (req, res) => {
       const userCredits = user.credits != null ? user.credits : 0;
       const userTotalCreditsEarned = user.totalCreditsEarned != null ? user.totalCreditsEarned : 0;
       const userTotalCreditsSpent = user.totalCreditsSpent != null ? user.totalCreditsSpent : 0;
+      
+      // Set cache-control headers to prevent browser caching - ensures fresh data across devices
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       
       // Fast response for skipNFTs mode - full data for authenticated owner
       return res.json({

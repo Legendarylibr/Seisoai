@@ -34,15 +34,29 @@ export const EmailAuthProvider = ({ children }) => {
         return;
       }
 
-      const response = await fetch(`${API_URL}/api/auth/me`, {
+      // Add cache-busting for mobile browsers (they cache aggressively)
+      const cacheBuster = `t=${Date.now()}`;
+      const url = `${API_URL}/api/auth/me?${cacheBuster}`;
+      logger.debug('Fetching email user data', { url, API_URL });
+      
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        cache: 'no-store' // Prevent browser caching (critical for mobile) - this is sufficient
       });
 
       if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unable to read error response');
+        logger.error('Email auth API returned error', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText.substring(0, 200),
+          API_URL,
+          url
+        });
         // Token invalid
         signOutService();
         setIsAuthenticated(false);
@@ -52,15 +66,26 @@ export const EmailAuthProvider = ({ children }) => {
 
       const data = await response.json();
       if (data.success && data.user) {
+        logger.debug('Email user data fetched successfully', {
+          credits: data.user.credits || 0,
+          API_URL
+        });
         setEmail(data.user.email);
         setUserId(data.user.userId);
         setCredits(data.user.credits || 0);
         setTotalCreditsEarned(data.user.totalCreditsEarned || 0);
         setTotalCreditsSpent(data.user.totalCreditsSpent || 0);
         setIsAuthenticated(true);
+      } else {
+        logger.warn('Email auth response missing user data', { API_URL, hasSuccess: !!data.success });
       }
     } catch (error) {
-      logger.error('Error fetching user data:', { error: error.message });
+      logger.error('Error fetching email user data:', { 
+        error: error.message,
+        errorName: error.name,
+        API_URL,
+        isNetworkError: error.name === 'TypeError' || error.message.includes('fetch')
+      });
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
@@ -112,13 +137,25 @@ export const EmailAuthProvider = ({ children }) => {
     };
 
     safeFetchUserData();
+    // Refresh every 15 seconds to ensure cross-device synchronization
     const refreshInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         safeFetchUserData();
       }
-    }, 30000);
+    }, 15000); // Reduced to 15s for better cross-device sync
 
-    return () => clearInterval(refreshInterval);
+    // Also refresh when tab becomes visible (user switches back)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        safeFetchUserData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(refreshInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [isAuthenticated, fetchUserData]);
 
 

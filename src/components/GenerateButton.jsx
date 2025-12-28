@@ -15,8 +15,8 @@ const GENERATION_TIMES = {
 
 // Constants for progress tracking
 const PROGRESS_CONFIG = {
-  INTERVAL_MS: 100,
-  COMPLETION_DELAY_MS: 1000,
+  INTERVAL_MS: 200, // Reduced from 100ms to 200ms for better performance
+  COMPLETION_DELAY_MS: 0, // Removed artificial delay - show image immediately
   MAX_PROGRESS_PERCENT: 75,
   PROGRESS_MULTIPLIER: 80
 };
@@ -224,42 +224,43 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       const imageUrls = imageResult.images;
       const imageUrl = imageUrls[0];
       
-      // Refresh credits from backend to ensure accuracy
-      if (isEmailAuth && emailContext.refreshCredits) {
-        await emailContext.refreshCredits();
-      } else if (!isEmailAuth && refreshCredits && address) {
-        await refreshCredits();
+      // Update credits from response immediately (backend already returns remainingCredits)
+      if (imageResult.remainingCredits !== undefined) {
+        if (isEmailAuth && emailContext.setCreditsManually) {
+          emailContext.setCreditsManually(imageResult.remainingCredits);
+        } else if (!isEmailAuth && setCreditsManually) {
+          setCreditsManually(imageResult.remainingCredits);
+        }
       }
 
       setError(null);
       setCurrentStep('Complete!');
       setProgress(100);
       
-      // Save generation to history
+      // Save generation to history (non-blocking - fire and forget)
       const userIdentifier = isEmailAuth 
         ? emailContext.userId 
         : address;
       const creditsUsed = multiImageModel === 'nano-banana-pro' ? 2 : 1;
       
-      try {
-        const promptForHistory = getPromptForDisplay(trimmedPrompt, selectedStyle);
-        
-        await addGeneration(userIdentifier, {
-          prompt: promptForHistory,
-          style: selectedStyle ? selectedStyle.name : 'No Style',
-          imageUrl,
-          creditsUsed,
-          userId: isEmailAuth ? emailContext.userId : undefined,
-          email: isEmailAuth ? emailContext.email : undefined
-        });
-      } catch (error) {
-        // Don't fail - image was already generated successfully
-      }
+      // Don't await - let it run in background
+      addGeneration(userIdentifier, {
+        prompt: getPromptForDisplay(trimmedPrompt, selectedStyle),
+        style: selectedStyle ? selectedStyle.name : 'No Style',
+        imageUrl,
+        creditsUsed,
+        userId: isEmailAuth ? emailContext.userId : undefined,
+        email: isEmailAuth ? emailContext.email : undefined
+      }).catch(error => {
+        // Silently fail - image was already generated successfully
+        logger.debug('Failed to save generation to history', { error: error.message });
+      });
       
-      // Show completion, then set the image
+      // Show image immediately (no artificial delay)
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       
-      timeoutRef.current = setTimeout(() => {
+      // Use requestAnimationFrame for immediate UI update
+      requestAnimationFrame(() => {
         setGeneratedImage(imageUrls.length > 1 ? imageUrls : imageUrl);
         setIsLoading(false);
         
@@ -276,9 +277,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           multiImageModel,
           timestamp: new Date().toISOString()
         });
-        
-        timeoutRef.current = null;
-      }, PROGRESS_CONFIG.COMPLETION_DELAY_MS);
+      });
       } catch (error) {
         const errorMessage = error.message || 'Failed to generate image. Please try again.';
       

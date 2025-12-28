@@ -41,6 +41,18 @@ const getStylePrompt = (styleId) => {
   return style ? style.prompt : 'artistic colors and lighting';
 };
 
+// Aspect ratio map - moved outside function for performance
+const ASPECT_RATIO_MAP = {
+  'square': '1:1',
+  'portrait_4_3': '3:4',
+  'portrait_16_9': '9:16',
+  'portrait_3_2': '2:3',
+  'landscape_4_3': '4:3',
+  'landscape_16_9': '16:9',
+  'landscape_3_2': '3:2',
+  'ultra_wide': '21:9'
+};
+
 export const generateImage = async (style, customPrompt = '', advancedSettings = {}, referenceImage = null) => {
   // Input validation - style is now optional
   if (style && typeof style !== 'object') {
@@ -79,15 +91,11 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     //   );
     // }
 
-    logger.info('Generation started', { 
+    // Reduced logging for performance - only log essential info
+    logger.debug('Generation started', { 
       style: style?.id, 
-      hasCustomPrompt: !!customPrompt,
-      hasAdvancedSettings: Object.keys(advancedSettings).length > 0
+      hasCustomPrompt: !!customPrompt
     });
-    logger.info('Content safety check bypassed - no censorship enabled');
-    
-    // Log which endpoint will be used
-    logger.debug('Using Flux Kontext endpoint based on settings');
 
     // Extract advanced settings with defaults
     const {
@@ -99,32 +107,25 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     // Build optimized prompt - avoid unnecessary concatenation
     let basePrompt = '';
     
-    logger.debug('Building prompt', {
-      hasCustomPrompt: !!(customPrompt && customPrompt.trim().length > 0),
-      hasStyle: !!style,
-      styleId: style?.id
-    });
-    
     // If we have a custom prompt, use it as the base
-    if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
-      basePrompt = customPrompt.trim();
+    const trimmedPrompt = customPrompt && typeof customPrompt === 'string' ? customPrompt.trim() : '';
+    if (trimmedPrompt.length > 0) {
+      basePrompt = trimmedPrompt;
       
       // Add style prompt only if we have a style and it adds value
-      if (style && style.id) {
+      if (style?.id) {
         const stylePrompt = getStylePrompt(style.id);
         if (stylePrompt && stylePrompt !== 'artistic colors and lighting') {
           basePrompt = `${basePrompt}, ${stylePrompt}`;
         }
       }
-    } else if (style && style.id) {
+    } else if (style?.id) {
       // If no custom prompt but we have a style, use the style prompt
       basePrompt = getStylePrompt(style.id);
     } else {
       // If no prompt and no style, use a default
       basePrompt = 'artistic image, high quality, detailed';
     }
-    
-    logger.debug('Final prompt prepared', { promptLength: basePrompt.length });
     
     // Determine image count and type for model selection
     // 0 images: text-to-image
@@ -160,24 +161,8 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     const hasRefImage = imageCount > 0;
     const fluxEndpoint = getFluxEndpoint(hasRefImage, isMultipleImages);
     
-    // Determine mode description
-    let modeDesc;
-    if (imageCount === 0) {
-      modeDesc = 'Kontext [pro] text-to-image';
-    } else if (isMultipleImages) {
-      modeDesc = `Kontext [multi] multi-image (${imageCount} images)`;
-    } else {
-      modeDesc = 'Kontext [max] image-to-image (1 image)';
-    }
-      
-    logger.info(`Using ${modeDesc} generation`, {
-      endpoint: fluxEndpoint,
-      imageCount,
-      hasReferenceImage: hasRefImage,
-      isMultipleImages: isMultipleImages
-    });
-    
-    logger.debug('Model selection', { imageCount, isMultipleImages, mode: modeDesc });
+    // Determine mode description (only for logging if needed)
+    // Removed verbose logging for performance
     
     // Generate random seed each time
     const randomSeed = Math.floor(Math.random() * 2147483647);
@@ -223,7 +208,6 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
         
         // Multiple images for multi model - use image_urls
         requestBody.image_urls = optimizedImages;
-        logger.debug('Using multiple reference images', { count: optimizedImages.length });
         
         // Ensure image_url is not set when using image_urls
         delete requestBody.image_url;
@@ -238,7 +222,6 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
         
         // Optimize if needed
         if (typeof singleImage === 'string' && singleImage.startsWith('data:') && needsOptimization(singleImage, 300)) {
-          logger.debug('Optimizing single image');
           optimizedImages = await optimizeImages(singleImage, {
             maxWidth: 2048,
             maxHeight: 2048,
@@ -251,60 +234,23 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
         
         // Single image for max model - use image_url
         requestBody.image_url = optimizedImages;
-        logger.debug('Using single reference image');
         
         // Ensure image_urls is not set when using image_url
         delete requestBody.image_urls;
       }
     } else {
       // No reference image (0 images) - using text-to-image mode
-      logger.debug('Using text-to-image generation');
-      
       // Ensure no image fields are set for text-to-image
       delete requestBody.image_url;
       delete requestBody.image_urls;
     }
 
-    // Add aspect ratio based on the selected size
-    if (imageSize && imageSize !== 'square_hd') {
-      // Map our image sizes to aspect ratios according to the API schema
-      const aspectRatioMap = {
-        'square': '1:1',
-        'portrait_4_3': '3:4',
-        'portrait_16_9': '9:16',
-        'portrait_3_2': '2:3',
-        'landscape_4_3': '4:3',
-        'landscape_16_9': '16:9',
-        'landscape_3_2': '3:2',
-        'ultra_wide': '21:9'
-      };
-      
-      if (aspectRatioMap[imageSize]) {
-        requestBody.aspect_ratio = aspectRatioMap[imageSize];
-      }
+    // Add aspect ratio based on the selected size (optimized lookup)
+    if (imageSize && imageSize !== 'square_hd' && ASPECT_RATIO_MAP[imageSize]) {
+      requestBody.aspect_ratio = ASPECT_RATIO_MAP[imageSize];
     }
 
-    logger.debug('Generation request prepared', {
-      prompt: requestBody.prompt,
-      hasImage: !!requestBody.image_url,
-      hasImages: !!requestBody.image_urls,
-      referenceImageCount: imageCount,
-      imageUrlsCount: requestBody.image_urls?.length || 0,
-      numImages: requestBody.num_images,
-      aspectRatio: requestBody.aspect_ratio,
-      endpoint: fluxEndpoint,
-      mode: modeDesc
-    });
-    
-    logger.debug('Request details', {
-      endpoint: fluxEndpoint,
-      mode: modeDesc,
-      promptLength: requestBody.prompt?.length || 0,
-      hasImage_url: !!requestBody.image_url,
-      hasImage_urls: !!requestBody.image_urls,
-      imageUrlsCount: requestBody.image_urls?.length || 0,
-      guidance_scale: requestBody.guidance_scale
-    });
+    // Reduced logging for performance
 
     // SECURITY: Route through backend to ensure credit checks
     // Extract user identification from advancedSettings
@@ -339,10 +285,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       })
     });
 
-    logger.debug('API response received', { 
-      status: response.status,
-      statusText: response.statusText
-    });
+    // Reduced logging for performance
 
     if (!response.ok) {
       let errorMessage = `HTTP error! status: ${response.status}`;
@@ -378,23 +321,10 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     }
 
     const data = await response.json();
-    logger.debug('API response received', { 
-      hasImages: !!data.images,
-      imageCount: data.images?.length || 0,
-      hasRemainingCredits: data.remainingCredits !== undefined,
-      remainingCredits: data.remainingCredits
-    });
     
     if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-      // Log all generated images for debugging
-      logger.info(`Generated ${data.images.length} image(s) successfully`, {
-        numImagesRequested: numImages,
-        numImagesReceived: data.images.length,
-        isMultiImage: isMultipleImages,
-        referenceImageCount: imageCount,
-        remainingCredits: data.remainingCredits,
-        creditsDeducted: data.creditsDeducted
-      });
+      // Reduced logging for performance - only log on success
+      logger.debug(`Generated ${data.images.length} image(s) successfully`);
       
       // Extract all image URLs
       const imageUrls = data.images.map(img => img.url || img);

@@ -30,31 +30,55 @@ export const SimpleWalletProvider = ({ children }) => {
     const normalizedAddress = walletAddress.toLowerCase();
     const cacheKey = `credits_${normalizedAddress}`;
     
-    // Check cache first
+    // Skip sessionStorage cache to ensure credits are always fresh across devices
+    // Device-specific caching can cause credits to be out of sync between devices
+    // Always fetch from backend to ensure consistency
     if (!skipCache) {
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        try {
-          const { data, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < 60000) {
-            setCredits(data.credits || 0);
-            setTotalCreditsEarned(data.totalCreditsEarned || 0);
-            setTotalCreditsSpent(data.totalCreditsSpent || 0);
-            return data.credits || 0;
+      // Only use cache for immediate UI feedback, but still fetch fresh data
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const { data, timestamp } = JSON.parse(cached);
+            // Very short cache (5 seconds) - just for instant UI, then refresh
+            if (Date.now() - timestamp < 5000) {
+              // Set cached value for instant UI, but still fetch fresh data in background
+              setCredits(data.credits || 0);
+              setTotalCreditsEarned(data.totalCreditsEarned || 0);
+              setTotalCreditsSpent(data.totalCreditsSpent || 0);
+              // Don't return early - continue to fetch fresh data
+            }
+          } catch (e) {
+            // Ignore cache errors - clear invalid cache
+            try {
+              sessionStorage.removeItem(cacheKey);
+            } catch (clearError) {
+              // Ignore
+            }
           }
-        } catch (e) {
-          // Ignore cache errors
         }
+      } catch (e) {
+        // sessionStorage might not be available on some mobile browsers in private mode
+        // Just continue to fetch from API
+        logger.debug('sessionStorage not available, fetching from API', { error: e.message });
       }
     }
 
-    // Fetch from API
+    // Fetch from API with cache-busting for mobile browsers
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const response = await fetch(`${API_URL}/api/users/${normalizedAddress}?skipNFTs=true`, {
+        // Add cache-busting timestamp for mobile browsers (they cache aggressively)
+        const cacheBuster = `t=${Date.now()}&attempt=${attempt}`;
+        const url = `${API_URL}/api/users/${normalizedAddress}?skipNFTs=true&${cacheBuster}`;
+        logger.debug('Fetching credits', { url, attempt, API_URL });
+        
+        const response = await fetch(url, {
           method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(15000)
+          headers: { 
+            'Content-Type': 'application/json'
+          },
+          cache: 'no-store', // Prevent browser caching (critical for mobile) - this is sufficient
+          signal: AbortSignal.timeout(20000) // Increased timeout for mobile networks
         });
         
         if (response.ok) {
@@ -64,6 +88,13 @@ export const SimpleWalletProvider = ({ children }) => {
           const currentCredits = Number(user.credits || data.credits || 0);
           const rewardedAmount = Number(user.totalCreditsEarned || data.totalCreditsEarned || 0);
           const spentAmount = Number(user.totalCreditsSpent || data.totalCreditsSpent || 0);
+          
+          logger.debug('Credits fetched successfully', { 
+            currentCredits, 
+            rewardedAmount, 
+            spentAmount,
+            API_URL 
+          });
           
           setCredits(currentCredits);
           setTotalCreditsEarned(rewardedAmount);
@@ -80,8 +111,33 @@ export const SimpleWalletProvider = ({ children }) => {
           }
           
           return currentCredits;
+        } else {
+          // Log non-OK responses for debugging
+          const errorText = await response.text().catch(() => 'Unable to read error response');
+          logger.error('Credits API returned error', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText.substring(0, 200),
+            API_URL,
+            url,
+            attempt
+          });
+          
+          if (attempt === retries) {
+            setCredits(0);
+            return 0;
+          }
         }
       } catch (error) {
+        logger.error('Error fetching credits', {
+          error: error.message,
+          errorName: error.name,
+          API_URL,
+          attempt,
+          isAbortError: error.name === 'AbortError',
+          willRetry: attempt < retries && error.name !== 'AbortError'
+        });
+        
         if (error.name === 'AbortError' || attempt === retries) {
           setCredits(0);
           return 0;
@@ -90,6 +146,7 @@ export const SimpleWalletProvider = ({ children }) => {
       }
     }
     
+    logger.warn('Failed to fetch credits after all retries', { API_URL, walletAddress: normalizedAddress });
     setCredits(0);
     return 0;
   }, [API_URL]);
@@ -356,19 +413,32 @@ export const SimpleWalletProvider = ({ children }) => {
     };
   }, []);
 
-  // Periodic credit refresh when connected
+    // Periodic credit refresh when connected - frequent refresh for cross-device sync
   useEffect(() => {
     if (!isConnected || !address) return;
 
+    // Initial fetch with cache bypass
     fetchCredits(address, 3, true).catch(() => {});
 
+    // Refresh every 15 seconds to ensure cross-device synchronization
     const refreshInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         fetchCredits(address, 3, true).catch(() => {});
       }
-    }, 30000);
+    }, 15000); // Reduced from 30s to 15s for better cross-device sync
 
-    return () => clearInterval(refreshInterval);
+    // Also refresh when tab becomes visible (user switches back)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchCredits(address, 3, true).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(refreshInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [isConnected, address, fetchCredits]);
 
   // Function to refresh credits without full reconnection (bypasses cache)
