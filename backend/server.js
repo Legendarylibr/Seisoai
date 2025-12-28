@@ -627,82 +627,64 @@ app.use((req, res, next) => {
   next();
 });
 
+// OPTIMIZATION: Pre-compute allowed origins Set at startup for O(1) lookups
+const buildAllowedOriginsCache = () => {
+  const cache = new Set();
+  if (process.env.ALLOWED_ORIGINS) {
+    const origins = process.env.ALLOWED_ORIGINS.split(',');
+    for (const origin of origins) {
+      const trimmed = origin.trim().toLowerCase();
+      if (trimmed) {
+        // Add all variations to the cache for fast lookup
+        cache.add(trimmed);
+        cache.add(trimmed.replace(/\/$/, '')); // Without trailing slash
+        cache.add(trimmed.replace(/^https?:\/\//, '').replace(/^www\./, '')); // Normalized
+        cache.add(trimmed.replace(/^www\./, '')); // Without www
+      }
+    }
+  }
+  return cache;
+};
+
+const allowedOriginsCache = buildAllowedOriginsCache();
+const hasAllowedOrigins = allowedOriginsCache.size > 0;
+
+// Helper function to normalize URLs for comparison (cached version)
+const normalizeOrigin = (url) => {
+  return url.toLowerCase()
+    .replace(/\/$/, '')
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '');
+};
+
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests without origin - these are handled by middleware above for specific paths
     if (!origin) {
-      // Allow no origin for testing tools (same in dev and production)
-      // The middleware above will have already set headers for allowed paths
       return callback(null, true);
     }
     
-    // Dynamic port handling - allow any localhost port (same in dev and production)
+    // OPTIMIZATION: Fast localhost check with startsWith
     const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
     
-    // Check if origin is in allowed list (trim whitespace and handle variations)
-    const allowedOriginsList = process.env.ALLOWED_ORIGINS 
-      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim().toLowerCase())
-      : [];
+    // OPTIMIZATION: O(1) Set lookup instead of O(n) array iteration
     const originLower = origin.toLowerCase();
-    
-    // Helper function to normalize URLs for comparison
-    const normalizeUrl = (url) => {
-      return url
-        .replace(/\/$/, '') // Remove trailing slash
-        .replace(/^https?:\/\//, '') // Remove protocol
-        .replace(/^www\./, ''); // Remove www
-    };
-    
-    const isAllowedOrigin = allowedOriginsList.some(allowed => {
-      // Exact match (case-insensitive)
-      if (allowed === originLower) return true;
-      
-      // Match without trailing slash
-      if (allowed.replace(/\/$/, '') === originLower.replace(/\/$/, '')) return true;
-      
-      // Match normalized (without protocol and www)
-      const normalizedAllowed = normalizeUrl(allowed);
-      const normalizedOrigin = normalizeUrl(originLower);
-      if (normalizedAllowed === normalizedOrigin) return true;
-      
-      // Match with/without www prefix (but keep protocol)
-      const allowedNoWww = allowed.replace(/^www\./, '');
-      const originNoWww = originLower.replace(/^www\./, '');
-      if (allowedNoWww === originNoWww) return true;
-      
-      return false;
-    });
+    const isAllowedOrigin = hasAllowedOrigins && (
+      allowedOriginsCache.has(originLower) ||
+      allowedOriginsCache.has(originLower.replace(/\/$/, '')) ||
+      allowedOriginsCache.has(normalizeOrigin(originLower))
+    );
     
     // Allow localhost, whitelisted origins, or any origin if ALLOWED_ORIGINS not set
-    // Same logic for both dev and production
-    if (isLocalhost || isAllowedOrigin || allowedOriginsList.length === 0) {
-      // Log when origin is allowed (info level so it's visible)
-      const reason = isLocalhost ? 'localhost' : 
-                     isAllowedOrigin ? 'in allowed list' : 
-                     'ALLOWED_ORIGINS not set (permissive mode)';
-      logger.info('CORS: ✅ Allowed origin', { 
-        origin, 
-        reason,
-        isLocalhost, 
-        isAllowedOrigin, 
-        allowedOriginsCount: allowedOriginsList.length,
-        allowedOrigins: allowedOriginsList.length > 0 ? allowedOriginsList : ['any origin allowed']
-      });
-      // Return the actual origin (not true) so CORS library sets it correctly with credentials
+    if (isLocalhost || isAllowedOrigin || !hasAllowedOrigins) {
+      // OPTIMIZATION: Reduced logging - only log debug level
+      logger.debug('CORS: Allowed origin', { origin, isLocalhost, isAllowedOrigin });
       return callback(null, origin);
     }
     
-    // Reject non-localhost, non-whitelisted origins (only if ALLOWED_ORIGINS is set)
-    logger.warn('CORS: ❌ Rejected origin', { 
-      origin, 
-      originLower,
-      allowedOrigins: process.env.ALLOWED_ORIGINS,
-      allowedOriginsArray: allowedOriginsList,
-      isAllowed: isAllowedOrigin,
-      isLocalhost,
-      reason: 'Origin not in ALLOWED_ORIGINS list and not localhost'
-    });
-    return callback(new Error(`Not allowed by CORS. Origin '${origin}' is not in ALLOWED_ORIGINS: ${process.env.ALLOWED_ORIGINS || 'not set'}`));
+    // Reject non-localhost, non-whitelisted origins
+    logger.warn('CORS: Rejected origin', { origin });
+    return callback(new Error(`Not allowed by CORS. Origin '${origin}' is not in ALLOWED_ORIGINS.`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -3024,11 +3006,13 @@ if (missingRecommended.length > 0) {
   });
 }
 
-// MongoDB connection
+// MongoDB connection - OPTIMIZATION: Enhanced pooling for better performance
 const mongoOptions = {
-  maxPoolSize: 10,
+  maxPoolSize: 10,        // Maximum connections in pool
+  minPoolSize: 2,         // OPTIMIZATION: Keep minimum connections warm
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
+  maxIdleTimeMS: 30000,   // OPTIMIZATION: Close idle connections after 30s
 };
 
 // Add SSL for production
@@ -3382,7 +3366,8 @@ async function getOrCreateUserByIdentifier(identifier, type = 'wallet') {
   let user;
   
   if (type === 'email') {
-    user = await User.findOne({ email: identifier.toLowerCase() });
+    // OPTIMIZATION: Use lean() for initial lookup (faster read-only check)
+    user = await User.findOne({ email: identifier.toLowerCase() }).lean();
     if (!user) {
       // Give new email users 2 free credits with atomic protection
       user = new User({
@@ -3463,11 +3448,12 @@ async function findUserByIdentifier(walletAddress = null, email = null, userId =
   }
 
   // If only one identifier, use direct query (more efficient)
+  // OPTIMIZATION: Use lean() for faster read-only queries (returns plain JS objects)
   if (query.$or.length === 1) {
-    return await User.findOne(query.$or[0]);
+    return await User.findOne(query.$or[0]).lean();
   }
 
-  return await User.findOne(query);
+  return await User.findOne(query).lean();
 }
 
 /**

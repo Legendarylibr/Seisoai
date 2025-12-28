@@ -179,69 +179,32 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
     };
 
     // Add reference image(s) if provided based on image count
+    // OPTIMIZATION: Streamlined image processing with single-pass optimization check
     if (hasRefImage && referenceImage) {
-      // Optimize images before sending to reduce payload size
-      let optimizedImages;
+      // Shared optimization config (defined once)
+      const optimizeConfig = { maxWidth: 2048, maxHeight: 2048, quality: 0.85, format: 'jpeg' };
       
       if (isMultipleImages && Array.isArray(referenceImage)) {
         // Multiple images (2+) - use multi model
-        // Filter out any invalid images
-        const validImages = referenceImage.filter(img => img && (typeof img === 'string' && img.trim().length > 0));
+        const validImages = referenceImage.filter(img => img && typeof img === 'string' && img.trim().length > 0);
         
-        // Check if optimization is needed for any image
-        const needsOpt = validImages.some(img => 
-          typeof img === 'string' && img.startsWith('data:') && needsOptimization(img, 300)
-        );
+        // OPTIMIZATION: Single-pass check - only check data: URIs that are large
+        const hasLargeDataUri = validImages.some(img => img.startsWith('data:') && img.length > 300000);
         
-        if (needsOpt) {
-          logger.debug('Optimizing images', { count: validImages.length });
-          optimizedImages = await optimizeImages(validImages, {
-            maxWidth: 2048,
-            maxHeight: 2048,
-            quality: 0.85,
-            format: 'jpeg'
-          });
-        } else {
-          optimizedImages = validImages;
-        }
-        
-        // Multiple images for multi model - use image_urls
-        requestBody.image_urls = optimizedImages;
-        
-        // Ensure image_url is not set when using image_urls
-        delete requestBody.image_url;
+        requestBody.image_urls = hasLargeDataUri 
+          ? await optimizeImages(validImages, optimizeConfig)
+          : validImages;
       } else if (imageCount === 1) {
         // Single image - use max model
-        let singleImage = referenceImage;
+        const singleImage = Array.isArray(referenceImage) 
+          ? referenceImage.find(img => img && typeof img === 'string' && img.trim().length > 0)
+          : referenceImage;
         
-        // If it's an array with one element, extract it
-        if (Array.isArray(referenceImage) && referenceImage.length >= 1) {
-          singleImage = referenceImage.find(img => img && (typeof img === 'string' && img.trim().length > 0));
-        }
-        
-        // Optimize if needed
-        if (typeof singleImage === 'string' && singleImage.startsWith('data:') && needsOptimization(singleImage, 300)) {
-          optimizedImages = await optimizeImages(singleImage, {
-            maxWidth: 2048,
-            maxHeight: 2048,
-            quality: 0.85,
-            format: 'jpeg'
-          });
-        } else {
-          optimizedImages = singleImage;
-        }
-        
-        // Single image for max model - use image_url
-        requestBody.image_url = optimizedImages;
-        
-        // Ensure image_urls is not set when using image_url
-        delete requestBody.image_urls;
+        // OPTIMIZATION: Only optimize large data URIs (>300KB)
+        requestBody.image_url = (typeof singleImage === 'string' && singleImage.startsWith('data:') && singleImage.length > 300000)
+          ? await optimizeImages(singleImage, optimizeConfig)
+          : singleImage;
       }
-    } else {
-      // No reference image (0 images) - using text-to-image mode
-      // Ensure no image fields are set for text-to-image
-      delete requestBody.image_url;
-      delete requestBody.image_urls;
     }
 
     // Add aspect ratio based on the selected size (optimized lookup)

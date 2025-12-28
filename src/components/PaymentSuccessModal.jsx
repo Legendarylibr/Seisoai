@@ -17,22 +17,25 @@ const PaymentSuccessModal = ({
   
   useEffect(() => {
     if (isOpen) {
-      // Refresh credits when modal opens (subscription was just purchased)
+      // OPTIMIZATION: Reduced polling - use exponential backoff instead of constant polling
+      // Webhook usually processes within 2-3 seconds
       if (refreshCredits) {
-        // Wait a moment for webhook to process, then refresh
-        setTimeout(() => {
-          refreshCredits();
-        }, 2000);
+        // Initial refresh after webhook processing time
+        const timeouts = [
+          setTimeout(() => refreshCredits(), 2000),  // First check at 2s
+          setTimeout(() => refreshCredits(), 5000),  // Second check at 5s
+          setTimeout(() => refreshCredits(), 10000), // Final check at 10s
+        ];
         
-        // Poll for credits update (webhook might take a few seconds)
-        const pollInterval = setInterval(() => {
-          refreshCredits();
-        }, 3000);
+        // Auto-close after 5 seconds
+        const closeTimer = setTimeout(() => {
+          onClose();
+        }, 5000);
         
-        // Stop polling after 30 seconds
-        setTimeout(() => {
-          clearInterval(pollInterval);
-        }, 30000);
+        return () => {
+          timeouts.forEach(t => clearTimeout(t));
+          clearTimeout(closeTimer);
+        };
       }
       
       // Auto-close after 5 seconds

@@ -15,7 +15,7 @@ const GENERATION_TIMES = {
 
 // Constants for progress tracking
 const PROGRESS_CONFIG = {
-  INTERVAL_MS: 200, // Reduced from 100ms to 200ms for better performance
+  INTERVAL_MS: 500, // OPTIMIZATION: Reduced from 200ms to 500ms - visually identical, 60% less CPU
   COMPLETION_DELAY_MS: 0, // Removed artificial delay - show image immediately
   MAX_PROGRESS_PERCENT: 75,
   PROGRESS_MULTIPLIER: 80

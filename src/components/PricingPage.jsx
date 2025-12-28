@@ -35,18 +35,11 @@ const PricingPage = () => {
       planPrice: planPrice || 'Activated'
     });
     
+    // OPTIMIZATION: Reduced polling - use exponential backoff instead of constant polling
     if (refreshCredits) {
-      setTimeout(() => {
-        refreshCredits();
-      }, 2000);
-      
-      const pollInterval = setInterval(() => {
-        refreshCredits();
-      }, 3000);
-      
-      setTimeout(() => {
-        clearInterval(pollInterval);
-      }, 30000);
+      setTimeout(() => refreshCredits(), 2000);  // First check at 2s
+      setTimeout(() => refreshCredits(), 5000);  // Second check at 5s
+      setTimeout(() => refreshCredits(), 10000); // Final check at 10s
     }
   }, [refreshCredits]);
 

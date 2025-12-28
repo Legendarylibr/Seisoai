@@ -36,16 +36,14 @@ export const EmailAuthProvider = ({ children }) => {
     }
 
     try {
-      const url = `${API_URL}/api/auth/me?t=${Date.now()}`;
-      logger.debug('Fetching email user data', { url });
-      
-      const response = await fetch(url, {
+      // OPTIMIZATION: Remove redundant timestamp query param, rely on cache headers
+      const response = await fetch(`${API_URL}/api/auth/me`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        cache: 'no-store'
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache' // Request fresh data but allow conditional caching
+        }
       });
 
       if (!response.ok) {

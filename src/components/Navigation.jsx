@@ -25,18 +25,8 @@ import logger from '../utils/logger.js';
   const credits = getCredits(isEmailAuth ? emailContext?.credits : walletContext?.credits);
   const totalCreditsEarned = getCredits(isEmailAuth ? emailContext?.totalCreditsEarned : walletContext?.totalCreditsEarned);
   
-  // Debug logging for credits issues
-  useEffect(() => {
-    if (isConnected) {
-      logger.info('Credits state', {
-        authMethod: isEmailAuth ? 'email' : 'wallet',
-        credits,
-        totalCreditsEarned,
-        emailCredits: emailContext.credits,
-        walletCredits: walletContext.credits
-      });
-    }
-  }, [credits, totalCreditsEarned, isConnected, isEmailAuth, emailContext.credits, walletContext.credits]);
+  // OPTIMIZATION: Removed excessive debug logging that ran on every credit change
+  // Use browser DevTools or explicit debug mode if needed
   const disconnectWallet = walletContext.disconnectWallet;
   const signOut = emailContext.signOut;
   const [showMobileMenu, setShowMobileMenu] = useState(false);
