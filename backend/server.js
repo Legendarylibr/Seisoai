@@ -107,28 +107,13 @@ app.use(helmet({
 // Compression middleware
 app.use(compression());
 
-// Additional security headers to prevent information leakage
+// Additional security headers (supplement helmet - only add what helmet doesn't provide)
+// Note: helmet already handles X-Powered-By, Referrer-Policy, X-Content-Type-Options, X-XSS-Protection
 app.use((req, res, next) => {
-  // Remove any server identification headers
-  res.removeHeader('X-Powered-By');
+  // Remove Server header (helmet's hidePoweredBy only handles X-Powered-By)
   res.removeHeader('Server');
   
-  // Prevent information leakage through referrer
-  if (!res.getHeader('Referrer-Policy')) {
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  }
-  
-  // Prevent MIME type sniffing
-  if (!res.getHeader('X-Content-Type-Options')) {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-  }
-  
-  // XSS Protection (legacy but still useful)
-  if (!res.getHeader('X-XSS-Protection')) {
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-  }
-  
-  // Permissions Policy (formerly Feature Policy)
+  // Permissions Policy (not handled by helmet by default)
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   
   // Don't expose API endpoints in error responses
@@ -183,6 +168,64 @@ const sanitizeNumber = (num) => {
   return parsed;
 };
 
+/**
+ * SHARED UTILITY: Validate URL for fal.ai/fal.media (prevents SSRF attacks)
+ * Centralized to avoid code duplication across endpoints
+ * @param {string} url - URL to validate
+ * @returns {boolean} - Whether URL is from trusted source
+ */
+const isValidFalUrl = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  // Allow data URIs (for uploaded files)
+  if (url.startsWith('data:')) return true;
+  
+  // Allow fal.ai and fal.media domains (trusted CDN)
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname.toLowerCase();
+    return hostname === 'fal.ai' || 
+           hostname === 'fal.media' ||
+           hostname.endsWith('.fal.ai') ||
+           hostname.endsWith('.fal.media');
+  } catch (e) {
+    return false; // Invalid URL format
+  }
+};
+
+/**
+ * SHARED UTILITY: Calculate subscription credits with scaling and NFT bonus
+ * Centralized to ensure consistent credit calculation across all payment flows
+ * (webhook, verify-payment, checkout session, invoice)
+ * @param {number} amountInDollars - Payment amount in dollars
+ * @param {boolean} isNFTHolder - Whether user holds qualifying NFTs
+ * @returns {{credits: number, scalingMultiplier: number, nftMultiplier: number}}
+ */
+const calculateCredits = (amountInDollars, isNFTHolder = false) => {
+  const baseRate = 5; // 5 credits per dollar (50 credits for $10)
+  
+  // Subscription scaling based on amount
+  let scalingMultiplier = 1.0;
+  if (amountInDollars >= 80) {
+    scalingMultiplier = 1.3; // 30% bonus for $80+
+  } else if (amountInDollars >= 40) {
+    scalingMultiplier = 1.2; // 20% bonus for $40-79
+  } else if (amountInDollars >= 20) {
+    scalingMultiplier = 1.1; // 10% bonus for $20-39
+  }
+  // $10: 5 credits/dollar (no bonus) = 50 credits
+  
+  // NFT holder bonus (additional 20% on top of subscription scaling)
+  const nftMultiplier = isNFTHolder ? 1.2 : 1;
+  
+  const credits = Math.floor(amountInDollars * baseRate * scalingMultiplier * nftMultiplier);
+  
+  return {
+    credits,
+    scalingMultiplier,
+    nftMultiplier
+  };
+};
+
 // Middleware to validate request inputs
 const validateInput = (req, res, next) => {
   // Sanitize query parameters
@@ -234,7 +277,7 @@ class LRUCache {
       // Move to end (most recently used)
       this.cache.delete(key);
     } else if (this.cache.size >= this.maxSize) {
-      // Remove least recently used (first item)
+      // Remove least recently used (first item) - O(1) operation
       const firstKey = this.cache.keys().next().value;
       this.cache.delete(firstKey);
     }
@@ -260,14 +303,72 @@ class LRUCache {
     return this.cache.delete(key);
   }
 
-  size() {
+  get size() {
     return this.cache.size;
   }
 
   clear() {
     this.cache.clear();
   }
+  
+  // Efficient pruning - keeps most recent entries without Array.from()
+  prune(keepCount = this.maxSize) {
+    if (this.cache.size <= keepCount) return;
+    const toRemove = this.cache.size - keepCount;
+    const keysIterator = this.cache.keys();
+    for (let i = 0; i < toRemove; i++) {
+      const key = keysIterator.next().value;
+      this.cache.delete(key);
+    }
+  }
 }
+
+// TTL Cache for short-lived data (e.g., NFT holdings)
+class TTLCache {
+  constructor(defaultTTL = 60000) { // Default 60 second TTL
+    this.cache = new Map();
+    this.defaultTTL = defaultTTL;
+  }
+
+  set(key, value, ttl = this.defaultTTL) {
+    const expiresAt = Date.now() + ttl;
+    this.cache.set(key, { value, expiresAt });
+  }
+
+  get(key) {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+
+  has(key) {
+    return this.get(key) !== undefined;
+  }
+
+  delete(key) {
+    return this.cache.delete(key);
+  }
+
+  // Periodic cleanup of expired entries
+  cleanup() {
+    const now = Date.now();
+    for (const [key, entry] of this.cache.entries()) {
+      if (now > entry.expiresAt) {
+        this.cache.delete(key);
+      }
+    }
+  }
+}
+
+// NFT holdings cache (5 minute TTL to reduce RPC calls)
+const nftHoldingsCache = new TTLCache(5 * 60 * 1000);
+
+// Cleanup NFT cache every 2 minutes
+setInterval(() => nftHoldingsCache.cleanup(), 2 * 60 * 1000);
 
 const processedTransactions = new LRUCache(1000);
 
@@ -295,15 +396,9 @@ const checkTransactionDedup = async (req, res, next) => {
     walletAddress: req.body?.walletAddress || 'unknown'
   });
 
-  // Clean up old transactions (keep last 1000)
-  if (processedTransactions.size > 1000) {
-    const entries = Array.from(processedTransactions.entries());
-    entries.sort((a, b) => b[1].timestamp - a[1].timestamp);
-    processedTransactions.clear();
-    entries.slice(0, 1000).forEach(([hash, data]) => {
-      processedTransactions.set(hash, data);
-    });
-  }
+  // Clean up old transactions using efficient prune (LRU already handles this)
+  // LRUCache auto-prunes on set(), but explicitly prune if needed
+  processedTransactions.prune(1000);
 
   next();
 };
@@ -742,29 +837,10 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
         }
         
         if (user && !isPaymentAlreadyProcessed(user, null, paymentIntent.id)) {
-          // Calculate credits using same formula as verify-payment endpoint
+          // Calculate credits using shared utility (single source of truth)
           const amount = paymentIntent.amount / 100; // Convert from cents
-          const baseRate = 5; // 5 credits per dollar (50 credits for $10)
-          
-          // Subscription scaling based on amount
-          let scalingMultiplier = 1.0;
-          if (amount >= 80) {
-            scalingMultiplier = 1.3; // 30% bonus for $80+
-          } else if (amount >= 40) {
-            scalingMultiplier = 1.2; // 20% bonus for $40-79
-          } else if (amount >= 20) {
-            scalingMultiplier = 1.1; // 10% bonus for $20-39
-          }
-          // $10: 5 credits/dollar (no bonus) = 50 credits
-          
-          // Check if user is NFT holder
-          let isNFTHolder = false;
-          if (user.walletAddress) {
-            isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-          }
-          
-          const nftMultiplier = isNFTHolder ? 1.2 : 1;
-          const finalCredits = Math.floor(amount * baseRate * scalingMultiplier * nftMultiplier);
+          const isNFTHolder = !!(user.walletAddress && user.nftCollections && user.nftCollections.length > 0);
+          const { credits: finalCredits } = calculateCredits(amount, isNFTHolder);
           
           // Add credits (with idempotency check inside)
           const paymentEntry = await addCreditsToUser(user, {
@@ -848,25 +924,9 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
               const paymentId = `checkout_${session.id}`;
               
               if (!isPaymentAlreadyProcessed(user, null, paymentId)) {
-                // Calculate credits using same formula
-                const baseRate = 5; // 5 credits per dollar (50 credits for $10)
-                let scalingMultiplier = 1.0;
-                if (amountInDollars >= 80) {
-                  scalingMultiplier = 1.3; // 30% bonus for $80+
-                } else if (amountInDollars >= 40) {
-                  scalingMultiplier = 1.2; // 20% bonus for $40-79
-                } else if (amountInDollars >= 20) {
-                  scalingMultiplier = 1.1; // 10% bonus for $20-39
-                }
-                // $10: 5 credits/dollar (no bonus) = 50 credits
-
-                let isNFTHolder = false;
-                if (user.walletAddress) {
-                  isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-                }
-
-                const nftMultiplier = isNFTHolder ? 1.2 : 1;
-                const finalCredits = Math.floor(amountInDollars * baseRate * scalingMultiplier * nftMultiplier);
+                // Calculate credits using shared utility (single source of truth)
+                const isNFTHolder = !!(user.walletAddress && user.nftCollections && user.nftCollections.length > 0);
+                const { credits: finalCredits } = calculateCredits(amountInDollars, isNFTHolder);
 
                 // Add credits
                 await addCreditsToUser(user, {
@@ -975,25 +1035,9 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
             const paymentId = `invoice_${invoice.id}`;
 
             if (!isPaymentAlreadyProcessed(user, null, paymentId)) {
-              // Calculate credits using same formula
-              const baseRate = 5; // 5 credits per dollar (50 credits for $10)
-              let scalingMultiplier = 1.0;
-              if (amountInDollars >= 80) {
-                scalingMultiplier = 1.3; // 30% bonus for $80+
-              } else if (amountInDollars >= 40) {
-                scalingMultiplier = 1.2; // 20% bonus for $40-79
-              } else if (amountInDollars >= 20) {
-                scalingMultiplier = 1.1; // 10% bonus for $20-39
-              }
-              // $10: 5 credits/dollar (no bonus) = 50 credits
-
-              let isNFTHolder = false;
-              if (user.walletAddress) {
-                isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-              }
-
-              const nftMultiplier = isNFTHolder ? 1.2 : 1;
-              const finalCredits = Math.floor(amountInDollars * baseRate * scalingMultiplier * nftMultiplier);
+              // Calculate credits using shared utility (single source of truth)
+              const isNFTHolder = !!(user.walletAddress && user.nftCollections && user.nftCollections.length > 0);
+              const { credits: finalCredits } = calculateCredits(amountInDollars, isNFTHolder);
 
               // Add credits
               await addCreditsToUser(user, {
@@ -1517,24 +1561,8 @@ app.post('/api/wan-animate/submit', wanSubmitLimiter, requireCredits(2), async (
     const videoUrl = input.video_url.trim();
     const imageUrl = input.image_url.trim();
     
-    const isValidUrl = (url) => {
-      // Allow data URIs (for uploaded files)
-      if (url.startsWith('data:')) return true;
-      
-      // Allow fal.ai and fal.media domains (trusted CDN)
-      try {
-        const urlObj = new URL(url);
-        const hostname = urlObj.hostname.toLowerCase();
-        return hostname.includes('fal.ai') || 
-               hostname.includes('fal.media') ||
-               hostname.endsWith('.fal.ai') ||
-               hostname.endsWith('.fal.media');
-      } catch (e) {
-        return false; // Invalid URL format
-      }
-    };
-    
-    if (!isValidUrl(videoUrl)) {
+    // Use shared URL validator (prevents SSRF attacks)
+    if (!isValidFalUrl(videoUrl)) {
       logger.warn('Invalid video URL - potential SSRF attempt', { 
         videoUrl: videoUrl.substring(0, 100),
         userId: req.user?.userId,
@@ -1548,7 +1576,7 @@ app.post('/api/wan-animate/submit', wanSubmitLimiter, requireCredits(2), async (
       });
     }
     
-    if (!isValidUrl(imageUrl)) {
+    if (!isValidFalUrl(imageUrl)) {
       logger.warn('Invalid image URL - potential SSRF attempt', { 
         imageUrl: imageUrl.substring(0, 100),
         userId: req.user?.userId,
@@ -2142,23 +2170,10 @@ app.post('/api/extract-layers', freeImageRateLimiter, requireCredits(1), async (
       return res.status(400).json({ success: false, error: 'image_url is required and must be a non-empty string' });
     }
 
-    // SECURITY: Validate URL to prevent SSRF attacks
+    // SECURITY: Validate URL to prevent SSRF attacks using shared validator
     const imageUrl = image_url.trim();
-    const isValidUrl = (url) => {
-      if (url.startsWith('data:')) return true;
-      try {
-        const urlObj = new URL(url);
-        const hostname = urlObj.hostname.toLowerCase();
-        return hostname.includes('fal.ai') || 
-               hostname.includes('fal.media') ||
-               hostname.endsWith('.fal.ai') ||
-               hostname.endsWith('.fal.media');
-      } catch (e) {
-        return false;
-      }
-    };
     
-    if (!isValidUrl(imageUrl)) {
+    if (!isValidFalUrl(imageUrl)) {
       logger.warn('Invalid image URL - potential SSRF attempt', { 
         imageUrl: imageUrl.substring(0, 100),
         userId: req.user?.userId,
@@ -3592,22 +3607,10 @@ const calculateCreditsFromAmount = (amount, creditsPerUSDC = STANDARD_CREDITS_PE
   return Math.floor(parseFloat(amount) * creditsPerUSDC);
 };
 
-// Helper to calculate subscription credits (shared by webhook + verification endpoint)
+// Helper to calculate subscription credits - delegates to shared calculateCredits utility
 const calculateSubscriptionCredits = (user, amountInDollars) => {
-  const baseRate = 5; // 5 credits per dollar (50 credits for $10)
-  let scalingMultiplier = 1.0;
-  if (amountInDollars >= 80) {
-    scalingMultiplier = 1.3; // 30% bonus for $80+
-  } else if (amountInDollars >= 40) {
-    scalingMultiplier = 1.2; // 20% bonus for $40-79
-  } else if (amountInDollars >= 20) {
-    scalingMultiplier = 1.1; // 10% bonus for $20-39
-  }
-
   const isNFTHolder = !!(user.walletAddress && user.nftCollections && user.nftCollections.length > 0);
-  const nftMultiplier = isNFTHolder ? 1.2 : 1;
-
-  const finalCredits = Math.floor(amountInDollars * baseRate * scalingMultiplier * nftMultiplier);
+  const { credits: finalCredits, nftMultiplier } = calculateCredits(amountInDollars, isNFTHolder);
 
   return {
     finalCredits,
@@ -3734,22 +3737,35 @@ const addSubscriptionCredits = async (user, {
 
 /**
  * Shared helper function to check NFT holdings for a wallet
+ * Uses TTL cache (5 min) to reduce expensive RPC calls
  * @param {string} walletAddress - The wallet address to check
  * @param {Array} collections - Optional collections to check (defaults to QUALIFYING_NFT_COLLECTIONS)
+ * @param {boolean} bypassCache - Force fresh check, ignoring cache
  * @returns {Promise<{ownedCollections: Array, isHolder: boolean}>}
  */
-const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING_NFT_COLLECTIONS) => {
-  const ownedCollections = [];
-  
+const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING_NFT_COLLECTIONS, bypassCache = false) => {
   // Normalize wallet address (EVM addresses should be lowercase, Solana stays as-is)
   const isSolanaAddress = !walletAddress.startsWith('0x');
   const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+  
+  // Check cache first (5 minute TTL) - skip expensive RPC calls if cached
+  const cacheKey = `nft_${normalizedWalletAddress}`;
+  if (!bypassCache) {
+    const cached = nftHoldingsCache.get(cacheKey);
+    if (cached) {
+      logger.debug('NFT holdings cache hit', { walletAddress: normalizedWalletAddress, isHolder: cached.isHolder });
+      return cached;
+    }
+  }
+  
+  const ownedCollections = [];
   
   logger.info('Starting NFT check for wallet', { 
     original: walletAddress,
     normalized: normalizedWalletAddress,
     isSolana: isSolanaAddress,
-    collectionCount: collections.length 
+    collectionCount: collections.length,
+    bypassCache
   });
   
   // Group collections by chain for parallel processing
@@ -4074,7 +4090,11 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
     })
   });
   
-  return { ownedCollections, isHolder };
+  // Cache the result for 5 minutes to reduce RPC calls
+  const result = { ownedCollections, isHolder };
+  nftHoldingsCache.set(cacheKey, result);
+  
+  return result;
 };
 
 // Alchemy API Key (extract from RPC URL or use dedicated env var)
@@ -4228,6 +4248,7 @@ async function getOrCreateUser(walletAddress, email = null) {
   // Use findOneAndUpdate with upsert to make this atomic and prevent race conditions
   // This ensures that if credits were granted before user connects, they won't be lost
   // Start with 2 credits for new users (will be updated to 5 if NFT holder)
+  // NOTE: Do NOT use setDefaultsOnInsert as it can override $setOnInsert values with schema defaults
   let user;
   try {
     user = await User.findOneAndUpdate(
@@ -4238,8 +4259,8 @@ async function getOrCreateUser(walletAddress, email = null) {
       },
       {
         upsert: true,
-        new: true,
-        setDefaultsOnInsert: true
+        new: true
+        // Removed setDefaultsOnInsert: true as it conflicts with $setOnInsert for credits
       }
     );
   } catch (error) {
@@ -4268,12 +4289,31 @@ async function getOrCreateUser(walletAddress, email = null) {
   
   // Always refetch to ensure we have the absolute latest data, especially credits
   // This handles the case where credits might have been granted between the upsert and now
-  const latestUser = await User.findOne({ walletAddress: normalizedAddress });
+  let latestUser = await User.findOne({ walletAddress: normalizedAddress });
   
   if (!latestUser) {
     // This shouldn't happen, but handle edge case
     logger.error('User not found after creation', { walletAddress: normalizedAddress });
     return user;
+  }
+  
+  // CRITICAL FIX: If this is a new user and credits are 0, immediately set to 2
+  // This handles cases where $setOnInsert didn't work properly due to Mongoose behavior
+  if (isNewUser && latestUser.credits === 0 && latestUser.totalCreditsEarned === 0) {
+    logger.info('New user detected with 0 credits - applying initial 2 credits', { 
+      walletAddress: normalizedAddress 
+    });
+    latestUser = await User.findOneAndUpdate(
+      { walletAddress: normalizedAddress, credits: 0, totalCreditsEarned: 0 },
+      { $set: { credits: 2, totalCreditsEarned: 2 } },
+      { new: true }
+    );
+    if (latestUser) {
+      logger.info('Successfully granted 2 initial credits to new user', { 
+        walletAddress: normalizedAddress, 
+        credits: latestUser.credits 
+      });
+    }
   }
   
   // If this is a new user, check NFT status and grant appropriate credits
@@ -4319,6 +4359,7 @@ async function getOrCreateUser(walletAddress, email = null) {
         );
         
         if (nftUser) {
+          latestUser = nftUser; // Update latestUser with fresh data
           logger.info('New NFT holder wallet user created with 5 credits (atomic update)', { 
             walletAddress: normalizedAddress, 
             isSolana: isSolanaAddress, 
@@ -4383,6 +4424,7 @@ async function getOrCreateUser(walletAddress, email = null) {
       );
       
       if (fixedUser) {
+        latestUser = fixedUser; // Update latestUser with fresh data
         logger.info('Fixed new user credits to 2 (atomic update)', {
           normalizedAddress,
           isSolana: isSolanaAddress,
@@ -4396,6 +4438,12 @@ async function getOrCreateUser(walletAddress, email = null) {
         });
       }
     }
+  }
+  
+  // Always refetch to ensure we return the absolute freshest data
+  const finalUser = await User.findOne({ walletAddress: normalizedAddress });
+  if (finalUser) {
+    return finalUser;
   }
   
   // If user already had credits (granted before first connection), log it
@@ -5280,6 +5328,12 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         totalCreditsEarned: user.totalCreditsEarned || 0,
         totalCreditsSpent: user.totalCreditsSpent || 0,
         walletAddress: user.walletAddress || null,
+        nftCollections: user.nftCollections || [],
+        paymentHistory: user.paymentHistory || [],
+        generationHistory: user.generationHistory || [],
+        gallery: user.gallery || [],
+        settings: user.settings || {},
+        lastActive: user.lastActive,
         isNFTHolder
       }
     });
@@ -5589,15 +5643,26 @@ app.get('/api/users/:walletAddress', async (req, res) => {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     
-    // Return user data
+    // Refetch user to ensure we have the absolute latest credits
+    const freshUser = await User.findOne({ walletAddress: user.walletAddress });
+    const finalCredits = freshUser?.credits ?? userCredits;
+    const finalTotalEarned = freshUser?.totalCreditsEarned ?? userTotalCreditsEarned;
+    const finalTotalSpent = freshUser?.totalCreditsSpent ?? userTotalCreditsSpent;
+    
+    // Return user data with all fields
     res.json({
       success: true,
       user: {
         walletAddress: user.walletAddress,
-        credits: userCredits,
-        totalCreditsEarned: userTotalCreditsEarned,
-        totalCreditsSpent: userTotalCreditsSpent,
-        nftCollections: user.nftCollections || [],
+        credits: finalCredits,
+        totalCreditsEarned: finalTotalEarned,
+        totalCreditsSpent: finalTotalSpent,
+        nftCollections: freshUser?.nftCollections || user.nftCollections || [],
+        paymentHistory: freshUser?.paymentHistory || user.paymentHistory || [],
+        generationHistory: freshUser?.generationHistory || user.generationHistory || [],
+        gallery: freshUser?.gallery || user.gallery || [],
+        settings: freshUser?.settings || user.settings || {},
+        lastActive: freshUser?.lastActive || user.lastActive,
         isNFTHolder: isNFTHolder,
         pricing: {
           costPerCredit: isNFTHolder ? 0.06 : 0.15,

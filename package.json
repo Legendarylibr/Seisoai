@@ -8,13 +8,10 @@
     "build": "vite build",
     "start": "node start-app.js",
     "start:backend": "cd backend && node server.js",
-    "start:frontend": "node serve-frontend.js",
     "build:start": "npm run build && npm start",
-    "build:frontend": "npm run build && npm run start:frontend",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "postinstall": "cd backend && npm install",
-    "test:cors": "node scripts/test-cors.js"
+    "postinstall": "cd backend && npm install"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

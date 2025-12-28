@@ -23,11 +23,7 @@ const initialState = {
   // ControlNet settings
   controlNetType: null,
   controlNetImage: null,
-  controlNetImageDimensions: null, // Store reference image dimensions
-  // Batch processing
-  batchPrompts: [],
-  batchResults: [],
-  isBatchProcessing: false
+  controlNetImageDimensions: null // Store reference image dimensions
 };
 
 const imageGeneratorReducer = (state, action) => {
@@ -117,18 +113,6 @@ const imageGeneratorReducer = (state, action) => {
     case 'SET_MULTI_IMAGE_MODEL':
       return { ...state, multiImageModel: action.payload };
     
-    case 'SET_BATCH_PROMPTS':
-      return { ...state, batchPrompts: action.payload };
-    
-    case 'SET_BATCH_PROCESSING':
-      return { ...state, isBatchProcessing: action.payload };
-    
-    case 'ADD_BATCH_RESULT':
-      return { ...state, batchResults: [...state.batchResults, action.payload] };
-    
-    case 'CLEAR_BATCH_RESULTS':
-      return { ...state, batchResults: [], batchPrompts: [] };
-    
     case 'SET_CONTROL_NET_TYPE':
       return { ...state, controlNetType: action.payload };
     
@@ -200,22 +184,6 @@ export const ImageGeneratorProvider = ({ children }) => {
     dispatch({ type: 'SET_MULTI_IMAGE_MODEL', payload: model });
   };
 
-  const setBatchPrompts = (prompts) => {
-    dispatch({ type: 'SET_BATCH_PROMPTS', payload: prompts });
-  };
-
-  const setBatchProcessing = (processing) => {
-    dispatch({ type: 'SET_BATCH_PROCESSING', payload: processing });
-  };
-
-  const addBatchResult = (result) => {
-    dispatch({ type: 'ADD_BATCH_RESULT', payload: result });
-  };
-
-  const clearBatchResults = () => {
-    dispatch({ type: 'CLEAR_BATCH_RESULTS' });
-  };
-
   const setControlNetType = (type) => {
     dispatch({ type: 'SET_CONTROL_NET_TYPE', payload: type });
   };
@@ -245,10 +213,6 @@ export const ImageGeneratorProvider = ({ children }) => {
     setSafetyChecker,
     setGenerationMode,
     setMultiImageModel,
-    setBatchPrompts,
-    setBatchProcessing,
-    addBatchResult,
-    clearBatchResults,
     setCurrentGeneration
   };
 
