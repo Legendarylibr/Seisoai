@@ -315,7 +315,10 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
             
             {/* When reference image exists, show it first (shifted up) */}
             {hasReferenceImages && (
-              <div className="note-amber rounded-lg lg:rounded-tl-xl lg:rounded-tr-none p-2 lg:p-2.5 rounded-b-none animate-slide-up">
+              <div 
+                key="reference-image-section-active"
+                className="note-amber rounded-lg lg:rounded-tl-xl lg:rounded-tr-none p-2 lg:p-2.5 rounded-b-none animate-slide-up"
+              >
                 <div className="flex items-center gap-2 mb-2">
                   <div className="p-1.5 rounded-lg icon-box-amber">
                     <Image className="w-4 h-4" style={{ color: '#d97706' }} />
@@ -340,11 +343,15 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
 
             {/* Prompt Input - Primary when no reference, Secondary (below) when reference exists */}
             {!isQwenSelected && (
-              <div className={`note-teal rounded-lg p-2 lg:p-2.5 transition-all duration-300 ${
-                hasReferenceImages 
-                  ? 'rounded-t-none animate-slide-down' 
-                  : 'lg:rounded-tl-xl lg:rounded-tr-none rounded-b-none'
-              }`} style={hasReferenceImages ? { borderTop: 'none' } : {}}>
+              <div 
+                key={hasReferenceImages ? 'prompt-below-image' : 'prompt-primary'}
+                className={`note-teal rounded-lg p-2 lg:p-2.5 transition-all duration-300 ${
+                  hasReferenceImages 
+                    ? 'rounded-t-none animate-slide-down' 
+                    : 'lg:rounded-tl-xl lg:rounded-tr-none rounded-b-none'
+                }`} 
+                style={hasReferenceImages ? { borderTop: 'none', marginTop: '-2px' } : {}}
+              >
                 <div className="flex items-center gap-2 mb-2">
                   <div className="p-1.5 rounded-lg icon-box-teal">
                     <Sparkles className="w-4 h-4" style={{ color: '#009688' }} />
@@ -379,7 +386,11 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
 
             {/* Reference Image Input - Only shown here when NO reference image (upload prompt) */}
             {!hasReferenceImages && (
-              <div className="note-amber rounded-lg p-2 lg:p-2.5 rounded-t-none" style={{ borderTop: 'none' }}>
+              <div 
+                key="reference-image-section-empty"
+                className="note-amber rounded-lg p-2 lg:p-2.5 rounded-t-none" 
+                style={{ borderTop: 'none', marginTop: '-2px' }}
+              >
                 <div className="flex items-center gap-2 mb-2">
                   <div className="p-1.5 rounded-lg icon-box-amber">
                     <Image className="w-4 h-4" style={{ color: '#d97706' }} />
@@ -404,14 +415,20 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
 
             {/* Model Selection */}
             {(!hasReferenceImages && !isQwenSelected) || hasReferenceImages ? (
-              <div className="glass-card rounded-lg p-2 lg:p-2.5 rounded-t-none" style={{ borderTop: 'none' }}>
+              <div 
+                className="glass-card rounded-lg p-2 lg:p-2.5 rounded-t-none" 
+                style={{ borderTop: 'none', marginTop: '-2px' }}
+              >
                 <MultiImageModelSelector customPrompt={customPrompt} />
               </div>
             ) : null}
 
             {/* Style Selection */}
             {!isQwenSelected && (
-              <div className="note-slate rounded-lg p-2 lg:p-2.5 rounded-t-none" style={{ borderTop: 'none' }}>
+              <div 
+                className="note-slate rounded-lg p-2 lg:p-2.5 rounded-t-none" 
+                style={{ borderTop: 'none', marginTop: '-2px' }}
+              >
                 <StyleSelector />
               </div>
             )}
@@ -421,6 +438,7 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
               background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%)',
               border: '2px solid #10b981',
               borderTop: 'none',
+              marginTop: '-2px',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.9), 0 4px 12px rgba(16, 185, 129, 0.2)'
             }}>
               <GenerateButton 
