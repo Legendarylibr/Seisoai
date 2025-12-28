@@ -2933,10 +2933,19 @@ async function createIndexes() {
       }
 
       // Create other indexes for frequently queried fields (only if they don't exist)
-      await User.collection.createIndex({ "paymentHistory.txHash": 1 }, { background: true });
-      await User.collection.createIndex({ "createdAt": 1 }, { background: true });
-      await User.collection.createIndex({ "userId": 1 }, { background: true });
-      await User.collection.createIndex({ "expiresAt": 1 }, { background: true });
+      // Use a helper to safely create indexes that might already exist with different options
+      const safeCreateIndex = async (field, options = { background: true }) => {
+        const indexName = Object.keys(field)[0] + '_1';
+        const existing = existingIndexes.find(idx => idx.name === indexName);
+        if (!existing) {
+          await User.collection.createIndex(field, options);
+        }
+      };
+      
+      await safeCreateIndex({ "paymentHistory.txHash": 1 });
+      await safeCreateIndex({ "createdAt": 1 });
+      await safeCreateIndex({ "userId": 1 });
+      await safeCreateIndex({ "expiresAt": 1 });
       
       logger.info('Database indexes created successfully');
     }
