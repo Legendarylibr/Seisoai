@@ -1,4 +1,4 @@
-# AI Image Generator
+# Seisoai - AI Image Generator
 
 A modern, responsive web application for generating AI images using FAL.ai as the backend. Users can select from popular visual styles without typing prompts, and optionally upload ControlNet input images for more control over the generation process.
 
@@ -187,4 +187,3 @@ This project is open source and available under the [MIT License](LICENSE).
 ## Support
 
 If you encounter any issues or have questions, please open an issue on GitHub.
-# Seisoai
