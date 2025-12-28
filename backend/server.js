@@ -503,7 +503,7 @@ app.use((req, res, next) => {
         // Don't set wildcard to avoid security issues
       }
       res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Cache-Control, Pragma');
+      res.header('Access-Control-Allow-Headers', 'Content-Type');
       res.header('Access-Control-Max-Age', '86400');
       
       // Mark that CORS is already handled for this request
@@ -5541,257 +5541,63 @@ app.post('/api/stripe/billing-portal', authenticateToken, async (req, res) => {
 app.get('/api/users/:walletAddress', async (req, res) => {
   try {
     const { walletAddress } = req.params;
-    const { refreshNFTs, skipNFTs } = req.query; // Allow forcing NFT refresh or skipping NFT checks
+    const { skipNFTs } = req.query;
     
-    // Normalize address once at the start
+    // Normalize address
     const isSolanaAddress = !walletAddress.startsWith('0x');
     const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
     
-    // SECURITY: Check if user is authenticated
-    let authenticatedUser = null;
-    const authHeader = req.headers['authorization'];
-    if (authHeader) {
+    // Get or create user - single source of truth for user data
+    const user = await getOrCreateUser(normalizedAddress);
+    
+    // Update lastActive timestamp
+    user.lastActive = new Date();
+    await user.save();
+    
+    // Extract credits with safe defaults
+    const userCredits = user.credits ?? 0;
+    const userTotalCreditsEarned = user.totalCreditsEarned ?? 0;
+    const userTotalCreditsSpent = user.totalCreditsSpent ?? 0;
+    let isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+    
+    // Check NFT holdings from blockchain (unless skipped for speed)
+    if (skipNFTs !== 'true') {
       try {
-        const token = authHeader.split(' ')[1]; // Bearer TOKEN
-        if (token) {
-          const decoded = jwt.verify(token, JWT_SECRET);
-          authenticatedUser = await User.findOne({
-            $or: [
-              { userId: decoded.userId },
-              { email: decoded.email }
-            ]
-          }).select('-password');
-          
-          // SECURITY: Verify authenticated user owns this wallet address
-          if (authenticatedUser && authenticatedUser.walletAddress) {
-            const userWalletNormalized = authenticatedUser.walletAddress.toLowerCase();
-            const requestedWalletNormalized = normalizedAddress.toLowerCase();
-            if (userWalletNormalized !== requestedWalletNormalized) {
-              // User is authenticated but doesn't own this wallet - return minimal data only
-              authenticatedUser = null;
-              logger.warn('Authenticated user attempted to access different wallet', {
-                authenticatedWallet: authenticatedUser?.walletAddress,
-                requestedWallet: normalizedAddress,
-                userId: authenticatedUser?.userId
-              });
-            }
-          } else if (authenticatedUser && !authenticatedUser.walletAddress) {
-            // Email-only user trying to access wallet endpoint - not allowed
-            authenticatedUser = null;
-            logger.warn('Email-only user attempted to access wallet endpoint', {
-              userId: authenticatedUser?.userId,
-              email: authenticatedUser?.email
-            });
-          }
+        const { ownedCollections } = await checkNFTHoldingsForWallet(normalizedAddress);
+        
+        if (ownedCollections.length > 0) {
+          await User.findOneAndUpdate(
+            { walletAddress: user.walletAddress },
+            { $set: { nftCollections: ownedCollections } }
+          );
+          isNFTHolder = true;
+        } else {
+          await User.findOneAndUpdate(
+            { walletAddress: user.walletAddress },
+            { $set: { nftCollections: [] } }
+          );
+          isNFTHolder = false;
         }
-      } catch (tokenError) {
-        // Invalid token - treat as unauthenticated
-        logger.debug('Invalid auth token in user data request', { error: tokenError.message });
+      } catch (nftError) {
+        logger.warn('Error checking NFT holdings', { error: nftError.message, walletAddress });
+        // Keep existing NFT status from database
       }
     }
     
-    // SECURITY: If not authenticated, return minimal public data only
-    if (!authenticatedUser) {
-      // Get user for public data (credits, NFT status, pricing)
-      const user = await getOrCreateUser(normalizedAddress);
-      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-      const userCredits = user.credits != null ? user.credits : 0;
-      
-      // Set cache-control headers to prevent browser caching - ensures fresh data across devices
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      
-      // Return minimal public data only (no history, no sensitive data)
-      return res.json({
-        success: true,
-        user: {
-          walletAddress: user.walletAddress,
-          credits: userCredits,
-          isNFTHolder: isNFTHolder,
-          pricing: {
-            costPerCredit: isNFTHolder ? 0.06 : 0.15,
-            creditsPerUSDC: isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC
-          }
-        },
-        // Indicate this is public data (limited)
-        publicData: true
-      });
-    }
+    // Set cache-control headers
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     
-    // SECURITY: User is authenticated and owns this wallet - return full data
-    // When skipNFTs=true, optimize for speed - single query, no NFT checks
-    if (skipNFTs === 'true') {
-      // Use authenticated user's wallet address (already verified above)
-      const user = await getOrCreateUser(normalizedAddress);
-      
-      // Update lastActive timestamp
-      user.lastActive = new Date();
-      await user.save();
-      
-      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-      const userCredits = user.credits != null ? user.credits : 0;
-      const userTotalCreditsEarned = user.totalCreditsEarned != null ? user.totalCreditsEarned : 0;
-      const userTotalCreditsSpent = user.totalCreditsSpent != null ? user.totalCreditsSpent : 0;
-      
-      // Set cache-control headers to prevent browser caching - ensures fresh data across devices
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      
-      // Fast response for skipNFTs mode - full data for authenticated owner
-      return res.json({
-        success: true,
-        user: {
-          walletAddress: user.walletAddress,
-          credits: userCredits,
-          totalCreditsEarned: userTotalCreditsEarned,
-          totalCreditsSpent: userTotalCreditsSpent,
-          nftCollections: user.nftCollections || [],
-          paymentHistory: user.paymentHistory || [],
-          generationHistory: user.generationHistory || [],
-          gallery: user.gallery || [],
-          settings: user.settings || {
-            preferredStyle: null,
-            defaultImageSize: '1024x1024',
-            enableNotifications: true
-          },
-          lastActive: user.lastActive || new Date(),
-          isNFTHolder: isNFTHolder,
-          pricing: {
-            costPerCredit: isNFTHolder ? 0.06 : 0.15,
-            creditsPerUSDC: isNFTHolder ? 16.67 : STANDARD_CREDITS_PER_USDC
-          }
-        }
-      });
-    }
-    
-    // Normal flow with NFT checking
-    // Get actual user data from database
-    const user = await getOrCreateUser(walletAddress);
-    
-    // Always check NFT holdings from blockchain when not explicitly skipped
-    // This ensures NFT detection works reliably without conditional conflicts
-    let isNFTHolder = false;
-    try {
-      // Normalize wallet address for NFT checking (lowercase for EVM, unchanged for Solana)
-      const normalizedWalletForNFT = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
-      
-      logger.debug('Checking NFT holdings', { 
-        originalAddress: walletAddress, 
-        normalizedAddress: normalizedWalletForNFT,
-        isSolana: isSolanaAddress,
-        refreshRequested: refreshNFTs === 'true'
-      });
-      
-      // Use shared helper function to check NFT holdings directly from blockchain
-      const { ownedCollections, isHolder: nftCheckResult } = await checkNFTHoldingsForWallet(normalizedWalletForNFT);
-      
-      // Update user's NFT collections in database based on actual blockchain data
-      // Always update to reflect current blockchain state
-      if (ownedCollections.length > 0) {
-        await User.findOneAndUpdate(
-          { walletAddress: user.walletAddress },
-          { $set: { nftCollections: ownedCollections } },
-          { new: true }
-        );
-        isNFTHolder = true;
-        logger.info('✅ Updated NFT collections for user', { 
-          walletAddress, 
-          collectionCount: ownedCollections.length,
-          collections: ownedCollections.map(c => ({ name: c.name, balance: c.balance, chainId: c.chainId }))
-        });
-      } else {
-        // Clear NFT data if none found - always reflect current blockchain state
-        await User.findOneAndUpdate(
-          { walletAddress: user.walletAddress },
-          { $set: { nftCollections: [] } },
-          { new: true }
-        );
-        isNFTHolder = false;
-        logger.info('No NFTs found for user', { walletAddress });
-      }
-    } catch (nftError) {
-      logger.warn('Error checking NFT holdings', { error: nftError.message, walletAddress });
-      // Fall back to database state if blockchain check fails
-      isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-    }
-    
-    // Refetch user from database to ensure we have the latest credits
-    const latestUser = await User.findOne({ walletAddress: normalizedAddress });
-    if (!latestUser) {
-      logger.error('User not found after refetch', { 
-        walletAddress, 
-        normalizedAddress,
-        userWalletAddress: user.walletAddress,
-        warning: 'User should exist after getOrCreateUser'
-      });
-      return res.status(500).json({ success: false, error: 'User not found' });
-    }
-    
-    // Ensure totalCreditsEarned field exists - fix legacy documents
-    if (latestUser.totalCreditsEarned == null) {
-      logger.warn('User missing totalCreditsEarned field, initializing', {
-        walletAddress: normalizedAddress,
-        credits: latestUser.credits
-      });
-      // Initialize based on existing credits (if they have credits, they were earned)
-      latestUser.totalCreditsEarned = latestUser.credits || 0;
-      // Also ensure totalCreditsSpent exists
-      if (latestUser.totalCreditsSpent == null) {
-        latestUser.totalCreditsSpent = 0;
-      }
-      await latestUser.save();
-      logger.info('Fixed missing totalCreditsEarned field', {
-        walletAddress: normalizedAddress,
-        totalCreditsEarned: latestUser.totalCreditsEarned
-      });
-    }
-    
-    // Update isNFTHolder based on latest data
-    isNFTHolder = latestUser.nftCollections && latestUser.nftCollections.length > 0;
-    
-    // Explicitly check for null/undefined and default to 0, but preserve actual 0 values
-    const userCredits = latestUser.credits != null ? latestUser.credits : 0;
-    const userTotalCreditsEarned = latestUser.totalCreditsEarned != null ? latestUser.totalCreditsEarned : 0;
-    const userTotalCreditsSpent = latestUser.totalCreditsSpent != null ? latestUser.totalCreditsSpent : 0;
-    
-    logger.debug('Returning user data', { 
-      walletAddress,
-      normalizedAddress,
-      credits: userCredits,
-      totalCreditsEarned: userTotalCreditsEarned,
-      rawCredits: latestUser.credits,
-      rawTotalCreditsEarned: latestUser.totalCreditsEarned,
-      isNFTHolder 
-    });
-    
-    // Log if totalCreditsEarned seems wrong
-    if (userTotalCreditsEarned === 0 && userCredits > 0) {
-      logger.warn('totalCreditsEarned is 0 but credits > 0 - this might indicate a data issue', {
-        walletAddress: normalizedAddress,
-        credits: userCredits,
-        totalCreditsEarned: userTotalCreditsEarned
-      });
-    }
-    
+    // Return user data
     res.json({
       success: true,
       user: {
-        walletAddress: latestUser.walletAddress,
+        walletAddress: user.walletAddress,
         credits: userCredits,
         totalCreditsEarned: userTotalCreditsEarned,
         totalCreditsSpent: userTotalCreditsSpent,
-        nftCollections: latestUser.nftCollections || [],
-        paymentHistory: latestUser.paymentHistory || [],
-        generationHistory: latestUser.generationHistory || [],
-        gallery: latestUser.gallery || [],
-        settings: latestUser.settings || {
-          preferredStyle: null,
-          defaultImageSize: '1024x1024',
-          enableNotifications: true
-        },
-        lastActive: latestUser.lastActive || new Date(),
+        nftCollections: user.nftCollections || [],
         isNFTHolder: isNFTHolder,
         pricing: {
           costPerCredit: isNFTHolder ? 0.06 : 0.15,

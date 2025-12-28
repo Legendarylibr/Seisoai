@@ -25,20 +25,18 @@ import logger from '../utils/logger.js';
   const credits = getCredits(isEmailAuth ? emailContext?.credits : walletContext?.credits);
   const totalCreditsEarned = getCredits(isEmailAuth ? emailContext?.totalCreditsEarned : walletContext?.totalCreditsEarned);
   
-  // Debug logging for mobile issues
+  // Debug logging for credits issues
   useEffect(() => {
-    const isMobile = /Mobile|Android|iPhone/i.test(navigator.userAgent);
-    if (isMobile && isConnected) {
-      logger.debug('Mobile credits state', {
-        isEmailAuth,
+    if (isConnected) {
+      logger.info('Credits state', {
+        authMethod: isEmailAuth ? 'email' : 'wallet',
+        credits,
+        totalCreditsEarned,
         emailCredits: emailContext.credits,
-        walletCredits: walletContext.credits,
-        finalCredits: credits,
-        emailLoading: emailContext.isLoading,
-        walletLoading: walletContext.isLoading
+        walletCredits: walletContext.credits
       });
     }
-  }, [credits, isConnected, isEmailAuth, emailContext.credits, walletContext.credits, emailContext.isLoading, walletContext.isLoading]);
+  }, [credits, totalCreditsEarned, isConnected, isEmailAuth, emailContext.credits, walletContext.credits]);
   const disconnectWallet = walletContext.disconnectWallet;
   const signOut = emailContext.signOut;
   const [showMobileMenu, setShowMobileMenu] = useState(false);
