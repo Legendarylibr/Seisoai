@@ -1,6 +1,7 @@
 // Stripe service for payment processing
 import { loadStripe } from '@stripe/stripe-js';
 import logger from '../utils/logger.js';
+import { API_URL } from '../utils/apiConfig.js';
 
 // Initialize Stripe with error handling - only accepts live keys
 const getStripePublishableKey = () => {
@@ -57,10 +58,6 @@ const stripePromise = (() => {
  */
 export const createPaymentIntent = async (walletAddress, amount, credits, currency = 'usd', userId = null) => {
   try {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-    if (!apiUrl) {
-      throw new Error('API URL not configured');
-    }
 
     // Check if Stripe is configured
     if (!getStripePublishableKey()) {
@@ -80,7 +77,7 @@ export const createPaymentIntent = async (walletAddress, amount, credits, curren
       body.walletAddress = walletAddress;
     }
 
-    const response = await fetch(`${apiUrl}/api/stripe/create-payment-intent`, {
+    const response = await fetch(`${API_URL}/api/stripe/create-payment-intent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -114,10 +111,6 @@ export const createPaymentIntent = async (walletAddress, amount, credits, curren
  */
 export const verifyStripePayment = async (paymentIntentId, walletAddress = null, userId = null) => {
   try {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-    if (!apiUrl) {
-      throw new Error('API URL not configured');
-    }
 
     const body = { paymentIntentId };
     if (userId) {
@@ -126,7 +119,7 @@ export const verifyStripePayment = async (paymentIntentId, walletAddress = null,
       body.walletAddress = walletAddress;
     }
 
-    const response = await fetch(`${apiUrl}/api/stripe/verify-payment`, {
+    const response = await fetch(`${API_URL}/api/stripe/verify-payment`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

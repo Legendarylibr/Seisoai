@@ -16,23 +16,14 @@ import logger from '../utils/logger.js';
   const isConnected = isEmailAuth || isWalletAuth;
   const address = walletContext.address;
   
-  // Validate and select credits from the active auth method
-  // Email auth takes priority to prevent race conditions when both are active
-  const validateCredits = (value) => {
-    if (value == null || typeof value !== 'number') return 0;
-    if (isNaN(value)) return 0;
-    return Math.max(0, Math.min(Math.floor(value), Number.MAX_SAFE_INTEGER));
+  // Get credits from active auth method (email takes priority)
+  const getCredits = (value) => {
+    const num = Number(value ?? 0);
+    return isNaN(num) ? 0 : Math.max(0, Math.floor(num));
   };
   
-  // Use email credits if email auth is active, otherwise use wallet credits
-  // This prevents flickering when both contexts are active
-  const credits = isEmailAuth 
-    ? validateCredits(emailContext.credits)
-    : validateCredits(walletContext.credits);
-    
-  const totalCreditsEarned = isEmailAuth 
-    ? validateCredits(emailContext.totalCreditsEarned)
-    : validateCredits(walletContext.totalCreditsEarned);
+  const credits = getCredits(isEmailAuth ? emailContext?.credits : walletContext?.credits);
+  const totalCreditsEarned = getCredits(isEmailAuth ? emailContext?.totalCreditsEarned : walletContext?.totalCreditsEarned);
   
   // Debug logging for mobile issues
   useEffect(() => {
@@ -551,7 +542,7 @@ import logger from '../utils/logger.js';
                 >
                   <Coins className="w-4 h-4" style={{ color: '#000000' }} />
                   <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                    {credits ?? 0}
+                    {(isEmailAuth ? emailContext.isLoading : walletContext.isLoading) ? '...' : credits}
                   </span>
                   {/* Buy Credits Button - Show Stripe for email users, Token for wallet users */}
                   {isEmailAuth && onShowStripePayment ? (

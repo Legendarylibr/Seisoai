@@ -3,6 +3,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import TokenPaymentModal from './TokenPaymentModal';
 import logger from '../utils/logger.js';
+import { API_URL } from '../utils/apiConfig.js';
 
 /**
  * SubscriptionCheckout Component
@@ -34,7 +35,6 @@ const SubscriptionCheckout = ({
 }) => {
   const { isConnected, address, isNFTHolder: walletIsNFTHolder } = useSimpleWallet();
   const { isAuthenticated, userId } = useEmailAuth();
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   
   // Only apply NFT pricing for wallet users (email users don't have NFT discounts)
   const isNFTHolder = walletIsNFTHolder;
@@ -106,7 +106,7 @@ const SubscriptionCheckout = ({
         body.userId = userId;
       }
 
-      const response = await fetch(`${apiUrl}/create-checkout-session`, {
+      const response = await fetch(`${API_URL}/create-checkout-session`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

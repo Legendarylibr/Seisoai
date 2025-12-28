@@ -118,8 +118,10 @@ class Logger {
   // Send logs to backend logging endpoint in production
   async sendToLoggingService(level, message, data) {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      await fetch(`${API_URL}/api/logs`, {
+      // Dynamically get API URL to avoid circular dependencies
+      const { getApiUrl } = await import('./apiConfig.js');
+      const apiUrl = getApiUrl();
+      await fetch(`${apiUrl}/api/logs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,8 +1,7 @@
 // Layer Extraction Service using Qwen Image Layered
 // SECURITY: All API calls route through backend to ensure credit checks
 import logger from '../utils/logger.js';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_URL } from '../utils/apiConfig.js';
 
 /**
  * Extract layers from an image using Qwen Image Layered

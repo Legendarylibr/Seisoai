@@ -1,7 +1,6 @@
 // Email authentication service
 import logger from '../utils/logger.js';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_URL } from '../utils/apiConfig.js';
 
 /**
  * Sign up with email and password

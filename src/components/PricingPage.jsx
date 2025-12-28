@@ -5,6 +5,7 @@ import SubscriptionManagement from './SubscriptionManagement';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { CheckCircle, AlertCircle, X, CreditCard } from 'lucide-react';
 import logger from '../utils/logger.js';
+import { API_URL } from '../utils/apiConfig.js';
 
 /**
  * PricingPage Component
@@ -22,7 +23,6 @@ const PricingPage = () => {
   const studioPriceLookupKey = 'studio_pack_monthly'; // Replace with your actual lookup key
 
   const { refreshCredits, userId, isAuthenticated } = useEmailAuth();
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   const [successState, setSuccessState] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [showSubscriptionManagement, setShowSubscriptionManagement] = useState(false);
@@ -73,7 +73,7 @@ const PricingPage = () => {
             headers['Authorization'] = `Bearer ${token}`;
           }
 
-          const response = await fetch(`${apiUrl}/api/subscription/verify`, {
+          const response = await fetch(`${API_URL}/api/subscription/verify`, {
             method: 'POST',
             headers,
             body: JSON.stringify(body)
@@ -105,7 +105,7 @@ const PricingPage = () => {
       setTimeout(() => setErrorMessage(null), 6000);
       cleanupUrl();
     }
-  }, [apiUrl, userId, handleSuccess]);
+  }, [userId, handleSuccess]);
 
   const handleError = (error) => {
     setErrorMessage(error);

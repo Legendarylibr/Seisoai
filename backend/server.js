@@ -2682,24 +2682,16 @@ app.post('/api/wan-animate/complete', authenticateToken, async (req, res) => {
     // Calculate credits (2 credits per second, minimum 2 credits)
     const creditsToDeduct = Math.max(Math.ceil(duration * 2), 2);
     
-    // Check if user has enough credits
-    const availableCredits = user.credits || 0;
-    if (availableCredits < creditsToDeduct) {
-      logger.warn('Insufficient credits for video completion', {
-        userId: user.userId,
-        email: user.email,
-        walletAddress: user.walletAddress,
-        availableCredits,
-        creditsToDeduct,
-        duration
-      });
-      return res.status(400).json({
-        success: false,
-        error: `Insufficient credits. Video requires ${creditsToDeduct} credits (${duration}s × 2), but you only have ${availableCredits} credits.`
+    // SECURITY: Build update query using authenticated user's identifier (supports wallet, email, or userId)
+    const updateQuery = buildUserUpdateQuery(user);
+    if (!updateQuery) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User account must have wallet address, userId, or email' 
       });
     }
     
-    // Deduct credits and add to gallery
+    // Prepare generation and gallery items
     const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const generation = {
       id: generationId,
@@ -2719,18 +2711,14 @@ app.post('/api/wan-animate/complete', authenticateToken, async (req, res) => {
       timestamp: new Date()
     };
     
-    // SECURITY: Build update query using authenticated user's identifier (supports wallet, email, or userId)
-    const updateQuery = buildUserUpdateQuery(user);
-    if (!updateQuery) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'User account must have wallet address, userId, or email' 
-      });
-    }
-    
-    // Atomic update: deduct credits and add to history/gallery
+    // Atomic credit deduction with condition to prevent race conditions and negative credits
+    // Only deduct if user has enough credits (prevents abuse from concurrent requests)
+    const previousCredits = user.credits || 0;
     const updateResult = await User.findOneAndUpdate(
-      updateQuery,
+      {
+        ...updateQuery,
+        credits: { $gte: creditsToDeduct } // Only update if user has enough credits
+      },
       {
         $inc: { 
           credits: -creditsToDeduct,
@@ -2745,7 +2733,24 @@ app.post('/api/wan-animate/complete', authenticateToken, async (req, res) => {
     );
     
     if (!updateResult) {
-      return res.status(404).json({ success: false, error: 'User not found' });
+      // User doesn't have enough credits or was modified between check and update (race condition)
+      // Refetch to get current credits
+      const currentUser = await User.findOne(updateQuery);
+      const currentCredits = currentUser?.credits || 0;
+      
+      logger.warn('Video credit deduction failed - insufficient credits or race condition', {
+        updateQuery,
+        previousCredits,
+        currentCredits,
+        creditsToDeduct,
+        duration,
+        userId: user.userId
+      });
+      
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient credits. Video requires ${creditsToDeduct} credits (${duration}s × 2), but you only have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''}.`
+      });
     }
     
     logger.info('Video generation completed and credits deducted', {
@@ -3004,9 +3009,21 @@ const userSchema = new mongoose.Schema({
     index: true,
     required: false
   },
-  credits: { type: Number, default: 0 },
-  totalCreditsEarned: { type: Number, default: 0 },
-  totalCreditsSpent: { type: Number, default: 0 },
+  credits: { 
+    type: Number, 
+    default: 0,
+    min: [0, 'Credits cannot be negative'] // Prevent negative credits at schema level
+  },
+  totalCreditsEarned: { 
+    type: Number, 
+    default: 0,
+    min: [0, 'Total credits earned cannot be negative']
+  },
+  totalCreditsSpent: { 
+    type: Number, 
+    default: 0,
+    min: [0, 'Total credits spent cannot be negative']
+  },
   nftCollections: [{
     contractAddress: String,
     chainId: String,
@@ -7865,13 +7882,29 @@ app.post('/api/test/deduct-credits', async (req, res) => {
     
     const beforeCredits = user.credits || 0;
     
+    // Atomic credit deduction with condition to prevent negative credits
     const updateResult = await User.findOneAndUpdate(
-      { walletAddress: normalizedWalletAddress },
+      {
+        walletAddress: normalizedWalletAddress,
+        credits: { $gte: creditsToDeduct } // Only update if user has enough credits
+      },
       {
         $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct }
       },
       { new: true }
     );
+    
+    if (!updateResult) {
+      const currentUser = await User.findOne({ walletAddress: normalizedWalletAddress });
+      const currentCredits = currentUser?.credits || 0;
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsToDeduct}.`,
+        beforeCredits,
+        currentCredits,
+        creditsToDeduct
+      });
+    }
     
     const afterCredits = updateResult?.credits || 0;
     

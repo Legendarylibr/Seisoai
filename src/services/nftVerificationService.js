@@ -1,8 +1,7 @@
 // NFT Verification Service
 // Checks if a wallet holds qualifying NFTs for discounts/free access
 import logger from '../utils/logger.js';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_URL } from '../utils/apiConfig.js';
 
 // Qualifying NFT collections (add your contract addresses here)
 const QUALIFYING_COLLECTIONS = [

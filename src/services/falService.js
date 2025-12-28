@@ -3,8 +3,7 @@
 import { VISUAL_STYLES } from '../utils/styles.js';
 import logger from '../utils/logger.js';
 import { optimizeImages, needsOptimization } from '../utils/imageOptimizer.js';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_URL } from '../utils/apiConfig.js';
 
 // Note: VITE_FAL_API_KEY is no longer used in frontend for security
 // All fal.ai calls are now proxied through the backend which checks credits first

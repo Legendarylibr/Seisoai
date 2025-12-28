@@ -3,6 +3,7 @@
 // API: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
 
 import logger from '../utils/logger.js';
+import { API_URL } from '../utils/apiConfig.js';
 
 // Note: VITE_FAL_API_KEY is no longer used in frontend for security
 // All fal.ai calls are now proxied through the backend which checks credits first
@@ -22,8 +23,7 @@ const prepareFileUrl = async (file, fileType = 'image') => {
   if (typeof file === 'string' && file.startsWith('data:')) {
     logger.debug(`Uploading ${fileType} to backend`);
     try {
-      const backendBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const uploadResponse = await fetch(`${backendBase}/api/wan-animate/upload-${fileType}`, {
+      const uploadResponse = await fetch(`${API_URL}/api/wan-animate/upload-${fileType}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -96,7 +96,6 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
     });
 
     // SECURITY: Submit via backend proxy which checks credits before making external API calls
-    const backendBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     
     // Extract user identification from options (required for credit checks)
     const { walletAddress, userId, email } = options;
@@ -105,7 +104,7 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
       throw new Error('User identification required. Please provide walletAddress, userId, or email in options.');
     }
     
-    const response = await fetch(`${backendBase}/api/wan-animate/submit`, {
+    const response = await fetch(`${API_URL}/api/wan-animate/submit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -191,7 +190,7 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
       
       let statusResponse;
       try {
-        statusResponse = await fetch(`${backendBase}/api/wan-animate/status/${request_id}`, {
+        statusResponse = await fetch(`${API_URL}/api/wan-animate/status/${request_id}`, {
           method: 'GET'
         });
       } catch (fetchError) {
@@ -255,7 +254,7 @@ export const generateVideo = async (videoUrl, imageUrl, options = {}, onProgress
         // Get the result
         let resultResponse;
         try {
-          resultResponse = await fetch(`${backendBase}/api/wan-animate/result/${request_id}`, {
+          resultResponse = await fetch(`${API_URL}/api/wan-animate/result/${request_id}`, {
             method: 'GET'
           });
 

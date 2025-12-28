@@ -9,6 +9,7 @@ import { Video as VideoIcon, Upload, Image as ImageIcon } from 'lucide-react';
 import { getVideoDuration, calculateVideoCredits } from '../utils/videoUtils';
 import logger from '../utils/logger';
 import { addGeneration } from '../services/galleryService';
+import { API_URL } from '../utils/apiConfig';
 
 function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
   const walletContext = useSimpleWallet();
@@ -246,7 +247,6 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                 
                 // Call completion endpoint to deduct credits and add to gallery
                 try {
-                  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
                   const completeResponse = await fetch(`${API_URL}/api/wan-animate/complete`, {
                     method: 'POST',
                     headers: {

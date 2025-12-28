@@ -9,30 +9,9 @@ import {
   verifyToken
 } from '../services/emailAuthService';
 import logger from '../utils/logger';
+import { API_URL } from '../utils/apiConfig';
 
 const EmailAuthContext = createContext();
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-// Warn if API_URL is still localhost in production
-if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && API_URL.includes('localhost')) {
-  logger.error('⚠️ VITE_API_URL is not set correctly for production!', {
-    currentAPI_URL: API_URL,
-    hostname: window.location.hostname,
-    expectedFormat: 'https://your-backend-domain.com',
-    envVar: import.meta.env.VITE_API_URL
-  });
-  // Show user-friendly error in console
-  console.error('❌ API URL Configuration Error:', 'VITE_API_URL environment variable is not set. Credits will not load.');
-}
-
-// Validate API URL format
-if (typeof window !== 'undefined' && API_URL && !API_URL.startsWith('http')) {
-  logger.error('⚠️ Invalid API_URL format!', {
-    currentAPI_URL: API_URL,
-    expectedFormat: 'http://... or https://...'
-  });
-}
 
 export const EmailAuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -50,15 +29,11 @@ export const EmailAuthProvider = ({ children }) => {
       const token = getAuthToken();
       if (!token) {
         setIsAuthenticated(false);
+        setCredits(0);
+        setTotalCreditsEarned(0);
+        setTotalCreditsSpent(0);
         setIsLoading(false);
         return;
-      }
-
-      // Validate API_URL before making request
-      if (!API_URL || API_URL.includes('localhost') && window.location.hostname !== 'localhost') {
-        const errorMsg = 'API URL is not configured. Please set VITE_API_URL environment variable.';
-        logger.error(errorMsg, { API_URL, hostname: window.location.hostname });
-        throw new Error(errorMsg);
       }
 
       // Add cache-busting for mobile browsers (they cache aggressively)
@@ -109,24 +84,19 @@ export const EmailAuthProvider = ({ children }) => {
       if (data.success && data.user) {
         // Backend returns: { success: true, user: { credits: number, ... } }
         // Extract credits directly from data.user.credits (the standard location)
-        const rawCredits = data.user.credits;
-        const rawTotalEarned = data.user.totalCreditsEarned;
-        const rawTotalSpent = data.user.totalCreditsSpent;
+        const rawCredits = data.user.credits ?? 0;
+        const rawTotalEarned = data.user.totalCreditsEarned ?? 0;
+        const rawTotalSpent = data.user.totalCreditsSpent ?? 0;
         
-        // Validate and convert credit values
-        // Ensures credits are non-negative integers within safe range
-        const validateCredits = (value) => {
-          if (value == null) return 0;
-          const num = Number(value);
-          if (isNaN(num)) return 0;
-          // Ensure non-negative and within safe integer range
-          const validated = Math.max(0, Math.min(Math.floor(num), Number.MAX_SAFE_INTEGER));
-          return validated;
+        // Simple validation - ensure we always have valid numbers
+        const getCredits = (value) => {
+          const num = Number(value ?? 0);
+          return isNaN(num) ? 0 : Math.max(0, Math.floor(num));
         };
         
-        const credits = validateCredits(rawCredits);
-        const totalEarned = validateCredits(rawTotalEarned);
-        const totalSpent = validateCredits(rawTotalSpent);
+        const credits = getCredits(rawCredits);
+        const totalEarned = getCredits(rawTotalEarned);
+        const totalSpent = getCredits(rawTotalSpent);
         
         logger.info('Email user data parsed from response', {
           credits,
@@ -135,20 +105,16 @@ export const EmailAuthProvider = ({ children }) => {
           rawCredits,
           rawTotalEarned,
           rawTotalSpent,
-          creditsType: typeof rawCredits,
-          isNull: rawCredits === null,
-          isUndefined: rawCredits === undefined,
           API_URL
         });
         
         // Always update credits - validation ensures valid number (never NaN)
-        // No blocking conditions - credits are always updated
         setCredits(credits);
         setTotalCreditsEarned(totalEarned);
         setTotalCreditsSpent(totalSpent);
         logger.debug('Credits updated successfully', { credits, totalEarned, totalSpent });
         
-        // Set user info even if credits parsing failed
+        // Set user info
         if (data.user.email) {
           setEmail(data.user.email);
         }
@@ -164,27 +130,57 @@ export const EmailAuthProvider = ({ children }) => {
           responseKeys: data ? Object.keys(data) : [],
           rawResponse: JSON.stringify(data).substring(0, 200)
         });
-        // Don't set authenticated to false if we just have a missing user field
-        // The token might still be valid, just the user data might be missing
+        // Reset credits if response is invalid
+        setCredits(0);
+        setTotalCreditsEarned(0);
+        setTotalCreditsSpent(0);
       }
     } catch (error) {
       const isNetworkError = error.name === 'TypeError' || error.message.includes('fetch') || error.message.includes('Failed to fetch');
       const isCorsError = error.message.includes('CORS') || error.message.includes('cross-origin');
+      const isDnsError = error.message.includes('ERR_NAME_NOT_RESOLVED') || 
+                        error.message.includes('getaddrinfo') ||
+                        error.message.includes('ENOTFOUND') ||
+                        (isNetworkError && error.message.includes('resolve'));
+      
+      // Extract domain from API_URL for better error messages
+      let apiDomain = 'unknown';
+      try {
+        if (API_URL) {
+          const urlObj = new URL(API_URL);
+          apiDomain = urlObj.hostname;
+        }
+      } catch (e) {
+        // Invalid URL format
+      }
       
       logger.error('Error fetching email user data:', { 
         error: error.message,
         errorName: error.name,
         errorStack: error.stack?.substring(0, 200),
         API_URL,
+        apiDomain,
         isNetworkError,
         isCorsError,
+        isDnsError,
         hostname: typeof window !== 'undefined' ? window.location.hostname : 'unknown',
         url: `${API_URL}/api/auth/me`
       });
       
+      // Show helpful error message for DNS resolution failures
+      if (isDnsError) {
+        console.error('❌ DNS Resolution Failed:', {
+          message: `Cannot resolve API domain: ${apiDomain}`,
+          apiUrl: API_URL,
+          suggestion: 'Check if VITE_API_URL is set correctly in your environment variables',
+          checkConsole: 'See console for more details'
+        });
+        setError(`Cannot connect to API server (${apiDomain}). Please check your network connection and API configuration.`);
+      }
+      
       // Don't set authenticated to false on network errors - token might still be valid
       // Only set to false if it's an authentication error
-      if (!isNetworkError && !isCorsError) {
+      if (!isNetworkError && !isCorsError && !isDnsError) {
         setIsAuthenticated(false);
       }
     } finally {

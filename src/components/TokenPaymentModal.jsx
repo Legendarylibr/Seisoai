@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { ethers } from 'ethers';
 import logger from '../utils/logger.js';
+import { API_URL } from '../utils/apiConfig.js';
 import { 
   getAvailableTokens, 
   getTokenBalance, 
@@ -690,8 +691,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
           // Reconcile frontend vs backend payment address for safety
           let solanaPaymentAddress = getPaymentWallet('solana', 'solana');
           try {
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-            const resp = await fetch(`${apiUrl}/api/payment/get-address`, {
+            const resp = await fetch(`${API_URL}/api/payment/get-address`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ walletAddress: address })
@@ -739,9 +739,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
           
           // Credit after confirmation
           try {
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-            
-            const creditResponse = await fetch(`${apiUrl}/api/payments/credit`, {
+            const creditResponse = await fetch(`${API_URL}/api/payments/credit`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -905,9 +903,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
             
             // Credit after confirmation (transaction is guaranteed to be on-chain)
             try {
-              const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-              
-              const creditResponse = await fetch(`${apiUrl}/api/payments/credit`, {
+              const creditResponse = await fetch(`${API_URL}/api/payments/credit`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -1015,10 +1011,9 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
     
     // Check once for any USDC transfer to payment wallet
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       
       // Use instant-check endpoint to detect ANY USDC transfer
-      const response = await fetch(`${apiUrl}/api/payment/instant-check`, {
+      const response = await fetch(`${API_URL}/api/payment/instant-check`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

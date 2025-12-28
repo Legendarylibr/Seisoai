@@ -1,6 +1,7 @@
 // Payment service for USDC and ERC-20 tokens on EVM chains and Solana
 import { ethers } from 'ethers';
 import logger from '../utils/logger.js';
+import { API_URL } from '../utils/apiConfig.js';
 
 // Standard ERC-20 ABI for token transfers
 const ERC20_ABI = [
@@ -519,12 +520,7 @@ export const transferToPaymentWallet = async (tokenAddress, amount, chainId, sig
  */
 export const verifyPayment = async (txHash, walletAddress, tokenSymbol, amount, chainId, walletType = 'evm') => {
   try {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-    if (!apiUrl) {
-      throw new Error('API URL not configured');
-    }
-
-    const response = await fetch(`${apiUrl}/api/payments/verify`, {
+    const response = await fetch(`${API_URL}/api/payments/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

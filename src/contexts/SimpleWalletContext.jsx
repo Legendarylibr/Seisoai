@@ -2,30 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { ethers } from 'ethers';
 import { checkNFTHoldings } from '../services/nftVerificationService';
 import logger from '../utils/logger';
+import { API_URL } from '../utils/apiConfig';
 
 const SimpleWalletContext = createContext();
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-// Warn if API_URL is still localhost in production
-if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && API_URL.includes('localhost')) {
-  logger.error('⚠️ VITE_API_URL is not set correctly for production!', {
-    currentAPI_URL: API_URL,
-    hostname: window.location.hostname,
-    expectedFormat: 'https://your-backend-domain.com',
-    envVar: import.meta.env.VITE_API_URL
-  });
-  // Show user-friendly error in console
-  console.error('❌ API URL Configuration Error:', 'VITE_API_URL environment variable is not set. Credits will not load.');
-}
-
-// Validate API URL format
-if (typeof window !== 'undefined' && API_URL && !API_URL.startsWith('http')) {
-  logger.error('⚠️ Invalid API_URL format!', {
-    currentAPI_URL: API_URL,
-    expectedFormat: 'http://... or https://...'
-  });
-}
 
 export const SimpleWalletProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
@@ -39,10 +18,12 @@ export const SimpleWalletProvider = ({ children }) => {
   const [nftCollections, setNftCollections] = useState([]);
   const [walletType, setWalletType] = useState(null); // 'evm' or 'solana'
   
-  // Fetch credits from backend - simplified
+  // Fetch credits from backend
   const fetchCredits = useCallback(async (walletAddress, retries = 3, skipCache = false) => {
     if (!walletAddress) {
       setCredits(0);
+      setTotalCreditsEarned(0);
+      setTotalCreditsSpent(0);
       return 0;
     }
 
@@ -86,13 +67,6 @@ export const SimpleWalletProvider = ({ children }) => {
     // Fetch from API with cache-busting for mobile browsers
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        // Validate API_URL before making request
-        if (!API_URL || (API_URL.includes('localhost') && typeof window !== 'undefined' && window.location.hostname !== 'localhost')) {
-          const errorMsg = 'API URL is not configured. Please set VITE_API_URL environment variable.';
-          logger.error(errorMsg, { API_URL, hostname: typeof window !== 'undefined' ? window.location.hostname : 'unknown' });
-          throw new Error(errorMsg);
-        }
-
         // Add cache-busting timestamp for mobile browsers (they cache aggressively)
         const cacheBuster = `t=${Date.now()}&attempt=${attempt}`;
         const url = `${API_URL}/api/users/${normalizedAddress}?skipNFTs=true&${cacheBuster}`;
@@ -124,25 +98,20 @@ export const SimpleWalletProvider = ({ children }) => {
           // Extract from standard location: data.user
           const user = data?.user || data;
           
-          // Extract raw values first to check what we're actually getting
-          const rawCredits = user?.credits ?? data?.user?.credits ?? data?.credits;
-          const rawTotalEarned = user?.totalCreditsEarned ?? data?.user?.totalCreditsEarned ?? data?.totalCreditsEarned;
-          const rawTotalSpent = user?.totalCreditsSpent ?? data?.user?.totalCreditsSpent ?? data?.totalCreditsSpent;
+          // Extract raw values with fallbacks
+          const rawCredits = user?.credits ?? data?.user?.credits ?? data?.credits ?? 0;
+          const rawTotalEarned = user?.totalCreditsEarned ?? data?.user?.totalCreditsEarned ?? data?.totalCreditsEarned ?? 0;
+          const rawTotalSpent = user?.totalCreditsSpent ?? data?.user?.totalCreditsSpent ?? data?.totalCreditsSpent ?? 0;
           
-          // Validate and convert credit values
-          // Ensures credits are non-negative integers within safe range
-          const validateCredits = (value) => {
-            if (value == null) return 0;
-            const num = Number(value);
-            if (isNaN(num)) return 0;
-            // Ensure non-negative and within safe integer range
-            const validated = Math.max(0, Math.min(Math.floor(num), Number.MAX_SAFE_INTEGER));
-            return validated;
+          // Simple validation - ensure we always have valid numbers
+          const getCredits = (value) => {
+            const num = Number(value ?? 0);
+            return isNaN(num) ? 0 : Math.max(0, Math.floor(num));
           };
           
-          const currentCredits = validateCredits(rawCredits);
-          const rewardedAmount = validateCredits(rawTotalEarned);
-          const spentAmount = validateCredits(rawTotalSpent);
+          const currentCredits = getCredits(rawCredits);
+          const rewardedAmount = getCredits(rawTotalEarned);
+          const spentAmount = getCredits(rawTotalSpent);
           
           logger.info('Wallet credits parsed from response', { 
             currentCredits, 
@@ -192,6 +161,8 @@ export const SimpleWalletProvider = ({ children }) => {
           
           if (attempt === retries) {
             setCredits(0);
+            setTotalCreditsEarned(0);
+            setTotalCreditsSpent(0);
             return 0;
           }
         }
@@ -199,25 +170,53 @@ export const SimpleWalletProvider = ({ children }) => {
         const isNetworkError = error.name === 'TypeError' || error.message.includes('fetch') || error.message.includes('Failed to fetch');
         const isCorsError = error.message.includes('CORS') || error.message.includes('cross-origin');
         const isAbortError = error.name === 'AbortError';
+        const isDnsError = error.message.includes('ERR_NAME_NOT_RESOLVED') || 
+                          error.message.includes('getaddrinfo') ||
+                          error.message.includes('ENOTFOUND') ||
+                          (isNetworkError && error.message.includes('resolve'));
+        
+        // Extract domain from API_URL for better error messages
+        let apiDomain = 'unknown';
+        try {
+          if (API_URL) {
+            const urlObj = new URL(API_URL);
+            apiDomain = urlObj.hostname;
+          }
+        } catch (e) {
+          // Invalid URL format
+        }
         
         logger.error('Error fetching credits', {
           error: error.message,
           errorName: error.name,
           errorStack: error.stack?.substring(0, 200),
           API_URL,
+          apiDomain,
           attempt,
           isAbortError,
           isNetworkError,
           isCorsError,
+          isDnsError,
           hostname: typeof window !== 'undefined' ? window.location.hostname : 'unknown',
           url: `${API_URL}/api/users/${normalizedAddress}`,
           willRetry: attempt < retries && !isAbortError
         });
         
+        // Show helpful error message for DNS resolution failures
+        if (isDnsError && attempt === retries) {
+          console.error('❌ DNS Resolution Failed:', {
+            message: `Cannot resolve API domain: ${apiDomain}`,
+            apiUrl: API_URL,
+            suggestion: 'Check if VITE_API_URL is set correctly in your environment variables',
+            checkConsole: 'See console for more details'
+          });
+          setError(`Cannot connect to API server. Please check your network connection and API configuration.`);
+        }
+        
         if (isAbortError || attempt === retries) {
           // Only set credits to 0 if we've exhausted retries or it's an abort
           // Don't set to 0 on network errors - keep last known value
-          if (isAbortError || (attempt === retries && !isNetworkError && !isCorsError)) {
+          if (isAbortError || (attempt === retries && !isNetworkError && !isCorsError && !isDnsError)) {
             setCredits(0);
           }
           return 0;
@@ -228,6 +227,8 @@ export const SimpleWalletProvider = ({ children }) => {
     
     logger.warn('Failed to fetch credits after all retries', { API_URL, walletAddress: normalizedAddress });
     setCredits(0);
+    setTotalCreditsEarned(0);
+    setTotalCreditsSpent(0);
     return 0;
   }, [API_URL]);
 

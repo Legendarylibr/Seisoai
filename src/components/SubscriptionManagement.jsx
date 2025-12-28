@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Calendar, DollarSign, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import logger from '../utils/logger.js';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_URL } from '../utils/apiConfig.js';
 
 const SubscriptionManagement = ({ isOpen, onClose }) => {
   const { email, refreshCredits } = useEmailAuth();

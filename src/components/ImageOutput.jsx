@@ -687,8 +687,8 @@ const ImageOutput = () => {
             onClick={() => handleDownload(imagesToDisplay[0])}
             disabled={isDownloading}
             className="flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-xs px-3 py-2 md:py-1.5 rounded transition-all duration-200 hover:scale-105 touch-manipulation"
-            style={{ minHeight: '44px' }}
             style={{
+              minHeight: '44px',
               background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
               border: '2px outset #f0f0f0',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
@@ -715,8 +715,8 @@ const ImageOutput = () => {
             onClick={handleRegenerate}
             disabled={isRegenerating || isGenerating || !isConnected || !currentGeneration}
             className="flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-xs px-3 py-2 md:py-1.5 rounded transition-all duration-200 hover:scale-105 touch-manipulation"
-            style={{ minHeight: '44px' }}
             style={{
+              minHeight: '44px',
               background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
               border: '2px outset #f0f0f0',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
@@ -742,8 +742,8 @@ const ImageOutput = () => {
           <button
             onClick={clearGeneration}
             className="flex items-center gap-1.5 text-xs px-3 py-2 md:py-1.5 rounded transition-all duration-200 hover:scale-105 touch-manipulation"
-            style={{ minHeight: '44px' }}
             style={{
+              minHeight: '44px',
               background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
               border: '2px outset #f0f0f0',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
