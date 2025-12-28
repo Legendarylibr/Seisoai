@@ -393,6 +393,112 @@
   .transition-smooth {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
+
+  /* Win95 Button - Raised (default) */
+  .win95-btn {
+    background: linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8);
+    border: 2px outset #f0f0f0;
+    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2);
+    color: #000000;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.8);
+    transition: all 0.2s ease;
+  }
+
+  .win95-btn:hover:not(:disabled) {
+    background: linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0);
+    border: 2px outset #f8f8f8;
+    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25);
+  }
+
+  .win95-btn:active:not(:disabled) {
+    background: linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0);
+    border: 2px inset #c0c0c0;
+    box-shadow: inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  .win95-btn:disabled {
+    background: linear-gradient(to bottom, #c8c8c8, #b0b0b0);
+    border: 2px inset #b8b8b8;
+    box-shadow: inset 3px 3px 0 rgba(0, 0, 0, 0.25);
+    color: #666666;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
+    cursor: not-allowed;
+  }
+
+  /* Win95 Button - Pressed state */
+  .win95-btn-pressed {
+    background: linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0);
+    border: 2px inset #c0c0c0;
+    box-shadow: inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2);
+    color: #000000;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  /* Win95 Input Field */
+  .win95-input {
+    background: #ffffff;
+    border: 2px inset #c0c0c0;
+    color: #000000;
+    box-shadow: inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  .win95-input:focus {
+    border: 2px inset #808080;
+    box-shadow: inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.3);
+    background: #fffffe;
+    outline: none;
+  }
+
+  /* Win95 Panel/Container */
+  .win95-panel {
+    background: linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8);
+    border: 2px outset #f0f0f0;
+    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Win95 Yellow Note Panel */
+  .win95-note {
+    background: linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa);
+    border: 2px outset #ffffbb;
+    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Win95 Dropdown Menu */
+  .win95-dropdown {
+    background: linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8);
+    border: 2px outset #e8e8e8;
+    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Win95 Icon Container */
+  .win95-icon {
+    background: linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8);
+    border: 2px outset #f0f0f0;
+    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Win95 Progress Bar */
+  .win95-progress {
+    background: #d0d0d0;
+    border: 2px inset #c0c0c0;
+    box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .win95-progress-bar {
+    background: linear-gradient(to bottom, #808080, #606060, #505050);
+    box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.3);
+  }
+
+  /* Text shadow utilities for Win95 */
+  .win95-text {
+    color: #000000;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .win95-text-subtle {
+    color: #1a1a1a;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.6);
+  }
 }
 
 /* Mobile-specific optimizations */
