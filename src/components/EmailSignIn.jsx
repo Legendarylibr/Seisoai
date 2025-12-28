@@ -205,8 +205,8 @@ const EmailSignIn = () => {
           </p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
+        {/* Form - noValidate to use custom JS validation instead of browser native */}
+        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6" noValidate>
           {/* Email Input */}
           <div>
             <label className="block text-sm md:text-base font-medium mb-2 md:mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
@@ -216,8 +216,10 @@ const EmailSignIn = () => {
               <Mail className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
               <input
                 type="email"
+                name="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onInput={(e) => setEmail(e.target.value)}
                 placeholder="your@email.com"
                 className="w-full pl-10 md:pl-12 pr-4 md:pr-5 py-3 md:py-4 rounded text-sm md:text-base"
                 style={{
@@ -225,9 +227,8 @@ const EmailSignIn = () => {
                   border: '2px inset #c0c0c0',
                   boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
                   color: '#000000',
-                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  textShadow: 'none'
                 }}
-                required
                 autoComplete="email"
                 autoCapitalize="none"
                 autoCorrect="off"
@@ -245,8 +246,10 @@ const EmailSignIn = () => {
               <Lock className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
               <input
                 type={showPassword ? 'text' : 'password'}
+                name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onInput={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="w-full pl-10 md:pl-12 pr-12 md:pr-14 py-3 md:py-4 rounded text-sm md:text-base"
                 style={{
@@ -254,10 +257,8 @@ const EmailSignIn = () => {
                   border: '2px inset #c0c0c0',
                   boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
                   color: '#000000',
-                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  textShadow: 'none'
                 }}
-                required
-                minLength={isSignUp ? 12 : 6}
                 autoComplete={isSignUp ? 'new-password' : 'current-password'}
               />
               <button
@@ -306,8 +307,10 @@ const EmailSignIn = () => {
                 <Lock className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
                 <input
                   type={showConfirmPassword ? 'text' : 'password'}
+                  name="confirmPassword"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  onInput={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
                   className="w-full pl-10 md:pl-12 pr-12 md:pr-14 py-3 md:py-4 rounded text-sm md:text-base"
                   style={{
@@ -319,10 +322,8 @@ const EmailSignIn = () => {
                         : '2px inset #c0c0c0',
                     boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
                     color: '#000000',
-                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                    textShadow: 'none'
                   }}
-                  required
-                  minLength={12}
                   autoComplete="new-password"
                 />
                 <button
