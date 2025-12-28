@@ -70,8 +70,22 @@ const EmailSignIn = () => {
     setError('');
     setErrorType('');
 
+    // Read email directly from form to handle browser autofill
+    // (Browser autofill may not trigger onChange, leaving React state empty)
+    const formData = new FormData(e.target);
+    const formEmail = formData.get('email') || email;
+    const formPassword = formData.get('password') || password;
+    
+    // Update state if form had different values (e.g., from autofill)
+    if (formEmail !== email) {
+      setEmail(formEmail);
+    }
+    if (formPassword !== password) {
+      setPassword(formPassword);
+    }
+
     // Trim email
-    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedEmail = (formEmail || '').trim().toLowerCase();
 
     // Validate email format
     const emailValidation = validateEmail(trimmedEmail);
@@ -82,7 +96,7 @@ const EmailSignIn = () => {
     }
 
     // Validate password is provided
-    if (!password) {
+    if (!formPassword) {
       setError('Password is required');
       setErrorType('validation');
       return;
@@ -91,7 +105,7 @@ const EmailSignIn = () => {
     // Signup-specific validations
     if (isSignUp) {
       // Validate password requirements
-      if (!validatePassword(password)) {
+      if (!validatePassword(formPassword)) {
         const requirements = getPasswordRequirements();
         setError(`Password requirements not met: ${requirements.join(', ')}`);
         setErrorType('validation');
@@ -99,13 +113,14 @@ const EmailSignIn = () => {
       }
 
       // Validate confirm password
-      if (!confirmPassword) {
+      const formConfirmPassword = formData.get('confirmPassword') || confirmPassword;
+      if (!formConfirmPassword) {
         setError('Please confirm your password');
         setErrorType('validation');
         return;
       }
 
-      if (password !== confirmPassword) {
+      if (formPassword !== formConfirmPassword) {
         setError('Passwords do not match');
         setErrorType('validation');
         return;
@@ -126,9 +141,9 @@ const EmailSignIn = () => {
 
     try {
       if (isSignUp) {
-        await signUp(trimmedEmail, password);
+        await signUp(trimmedEmail, formPassword);
       } else {
-        await signIn(trimmedEmail, password);
+        await signIn(trimmedEmail, formPassword);
       }
       // Clear timeout on success
       clearTimeout(timeoutId);
