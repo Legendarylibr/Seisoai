@@ -1109,26 +1109,6 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
 });
 
 // Body parsing middleware - AFTER webhook route
-// Wan 2.2 Animate Replace - Direct file upload endpoint (must be before express.json())
-// Direct file upload endpoint (for large files via FormData)
-app.post('/api/wan-animate/upload-video-direct', express.raw({ type: 'multipart/form-data', limit: '200mb' }), async (req, res) => {
-  try {
-    if (!FAL_API_KEY) {
-      return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
-    }
-
-    // For now, return error - use data URI endpoint instead
-    // This endpoint would need proper multipart parsing library like multer
-    return res.status(501).json({ 
-      success: false, 
-      error: 'Direct upload not yet implemented. Please use smaller files (<50MB) or upload via data URI.' 
-    });
-  } catch (error) {
-    logger.error('Wan-animate video upload error (direct)', { error: error.message });
-    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to upload video') });
-  }
-});
-
 // Increase JSON limit for image/video data URIs (can be large even after optimization)
 // Videos especially can be very large, so we need a higher limit
 // Note: Railway's reverse proxy may have a default 10MB limit. If you see 413 errors,
@@ -2791,11 +2771,8 @@ app.get('/api/wan-animate/result/:requestId', wanResultLimiter, async (req, res)
 });
 
 /**
- * Complete video generation - deduct credits based on duration and add to gallery
- * Called by frontend after video is successfully generated and duration is calculated
- */
-/**
  * Wan Animate Complete - called when video generation is complete
+ * Deducts credits based on duration and adds to gallery
  * SECURITY: Requires authentication - uses authenticated user from token
  */
 app.post('/api/wan-animate/complete', authenticateToken, async (req, res) => {
@@ -3426,10 +3403,6 @@ async function getOrCreateUserByIdentifier(identifier, type = 'wallet') {
   return user;
 }
 
-/**
- * Helper function to get user from request body (walletAddress, userId, or email)
- * Used for endpoints that need to identify user before making external API calls
- */
 /**
  * Unified function to find user by wallet address OR email
  * Makes it easy to reference users by either identifier
@@ -5153,9 +5126,6 @@ app.get('/api/metrics', async (req, res) => {
   }
 });
 
-/**
- * Frontend logging endpoint
- */
 /**
  * Frontend logging endpoint
  * CORS: Handles OPTIONS preflight requests explicitly
