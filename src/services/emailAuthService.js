@@ -2,6 +2,100 @@
 import logger from '../utils/logger.js';
 import { API_URL } from '../utils/apiConfig.js';
 
+// Constants
+const REQUEST_TIMEOUT = 30000; // 30 seconds
+const MAX_RETRIES = 2;
+const RETRY_DELAY = 1000; // 1 second
+
+/**
+ * Helper function to check if localStorage is available
+ */
+const isLocalStorageAvailable = () => {
+  try {
+    const testKey = '__storage_test__';
+    localStorage.setItem(testKey, testKey);
+    localStorage.removeItem(testKey);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+/**
+ * Helper function to safely get from localStorage
+ */
+const safeGetItem = (key) => {
+  if (!isLocalStorageAvailable()) return null;
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    logger.error('Failed to read from localStorage', { key, error: e.message });
+    return null;
+  }
+};
+
+/**
+ * Helper function to safely set to localStorage
+ */
+const safeSetItem = (key, value) => {
+  if (!isLocalStorageAvailable()) {
+    logger.warn('localStorage not available, auth state will not persist');
+    return false;
+  }
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    logger.error('Failed to write to localStorage', { key, error: e.message });
+    return false;
+  }
+};
+
+/**
+ * Helper function to safely remove from localStorage
+ */
+const safeRemoveItem = (key) => {
+  if (!isLocalStorageAvailable()) return;
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {
+    logger.error('Failed to remove from localStorage', { key, error: e.message });
+  }
+};
+
+/**
+ * Fetch with timeout and retry logic
+ */
+const fetchWithRetry = async (url, options, retries = MAX_RETRIES) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    // Check if it's an abort error (timeout)
+    if (error.name === 'AbortError') {
+      throw new Error('Request timed out. Please try again.');
+    }
+    
+    // Retry on network errors
+    if (retries > 0 && (error.name === 'TypeError' || error.message.includes('fetch'))) {
+      logger.warn(`Request failed, retrying... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+    
+    throw error;
+  }
+};
+
 /**
  * Sign up with email and password
  * @param {string} email - User's email address
@@ -9,16 +103,31 @@ import { API_URL } from '../utils/apiConfig.js';
  * @returns {Promise<Object>} - Sign up response
  */
 export const signUp = async (email, password) => {
+  // Validate inputs
+  if (!email || typeof email !== 'string') {
+    throw new Error('Email is required');
+  }
+  if (!password || typeof password !== 'string') {
+    throw new Error('Password is required');
+  }
+
+  const trimmedEmail = email.trim().toLowerCase();
+  
   try {
-    const response = await fetch(`${API_URL}/api/auth/signup`, {
+    const response = await fetchWithRetry(`${API_URL}/api/auth/signup`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email: trimmedEmail, password })
     });
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (parseError) {
+      throw new Error('Server returned an invalid response. Please try again.');
+    }
     
     if (!response.ok) {
       throw new Error(data.error || 'Sign up failed');
@@ -26,9 +135,9 @@ export const signUp = async (email, password) => {
 
     // Store token in localStorage
     if (data.token) {
-      localStorage.setItem('authToken', data.token);
-      localStorage.setItem('userEmail', email);
-      localStorage.setItem('authType', 'email');
+      safeSetItem('authToken', data.token);
+      safeSetItem('userEmail', trimmedEmail);
+      safeSetItem('authType', 'email');
     }
 
     return {
@@ -49,16 +158,31 @@ export const signUp = async (email, password) => {
  * @returns {Promise<Object>} - Sign in response
  */
 export const signIn = async (email, password) => {
+  // Validate inputs
+  if (!email || typeof email !== 'string') {
+    throw new Error('Email is required');
+  }
+  if (!password || typeof password !== 'string') {
+    throw new Error('Password is required');
+  }
+
+  const trimmedEmail = email.trim().toLowerCase();
+
   try {
-    const response = await fetch(`${API_URL}/api/auth/signin`, {
+    const response = await fetchWithRetry(`${API_URL}/api/auth/signin`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email: trimmedEmail, password })
     });
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (parseError) {
+      throw new Error('Server returned an invalid response. Please try again.');
+    }
     
     if (!response.ok) {
       // Provide user-friendly error message
@@ -68,9 +192,9 @@ export const signIn = async (email, password) => {
 
     // Store token in localStorage
     if (data.token) {
-      localStorage.setItem('authToken', data.token);
-      localStorage.setItem('userEmail', email);
-      localStorage.setItem('authType', 'email');
+      safeSetItem('authToken', data.token);
+      safeSetItem('userEmail', trimmedEmail);
+      safeSetItem('authType', 'email');
     }
 
     return {
@@ -91,10 +215,10 @@ export const signIn = async (email, password) => {
  * Sign out
  */
 export const signOut = () => {
-  localStorage.removeItem('authToken');
-  localStorage.removeItem('userEmail');
-  localStorage.removeItem('authType');
-  localStorage.removeItem('userId');
+  safeRemoveItem('authToken');
+  safeRemoveItem('userEmail');
+  safeRemoveItem('authType');
+  safeRemoveItem('userId');
 };
 
 /**
@@ -102,7 +226,7 @@ export const signOut = () => {
  * @returns {string|null} - Auth token or null
  */
 export const getAuthToken = () => {
-  return localStorage.getItem('authToken');
+  return safeGetItem('authToken');
 };
 
 /**
@@ -110,7 +234,7 @@ export const getAuthToken = () => {
  * @returns {string|null} - User email or null
  */
 export const getUserEmail = () => {
-  return localStorage.getItem('userEmail');
+  return safeGetItem('userEmail');
 };
 
 /**
@@ -118,7 +242,7 @@ export const getUserEmail = () => {
  * @returns {string|null} - Auth type ('email' or 'wallet') or null
  */
 export const getAuthType = () => {
-  return localStorage.getItem('authType');
+  return safeGetItem('authType');
 };
 
 /**
@@ -132,15 +256,21 @@ export const verifyToken = async () => {
       return null;
     }
 
-    const response = await fetch(`${API_URL}/api/auth/verify`, {
+    const response = await fetchWithRetry(`${API_URL}/api/auth/verify`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       }
-    });
+    }, 1); // Only 1 retry for verification
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (parseError) {
+      logger.error('Failed to parse verify response');
+      return null;
+    }
     
     if (!response.ok) {
       // Token invalid, clear storage
@@ -153,6 +283,11 @@ export const verifyToken = async () => {
       user: data.user
     };
   } catch (error) {
+    // Don't sign out on network errors - token might still be valid
+    if (error.message && error.message.includes('timed out')) {
+      logger.warn('Token verification timed out, will retry later');
+      return null;
+    }
     logger.error('Token verification error', { error: error.message });
     signOut();
     return null;
