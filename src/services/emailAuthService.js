@@ -62,7 +62,9 @@ export const signIn = async (email, password) => {
     const data = await response.json();
     
     if (!response.ok) {
-      throw new Error(data.error || 'Sign in failed');
+      // Provide user-friendly error message
+      const errorMsg = data.error || 'Sign in failed. Please check your email and password.';
+      throw new Error(errorMsg);
     }
 
     // Store token in localStorage
@@ -78,7 +80,10 @@ export const signIn = async (email, password) => {
       user: data.user
     };
   } catch (error) {
-    logger.error('Sign in error', { error: error.message });
+    // Don't log network errors or user errors - just rethrow with clean message
+    if (error.message && !error.message.includes('fetch')) {
+      logger.error('Sign in error', { error: error.message });
+    }
     throw error;
   }
 };
@@ -155,40 +160,4 @@ export const verifyToken = async () => {
   }
 };
 
-/**
- * Link wallet to email account
- * @param {string} walletAddress - Wallet address to link
- * @returns {Promise<Object>} - Link response
- */
-export const linkWallet = async (walletAddress) => {
-  try {
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
-
-    const response = await fetch(`${API_URL}/api/auth/link-wallet`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ walletAddress })
-    });
-
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to link wallet');
-    }
-
-    return {
-      success: true,
-      user: data.user
-    };
-  } catch (error) {
-    logger.error('Link wallet error', { error: error.message });
-    throw error;
-  }
-};
 

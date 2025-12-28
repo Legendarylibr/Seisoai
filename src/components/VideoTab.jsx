@@ -201,7 +201,7 @@ function VideoTab({ onShowTokenPayment, onShowStripePayment }) {
                 const { generateVideo } = await import('../services/wanAnimateService');
                 
                 const userIdentifier = isEmailAuth 
-                  ? (emailContext.linkedWalletAddress || emailContext.userId) 
+                  ? emailContext.userId 
                   : walletContext.address;
                 
                 const result = await generateVideo(

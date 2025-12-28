@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
@@ -148,10 +148,10 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     // Check if authenticated (email or wallet)
     const isAuthenticated = isConnected || isEmailAuth;
     
-    // For email users, we can use userId or linked wallet address
-    // For wallet users, we need the address
+    // For email users, use userId
+    // For wallet users, use address
     const hasIdentifier = isEmailAuth 
-      ? (emailContext.userId || emailContext.linkedWalletAddress) 
+      ? emailContext.userId 
       : address;
     
     // Require authentication to generate (but UI is accessible without auth)
@@ -164,33 +164,17 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       return;
     }
 
-    // Calculate credits that will be deducted (matches backend logic)
-    const isNanoBananaPro = multiImageModel === 'nano-banana-pro';
-    const creditsToDeduct = isNanoBananaPro ? 2 : 1; // 2 credits for Nano Banana Pro, 1 for others
-
-    // Get current credits BEFORE refresh
-    const currentCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
+    // Calculate credits that will be deducted
+    const creditsToDeduct = multiImageModel === 'nano-banana-pro' ? 2 : 1;
     
-    // Deduct credits IMMEDIATELY in UI when user clicks generate (before API call)
-    // This gives instant feedback that credits are being used
+    // Optimistically update UI for instant feedback
+    const currentCredits = isEmailAuth ? (emailContext.credits || 0) : (credits || 0);
     const newCredits = Math.max(0, currentCredits - creditsToDeduct);
     
     if (isEmailAuth && emailContext.setCreditsManually) {
       emailContext.setCreditsManually(newCredits);
-      logger.debug('Email credits deducted immediately in UI', { 
-        previousCredits: currentCredits, 
-        creditsDeducted: creditsToDeduct, 
-        newCredits,
-        isNanoBananaPro
-      });
     } else if (!isEmailAuth && setCreditsManually) {
       setCreditsManually(newCredits);
-      logger.debug('Wallet credits deducted immediately in UI', { 
-        previousCredits: currentCredits, 
-        creditsDeducted: creditsToDeduct, 
-        newCredits,
-        isNanoBananaPro
-      });
     }
 
     // Style is optional - can generate with just prompt and reference image
@@ -239,62 +223,23 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       
       const imageUrls = imageResult.images;
       const imageUrl = imageUrls[0];
-      const remainingCredits = imageResult.remainingCredits;
       
-      // Update credits immediately from generate response for instant UI feedback
-      if (remainingCredits !== undefined) {
-        if (isEmailAuth && emailContext.setCreditsManually) {
-          emailContext.setCreditsManually(remainingCredits);
-          logger.debug('Email credits updated immediately from generate response', { remainingCredits });
-        } else if (!isEmailAuth && setCreditsManually) {
-          setCreditsManually(remainingCredits);
-          logger.debug('Wallet credits updated immediately from generate response', { remainingCredits });
-        }
-      }
-      
-      // ALWAYS refresh credits from backend after generation to ensure accuracy
-      // This ensures the display matches the backend state even if there were any discrepancies
+      // Refresh credits from backend to ensure accuracy
       if (isEmailAuth && emailContext.refreshCredits) {
         await emailContext.refreshCredits();
-        logger.debug('Email user credits refreshed from backend after generation', { 
-          remainingCredits,
-          refreshedCredits: emailContext.credits 
-        });
       } else if (!isEmailAuth && refreshCredits && address) {
         await refreshCredits();
-        logger.debug('Wallet user credits refreshed from backend after generation', { 
-          remainingCredits 
-        });
-      } else {
-        logger.warn('Cannot refresh credits - missing refreshCredits function', { 
-          isEmailAuth,
-          hasEmailRefresh: !!emailContext.refreshCredits,
-          hasWalletRefresh: !!refreshCredits,
-          hasAddress: !!address
-        });
       }
 
-      logger.info('Image generation completed successfully', { 
-        hasImageUrl: !!imageUrl,
-        isMultiple: imageUrls.length > 1,
-        imageCount: imageUrls.length,
-        remainingCredits
-      });
-      
-      // Clear any existing errors since image generation succeeded
       setError(null);
-      
       setCurrentStep('Complete!');
-      setProgress(100); // Complete the progress bar
+      setProgress(100);
       
-      // Save generation to history (credits already deducted in /api/generate/image)
+      // Save generation to history
       const userIdentifier = isEmailAuth 
-        ? (emailContext.linkedWalletAddress || emailContext.userId) 
+        ? emailContext.userId 
         : address;
-      
-      // Calculate credits used for history (matches backend deduction logic)
-      const isNanoBananaPro = multiImageModel === 'nano-banana-pro';
-      const creditsUsed = isNanoBananaPro ? 2 : 1;
+      const creditsUsed = multiImageModel === 'nano-banana-pro' ? 2 : 1;
       
       try {
         const promptForHistory = getPromptForDisplay(trimmedPrompt, selectedStyle);
@@ -303,34 +248,24 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           prompt: promptForHistory,
           style: selectedStyle ? selectedStyle.name : 'No Style',
           imageUrl,
-          creditsUsed, // For history tracking only
+          creditsUsed,
           userId: isEmailAuth ? emailContext.userId : undefined,
           email: isEmailAuth ? emailContext.email : undefined
         });
-        logger.debug('Generation saved to history');
       } catch (error) {
-        logger.error('Error saving generation to history', { error: error.message });
         // Don't fail - image was already generated successfully
       }
       
-      // Wait a moment to show completion, then set the image and stop loading
-      // Clear any existing timeout before setting a new one
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      // Show completion, then set the image
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       
       timeoutRef.current = setTimeout(() => {
-        // Pass the image(s) to setGeneratedImage (handle both single and multiple)
         setGeneratedImage(imageUrls.length > 1 ? imageUrls : imageUrl);
         setIsLoading(false);
         
-        // Store current generation details for explain/regenerate functionality
-        // Use first image for currentGeneration.image (backward compatibility)
-        const promptForStorage = getPromptForDisplay(trimmedPrompt, selectedStyle);
-        
         setCurrentGeneration({
           image: imageUrl,
-          prompt: promptForStorage,
+          prompt: getPromptForDisplay(trimmedPrompt, selectedStyle),
           style: selectedStyle,
           referenceImage: controlNetImage,
           guidanceScale,
@@ -338,38 +273,32 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           numImages,
           enableSafetyChecker,
           generationMode,
-          multiImageModel, // Store model selection for regeneration
+          multiImageModel,
           timestamp: new Date().toISOString()
         });
         
         timeoutRef.current = null;
       }, PROGRESS_CONFIG.COMPLETION_DELAY_MS);
       } catch (error) {
-        logger.error('Generation error:', { error: error.message, stack: error.stack });
         const errorMessage = error.message || 'Failed to generate image. Please try again.';
       
-        // Always refresh credits after error (in case credits were deducted but generation failed)
+        // Refresh credits after error
         try {
           if (isEmailAuth && emailContext.refreshCredits) {
             await emailContext.refreshCredits();
-            logger.debug('Credits refreshed after generation error', { credits: emailContext.credits });
           } else if (!isEmailAuth && refreshCredits && address) {
             await refreshCredits();
-            logger.debug('Credits refreshed after generation error');
           }
         } catch (refreshError) {
-          logger.warn('Failed to refresh credits after error', { error: refreshError.message });
+          // Ignore refresh errors
         }
       
-        // If error is about insufficient credits and user is authenticated, show payment modal
+        // Show payment modal if insufficient credits
         if (errorMessage.includes('Insufficient credits') && isAuthenticated && onShowTokenPayment) {
-          // User has used their credits and needs to pay
           setError('You\'ve used your credits! Please purchase more credits to generate more.');
           onShowTokenPayment();
         } else {
-          // Sanitize error message before displaying
-          const sanitizedError = sanitizeError(error);
-          setError(sanitizedError);
+          setError(sanitizeError(error));
         }
       
         setProgress(0);
@@ -392,39 +321,38 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
 
   const isDisabled = isGenerating || walletLoading || (!isConnected && !isEmailAuth);
   
-  // Memoize button text to avoid unnecessary recalculations
-  const buttonText = useMemo(() => {
-    if (isGenerating) return multiImageModel === 'qwen-image-layered' ? 'Extracting Layers...' : 'Generating...';
-    if (walletLoading) return 'Loading...';
-    if (!isConnected && !isEmailAuth) return 'Sign In to Generate';
-    return multiImageModel === 'qwen-image-layered' ? 'Extract Layers' : 'Generate Image';
-  }, [isGenerating, walletLoading, isConnected, isEmailAuth, multiImageModel]);
+  // Button text and icon
+  const buttonText = isGenerating 
+    ? (multiImageModel === 'qwen-image-layered' ? 'Extracting Layers...' : 'Generating...')
+    : walletLoading 
+    ? 'Loading...'
+    : (!isConnected && !isEmailAuth)
+    ? 'Sign In to Generate'
+    : (multiImageModel === 'qwen-image-layered' ? 'Extract Layers' : 'Generate Image');
+  
+  const buttonIcon = isGenerating || walletLoading 
+    ? <span className="text-xs" style={{ color: '#000000' }}>⏳</span>
+    : (!isConnected && !isEmailAuth)
+    ? <span className="text-xs" style={{ color: '#000000' }}>🔗</span>
+    : <span className="text-xs" style={{ color: '#000000' }}>✨</span>;
 
-  // Memoize button icon to avoid unnecessary recalculations
-  const buttonIcon = useMemo(() => {
-    if (isGenerating) return <span className="text-xs" style={{ color: '#000000' }}>⏳</span>;
-    if (walletLoading) return <span className="text-xs animate-pulse" style={{ color: '#000000' }}>⏳</span>;
-    if (!isConnected && !isEmailAuth) return <span className="text-xs" style={{ color: '#000000' }}>🔗</span>;
-    return <span className="text-xs" style={{ color: '#000000' }}>✨</span>;
-  }, [isGenerating, walletLoading, isConnected, isEmailAuth]);
-
-  // Memoize button styles to avoid recreating objects on every render
-  const disabledButtonStyles = useMemo(() => ({
+  // Button styles
+  const disabledButtonStyles = {
     background: 'linear-gradient(to bottom, #c8c8c8, #b0b0b0)',
     border: '2px inset #b8b8b8',
     boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)',
     color: '#666666',
     textShadow: '1px 1px 0 rgba(255, 255, 255, 0.5)',
     cursor: 'not-allowed'
-  }), []);
+  };
 
-  const enabledButtonStyles = useMemo(() => ({
+  const enabledButtonStyles = {
     background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
     border: '2px outset #f0f0f0',
     boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)',
     color: '#000000',
     textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-  }), []);
+  };
 
   return (
     <>
@@ -436,22 +364,28 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           aria-busy={isGenerating || isLoading}
           aria-live="polite"
           role="button"
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded transition-all duration-200"
-          style={isDisabled ? disabledButtonStyles : enabledButtonStyles}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 md:py-2 text-xs font-bold rounded-lg transition-all duration-200 touch-manipulation"
+          style={isDisabled ? { ...disabledButtonStyles, minHeight: '48px' } : {
+            ...enabledButtonStyles,
+            minHeight: '48px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2)'
+          }}
           onMouseEnter={(e) => {
             if (!isDisabled) {
               e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
               e.currentTarget.style.border = '2px outset #f8f8f8';
-              e.currentTarget.style.transform = 'translateY(-1px)';
-              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.35)';
+              e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 6px 12px rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)';
             }
           }}
           onMouseLeave={(e) => {
             if (!isDisabled) {
               e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
               e.currentTarget.style.border = '2px outset #f0f0f0';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)';
+              e.currentTarget.style.transform = 'translateY(0) scale(1)';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2)';
             }
           }}
           onMouseDown={(e) => {
@@ -476,11 +410,11 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
 
       {/* Enhanced Progress Bar with Loading Steps */}
       {(isGenerating || isLoading) && (
-        <div className="w-full mt-3 space-y-2">
+        <div className="w-full mt-2 space-y-2">
           {/* Progress Header */}
           <div className="flex justify-between items-center text-xs">
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ 
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ 
                 background: '#000000',
                 boxShadow: '0 0 2px rgba(255, 255, 255, 0.8)',
                 animation: 'pulse 1.5s ease-in-out infinite'
@@ -521,7 +455,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           </div>
           
           {/* Loading Steps Indicator */}
-          <div className="flex justify-center space-x-1.5">
+          <div className="flex justify-center gap-2">
             {['Init', 'Process', 'Generate', 'Enhance', 'Finish'].map((step, index) => {
               const stepProgress = (index + 1) * 20;
               const isActive = progress >= stepProgress - 10;
@@ -529,12 +463,12 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
               
               return (
                 <div key={step} className="flex flex-col items-center">
-                  <div className="w-1.5 h-1.5 rounded-full transition-all duration-300" style={{
+                  <div className="w-2 h-2 rounded-full transition-all duration-300" style={{
                     background: isCompleted ? '#000000' : isActive ? '#000000' : '#c0c0c0',
                     boxShadow: (isCompleted || isActive) ? '0 0 2px rgba(255, 255, 255, 0.8)' : 'none',
                     opacity: isCompleted ? 1 : isActive ? 0.7 : 0.4
                   }}></div>
-                  <span className="text-xs mt-0.5 transition-colors duration-300" style={{
+                  <span className="text-xs mt-1 transition-colors duration-300" style={{
                     color: isCompleted ? '#000000' : isActive ? '#1a1a1a' : '#808080',
                     textShadow: (isCompleted || isActive) ? '1px 1px 0 rgba(255, 255, 255, 0.6)' : 'none'
                   }}>

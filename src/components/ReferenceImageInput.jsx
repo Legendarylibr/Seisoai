@@ -161,11 +161,11 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden">
         {!controlNetImage ? (
           <div
             onClick={handleClickUpload}
-            className="flex-1 border-2 border-dashed border-transparent rounded-lg p-4 text-center cursor-pointer hover:border-[#42a5f5]/60 hover:bg-white/5 transition-all duration-200 flex flex-col items-center justify-center"
+            className="h-full border-2 border-dashed border-transparent rounded-lg p-4 text-center cursor-pointer hover:border-[#42a5f5]/60 hover:bg-white/5 transition-all duration-200 flex flex-col items-center justify-center"
             role="button"
             tabIndex={0}
             aria-label="Upload reference image"
@@ -216,10 +216,10 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
           )}
         </div>
       ) : (
-        <div className="flex-1 flex flex-col">
+        <div className="h-full flex flex-col overflow-hidden">
           {/* Display images - grid if multiple, single if one */}
           {Array.isArray(controlNetImage) && controlNetImage.length > 1 ? (
-            <div className="flex-1 rounded-lg overflow-auto bg-black/10 p-2">
+            <div className="flex-1 rounded-lg overflow-auto bg-black/10 p-2" style={{ maxHeight: 'calc(100% - 40px)' }}>
               <div className={`grid gap-2 ${
                 controlNetImage.length === 2 ? 'grid-cols-2' :
                 controlNetImage.length === 3 ? 'grid-cols-2' :
@@ -229,7 +229,7 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
                 {controlNetImage.map((imageUrl, index) => {
                   if (!imageUrl) return null;
                   return (
-                    <div key={index} className="relative rounded-lg overflow-hidden bg-white/5 min-h-[120px] aspect-square border border-white/10">
+                    <div key={index} className="relative rounded-lg overflow-hidden bg-white/5 aspect-square border border-white/10">
                       <img
                         src={imageUrl}
                         alt={`Reference ${index + 1}`}
@@ -241,7 +241,8 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
                       />
                       <button
                         onClick={handleRemoveImage}
-                        className="absolute top-1 right-1 p-1.5 bg-red-500/80 hover:bg-red-500 rounded-full transition-colors z-10 shadow-lg"
+                        className="absolute top-1 right-1 p-1.5 md:p-1.5 bg-red-500/80 hover:bg-red-500 active:bg-red-600 rounded-full transition-colors z-10 shadow-lg touch-manipulation"
+                        style={{ minWidth: '32px', minHeight: '32px' }}
                         title={`Remove image ${index + 1}`}
                         aria-label={`Remove image ${index + 1}`}
                       >
@@ -256,36 +257,36 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
               </div>
             </div>
           ) : (
-            <div className="relative flex-1 rounded-lg overflow-hidden bg-white/5 min-h-[150px] md:min-h-[180px]">
+            <div className="flex-1 relative rounded-lg overflow-hidden bg-white/5" style={{ minHeight: 0 }}>
               <img
                 src={Array.isArray(controlNetImage) ? controlNetImage[0] : controlNetImage}
                 alt="Reference"
                 className="w-full h-full object-contain"
               />
               <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200">
-                <div className="flex gap-2 md:gap-3">
+                <div className="flex gap-2">
                     <button
                       onClick={handleClickUpload}
-                      className="p-2 md:p-3 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+                      className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
                       title="Change image"
                       aria-label="Change reference image"
                     >
-                      <Upload className="w-4 h-4 md:w-5 md:h-5" />
+                      <Upload className="w-4 h-4" />
                     </button>
                     <button
                       onClick={handleRemoveImage}
-                      className="p-2 md:p-3 bg-red-500/20 rounded-full hover:bg-red-500/30 transition-colors"
+                      className="p-2 bg-red-500/20 rounded-full hover:bg-red-500/30 transition-colors"
                       title="Remove image"
                       aria-label="Remove reference image"
                     >
-                      <X className="w-4 h-4 md:w-5 md:h-5" />
+                      <X className="w-4 h-4" />
                     </button>
                 </div>
               </div>
             </div>
           )}
           
-          <div className="mt-2 flex items-center justify-between">
+          <div className="mt-2 flex items-center justify-between flex-shrink-0">
             <span className="text-xs text-gray-400">
               {Array.isArray(controlNetImage) 
                 ? `${controlNetImage.length} image${controlNetImage.length > 1 ? 's' : ''}` 

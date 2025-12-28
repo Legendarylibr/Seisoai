@@ -1,22 +1,14 @@
 import React from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
-import { Mail, LogOut, Coins, RefreshCw, Wallet } from 'lucide-react';
+import { Mail, LogOut, Coins, RefreshCw } from 'lucide-react';
 
 const EmailUserInfo = ({ onShowStripePayment }) => {
   const { 
     email, 
     credits, 
-    isNFTHolder,
-    linkedWalletAddress,
     refreshCredits,
-    signOut,
-    connectWallet
+    signOut
   } = useEmailAuth();
-
-  const formatAddress = (addr) => {
-    if (!addr) return '';
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
 
   return (
     <div>
@@ -75,33 +67,6 @@ const EmailUserInfo = ({ onShowStripePayment }) => {
             </button>
           </div>
         </div>
-
-        {/* Optional Wallet Connection - Only show NFT discount info if wallet is linked */}
-        {linkedWalletAddress && (
-          <div className="p-1 rounded" style={{ 
-            background: 'linear-gradient(to bottom, #f5f5f5, #eeeeee)',
-            border: '1px solid #d0d0d0'
-          }}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1">
-                <Wallet className="w-3 h-3" style={{ color: '#000000' }} />
-                <span className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Wallet:</span>
-                <span className="text-xs font-mono" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>{formatAddress(linkedWalletAddress)}</span>
-              </div>
-            </div>
-            {isNFTHolder && (
-              <div className="flex items-center gap-1 text-xs mt-1 pt-1 border-t" style={{ 
-                borderColor: '#d0d0d0',
-                color: '#000000',
-                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
-              }}>
-                <span>✨</span>
-                <span className="font-medium">NFT Holder Discount Active</span>
-              </div>
-            )}
-          </div>
-        )}
-
       </div>
     </div>
   );

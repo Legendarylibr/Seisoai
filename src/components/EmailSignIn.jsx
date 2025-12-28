@@ -10,6 +10,34 @@ const EmailSignIn = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
+  // Password requirements validation (matches backend)
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
+  
+  const validatePassword = (pwd) => {
+    return passwordRegex.test(pwd);
+  };
+
+  const getPasswordRequirements = () => {
+    if (!password) return [];
+    const requirements = [];
+    if (password.length < 12) {
+      requirements.push('At least 12 characters');
+    }
+    if (!/[a-z]/.test(password)) {
+      requirements.push('One lowercase letter');
+    }
+    if (!/[A-Z]/.test(password)) {
+      requirements.push('One uppercase letter');
+    }
+    if (!/\d/.test(password)) {
+      requirements.push('One number');
+    }
+    if (!/[@$!%*?&]/.test(password)) {
+      requirements.push('One special character (@$!%*?&)');
+    }
+    return requirements;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -19,9 +47,19 @@ const EmailSignIn = () => {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
+    // Only validate password requirements on signup
+    if (isSignUp) {
+      if (!validatePassword(password)) {
+        const requirements = getPasswordRequirements();
+        setError(`Password requirements not met: ${requirements.join(', ')}`);
+        // Navigate back to previous page after a short delay
+        setTimeout(() => {
+          if (window.history.length > 1) {
+            window.history.back();
+          }
+        }, 2000);
+        return;
+      }
     }
 
     try {
@@ -32,6 +70,14 @@ const EmailSignIn = () => {
       }
     } catch (err) {
       setError(err.message || 'Authentication failed');
+      // Only navigate back on signup if it's a password validation error
+      if (isSignUp && err.message && err.message.includes('Password must be')) {
+        setTimeout(() => {
+          if (window.history.length > 1) {
+            window.history.back();
+          }
+        }, 2000);
+      }
     }
   };
 
@@ -108,7 +154,7 @@ const EmailSignIn = () => {
                   textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
                 }}
                 required
-                minLength={6}
+                minLength={isSignUp ? 12 : 6}
               />
               <button
                 type="button"
@@ -123,6 +169,27 @@ const EmailSignIn = () => {
                 )}
               </button>
             </div>
+            {/* Password Requirements (only shown on signup) */}
+            {isSignUp && (
+              <div className="mt-2 md:mt-3 p-3 md:p-4 rounded text-xs md:text-sm" style={{
+                background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
+                border: '2px outset #ffffbb',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)',
+                color: '#000000',
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+              }}>
+                <div className="font-semibold mb-1 md:mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                  Password Requirements:
+                </div>
+                <ul className="list-disc list-inside space-y-0.5 md:space-y-1 text-[10px] md:text-xs">
+                  <li className={password.length >= 12 ? 'line-through opacity-60' : ''}>At least 12 characters</li>
+                  <li className={/[a-z]/.test(password) ? 'line-through opacity-60' : ''}>One lowercase letter</li>
+                  <li className={/[A-Z]/.test(password) ? 'line-through opacity-60' : ''}>One uppercase letter</li>
+                  <li className={/\d/.test(password) ? 'line-through opacity-60' : ''}>One number</li>
+                  <li className={/[@$!%*?&]/.test(password) ? 'line-through opacity-60' : ''}>One special character (@$!%*?&)</li>
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Error Message */}
@@ -170,6 +237,7 @@ const EmailSignIn = () => {
             onClick={() => {
               setIsSignUp(!isSignUp);
               setError('');
+              setPassword(''); // Clear password when switching modes
             }}
             className="text-sm md:text-base transition-colors"
             style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}

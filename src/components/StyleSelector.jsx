@@ -35,7 +35,7 @@ const StyleSelector = () => {
           border: '2px outset #e0e0e0',
           boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
         }}>
-          <Palette className="w-3 h-3" style={{ color: '#000000' }} />
+          <Palette className="w-4 h-4" style={{ color: '#000000' }} />
         </div>
         <div>
           <h3 className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Style (Optional)</h3>
@@ -109,22 +109,22 @@ const StyleSelector = () => {
     >
         <Palette className="w-4 h-4" style={{ color: '#000000' }} />
         <span className="text-xs font-medium">{selectedStyle ? 'Change Style' : 'Select Style (Optional)'}</span>
-        {showStyleOptions ? <ChevronUp className="w-3 h-3" style={{ color: '#000000' }} /> : <ChevronDown className="w-3 h-3" style={{ color: '#000000' }} />}
+        {showStyleOptions ? <ChevronUp className="w-4 h-4" style={{ color: '#000000' }} /> : <ChevronDown className="w-4 h-4" style={{ color: '#000000' }} />}
       </button>
 
       {/* Style Options Dropdown */}
       {showStyleOptions && (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {/* Search Bar */}
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3" style={{ color: '#000000' }} />
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: '#000000' }} />
             <input
               type="text"
               placeholder="Search styles..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               aria-label="Search for styles"
-              className="w-full pl-8 pr-3 py-1.5 rounded text-xs transition-all duration-300"
+              className="w-full pl-8 pr-3 py-2 rounded text-xs transition-all duration-300"
               style={{
                 background: '#ffffff',
                 border: '2px inset #c0c0c0',
@@ -145,7 +145,7 @@ const StyleSelector = () => {
           </div>
 
           {/* Category Filter */}
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-2">
             {categories.map((category) => (
               <button
                 key={category}
@@ -184,7 +184,7 @@ const StyleSelector = () => {
 
           {/* Styles Grid */}
           <div className="max-h-60 overflow-y-auto">
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-3 gap-2">
               {filteredStyles.map((style) => (
                 <button
                   key={style.id}

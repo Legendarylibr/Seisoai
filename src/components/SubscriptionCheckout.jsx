@@ -33,13 +33,11 @@ const SubscriptionCheckout = ({
   compact = false
 }) => {
   const { isConnected, address, isNFTHolder: walletIsNFTHolder } = useSimpleWallet();
-  const { isAuthenticated, userId, linkedWalletAddress, isNFTHolder: emailIsNFTHolder } = useEmailAuth();
+  const { isAuthenticated, userId } = useEmailAuth();
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   
-  // Only apply NFT pricing if user has a linked wallet (for email users) or is a wallet user
-  const isNFTHolder = isAuthenticated && !isConnected
-    ? (linkedWalletAddress && emailIsNFTHolder)
-    : walletIsNFTHolder;
+  // Only apply NFT pricing for wallet users (email users don't have NFT discounts)
+  const isNFTHolder = walletIsNFTHolder;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showTokenPayment, setShowTokenPayment] = useState(false);

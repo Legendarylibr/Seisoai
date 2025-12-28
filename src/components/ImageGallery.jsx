@@ -22,7 +22,7 @@ const ImageGallery = () => {
         setLoading(true);
         const isEmailAuth = emailContext.isAuthenticated;
         const userIdentifier = isEmailAuth 
-          ? (emailContext.linkedWalletAddress || emailContext.userId) 
+          ? emailContext.userId 
           : walletContext.address;
 
         if (!userIdentifier) {

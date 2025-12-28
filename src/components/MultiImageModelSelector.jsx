@@ -67,27 +67,27 @@ const MultiImageModelSelector = ({ customPrompt = '' }) => {
     const isNanoBananaProSelected = multiImageModel === 'nano-banana-pro';
     
     return (
-      <div className="space-y-1 p-1.5 rounded" style={{ 
+      <div className="space-y-2 p-2 rounded" style={{ 
         background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
         border: '2px outset #e8e8e8',
         boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 4px 8px rgba(0, 0, 0, 0.2)'
       }}>
         <label className="flex items-center gap-1">
-          <span className="text-[10px] font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+          <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
             Model Selection
           </span>
-          <span className="text-[10px] font-medium" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
+          <span className="text-xs font-medium" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
             (prompt only)
           </span>
         </label>
-        <div className="flex gap-1 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
           <button
             type="button"
             onClick={() => {
               logger.debug('Selected FLUX model for text-to-image');
               setMultiImageModel('flux');
             }}
-            className="flex-1 flex flex-row items-center justify-center gap-1 px-1.5 py-1 rounded transition-all min-w-[60px]"
+            className="flex-1 flex flex-row items-center justify-center gap-1 px-2 py-1.5 rounded transition-all min-w-[60px]"
             style={isFluxSelectedForTextToImage ? {
               background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
               border: '2px inset #c0c0c0',
@@ -114,10 +114,10 @@ const MultiImageModelSelector = ({ customPrompt = '' }) => {
               }
             }}
           >
-            <Zap className="w-3 h-3" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
+            <Zap className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
             <div className="flex flex-col items-center gap-0">
-              <span className="text-[10px] font-bold leading-tight">FLUX</span>
-              <span className="text-[9px] leading-tight" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>1 credit</span>
+              <span className="text-xs font-bold leading-tight">FLUX</span>
+              <span className="text-xs leading-tight" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>1 credit</span>
             </div>
           </button>
           <button
@@ -126,7 +126,7 @@ const MultiImageModelSelector = ({ customPrompt = '' }) => {
               logger.debug('Selected Nano Banana Pro model');
               setMultiImageModel('nano-banana-pro');
             }}
-            className="flex-1 flex flex-row items-center justify-center gap-1 px-1.5 py-1 rounded transition-all min-w-[60px]"
+            className="flex-1 flex flex-row items-center justify-center gap-1 px-2 py-1.5 rounded transition-all min-w-[60px]"
             style={isNanoBananaProSelected ? {
               background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
               border: '2px inset #c0c0c0',
@@ -153,15 +153,15 @@ const MultiImageModelSelector = ({ customPrompt = '' }) => {
               }
             }}
           >
-            <Sparkles className="w-3 h-3" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
+            <Sparkles className="w-4 h-4" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
             <div className="flex flex-col items-center gap-0">
-              <span className="text-[10px] font-bold leading-tight">Nano Banana</span>
-              <span className="text-[9px] leading-tight" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>2 credits</span>
+              <span className="text-xs font-bold leading-tight">Nano Banana</span>
+              <span className="text-xs leading-tight" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>2 credits</span>
             </div>
           </button>
         </div>
-        <div className="pt-0.5 border-t" style={{ borderColor: '#d0d0d0' }}>
-          <p className="text-[10px] leading-tight" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
+        <div className="pt-1 border-t" style={{ borderColor: '#d0d0d0' }}>
+          <p className="text-xs leading-tight" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
             {isNanoBananaProSelected
               ? '✨ Advanced text-to-image with better quality'
               : isFluxSelectedForTextToImage
@@ -174,12 +174,12 @@ const MultiImageModelSelector = ({ customPrompt = '' }) => {
   }
 
   return (
-    <div className="space-y-1.5 p-2 rounded" style={{ 
+    <div className="space-y-2 p-2 rounded" style={{ 
       background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
       border: '2px outset #e8e8e8',
       boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 4px 8px rgba(0, 0, 0, 0.2)'
     }}>
-      <label className="flex items-center gap-1.5">
+      <label className="flex items-center gap-2">
         <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
           Model Selection
         </span>
@@ -187,14 +187,14 @@ const MultiImageModelSelector = ({ customPrompt = '' }) => {
           ({imageCount} {imageCount === 1 ? 'image' : 'images'})
         </span>
       </label>
-      <div className="flex gap-1.5 flex-wrap">
+      <div className="flex gap-2 flex-wrap">
         <button
           type="button"
           onClick={() => {
             logger.debug('Selected FLUX model', { fluxModel: labels.currentFluxModel });
             setMultiImageModel(labels.currentFluxModel);
           }}
-          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all min-w-[80px]"
+          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded transition-all min-w-[80px]"
           style={isFluxSelected ? {
             background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
             border: '2px inset #c0c0c0',
@@ -234,7 +234,7 @@ const MultiImageModelSelector = ({ customPrompt = '' }) => {
             logger.debug('Selected Nano Banana Pro model');
             setMultiImageModel('nano-banana-pro');
           }}
-          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all min-w-[80px]"
+          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded transition-all min-w-[80px]"
           style={multiImageModel === 'nano-banana-pro' ? {
             background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
             border: '2px inset #c0c0c0',
@@ -274,7 +274,7 @@ const MultiImageModelSelector = ({ customPrompt = '' }) => {
             logger.debug('Selected Qwen Image Layered model');
             setMultiImageModel('qwen-image-layered');
           }}
-          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded transition-all min-w-[80px]"
+          className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded transition-all min-w-[80px]"
           style={multiImageModel === 'qwen-image-layered' ? {
             background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
             border: '2px inset #c0c0c0',

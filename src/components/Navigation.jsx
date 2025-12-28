@@ -12,8 +12,9 @@ import logger from '../utils/logger.js';
   // Support both auth methods
   const isConnected = walletContext.isConnected || emailContext.isAuthenticated;
   const isEmailAuth = emailContext.isAuthenticated;
-  const address = walletContext.address || emailContext.linkedWalletAddress;
-  const credits = walletContext.credits || emailContext.credits;
+  const address = walletContext.address;
+  const credits = walletContext.credits || emailContext.credits || 0;
+  const totalCreditsEarned = walletContext.totalCreditsEarned || emailContext.totalCreditsEarned || 0;
   const disconnectWallet = walletContext.disconnectWallet;
   const signOut = emailContext.signOut;
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -264,12 +265,26 @@ import logger from '../utils/logger.js';
 
                 {/* Credits Dropdown Menu */}
                 {showCreditsDropdown && (
-                  <div className="absolute right-0 mt-2 w-56 rounded z-50 overflow-hidden" style={{
+                  <div className="absolute right-0 mt-2 w-64 rounded z-50 overflow-hidden" style={{
                     background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
                     border: '2px outset #e8e8e8',
                     boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3)'
                   }}>
                     <div className="py-1">
+                      {/* Credit Details Section */}
+                      <div className="px-4 py-2.5 border-b" style={{ borderColor: '#d0d0d0' }}>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Current Balance:</span>
+                            <span className="text-sm font-bold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{credits}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Total Earned:</span>
+                            <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{totalCreditsEarned}</span>
+                          </div>
+                        </div>
+                      </div>
+                      
                       {/* Manage Subscription - Only show for email users */}
                       {isEmailAuth && (
                         <>
@@ -302,7 +317,7 @@ import logger from '../utils/logger.js';
                           if (isEmailAuth) {
                             emailContext.refreshCredits();
                           } else {
-                            walletContext.fetchCredits();
+                            walletContext.fetchCredits(address, 3, true); // Force refresh, skip cache
                           }
                           setShowCreditsDropdown(false);
                         }}

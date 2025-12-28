@@ -300,11 +300,23 @@ async function main() {
     console.log('✅ Displaying user credits (no changes made)\n');
   } else if (action === 'add') {
     console.log(`➕ Adding ${credits} credits...`);
-    // Use atomic update to ensure credits are added reliably
+    // Record in paymentHistory for consistency with payment-based credits
+    const paymentEntry = {
+      txHash: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      tokenSymbol: 'MANUAL',
+      amount: 0,
+      credits: credits,
+      chainId: 'manual',
+      walletType: 'script',
+      timestamp: new Date()
+    };
+    
+    // Use atomic update to ensure credits are added reliably and recorded in paymentHistory
     user = await User.findOneAndUpdate(
       query,
       {
-        $inc: { credits: credits, totalCreditsEarned: credits }
+        $inc: { credits: credits, totalCreditsEarned: credits },
+        $push: { paymentHistory: paymentEntry }
       },
       { new: true }
     );
@@ -313,14 +325,24 @@ async function main() {
       await mongoose.disconnect();
       process.exit(1);
     }
-    console.log(`✅ Credits added!\n`);
+    console.log(`✅ Credits added and recorded in payment history!\n`);
   } else if (action === 'set') {
     console.log(`🔧 Setting credits to ${credits}...`);
     const difference = credits - previousCredits;
     const updateFields = { $set: { credits: credits } };
     if (difference > 0) {
-      // If setting higher, add to total earned
+      // If setting higher, add to total earned and record in paymentHistory
       updateFields.$inc = { totalCreditsEarned: difference };
+      const paymentEntry = {
+        txHash: `manual_set_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        tokenSymbol: 'MANUAL',
+        amount: 0,
+        credits: difference,
+        chainId: 'manual',
+        walletType: 'script',
+        timestamp: new Date()
+      };
+      updateFields.$push = { paymentHistory: paymentEntry };
     }
     user = await User.findOneAndUpdate(
       query,
@@ -332,7 +354,7 @@ async function main() {
       await mongoose.disconnect();
       process.exit(1);
     }
-    console.log(`✅ Credits set!\n`);
+    console.log(`✅ Credits set${difference > 0 ? ' and recorded in payment history' : ''}!\n`);
   } else if (action === 'subtract') {
     console.log(`➖ Subtracting ${credits} credits...`);
     if (previousCredits < credits) {

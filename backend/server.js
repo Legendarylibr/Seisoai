@@ -721,12 +721,24 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
       
       // Process credits via webhook (idempotent - will skip if already processed)
       try {
-        // Get user from metadata
+        // Get user from metadata - support userId, email, or walletAddress
         let user;
         if (paymentIntent.metadata.userId) {
           user = await User.findById(paymentIntent.metadata.userId);
+        } else if (paymentIntent.metadata.email) {
+          // Support email-based users
+          user = await User.findOne({ email: paymentIntent.metadata.email.toLowerCase() });
         } else if (paymentIntent.metadata.walletAddress) {
           user = await getOrCreateUser(paymentIntent.metadata.walletAddress);
+        }
+        
+        // If still no user, try findUserByIdentifier with all metadata
+        if (!user && (paymentIntent.metadata.userId || paymentIntent.metadata.email || paymentIntent.metadata.walletAddress)) {
+          user = await findUserByIdentifier(
+            paymentIntent.metadata.walletAddress || null,
+            paymentIntent.metadata.email || null,
+            paymentIntent.metadata.userId || null
+          );
         }
         
         if (user && !isPaymentAlreadyProcessed(user, null, paymentIntent.id)) {
@@ -2715,17 +2727,9 @@ app.post('/api/wan-animate/complete', authenticateToken, async (req, res) => {
       timestamp: new Date()
     };
     
-    // SECURITY: Build update query using authenticated user's identifier
-    let updateQuery;
-    if (user.walletAddress) {
-      const isSolanaAddress = !user.walletAddress.startsWith('0x');
-      const normalizedWalletAddress = isSolanaAddress ? user.walletAddress : user.walletAddress.toLowerCase();
-      updateQuery = { walletAddress: normalizedWalletAddress };
-    } else if (user.userId) {
-      updateQuery = { userId: user.userId };
-    } else if (user.email) {
-      updateQuery = { email: user.email.toLowerCase() };
-    } else {
+    // SECURITY: Build update query using authenticated user's identifier (supports wallet, email, or userId)
+    const updateQuery = buildUserUpdateQuery(user);
+    if (!updateQuery) {
       return res.status(400).json({ 
         success: false, 
         error: 'User account must have wallet address, userId, or email' 
@@ -2893,6 +2897,25 @@ async function createIndexes() {
       } else {
         await User.collection.createIndex(
           { "walletAddress": 1 },
+          { unique: true, sparse: true, background: true }
+        );
+      }
+
+      // Ensure email index is unique + sparse (allows multiple documents without email)
+      const emailIndex = existingIndexes.find(idx => idx.name === 'email_1');
+      if (emailIndex) {
+        const needsUpdate = !(emailIndex.unique && emailIndex.sparse);
+        if (needsUpdate) {
+          logger.warn('Recreating email index to enforce unique+sparse');
+          await User.collection.dropIndex('email_1');
+          await User.collection.createIndex(
+            { "email": 1 },
+            { unique: true, sparse: true, background: true }
+          );
+        }
+      } else {
+        await User.collection.createIndex(
+          { "email": 1 },
           { unique: true, sparse: true, background: true }
         );
       }
@@ -3309,42 +3332,66 @@ async function getUserFromRequest(req) {
     return user;
   } else if (email) {
     const normalizedEmail = email.toLowerCase();
-    logger.info('Creating new user with email', { email: normalizedEmail });
-    user = new User({
-      email: normalizedEmail,
-      credits: 2,
-      totalCreditsEarned: 2,
-      totalCreditsSpent: 0,
-      hasUsedFreeImage: false,
-      nftCollections: [],
-      paymentHistory: [],
-      generationHistory: [],
-      gallery: [],
-      settings: {
-        preferredStyle: null,
-        defaultImageSize: '1024x1024',
-        enableNotifications: true
+    
+    // Double-check if user exists (race condition protection)
+    const existingEmailUser = await User.findOne({ email: normalizedEmail });
+    if (existingEmailUser) {
+      logger.debug('User with email already exists, returning existing user', { email: normalizedEmail });
+      return existingEmailUser;
+    }
+    
+    try {
+      logger.info('Creating new user with email', { email: normalizedEmail });
+      user = new User({
+        email: normalizedEmail,
+        credits: 2,
+        totalCreditsEarned: 2,
+        totalCreditsSpent: 0,
+        hasUsedFreeImage: false,
+        nftCollections: [],
+        paymentHistory: [],
+        generationHistory: [],
+        gallery: [],
+        settings: {
+          preferredStyle: null,
+          defaultImageSize: '1024x1024',
+          enableNotifications: true
+        }
+      });
+      await user.save();
+      
+      // Atomic fallback: Ensure credits are set correctly
+      const savedUser = await User.findOneAndUpdate(
+        {
+          _id: user._id,
+          credits: { $lt: 2 },
+          createdAt: { $gte: new Date(Date.now() - 10000) }
+        },
+        {
+          $set: { credits: 2 },
+          $max: { totalCreditsEarned: 2 }
+        },
+        { new: true }
+      );
+      
+      user = savedUser || user;
+      logger.info('New email user created with 2 free credits', { email: normalizedEmail, credits: user.credits });
+      return user;
+    } catch (error) {
+      // Handle duplicate email error (race condition - another request created user with same email)
+      if (error.code === 11000 || (error.message && error.message.includes('duplicate key'))) {
+        if (error.keyPattern && error.keyPattern.email) {
+          logger.warn('Duplicate email detected during user creation, fetching existing user', { email: normalizedEmail });
+          // Fetch and return the existing user
+          const existingUser = await User.findOne({ email: normalizedEmail });
+          if (existingUser) {
+            return existingUser;
+          }
+        }
       }
-    });
-    await user.save();
-    
-    // Atomic fallback: Ensure credits are set correctly
-    const savedUser = await User.findOneAndUpdate(
-      {
-        _id: user._id,
-        credits: { $lt: 2 },
-        createdAt: { $gte: new Date(Date.now() - 10000) }
-      },
-      {
-        $set: { credits: 2 },
-        $max: { totalCreditsEarned: 2 }
-      },
-      { new: true }
-    );
-    
-    user = savedUser || user;
-    logger.info('New email user created with 2 free credits', { email: normalizedEmail, credits: user.credits });
-    return user;
+      // Re-throw other errors
+      throw error;
+    }
   } else if (userId) {
     logger.info('Creating new user with userId', { userId });
     user = new User({
@@ -3561,6 +3608,7 @@ const calculateSubscriptionCredits = (user, amountInDollars) => {
 };
 
 // Helper function to add credits and payment history to user (with idempotency check)
+// Uses atomic operations to ensure reliability with both wallet and email users
 const addCreditsToUser = async (user, {
   txHash,
   tokenSymbol,
@@ -3584,9 +3632,7 @@ const addCreditsToUser = async (user, {
     return null; // Return null to indicate already processed
   }
   
-  user.credits += credits;
-  user.totalCreditsEarned += credits;
-  
+  // Build payment entry
   const paymentEntry = {
     txHash: paymentIntentId || txHash,
     tokenSymbol: tokenSymbol || 'USDC',
@@ -3605,8 +3651,51 @@ const addCreditsToUser = async (user, {
     paymentEntry.subscriptionId = subscriptionId;
   }
   
-  user.paymentHistory.push(paymentEntry);
-  await user.save();
+  // Use atomic operation to update credits and payment history
+  // This works with both wallet and email users via buildUserUpdateQuery
+  const updateQuery = buildUserUpdateQuery(user);
+  if (!updateQuery) {
+    logger.error('Cannot build update query for user', {
+      userId: user.userId,
+      email: user.email,
+      walletAddress: user.walletAddress
+    });
+    throw new Error('User account must have wallet address, userId, or email');
+  }
+  
+  // Atomic update: increment credits and add payment history in one operation
+  const updatedUser = await User.findOneAndUpdate(
+    updateQuery,
+    {
+      $inc: { 
+        credits: credits,
+        totalCreditsEarned: credits
+      },
+      $push: {
+        paymentHistory: paymentEntry
+      }
+    },
+    { new: true }
+  );
+  
+  if (!updatedUser) {
+    logger.error('Failed to update user credits', {
+      userId: user.userId,
+      email: user.email,
+      walletAddress: user.walletAddress,
+      updateQuery
+    });
+    throw new Error('Failed to update user credits');
+  }
+  
+  logger.info('Credits added to user', {
+    userId: updatedUser.userId,
+    email: updatedUser.email,
+    walletAddress: updatedUser.walletAddress,
+    creditsAdded: credits,
+    totalCredits: updatedUser.credits,
+    paymentId: paymentId
+  });
   
   return paymentEntry;
 };
@@ -4113,21 +4202,60 @@ async function getOrCreateUser(walletAddress, email = null) {
     }
   }
   
+  // Check if email already exists for a different user (prevent duplicate emails)
+  if (normalizedEmail && isNewUser) {
+    const existingEmailUser = await User.findOne({ email: normalizedEmail });
+    if (existingEmailUser && existingEmailUser.walletAddress !== normalizedAddress) {
+      logger.warn('Email already belongs to another user, cannot create new user with same email', {
+        walletAddress: normalizedAddress,
+        email: normalizedEmail,
+        existingUserId: existingEmailUser.userId
+      });
+      // Return the existing user with that email (don't create duplicate)
+      return existingEmailUser;
+    }
+  }
+  
   // Use findOneAndUpdate with upsert to make this atomic and prevent race conditions
   // This ensures that if credits were granted before user connects, they won't be lost
   // Start with 2 credits for new users (will be updated to 5 if NFT holder)
-  const user = await User.findOneAndUpdate(
-    { walletAddress: normalizedAddress },
-    {
-      $setOnInsert: setOnInsertFields,
-      $set: setFields
-    },
-    {
-      upsert: true,
-      new: true,
-      setDefaultsOnInsert: true
+  let user;
+  try {
+    user = await User.findOneAndUpdate(
+      { walletAddress: normalizedAddress },
+      {
+        $setOnInsert: setOnInsertFields,
+        $set: setFields
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true
+      }
+    );
+  } catch (error) {
+    // Handle duplicate email error (race condition - email was taken between check and upsert)
+    if (error.code === 11000 || (error.message && error.message.includes('duplicate key'))) {
+      if (error.keyPattern && error.keyPattern.email) {
+        logger.warn('Duplicate email detected during user creation, fetching existing user', { 
+          email: normalizedEmail,
+          walletAddress: normalizedAddress 
+        });
+        // Try to find user by email
+        const existingEmailUser = await User.findOne({ email: normalizedEmail });
+        if (existingEmailUser) {
+          return existingEmailUser;
+        }
+        // If email user not found, try to find by wallet (might have been created)
+        const walletUser = await User.findOne({ walletAddress: normalizedAddress });
+        if (walletUser) {
+          return walletUser;
+        }
+      }
     }
-  );
+    // Re-throw other errors
+    throw error;
+  }
   
   // Always refetch to ensure we have the absolute latest data, especially credits
   // This handles the case where credits might have been granted between the upsert and now
@@ -4839,6 +4967,27 @@ app.post('/api/auth/signup', async (req, res) => {
       code: error.code
     });
     
+    // Handle duplicate email error (MongoDB error code 11000 for unique constraint violation)
+    // This can happen in race conditions where two signups occur simultaneously
+    if (error.code === 11000 || (error.message && error.message.includes('duplicate key'))) {
+      // Check if it's an email duplicate
+      if (error.keyPattern && error.keyPattern.email) {
+        logger.warn('Duplicate email signup attempt blocked', { email: req.body.email });
+        return res.status(400).json({
+          success: false,
+          error: 'Email already registered'
+        });
+      }
+      // Check if it's a userId duplicate (shouldn't happen, but handle it)
+      if (error.keyPattern && error.keyPattern.userId) {
+        logger.error('Duplicate userId detected during signup', { email: req.body.email });
+        return res.status(500).json({
+          success: false,
+          error: 'Account creation failed. Please try again.'
+        });
+      }
+    }
+    
     // Check for common issues
     if (error.message && error.message.includes('buffering timed out')) {
       logger.error('MongoDB connection issue - MONGODB_URI may not be set or MongoDB is not accessible');
@@ -4888,7 +5037,15 @@ app.post('/api/auth/signin', async (req, res) => {
 
     // Update last active
     user.lastActive = new Date();
-    await user.save();
+    try {
+      await user.save();
+    } catch (saveError) {
+      // Log save error but don't fail signin - lastActive is not critical
+      logger.warn('Failed to update lastActive during signin', { 
+        error: saveError.message,
+        userId: user.userId 
+      });
+    }
 
     // Generate JWT access token (7 days) and refresh token (30 days)
     const token = jwt.sign(
@@ -4920,7 +5077,27 @@ app.post('/api/auth/signin', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('Sign in error:', error);
+    // Log error but don't expose internal details
+    logger.error('Sign in error:', { 
+      error: error.message, 
+      name: error.name,
+      hasStack: !!error.stack
+    });
+    
+    // Handle specific known errors
+    if (error.message && error.message.includes('data and hash arguments required')) {
+      // This is an ethers.js error that shouldn't happen in signin
+      // Likely from a concurrent request or unrelated code path
+      logger.warn('Unexpected ethers.js error in signin - likely from unrelated code path', {
+        error: error.message
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Sign in failed. Please try again.'
+      });
+    }
+    
+    // Generic error response
     res.status(500).json({
       success: false,
       error: getSafeErrorMessage(error, 'Failed to sign in')
@@ -5063,6 +5240,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         email: user.email,
         credits: user.credits || 0,
         totalCreditsEarned: user.totalCreditsEarned || 0,
+        totalCreditsSpent: user.totalCreditsSpent || 0,
         walletAddress: user.walletAddress || null,
         isNFTHolder
       }
@@ -5077,119 +5255,6 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   }
 });
 
-/**
- * Link wallet to email account
- */
-app.post('/api/auth/link-wallet', authenticateToken, async (req, res) => {
-  try {
-    const { walletAddress } = req.body;
-    const user = req.user;
-
-    if (!walletAddress) {
-      return res.status(400).json({
-        success: false,
-        error: 'Wallet address is required'
-      });
-    }
-
-    // Validate wallet address
-    if (!isValidWalletAddress(walletAddress)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid wallet address'
-      });
-    }
-
-    // Normalize wallet address
-    const isSolanaAddress = !walletAddress.startsWith('0x');
-    const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
-
-    // Check if wallet is already linked to another account
-    const existingWalletUser = await User.findOne({ walletAddress: normalizedAddress });
-    if (existingWalletUser && existingWalletUser.userId !== user.userId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Wallet is already linked to another account'
-      });
-    }
-
-    // Link wallet to user
-    user.walletAddress = normalizedAddress;
-    await user.save();
-
-    // Check NFT holdings
-    let isNFTHolder = false;
-    try {
-      const nftCheckResponse = await fetch(`${req.protocol}://${req.get('host')}/api/nft/check-holdings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ walletAddress: normalizedAddress })
-      });
-      if (nftCheckResponse.ok) {
-        const nftData = await nftCheckResponse.json();
-        isNFTHolder = nftData.isNFTHolder || false;
-      }
-    } catch (nftError) {
-      logger.warn('Failed to check NFT holdings during wallet link', { error: nftError.message });
-    }
-
-    logger.info('Wallet linked to email account', { email: user.email, walletAddress: normalizedAddress });
-
-    res.json({
-      success: true,
-      user: {
-        userId: user.userId,
-        email: user.email,
-        credits: user.credits,
-        totalCreditsEarned: user.totalCreditsEarned,
-        walletAddress: user.walletAddress,
-        isNFTHolder
-      }
-    });
-
-  } catch (error) {
-    logger.error('Link wallet error:', error);
-    res.status(500).json({
-      success: false,
-      error: getSafeErrorMessage(error, 'Failed to link wallet')
-    });
-  }
-});
-
-/**
- * Unlink wallet from email account
- */
-app.post('/api/auth/unlink-wallet', authenticateToken, async (req, res) => {
-  try {
-    const user = req.user;
-
-    // Unlink wallet
-    user.walletAddress = undefined;
-    user.nftCollections = [];
-    await user.save();
-
-    logger.info('Wallet unlinked from email account', { email: user.email });
-
-    res.json({
-      success: true,
-      user: {
-        userId: user.userId,
-        email: user.email,
-        credits: user.credits,
-        totalCreditsEarned: user.totalCreditsEarned,
-        walletAddress: null,
-        isNFTHolder: false
-      }
-    });
-
-  } catch (error) {
-    logger.error('Unlink wallet error:', error);
-    res.status(500).json({
-      success: false,
-      error: getSafeErrorMessage(error, 'Failed to unlink wallet')
-    });
-  }
-});
 
 /**
  * Get user's active subscription
@@ -6702,18 +6767,41 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
       });
     }
 
-    // Get user from metadata or provided identifier
+    // Get user from metadata or provided identifier - support wallet, email, or userId
     let user;
+    // First try metadata from payment intent
     if (paymentIntent.metadata.userId) {
       user = await User.findById(paymentIntent.metadata.userId);
-    } else if (userId) {
-      user = await User.findOne({ userId });
-    } else if (walletAddress) {
-      user = await getOrCreateUser(walletAddress);
-    } else {
+    } else if (paymentIntent.metadata.email) {
+      user = await User.findOne({ email: paymentIntent.metadata.email.toLowerCase() });
+    } else if (paymentIntent.metadata.walletAddress) {
+      user = await getOrCreateUser(paymentIntent.metadata.walletAddress);
+    }
+    
+    // If not found in metadata, try request body parameters
+    if (!user) {
+      if (userId) {
+        user = await User.findOne({ userId });
+      } else if (req.body.email) {
+        user = await User.findOne({ email: req.body.email.toLowerCase() });
+      } else if (walletAddress) {
+        user = await getOrCreateUser(walletAddress);
+      }
+    }
+    
+    // Last resort: try findUserByIdentifier with all available identifiers
+    if (!user) {
+      user = await findUserByIdentifier(
+        paymentIntent.metadata.walletAddress || walletAddress || null,
+        paymentIntent.metadata.email || req.body.email || null,
+        paymentIntent.metadata.userId || userId || null
+      );
+    }
+    
+    if (!user) {
       return res.status(400).json({
         success: false,
-        error: 'Unable to identify user. Please provide userId or walletAddress.'
+        error: 'Unable to identify user. Please provide userId, email, or walletAddress.'
       });
     }
 

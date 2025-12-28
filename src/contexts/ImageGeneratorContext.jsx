@@ -97,78 +97,40 @@ const imageGeneratorReducer = (state, action) => {
       };
     
     case 'SET_GUIDANCE_SCALE':
-      return {
-        ...state,
-        guidanceScale: action.payload
-      };
+      return { ...state, guidanceScale: action.payload };
     
     case 'SET_INFERENCE_STEPS':
-      return {
-        ...state,
-        numInferenceSteps: action.payload
-      };
+      return { ...state, numInferenceSteps: action.payload };
     
     case 'SET_IMAGE_SIZE':
-      return {
-        ...state,
-        imageSize: action.payload
-      };
-    
+      return { ...state, imageSize: action.payload };
     
     case 'SET_NUM_IMAGES':
-      return {
-        ...state,
-        numImages: action.payload
-      };
+      return { ...state, numImages: action.payload };
     
     case 'SET_SAFETY_CHECKER':
-      return {
-        ...state,
-        enableSafetyChecker: action.payload
-      };
+      return { ...state, enableSafetyChecker: action.payload };
     
     case 'SET_GENERATION_MODE':
-      return {
-        ...state,
-        generationMode: action.payload
-      };
+      return { ...state, generationMode: action.payload };
     
     case 'SET_MULTI_IMAGE_MODEL':
-      return {
-        ...state,
-        multiImageModel: action.payload
-      };
+      return { ...state, multiImageModel: action.payload };
     
     case 'SET_BATCH_PROMPTS':
-      return {
-        ...state,
-        batchPrompts: action.payload
-      };
+      return { ...state, batchPrompts: action.payload };
     
     case 'SET_BATCH_PROCESSING':
-      return {
-        ...state,
-        isBatchProcessing: action.payload
-      };
+      return { ...state, isBatchProcessing: action.payload };
     
     case 'ADD_BATCH_RESULT':
-      return {
-        ...state,
-        batchResults: [...state.batchResults, action.payload]
-      };
+      return { ...state, batchResults: [...state.batchResults, action.payload] };
     
     case 'CLEAR_BATCH_RESULTS':
-      return {
-        ...state,
-        batchResults: [],
-        batchPrompts: []
-      };
+      return { ...state, batchResults: [], batchPrompts: [] };
     
     case 'SET_CONTROL_NET_TYPE':
-      return {
-        ...state,
-        controlNetType: action.payload
-      };
+      return { ...state, controlNetType: action.payload };
     
     case 'SET_CONTROL_NET_IMAGE':
       return {

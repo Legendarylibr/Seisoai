@@ -272,7 +272,7 @@ const ImageOutput = () => {
     // For email users, we can use userId or linked wallet address
     // For wallet users, we need the address
     const hasIdentifier = isEmailAuth 
-      ? (emailContext.userId || emailContext.linkedWalletAddress) 
+      ? emailContext.userId 
       : address;
     
     if (!isAuthenticated || !hasIdentifier) {
@@ -389,7 +389,7 @@ const ImageOutput = () => {
       // Save generation to backend and deduct credits IMMEDIATELY after image is returned
       // Use wallet address if available, otherwise use userId for email users
       const userIdentifier = isEmailAuth 
-        ? (emailContext.linkedWalletAddress || emailContext.userId) 
+        ? emailContext.userId 
         : address;
       
       logger.debug('Saving generation and deducting credits', { 
@@ -520,16 +520,16 @@ const ImageOutput = () => {
 
   if (isGenerating) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-8">
-        <div className="glass-card p-8 rounded-2xl text-center slide-up">
-          <div className="relative w-20 h-20 mx-auto mb-6">
+      <div className="h-full flex flex-col items-center justify-center p-4">
+        <div className="glass-card p-6 rounded-lg text-center slide-up">
+          <div className="relative w-16 h-16 mx-auto mb-4">
             <div className="animate-spin w-full h-full border-4 border-purple-500/30 border-t-purple-500 rounded-full"></div>
             <div className="absolute inset-0 flex items-center justify-center">
-              <Sparkles className="w-8 h-8 text-purple-400 animate-pulse" />
+              <Sparkles className="w-6 h-6 text-purple-400 animate-pulse" />
             </div>
           </div>
-          <p className="text-xl text-white mb-2 font-semibold">Creating your masterpiece...</p>
-          <p className="text-sm text-gray-400">This may take a few moments</p>
+          <p className="text-sm mb-1 font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Creating your masterpiece...</p>
+          <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>This may take a few moments</p>
         </div>
       </div>
     );
@@ -540,23 +540,37 @@ const ImageOutput = () => {
   const hasGeneratedImage = (generatedImages && generatedImages.length > 0) || generatedImage;
   if (error && !hasGeneratedImage) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-8">
-        <div className="glass-card p-8 rounded-2xl text-center max-w-md slide-up">
-          <div className="w-20 h-20 mx-auto mb-6 flex items-center justify-center bg-red-500/20 rounded-full">
-            <div className="text-4xl">❌</div>
+      <div className="h-full flex flex-col items-center justify-center p-4">
+        <div className="glass-card p-6 rounded-lg text-center max-w-md slide-up">
+          <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center bg-red-500/20 rounded-full">
+            <div className="text-2xl">❌</div>
           </div>
-          <h4 className="text-xl font-semibold text-red-400 mb-3">Something went wrong</h4>
-          <p className="text-gray-300 mb-6">{error}</p>
-          <div className="flex gap-3 justify-center">
+          <h4 className="text-sm font-semibold mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Something went wrong</h4>
+          <p className="text-xs mb-4" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>{error}</p>
+          <div className="flex gap-2 justify-center">
             <button
               onClick={clearGeneration}
-              className="btn-secondary px-5 py-2.5"
+              className="px-3 py-1.5 rounded text-xs transition-all duration-200"
+              style={{
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                color: '#000000',
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}
             >
               Try Again
             </button>
             <button
               onClick={clearAll}
-              className="btn-secondary px-5 py-2.5"
+              className="px-3 py-1.5 rounded text-xs transition-all duration-200"
+              style={{
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                border: '2px outset #f0f0f0',
+                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                color: '#000000',
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+              }}
             >
               Start Over
             </button>
@@ -579,9 +593,9 @@ const ImageOutput = () => {
 
   if (imagesToDisplay.length === 0) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-8">
-        <div className="glass-card p-12 rounded-2xl text-center max-w-md slide-up">
-          <div className="w-28 h-28 mx-auto mb-6 opacity-60">
+      <div className="h-full flex flex-col items-center justify-center p-4">
+        <div className="glass-card p-6 rounded-lg text-center max-w-md slide-up">
+          <div className="w-20 h-20 mx-auto mb-4 opacity-60">
             <svg viewBox="0 0 24 24" fill="none" className="w-full h-full text-gray-400">
               <path
                 d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
@@ -589,25 +603,25 @@ const ImageOutput = () => {
               />
             </svg>
           </div>
-          <p className="text-lg text-gray-300 mb-2 font-medium">Your generated image will appear here</p>
-          <p className="text-sm text-gray-500">Select a style and click generate to create your image</p>
+          <p className="text-sm text-gray-300 mb-1 font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Your generated image will appear here</p>
+          <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Enter a prompt and click generate to create your image</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full space-y-2">
+    <div className="w-full h-full flex flex-col overflow-hidden">
       {/* Show error banner if there's both an error and a generated image */}
       {error && hasGeneratedImage && (
-        <div className="glass-card rounded-lg p-3 mb-2 flex items-center justify-between gap-3 animate-slide-down" style={{
+        <div className="glass-card rounded-lg p-1 lg:p-1.5 mb-0.5 lg:mb-1 flex items-center justify-between gap-1 lg:gap-1.5 animate-slide-down flex-shrink-0" style={{
           background: 'linear-gradient(to bottom, #ffe0e0, #ffd0d0)',
           border: '2px outset #ffc0c0',
           boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
         }}>
           <div className="flex items-center gap-2 flex-1">
-            <div className="text-lg">⚠️</div>
-            <p className="text-sm flex-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{error}</p>
+            <div className="text-sm">⚠️</div>
+            <p className="text-xs flex-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{error}</p>
           </div>
           <button
             onClick={() => setError(null)}
@@ -615,102 +629,167 @@ const ImageOutput = () => {
             style={{ color: '#000000' }}
             aria-label="Dismiss error"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3 h-3" />
           </button>
         </div>
       )}
-      <div className="flex items-center justify-end mb-2 flex-wrap gap-1.5">
-        <div className="flex gap-1.5 flex-wrap">
-          {hasMultipleImages && (
-            <div className="text-xs text-gray-400 px-2 py-1.5 flex items-center gap-1">
-              <span>{imagesToDisplay.length} images</span>
-            </div>
-          )}
+      {/* Action Buttons - Better positioned above image */}
+      <div className="flex items-center justify-between mb-0.5 lg:mb-1 flex-wrap gap-1 lg:gap-1.5 flex-shrink-0">
+        {hasMultipleImages && (
+          <div className="text-xs px-2 py-1.5 flex items-center gap-1 rounded" style={{ 
+            background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0)',
+            border: '2px outset #e8e8e8',
+            color: '#000000',
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+          }}>
+            <span>{imagesToDisplay.length} images</span>
+          </div>
+        )}
+        <div className="flex gap-2 flex-wrap ml-auto">
           <button
             onClick={() => handleDownload(imagesToDisplay[0])}
             disabled={isDownloading}
-            className="btn-secondary flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-xs px-2.5 py-1.5 hover:scale-105 transition-all duration-300"
+            className="flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-xs px-3 py-2 md:py-1.5 rounded transition-all duration-200 hover:scale-105 touch-manipulation"
+            style={{ minHeight: '44px' }}
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+              color: '#000000',
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+            }}
+            onMouseEnter={(e) => {
+              if (!isDownloading) {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                e.currentTarget.style.border = '2px outset #f8f8f8';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isDownloading) {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                e.currentTarget.style.border = '2px outset #f0f0f0';
+              }
+            }}
           >
-            <span className="text-sm">{isDownloading ? '⏳' : '💾'}</span>
+            <span className="text-xs">{isDownloading ? '⏳' : '💾'}</span>
             <span className="hidden sm:inline text-xs">{isDownloading ? 'Downloading...' : 'Download'}</span>
           </button>
           <button
             onClick={handleRegenerate}
             disabled={isRegenerating || isGenerating || !isConnected || !currentGeneration}
-            className="btn-secondary flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-xs px-2.5 py-1.5 hover:scale-105 transition-all duration-300"
+            className="flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-xs px-3 py-2 md:py-1.5 rounded transition-all duration-200 hover:scale-105 touch-manipulation"
+            style={{ minHeight: '44px' }}
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+              color: '#000000',
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+            }}
+            onMouseEnter={(e) => {
+              if (!(isRegenerating || isGenerating || !isConnected || !currentGeneration)) {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                e.currentTarget.style.border = '2px outset #f8f8f8';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!(isRegenerating || isGenerating || !isConnected || !currentGeneration)) {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                e.currentTarget.style.border = '2px outset #f0f0f0';
+              }
+            }}
           >
-            <span className="text-sm">{isRegenerating ? '⏳' : '🔄'}</span>
+            <span className="text-xs">{isRegenerating ? '⏳' : '🔄'}</span>
             <span className="hidden sm:inline text-xs">{isRegenerating ? 'Regenerating...' : 'Regenerate'}</span>
           </button>
           <button
             onClick={clearGeneration}
-            className="btn-secondary flex items-center gap-1.5 text-xs px-2.5 py-1.5 hover:scale-105 transition-all duration-300"
+            className="flex items-center gap-1.5 text-xs px-3 py-2 md:py-1.5 rounded transition-all duration-200 hover:scale-105 touch-manipulation"
+            style={{ minHeight: '44px' }}
+            style={{
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+              color: '#000000',
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+              e.currentTarget.style.border = '2px outset #f8f8f8';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+              e.currentTarget.style.border = '2px outset #f0f0f0';
+            }}
           >
-            <span className="text-sm">🗑️</span>
+            <span className="text-xs">🗑️</span>
             <span className="hidden sm:inline text-xs">Clear</span>
           </button>
         </div>
       </div>
       
-      {/* Display images in grid for multiple, single image for one */}
-      {hasMultipleImages ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          {imagesToDisplay.map((imageUrl, index) => (
-            <div key={index} className="glass-card rounded-xl overflow-hidden p-1.5">
-              <img
-                src={imageUrl}
-                alt={`Generated AI image ${index + 1}`}
-                className="w-full h-auto max-h-[200px] xs:max-h-[250px] sm:max-h-[300px] md:max-h-[350px] lg:max-h-[400px] object-contain rounded-lg"
-                style={{ 
-                  maxWidth: '100%', 
-                  height: 'auto',
-                  display: 'block',
-                  margin: '0 auto'
-                }}
-                loading="lazy"
-                onError={(e) => {
-                  logger.error('Image failed to load:', { imageUrl });
-                  e.target.style.display = 'none';
-                }}
-                onLoad={() => {
-                  logger.debug(`Generated image ${index + 1} loaded successfully`);
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="glass-card rounded-xl overflow-hidden mb-3 p-1.5">
-          <img
-            src={imagesToDisplay[0]}
-            alt="Generated AI image"
-            className="w-full h-auto max-h-[200px] xs:max-h-[250px] sm:max-h-[300px] md:max-h-[400px] lg:max-h-[500px] xl:max-h-[600px] object-contain rounded-lg"
-            style={{ 
-              maxWidth: '100%', 
-              height: 'auto',
-              display: 'block',
-              margin: '0 auto'
-            }}
-            loading="lazy"
-            onError={(e) => {
-              logger.error('Image failed to load:', { imageUrl: imagesToDisplay[0] });
-              setError('Failed to load image. Please try regenerating.');
-              e.target.style.display = 'none';
-            }}
-            onLoad={() => {
-              logger.debug('Generated image loaded successfully');
-            }}
-          />
-        </div>
-      )}
+      {/* Display images in grid for multiple, single image for one - Fixed height container */}
+      <div className="flex-1 overflow-auto" style={{ minHeight: 0 }}>
+        {hasMultipleImages ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 lg:gap-1.5">
+            {imagesToDisplay.map((imageUrl, index) => (
+              <div key={index} className="glass-card rounded-lg overflow-hidden p-1 lg:p-1.5">
+                <img
+                  src={imageUrl}
+                  alt={`Generated AI image ${index + 1}`}
+                  className="w-full h-auto max-h-[200px] sm:max-h-[220px] lg:max-h-[180px] object-contain rounded-lg"
+                  style={{ 
+                    maxWidth: '100%', 
+                    height: 'auto',
+                    display: 'block',
+                    margin: '0 auto'
+                  }}
+                  loading="lazy"
+                  onError={(e) => {
+                    logger.error('Image failed to load:', { imageUrl });
+                    e.target.style.display = 'none';
+                  }}
+                  onLoad={() => {
+                    logger.debug(`Generated image ${index + 1} loaded successfully`);
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="glass-card rounded-lg overflow-hidden p-1 lg:p-1.5 h-full flex items-center justify-center">
+            <img
+              src={imagesToDisplay[0]}
+              alt="Generated AI image"
+              className="max-w-full max-h-full object-contain rounded-lg"
+              style={{ 
+                maxWidth: '100%', 
+                maxHeight: '100%',
+                width: 'auto',
+                height: 'auto',
+                display: 'block'
+              }}
+              loading="lazy"
+              onError={(e) => {
+                logger.error('Image failed to load:', { imageUrl: imagesToDisplay[0] });
+                setError('Failed to load image. Please try regenerating.');
+                e.target.style.display = 'none';
+              }}
+              onLoad={() => {
+                logger.debug('Generated image loaded successfully');
+              }}
+            />
+          </div>
+        )}
+      </div>
 
-      {/* Quick Actions */}
-      <div className="glass-card rounded-lg p-2 mb-2">
-        <h4 className="text-xs font-semibold text-white mb-1.5 flex items-center gap-1">
-          <span className="text-sm">✨</span>
-          Quick Actions
-        </h4>
-        <div className="flex gap-1.5 flex-wrap">
+      {/* Quick Actions - Better positioned below image */}
+      <div className="glass-card rounded-lg p-2 mt-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h4 className="text-xs font-semibold flex items-center gap-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+            <span className="text-xs">✨</span>
+            <span>Quick Actions</span>
+          </h4>
           <button
             onClick={() => {
               // Initialize selected model to current model when opening modal
@@ -719,10 +798,36 @@ const ImageOutput = () => {
               setShowPromptModal(true);
             }}
             disabled={isRegenerating || isGenerating || (!isConnected && !isEmailAuth) || !currentGeneration || availableCredits <= 0}
-            className="btn-primary flex items-center gap-1.5 text-xs px-2.5 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105"
+            style={(!isRegenerating && !isGenerating && (isConnected || isEmailAuth) && currentGeneration && availableCredits > 0) ? {
+              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              border: '2px outset #f0f0f0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+              color: '#000000',
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+            } : {
+              background: 'linear-gradient(to bottom, #c8c8c8, #b0b0b0)',
+              border: '2px inset #b8b8b8',
+              boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)',
+              color: '#666666',
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.5)',
+              cursor: 'not-allowed'
+            }}
             title={availableCredits <= 0 ? 'Insufficient credits' : 'Regenerate with new prompt'}
+            onMouseEnter={(e) => {
+              if (!isRegenerating && !isGenerating && (isConnected || isEmailAuth) && currentGeneration && availableCredits > 0) {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                e.currentTarget.style.border = '2px outset #f8f8f8';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isRegenerating && !isGenerating && (isConnected || isEmailAuth) && currentGeneration && availableCredits > 0) {
+                e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                e.currentTarget.style.border = '2px outset #f0f0f0';
+              }
+            }}
           >
-            <Sparkles className="w-3 h-3" />
+            <Sparkles className="w-4 h-4" />
             <span className="text-xs">New Prompt</span>
           </button>
         </div>

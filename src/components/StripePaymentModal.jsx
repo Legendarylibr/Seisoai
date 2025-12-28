@@ -170,12 +170,12 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
   
   // Use email auth if available, otherwise fall back to wallet
   const isEmailAuth = emailContext.isAuthenticated;
-  const address = isEmailAuth ? emailContext.linkedWalletAddress : walletContext.address;
+  const address = walletContext.address;
   const credits = isEmailAuth ? emailContext.credits : walletContext.credits;
   const userId = isEmailAuth ? emailContext.userId : null;
   // Only apply NFT pricing if user has a linked wallet (for email users) or is a wallet user
   const isNFTHolder = isEmailAuth 
-    ? (emailContext.linkedWalletAddress && emailContext.isNFTHolder) 
+    ? false 
     : (walletContext.isNFTHolder || false);
   const fetchCredits = isEmailAuth ? emailContext.refreshCredits : walletContext.fetchCredits;
 

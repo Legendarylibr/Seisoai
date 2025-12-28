@@ -127,7 +127,7 @@ export const getNFTBenefits = () => {
  * @returns {boolean}
  */
 export const canGenerateForFree = (isNFTHolder, credits) => {
-  // NFT holders can generate for free if FastAPI is available
+  // NFT holders get discounts but still need credits
   // Non-holders need credits
   return isNFTHolder || credits > 0;
 };

@@ -10,7 +10,7 @@ const AuthGuard = ({ children, requireCredits = true, fallback = null }) => {
   
   // Check if authenticated via either method
   const isConnected = walletContext.isConnected || emailContext.isAuthenticated;
-  const address = walletContext.address || emailContext.linkedWalletAddress;
+  const address = walletContext.address;
   const credits = walletContext.credits || emailContext.credits;
   const isLoading = walletContext.isLoading || emailContext.isLoading;
   const error = walletContext.error || emailContext.error;
