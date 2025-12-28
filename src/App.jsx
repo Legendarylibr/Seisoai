@@ -313,9 +313,38 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
             {/* How to Use - Collapsible and Compact */}
             <CollapsibleHowToUse />
             
-            {/* Primary Input: Prompt First (Most Important) */}
+            {/* When reference image exists, show it first (shifted up) */}
+            {hasReferenceImages && (
+              <div className="note-amber rounded-lg lg:rounded-tl-xl lg:rounded-tr-none p-2 lg:p-2.5 rounded-b-none animate-slide-up">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 rounded-lg icon-box-amber">
+                    <Image className="w-4 h-4" style={{ color: '#d97706' }} />
+                  </div>
+                  <div>
+                    <h2 className="section-title text-sm md:text-base" style={{ color: '#92400e' }}>
+                      🖼️ Reference Image
+                    </h2>
+                    <p className="text-[10px] leading-tight" style={{ color: '#b45309' }}>
+                      <strong>1:</strong> edit • <strong>2+:</strong> blend
+                    </p>
+                  </div>
+                </div>
+                <div className="h-[160px] md:h-[190px] lg:h-[150px] overflow-hidden rounded-lg" style={{
+                  background: 'rgba(255, 255, 255, 0.5)',
+                  border: '2px dashed rgba(217, 119, 6, 0.3)'
+                }}>
+                  <ReferenceImageInput />
+                </div>
+              </div>
+            )}
+
+            {/* Prompt Input - Primary when no reference, Secondary (below) when reference exists */}
             {!isQwenSelected && (
-              <div className="note-teal rounded-lg lg:rounded-tl-xl lg:rounded-tr-none p-2 lg:p-2.5 rounded-b-none">
+              <div className={`note-teal rounded-lg p-2 lg:p-2.5 transition-all duration-300 ${
+                hasReferenceImages 
+                  ? 'rounded-t-none animate-slide-down' 
+                  : 'lg:rounded-tl-xl lg:rounded-tr-none rounded-b-none'
+              }`} style={hasReferenceImages ? { borderTop: 'none' } : {}}>
                 <div className="flex items-center gap-2 mb-2">
                   <div className="p-1.5 rounded-lg icon-box-teal">
                     <Sparkles className="w-4 h-4" style={{ color: '#009688' }} />
@@ -348,28 +377,30 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
               </div>
             )}
 
-            {/* Secondary Input: Reference Image */}
-            <div className="note-amber rounded-lg p-2 lg:p-2.5 rounded-t-none" style={{ borderTop: 'none' }}>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-1.5 rounded-lg icon-box-amber">
-                  <Image className="w-4 h-4" style={{ color: '#d97706' }} />
+            {/* Reference Image Input - Only shown here when NO reference image (upload prompt) */}
+            {!hasReferenceImages && (
+              <div className="note-amber rounded-lg p-2 lg:p-2.5 rounded-t-none" style={{ borderTop: 'none' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 rounded-lg icon-box-amber">
+                    <Image className="w-4 h-4" style={{ color: '#d97706' }} />
+                  </div>
+                  <div>
+                    <h2 className="section-title text-sm md:text-base" style={{ color: '#92400e' }}>
+                      🖼️ Reference Image
+                    </h2>
+                    <p className="text-[10px] leading-tight" style={{ color: '#b45309' }}>
+                      <strong>0:</strong> generate new • <strong>1:</strong> edit • <strong>2+:</strong> blend
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="section-title text-sm md:text-base" style={{ color: '#92400e' }}>
-                    🖼️ Reference Image
-                  </h2>
-                  <p className="text-[10px] leading-tight" style={{ color: '#b45309' }}>
-                    <strong>0:</strong> generate new • <strong>1:</strong> edit • <strong>2+:</strong> blend
-                  </p>
+                <div className="h-[160px] md:h-[190px] lg:h-[150px] overflow-hidden rounded-lg" style={{
+                  background: 'rgba(255, 255, 255, 0.5)',
+                  border: '2px dashed rgba(217, 119, 6, 0.3)'
+                }}>
+                  <ReferenceImageInput />
                 </div>
               </div>
-              <div className="h-[160px] md:h-[190px] lg:h-[150px] overflow-hidden rounded-lg" style={{
-                background: 'rgba(255, 255, 255, 0.5)',
-                border: '2px dashed rgba(217, 119, 6, 0.3)'
-              }}>
-                <ReferenceImageInput />
-              </div>
-            </div>
+            )}
 
             {/* Model Selection */}
             {(!hasReferenceImages && !isQwenSelected) || hasReferenceImages ? (

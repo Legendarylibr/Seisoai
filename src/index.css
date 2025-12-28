@@ -308,11 +308,20 @@
   }
 
   .animate-slide-down {
-    animation: slideDown 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: slideDown 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   }
 
   @keyframes slideDown {
-    from { opacity: 0; transform: translateY(-20px); }
+    from { opacity: 0; transform: translateY(-15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-slide-up {
+    animation: animateSlideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  @keyframes animateSlideUp {
+    from { opacity: 0; transform: translateY(15px); }
     to { opacity: 1; transform: translateY(0); }
   }
 
