@@ -11,14 +11,23 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password}
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-ai-image-generator}
     volumes:
+      # Use named volumes only - no host bind mounts for security
       - mongodb_data:/data/db
-      - ./backup:/backup
+      - mongodb_backup:/backup
     # Security: Don't expose MongoDB port publicly - only accessible within Docker network
-    # Remove port mapping to prevent external access
     # ports:
     #   - "27017:27017"
     networks:
       - ai-network
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 30s
@@ -34,11 +43,21 @@ services:
     volumes:
       - redis_data:/data
     # Security: Don't expose Redis port publicly - only accessible within Docker network
-    # Remove port mapping to prevent external access
     # ports:
     #   - "6379:6379"
     networks:
       - ai-network
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=64M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
@@ -73,13 +92,20 @@ services:
       # CORS
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
     # Security: App should only be accessible through Nginx reverse proxy
-    # Remove direct port exposure - access via Nginx (ports 80/443) instead
     # ports:
     #   - "3001:3001"
     volumes:
+      # Use named volumes only - no host bind mounts
       - app_logs:/app/logs
     networks:
       - ai-network
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:mode=1777,size=256M
     depends_on:
       mongodb:
         condition: service_healthy
@@ -100,11 +126,27 @@ services:
       - "80:80"
       - "443:443"
     volumes:
+      # Read-only bind mounts for config files (secure - no write access, no directory traversal)
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./ssl:/etc/nginx/ssl:ro
       - nginx_logs:/var/log/nginx
     networks:
       - ai-network
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:mode=1777,size=128M
+      - /var/run:mode=1777,size=16M
+      - /tmp:mode=1777,size=64M
     depends_on:
       - app
     healthcheck:
@@ -119,14 +161,22 @@ services:
     container_name: ai-image-generator-prometheus
     restart: unless-stopped
     # Security: Only expose Prometheus internally or through reverse proxy
-    # For production, access through Nginx reverse proxy instead
     # ports:
     #   - "9090:9090"
     volumes:
+      # Read-only bind mount for config (secure - no write access)
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     networks:
       - ai-network
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=64M
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -141,20 +191,33 @@ services:
     container_name: ai-image-generator-grafana
     restart: unless-stopped
     # Security: Only expose Grafana internally or through reverse proxy
-    # For production, access through Nginx reverse proxy instead
     # ports:
     #   - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_STRICT_TRANSPORT_SECURITY: "true"
     volumes:
+      # Read-only bind mounts for provisioning configs (secure - no write access)
       - grafana_data:/var/lib/grafana
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
     networks:
       - ai-network
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:mode=1777,size=64M
 
 volumes:
   mongodb_data:
+    driver: local
+  mongodb_backup:
     driver: local
   redis_data:
     driver: local
