@@ -12,31 +12,43 @@ const AuthPrompt = () => {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-120px)] px-4 py-6" style={{ position: 'relative', zIndex: 10 }}>
         <div className="text-center max-w-5xl mx-auto slide-up">
-          {/* Hero Section */}
-          <div className="mb-6">
+          {/* Hero Section with Neon Effect */}
+          <div className="mb-8 relative">
+            {/* Decorative corners */}
+            <div className="absolute -top-2 -left-2 w-6 h-6 opacity-50" style={{
+              background: 'linear-gradient(90deg, #00b8a9 33%, transparent 33%), linear-gradient(180deg, #00b8a9 33%, transparent 33%)',
+              backgroundSize: '4px 4px'
+            }}></div>
+            <div className="absolute -top-2 -right-2 w-6 h-6 opacity-50" style={{
+              background: 'linear-gradient(270deg, #f59e0b 33%, transparent 33%), linear-gradient(180deg, #f59e0b 33%, transparent 33%)',
+              backgroundSize: '4px 4px'
+            }}></div>
             <div className="text-center mb-6">
-              <h1 className="text-2xl md:text-3xl font-bold mb-2" style={{ 
-                color: '#ffffff', 
-                textShadow: '4px 4px 0 rgba(0, 0, 0, 0.8), 3px 3px 0 rgba(0, 0, 0, 0.8), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.5)'
+              <h1 className="text-3xl md:text-4xl font-bold mb-3 hero-title" style={{ 
+                fontFamily: "'VT323', monospace",
+                letterSpacing: '0.1em'
               }}>
-                Welcome to Seiso AI
+                WELCOME TO SEISO AI
               </h1>
-              <p className="text-xs md:text-sm" style={{ 
+              <p className="text-sm md:text-base tracking-wide" style={{ 
                 color: '#ffffff', 
-                textShadow: '3px 3px 0 rgba(0, 0, 0, 0.8), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.5)'
+                textShadow: '0 0 12px rgba(0, 184, 169, 0.5), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9)',
+                fontFamily: "'IBM Plex Mono', monospace"
               }}>
-                Generate, edit, and extract images by layer
+                Generate • Edit • Extract Layers
               </p>
             </div>
           </div>
 
           {/* Sign In Section */}
-          <div className="mb-4">
-            <h2 className="text-base font-bold mb-3" style={{ 
+          <div className="mb-5">
+            <h2 className="text-lg font-bold mb-3 inline-flex items-center gap-2" style={{ 
               color: '#ffffff', 
-              textShadow: '3px 3px 0 rgba(0, 0, 0, 0.8), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.5)'
+              textShadow: '0 0 8px rgba(245, 158, 11, 0.5), 2px 2px 0 rgba(0, 0, 0, 0.8)',
+              fontFamily: "'VT323', monospace",
+              letterSpacing: '0.05em'
             }}>
-              Sign In to Get Started
+              <span>▸</span> Sign In to Get Started
             </h2>
           </div>
 
@@ -181,9 +193,9 @@ const AuthPrompt = () => {
 
             {/* Free Benefits */}
             <div className="rounded-lg p-3 text-left" style={{ 
-              background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
-              border: '2px outset #ffffbb',
-              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
+              background: 'linear-gradient(to bottom, #ecfdf5, #d1fae5, #a7f3d0)',
+              border: '2px outset #a7f3d0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.1)'
             }}>
               <h2 className="text-xs font-bold mb-2 flex items-center gap-1" style={{ 
                 color: '#000000', 

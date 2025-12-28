@@ -404,20 +404,26 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
           aria-busy={isGenerating || isLoading}
           aria-live="polite"
           role="button"
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 md:py-2 text-xs font-bold rounded-lg transition-all duration-200 touch-manipulation"
-          style={isDisabled ? { ...disabledButtonStyles, minHeight: '48px' } : {
+          className="generate-btn w-full flex items-center justify-center gap-2.5 px-5 py-3.5 md:py-3 font-bold rounded-lg transition-all duration-250 touch-manipulation relative overflow-hidden group"
+          style={isDisabled ? { 
+            ...disabledButtonStyles, 
+            minHeight: '52px',
+            fontFamily: "'IBM Plex Mono', monospace"
+          } : {
             ...enabledButtonStyles,
-            minHeight: '48px',
+            minHeight: '52px',
             fontSize: '14px',
             fontWeight: 'bold',
-            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            fontFamily: "'IBM Plex Mono', monospace",
+            letterSpacing: '0.02em',
+            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 212, 255, 0.1)'
           }}
           onMouseEnter={(e) => {
             if (!isDisabled) {
               e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
               e.currentTarget.style.border = '2px outset #f8f8f8';
-              e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
-              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 6px 12px rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)';
+              e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2), 0 0 20px rgba(0, 212, 255, 0.2)';
             }
           }}
           onMouseLeave={(e) => {
@@ -425,7 +431,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
               e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
               e.currentTarget.style.border = '2px outset #f0f0f0';
               e.currentTarget.style.transform = 'translateY(0) scale(1)';
-              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2)';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 212, 255, 0.1)';
             }
           }}
           onMouseDown={(e) => {
@@ -433,84 +439,112 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
               e.currentTarget.style.border = '2px inset #d0d0d0';
               e.currentTarget.style.background = 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)';
               e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
+              e.currentTarget.style.transform = 'translateY(0) scale(0.99)';
             }
           }}
           onMouseUp={(e) => {
             if (!isDisabled) {
               e.currentTarget.style.border = '2px outset #f0f0f0';
               e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)';
+              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15)';
+              e.currentTarget.style.transform = 'translateY(0) scale(1)';
             }
           }}
         >
-          {buttonIcon}
-          <span>{buttonText}</span>
+          {/* Shimmer effect on hover */}
+          <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" style={{ display: isDisabled ? 'none' : 'block' }}></span>
+          {/* Icon with pulse effect */}
+          <span className="relative z-10 text-sm" style={{ color: '#000000' }}>
+            {isGenerating || walletLoading ? '⏳' : (!isConnected && !isEmailAuth) ? '🔗' : '✨'}
+          </span>
+          <span className="relative z-10 tracking-wide">{buttonText}</span>
         </button>
       </div>
 
       {/* Enhanced Progress Bar with Loading Steps */}
       {(isGenerating || isLoading) && (
-        <div className="w-full mt-2 space-y-2">
+        <div className="w-full mt-3 space-y-2.5 glass-card p-3 rounded-lg animate-scale-in">
           {/* Progress Header */}
           <div className="flex justify-between items-center text-xs">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full" style={{ 
-                background: '#000000',
-                boxShadow: '0 0 2px rgba(255, 255, 255, 0.8)',
-                animation: 'pulse 1.5s ease-in-out infinite'
+              <div className="w-2.5 h-2.5 rounded-full" style={{ 
+                background: 'linear-gradient(135deg, #00d4ff, #00b8e6)',
+                boxShadow: '0 0 8px rgba(0, 212, 255, 0.6), 0 0 16px rgba(0, 212, 255, 0.3)',
+                animation: 'pulse 1.2s ease-in-out infinite'
               }}></div>
-              <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{currentStep}</span>
+              <span className="font-medium tracking-wide" style={{ 
+                color: '#000000', 
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
+                fontFamily: "'IBM Plex Mono', monospace"
+              }}>{currentStep}</span>
             </div>
-            <span style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
-              {timeRemaining > 0 ? `${timeRemaining}s remaining` : 'Almost done...'}
+            <span className="font-mono" style={{ 
+              color: '#1a1a2e', 
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)',
+              fontSize: '11px'
+            }}>
+              {timeRemaining > 0 ? `${timeRemaining}s` : '...'}
             </span>
           </div>
           
           {/* Progress Bar */}
-          <div className="w-full rounded h-2.5 overflow-hidden relative" style={{
-            background: '#d0d0d0',
-            border: '2px inset #c0c0c0',
-            boxShadow: 'inset 2px 2px 0 rgba(0, 0, 0, 0.2)'
+          <div className="w-full rounded-sm h-3 overflow-hidden relative" style={{
+            background: '#d0d0d8',
+            border: '2px inset #b8b8c0',
+            boxShadow: 'inset 2px 2px 0 rgba(0, 0, 0, 0.15)'
           }}>
             <div 
-              className="h-full transition-all duration-500 ease-out relative"
+              className="h-full transition-all duration-300 ease-out relative"
               style={{ 
                 width: `${progress}%`,
-                background: 'linear-gradient(to bottom, #808080, #606060, #505050)',
-                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.3)'
+                background: 'linear-gradient(90deg, #00d4ff 0%, #00b8e6 50%, #00a0cc 100%)',
+                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.4), 0 0 10px rgba(0, 212, 255, 0.4)'
               }}
             >
               {/* Animated shimmer effect */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent" style={{
-                animation: 'shimmer 2s ease-in-out infinite'
+              <div className="absolute inset-0" style={{
+                background: 'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%)',
+                animation: 'shimmer 1.5s ease-in-out infinite'
               }}></div>
             </div>
             {/* Progress percentage */}
-            <div className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ 
-              color: '#000000', 
-              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold" style={{ 
+              color: progress > 50 ? '#ffffff' : '#000000', 
+              textShadow: progress > 50 ? '0 0 4px rgba(0, 0, 0, 0.5)' : '1px 1px 0 rgba(255, 255, 255, 0.8)',
+              fontFamily: "'IBM Plex Mono', monospace",
+              letterSpacing: '0.05em'
             }}>
               {Math.round(progress)}%
             </div>
           </div>
           
           {/* Loading Steps Indicator */}
-          <div className="flex justify-center gap-2">
+          <div className="flex justify-between px-1">
             {['Init', 'Process', 'Generate', 'Enhance', 'Finish'].map((step, index) => {
               const stepProgress = (index + 1) * 20;
               const isActive = progress >= stepProgress - 10;
               const isCompleted = progress >= stepProgress;
               
               return (
-                <div key={step} className="flex flex-col items-center">
+                <div key={step} className="flex flex-col items-center gap-1">
                   <div className="w-2 h-2 rounded-full transition-all duration-300" style={{
-                    background: isCompleted ? '#000000' : isActive ? '#000000' : '#c0c0c0',
-                    boxShadow: (isCompleted || isActive) ? '0 0 2px rgba(255, 255, 255, 0.8)' : 'none',
-                    opacity: isCompleted ? 1 : isActive ? 0.7 : 0.4
+                    background: isCompleted 
+                      ? 'linear-gradient(135deg, #00d4ff, #00b8e6)' 
+                      : isActive 
+                        ? 'linear-gradient(135deg, #00d4ff, #00b8e6)'
+                        : '#c0c0c8',
+                    boxShadow: isCompleted 
+                      ? '0 0 6px rgba(0, 212, 255, 0.6)' 
+                      : isActive 
+                        ? '0 0 4px rgba(0, 212, 255, 0.4)' 
+                        : 'none',
+                    opacity: isCompleted ? 1 : isActive ? 0.8 : 0.4,
+                    transform: isActive && !isCompleted ? 'scale(1.2)' : 'scale(1)'
                   }}></div>
-                  <span className="text-xs mt-1 transition-colors duration-300" style={{
-                    color: isCompleted ? '#000000' : isActive ? '#1a1a1a' : '#808080',
-                    textShadow: (isCompleted || isActive) ? '1px 1px 0 rgba(255, 255, 255, 0.6)' : 'none'
+                  <span className="text-[9px] font-medium transition-all duration-300" style={{
+                    color: isCompleted ? '#000000' : isActive ? '#1a1a2e' : '#909090',
+                    textShadow: (isCompleted || isActive) ? '1px 1px 0 rgba(255, 255, 255, 0.7)' : 'none',
+                    fontFamily: "'IBM Plex Mono', monospace"
                   }}>
                     {step}
                   </span>
@@ -519,9 +553,14 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
             })}
           </div>
           
-          {/* Status Message */}
-          <div className="text-xs text-center" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
-            {generationMode === 'flux-multi' ? 'Creating multiple images...' : 'Creating your masterpiece...'}
+          {/* Status Message with subtle animation */}
+          <div className="text-[10px] text-center pt-1" style={{ 
+            color: '#1a1a2e', 
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.7)',
+            fontFamily: "'IBM Plex Mono', monospace",
+            letterSpacing: '0.03em'
+          }}>
+            {generationMode === 'flux-multi' ? '◆ Creating multiple images...' : '◆ Creating your masterpiece...'}
           </div>
         </div>
       )}

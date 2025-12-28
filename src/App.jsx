@@ -10,20 +10,21 @@ import ReferenceImageInput from './components/ReferenceImageInput';
 import MultiImageModelSelector from './components/MultiImageModelSelector';
 import TokenPaymentModal from './components/TokenPaymentModal';
 import StripePaymentModal from './components/StripePaymentModal';
+import PaymentSuccessModal from './components/PaymentSuccessModal';
 import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import ImageGallery from './components/ImageGallery';
-import PricingPage from './components/PricingPage';
 import GenerateButton from './components/GenerateButton';
-import { Grid, Sparkles, Image, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
+import { Grid, Sparkles, Image, ChevronDown, ChevronUp } from 'lucide-react';
+import logger from './utils/logger.js';
+import { API_URL } from './utils/apiConfig.js';
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
 
   const tabs = [
     { id: 'generate', name: 'Generate', icon: Sparkles },
-    { id: 'gallery', name: 'Gallery', icon: Grid },
-    { id: 'pricing', name: 'Pricing', icon: DollarSign }
+    { id: 'gallery', name: 'Gallery', icon: Grid }
   ];
 
   return (
@@ -43,18 +44,85 @@ function App() {
 
 function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
   const { isConnected } = useSimpleWallet();
-  const { isAuthenticated } = useEmailAuth();
+  const { isAuthenticated, userId, refreshCredits } = useEmailAuth();
   const [showTokenPaymentModal, setShowTokenPaymentModal] = useState(false);
   const [showStripePaymentModal, setShowStripePaymentModal] = useState(false);
   const [currentTab, setCurrentTab] = useState(activeTab);
+  const [subscriptionSuccess, setSubscriptionSuccess] = useState(null);
 
-  // Redirect to generate if user has credits and is on pricing page
+  // Handle subscription verification from Stripe checkout redirect
   useEffect(() => {
-    if ((isConnected || isAuthenticated) && currentTab === 'pricing') {
-      setCurrentTab('generate');
-      setActiveTab('generate');
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
+    const canceled = urlParams.get('canceled');
+
+    const cleanupUrl = () => {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    };
+
+    if (sessionId) {
+      const verifySubscription = async () => {
+        try {
+          const body = { sessionId };
+          if (userId) {
+            body.userId = userId;
+          }
+
+          const headers = { 'Content-Type': 'application/json' };
+          const token = localStorage.getItem('authToken');
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
+
+          const response = await fetch(`${API_URL}/api/subscription/verify`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body)
+          });
+
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || 'Failed to verify subscription payment');
+          }
+
+          // Show success modal
+          setSubscriptionSuccess({
+            sessionId,
+            planName: data.planName || 'Subscription',
+            planPrice: data.planPrice || (data.amount ? `$${data.amount}/month` : 'Activated'),
+            credits: data.credits
+          });
+
+          // Refresh credits
+          if (refreshCredits) {
+            setTimeout(() => refreshCredits(), 1000);
+          }
+
+          logger.info('Subscription verified successfully', { 
+            sessionId, 
+            credits: data.credits, 
+            planName: data.planName 
+          });
+        } catch (error) {
+          logger.error('Subscription verification failed:', { error: error.message });
+          // Still show some feedback even on error
+          setSubscriptionSuccess({
+            sessionId,
+            planName: 'Subscription',
+            planPrice: 'Processing...',
+            error: error.message
+          });
+        } finally {
+          cleanupUrl();
+        }
+      };
+
+      verifySubscription();
+    } else if (canceled) {
+      logger.info('Subscription checkout was canceled');
+      cleanupUrl();
     }
-  }, [isConnected, isAuthenticated, currentTab, setActiveTab]);
+  }, [userId, refreshCredits]);
 
   const handleShowTokenPayment = useCallback(() => {
     setShowTokenPaymentModal(true);
@@ -98,17 +166,22 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
         isOpen={showStripePaymentModal} 
         onClose={() => setShowStripePaymentModal(false)} 
       />
+
+      {/* Subscription Success Modal */}
+      {subscriptionSuccess && (
+        <PaymentSuccessModal
+          isOpen={!!subscriptionSuccess}
+          onClose={() => setSubscriptionSuccess(null)}
+          planName={subscriptionSuccess.planName}
+          planPrice={subscriptionSuccess.planPrice}
+          sessionId={subscriptionSuccess.sessionId}
+        />
+      )}
     </div>
   );
 }
 
 function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
-
-  // Pricing page is accessible without auth (but checkout requires auth)
-  if (activeTab === 'pricing') {
-    return <PricingPage />;
-  }
-
   // Allow UI access without authentication - users can see the interface and try to generate
   // Authentication will be prompted when they try to generate if needed
   // New users get 2 credits when they sign up, so we allow them to see the UI
@@ -125,53 +198,62 @@ function CollapsibleHowToUse() {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="rounded-lg lg:rounded-tl-xl lg:rounded-tr-none p-0.5 lg:p-1 rounded-b-none" style={{ 
-      background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
-      border: '2px outset #ffffbb',
+    <div className="rounded-lg lg:rounded-tl-xl lg:rounded-tr-none p-1 lg:p-1.5 rounded-b-none relative overflow-hidden transition-all duration-300" style={{ 
+      background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%)',
+      border: '2px outset #cbd5e1',
       borderBottom: 'none',
-      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px 0 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
+      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.9), inset -2px 0 0 rgba(0, 0, 0, 0.1), 0 3px 8px rgba(0, 0, 0, 0.1)'
     }}>
+      {/* Subtle pattern overlay */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
+        backgroundImage: 'repeating-linear-gradient(45deg, #000 0, #000 1px, transparent 1px, transparent 6px)'
+      }}></div>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between gap-2"
+        className="w-full flex items-center justify-between gap-2 relative z-10 group"
         aria-expanded={isExpanded}
       >
-        <div className="flex items-center gap-1.5">
-          <div className="p-0.5 rounded flex-shrink-0" style={{ 
-            background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+        <div className="flex items-center gap-2">
+          <div className="p-1 rounded flex-shrink-0 transition-all duration-200 group-hover:scale-110" style={{ 
+            background: 'linear-gradient(135deg, #f8f8f8, #e8e8e8, #d8d8d8)',
             border: '2px outset #f0f0f0',
-            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.15)'
           }}>
-            <Sparkles className="w-3 h-3" style={{ color: '#000000' }} />
+            <Sparkles className="w-3.5 h-3.5" style={{ color: '#000000' }} />
           </div>
-          <h3 className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>How to Use</h3>
+          <h3 className="text-xs font-bold tracking-wide" style={{ 
+            color: '#000000', 
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.9)',
+            fontFamily: "'IBM Plex Mono', monospace"
+          }}>How to Use</h3>
         </div>
-        {isExpanded ? (
-          <ChevronUp className="w-3 h-3" style={{ color: '#000000' }} />
-        ) : (
-          <ChevronDown className="w-3 h-3" style={{ color: '#000000' }} />
-        )}
+        <div className="p-0.5 rounded transition-transform duration-200" style={{
+          transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+        }}>
+          <ChevronDown className="w-4 h-4" style={{ color: '#000000' }} />
+        </div>
       </button>
-      {isExpanded && (
-        <div className="mt-1.5 space-y-0.5 text-xs leading-tight" style={{ color: '#000000' }}>
-          <div className="flex items-start gap-1.5">
-            <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>1.</span>
-            <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Text to Image:</strong> Type a description, choose a style (optional), and click Generate.</span>
-          </div>
-          <div className="flex items-start gap-1.5">
-            <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>2.</span>
-            <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>With Reference Image:</strong> Upload 1 image, add a prompt describing changes, and click Generate.</span>
-          </div>
-          <div className="flex items-start gap-1.5">
-            <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>3.</span>
-            <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Multiple Reference Images:</strong> Upload 2+ images, select FLUX or Nano Banana Pro, and click Generate to blend them.</span>
-          </div>
-          <div className="flex items-start gap-1.5">
-            <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>4.</span>
-            <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Layer Extract:</strong> Upload an image, select Qwen model, and click "Extract Layers" to separate into individual layers.</span>
-          </div>
+      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-48 opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'}`}>
+        <div className="space-y-1.5 text-xs leading-relaxed relative z-10" style={{ color: '#000000' }}>
+          {[
+            { num: '1', label: 'Text to Image:', desc: 'Type a description, choose a style, and click Generate.' },
+            { num: '2', label: 'Reference Edit:', desc: 'Upload 1 image, describe changes, and click Generate.' },
+            { num: '3', label: 'Image Blend:', desc: 'Upload 2+ images with FLUX or Nano Banana Pro.' },
+            { num: '4', label: 'Layer Extract:', desc: 'Upload image, select Qwen, click "Extract Layers".' }
+          ].map((item, index) => (
+            <div key={item.num} className="flex items-start gap-2 p-1 rounded transition-colors hover:bg-white/30" style={{ animationDelay: `${index * 50}ms` }}>
+              <span className="flex-shrink-0 w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold" style={{ 
+                background: 'linear-gradient(135deg, #f0f0f0, #d8d8d8)',
+                border: '1px solid #c0c0c0',
+                color: '#000000'
+              }}>{item.num}</span>
+              <span style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.7)' }}>
+                <strong style={{ color: '#000000' }}>{item.label}</strong> {item.desc}
+              </span>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -189,16 +271,26 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
     <div className="fade-in">
       {/* Top Row - Header and User Info - Compact */}
       <div className="mb-0.5 lg:mb-1">
-          {/* Compact Header */}
-          <div className="text-center py-0.5 lg:py-0.5 mb-0.5 lg:mb-1">
-            <h1 className="text-base md:text-lg lg:text-base font-bold mb-0" style={{ 
+          {/* Compact Header with Neon Effect */}
+          <div className="text-center py-1 lg:py-1.5 mb-0.5 lg:mb-1 relative">
+            {/* Decorative pixel corners */}
+            <div className="absolute top-0 left-0 w-3 h-3 opacity-60" style={{
+              background: 'linear-gradient(90deg, #00b8a9 33%, transparent 33%), linear-gradient(180deg, #00b8a9 33%, transparent 33%)',
+              backgroundSize: '3px 3px'
+            }}></div>
+            <div className="absolute top-0 right-0 w-3 h-3 opacity-60" style={{
+              background: 'linear-gradient(270deg, #f59e0b 33%, transparent 33%), linear-gradient(180deg, #f59e0b 33%, transparent 33%)',
+              backgroundSize: '3px 3px'
+            }}></div>
+            <h1 className="hero-title text-xl md:text-2xl lg:text-xl font-bold mb-0.5" style={{ 
+              fontFamily: "'VT323', monospace",
+              letterSpacing: '0.08em'
+            }}>SEISO AI</h1>
+            <p className="text-[10px] md:text-xs lg:text-[10px] tracking-wide" style={{ 
               color: '#ffffff', 
-              textShadow: '4px 4px 0 rgba(0, 0, 0, 0.8), 3px 3px 0 rgba(0, 0, 0, 0.8), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.5)'
-            }}>Seiso AI</h1>
-            <p className="text-[9px] md:text-[10px] lg:text-[9px]" style={{ 
-              color: '#ffffff', 
-              textShadow: '3px 3px 0 rgba(0, 0, 0, 0.8), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.5)'
-            }}>Generate, edit, and extract images by layer</p>
+              textShadow: '0 0 8px rgba(0, 184, 169, 0.6), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9)',
+              fontFamily: "'IBM Plex Mono', monospace"
+            }}>Generate • Edit • Extract Layers</p>
           </div>
 
         {/* User Info - Email or Wallet */}
@@ -223,23 +315,17 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
             
             {/* Primary Input: Prompt First (Most Important) */}
             {!isQwenSelected && (
-              <div className="glass-card rounded-lg lg:rounded-tl-xl lg:rounded-tr-none p-0.5 lg:p-1 rounded-b-none" style={{
-                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
-              }}>
-                <div className="flex items-center gap-0.5 lg:gap-1 mb-0.5 lg:mb-1">
-                  <div className="p-0.5 rounded" style={{ 
-                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                    border: '2px outset #f0f0f0',
-                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
-                  }}>
-                    <Sparkles className="w-3.5 h-3.5" style={{ color: '#000000' }} />
+              <div className="note-teal rounded-lg lg:rounded-tl-xl lg:rounded-tr-none p-2 lg:p-2.5 rounded-b-none">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 rounded-lg icon-box-teal">
+                    <Sparkles className="w-4 h-4" style={{ color: '#009688' }} />
                   </div>
                   <div>
-                    <h2 className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                      {hasReferenceImages ? 'Describe Changes' : 'Prompt'}
+                    <h2 className="section-title text-sm md:text-base" style={{ color: '#00695c' }}>
+                      {hasReferenceImages ? '✏️ Describe Changes' : '✨ Prompt'}
                     </h2>
                     {hasReferenceImages && (
-                      <p className="text-[10px] leading-tight" style={{ color: '#666666', fontStyle: 'italic' }}>Optional - describe what to change</p>
+                      <p className="text-[10px] leading-tight" style={{ color: '#00897b', fontStyle: 'italic' }}>Optional - describe what to change</p>
                     )}
                   </div>
                 </div>
@@ -249,100 +335,62 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
                   placeholder={
                     hasReferenceImages 
                       ? "e.g., 'make it more vibrant', 'add sunset colors'..." 
-                      : multiImageModel === 'nano-banana-pro'
-                      ? "✨ Text-to-Image: e.g., 'a futuristic city at night', 'a serene mountain landscape'..."
-                      : "e.g., 'a futuristic city at night', 'a serene mountain landscape'..."
+                      : "Describe your image... e.g., 'a futuristic city at sunset with neon lights'"
                   }
-                  className="w-full p-0.5 lg:p-1 rounded resize-none text-xs transition-all duration-300"
-                  style={{
-                    background: '#ffffff',
-                    border: '2px inset #c0c0c0',
-                    color: '#000000',
-                    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.border = '2px inset #808080';
-                    e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.3)';
-                    e.target.style.background = '#fffffe';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.border = '2px inset #c0c0c0';
-                    e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-                    e.target.style.background = '#ffffff';
-                  }}
-                  rows={2}
+                  className="w-full p-2 lg:p-2.5 rounded-lg resize-none text-sm transition-all duration-300 win95-input"
+                  rows={3}
                 />
                 {!hasReferenceImages && (
-                  <p className="text-[9px] mt-0.5 leading-tight" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
-                    {multiImageModel === 'nano-banana-pro' 
-                      ? '✨ Nano Banana Pro supports text-to-image generation - describe what you want to create!'
-                      : '💡 Tip: Be specific with colors, mood, style'}
+                  <p className="text-[10px] mt-1.5 leading-tight" style={{ color: '#00695c' }}>
+                    💡 Be specific with colors, mood, and style for best results
                   </p>
                 )}
               </div>
             )}
 
             {/* Secondary Input: Reference Image */}
-            <div className="glass-card rounded-lg p-0.5 lg:p-1 rounded-t-none" style={{
-              borderTop: 'none',
-              boxShadow: 'inset 2px 0 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
-            }}>
-              <div className="flex items-center gap-0.5 lg:gap-1 mb-0.5 lg:mb-1">
-                <div className="p-0.5 rounded" style={{ 
-                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                  border: '2px outset #f0f0f0',
-                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
-                }}>
-                  <Image className="w-3.5 h-3.5" style={{ color: '#000000' }} />
+            <div className="note-amber rounded-lg p-2 lg:p-2.5 rounded-t-none" style={{ borderTop: 'none' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 rounded-lg icon-box-amber">
+                  <Image className="w-4 h-4" style={{ color: '#d97706' }} />
                 </div>
                 <div>
-                  <h2 className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Reference Image</h2>
-                  <p className="text-[10px] leading-tight" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
-                    <span style={{ color: '#000000', fontWeight: 'bold' }}>0:</span> new • <span style={{ color: '#000000', fontWeight: 'bold' }}>1:</span> edit • <span style={{ color: '#000000', fontWeight: 'bold' }}>2+:</span> blend
+                  <h2 className="section-title text-sm md:text-base" style={{ color: '#92400e' }}>
+                    🖼️ Reference Image
+                  </h2>
+                  <p className="text-[10px] leading-tight" style={{ color: '#b45309' }}>
+                    <strong>0:</strong> generate new • <strong>1:</strong> edit • <strong>2+:</strong> blend
                   </p>
                 </div>
               </div>
-              <div className="h-[150px] md:h-[180px] lg:h-[140px] overflow-hidden">
+              <div className="h-[160px] md:h-[190px] lg:h-[150px] overflow-hidden rounded-lg" style={{
+                background: 'rgba(255, 255, 255, 0.5)',
+                border: '2px dashed rgba(217, 119, 6, 0.3)'
+              }}>
                 <ReferenceImageInput />
               </div>
             </div>
 
-            {/* Model Selection - Show for text-to-image or when images are uploaded */}
-            {!hasReferenceImages && !isQwenSelected && (
-              <div className="glass-card rounded-lg p-0.5 lg:p-1 rounded-t-none" style={{
-                borderTop: 'none',
-                boxShadow: 'inset 2px 0 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
-              }}>
+            {/* Model Selection */}
+            {(!hasReferenceImages && !isQwenSelected) || hasReferenceImages ? (
+              <div className="glass-card rounded-lg p-2 lg:p-2.5 rounded-t-none" style={{ borderTop: 'none' }}>
                 <MultiImageModelSelector customPrompt={customPrompt} />
               </div>
-            )}
-            {hasReferenceImages && (
-              <div className="glass-card rounded-lg p-0.5 lg:p-1 rounded-t-none" style={{
-                borderTop: 'none',
-                boxShadow: 'inset 2px 0 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
-              }}>
-                <MultiImageModelSelector customPrompt={customPrompt} />
-              </div>
-            )}
+            ) : null}
 
-            {/* Optional: Style Selection - Compact, After Model Selection */}
+            {/* Style Selection */}
             {!isQwenSelected && (
-              <div className="rounded-lg p-0.5 lg:p-1 rounded-t-none" style={{ 
-                background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
-                border: '2px outset #ffffbb',
-                borderTop: 'none',
-                boxShadow: 'inset 2px 0 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
-              }}>
+              <div className="note-slate rounded-lg p-2 lg:p-2.5 rounded-t-none" style={{ borderTop: 'none' }}>
                 <StyleSelector />
               </div>
             )}
 
-            {/* Generate Button - Prominent, Always Visible */}
-            <div className="rounded-lg lg:rounded-bl-xl p-0.5 lg:p-1 rounded-t-none" style={{ 
-              background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
-              border: '2px outset #ffffbb',
+            {/* Generate Button */}
+            <div className="rounded-lg lg:rounded-bl-xl p-2 lg:p-2.5 rounded-t-none" style={{ 
+              background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%)',
+              border: '2px solid #10b981',
               borderTop: 'none',
-              boxShadow: 'inset 2px 0 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)'
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.9), 0 4px 12px rgba(16, 185, 129, 0.2)'
             }}>
               <GenerateButton 
                 customPrompt={customPrompt}
@@ -351,22 +399,22 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
             </div>
           </div>
 
-          {/* Right Column: Output Section - Matched Height */}
+          {/* Right Column: Output Section */}
           <div className="slide-up flex flex-col" style={{ animationDelay: '200ms' }}>
-            <div className="glass-card rounded-lg lg:rounded-tr-xl lg:rounded-tl-none lg:rounded-br-xl p-0.5 lg:p-1 flex flex-col h-full lg:h-full" style={{
-              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
-            }}>
-              <div className="flex items-center gap-0.5 lg:gap-1 mb-0.5 lg:mb-1 flex-shrink-0">
-                <div className="p-0.5 rounded" style={{ 
-                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                  border: '2px outset #f0f0f0',
-                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
-                }}>
-                  <Sparkles className="w-3.5 h-3.5" style={{ color: '#000000', filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2))' }} />
+            <div className="note-blue rounded-lg lg:rounded-tr-xl lg:rounded-tl-none lg:rounded-br-xl p-2 lg:p-2.5 flex flex-col h-full lg:h-full">
+              <div className="flex items-center gap-2 mb-2 flex-shrink-0">
+                <div className="p-1.5 rounded-lg icon-box-blue">
+                  <Sparkles className="w-4 h-4" style={{ color: '#2563eb' }} />
                 </div>
-                <h2 className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Generated Image</h2>
+                <h2 className="section-title text-sm md:text-base" style={{ color: '#1e40af' }}>
+                  🎨 Generated Image
+                </h2>
               </div>
-              <div className="flex-1 flex flex-col overflow-hidden min-h-[200px] lg:min-h-0" style={{ minHeight: '200px' }}>
+              <div className="flex-1 flex flex-col overflow-hidden min-h-[200px] lg:min-h-0 rounded-lg" style={{ 
+                minHeight: '200px',
+                background: 'rgba(255, 255, 255, 0.6)',
+                border: '2px solid rgba(59, 130, 246, 0.25)'
+              }}>
                 <ImageOutput />
               </div>
             </div>

@@ -174,7 +174,7 @@ const SubscriptionManagement = ({ isOpen, onClose }) => {
         {!loading && subscription && (
           <div className="space-y-4">
             {/* Subscription Status */}
-            <div className="p-4 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20">
+            <div className="p-4 bg-gradient-to-r from-teal-500/10 to-blue-500/10 rounded-lg border border-teal-500/20">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className={`w-3 h-3 rounded-full ${

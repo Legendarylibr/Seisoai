@@ -21,26 +21,39 @@ const StyleSelector = () => {
   });
 
   return (
-    <div className="w-full space-y-2" style={{ 
-      background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
-      border: '2px outset #ffffbb',
-      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)',
-      padding: '0.5rem',
+    <div className="w-full space-y-2 relative overflow-hidden" style={{ 
+      background: 'linear-gradient(135deg, #ffffee 0%, #ffffdd 50%, #ffffc8 100%)',
+      border: '2px outset #ffffcc',
+      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.9), inset -2px -2px 0 rgba(0, 0, 0, 0.15), 0 3px 8px rgba(0, 0, 0, 0.12)',
+      padding: '0.625rem',
       borderRadius: '0.5rem'
     }}>
+      {/* Subtle pattern overlay */}
+      <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
+        backgroundImage: 'repeating-linear-gradient(45deg, #000 0, #000 1px, transparent 1px, transparent 6px)'
+      }}></div>
+      
       {/* Style Selection Header */}
-      <div className="flex items-center gap-2 mb-2">
-        <div className="p-1 rounded" style={{ 
-          background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
-          border: '2px outset #e0e0e0',
-          boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
+      <div className="flex items-center gap-2 mb-2 relative z-10">
+        <div className="p-1.5 rounded transition-transform duration-200 hover:scale-105" style={{ 
+          background: 'linear-gradient(135deg, #e8e8f0, #d8d8e0)',
+          border: '2px outset #e0e0e8',
+          boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.25)'
         }}>
           <Palette className="w-4 h-4" style={{ color: '#000000' }} />
         </div>
         <div>
-          <h3 className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Style (Optional)</h3>
-          <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
-            {selectedStyle ? `${selectedStyle.name} applied` : 'Works with Flux & Nano Banana Pro'}
+          <h3 className="text-xs font-bold tracking-wide" style={{ 
+            color: '#000000', 
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.9)',
+            fontFamily: "'IBM Plex Mono', monospace"
+          }}>Style (Optional)</h3>
+          <p className="text-[10px]" style={{ 
+            color: '#1a1a2e', 
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.7)',
+            fontFamily: "'IBM Plex Mono', monospace"
+          }}>
+            {selectedStyle ? `✓ ${selectedStyle.name} applied` : 'Works with Flux & Nano Banana Pro'}
           </p>
         </div>
       </div>
@@ -224,9 +237,9 @@ const StyleSelector = () => {
                     <div className="text-xs font-medium" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>{style.category}</div>
                   </div>
                   {selectedStyle?.id === style.id && (
-                    <div className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ 
-                      background: '#000000',
-                      boxShadow: '0 0 2px rgba(255, 255, 255, 0.8)'
+                    <div className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full" style={{ 
+                      background: 'linear-gradient(135deg, #00d4ff, #00b8e6)',
+                      boxShadow: '0 0 6px rgba(0, 212, 255, 0.6), 0 0 2px rgba(255, 255, 255, 0.8)'
                     }} />
                   )}
                 </button>

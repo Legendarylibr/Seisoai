@@ -892,10 +892,21 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
           // Get user from metadata
           let user;
           if (session.metadata.userId) {
-            user = await User.findById(session.metadata.userId);
-          } else if (session.metadata.walletAddress) {
+            // First try as custom userId field (for email users like "email_abc123")
+            user = await User.findOne({ userId: session.metadata.userId });
+            if (!user) {
+              // If not found, try as MongoDB _id (for legacy records)
+              try {
+                user = await User.findById(session.metadata.userId);
+              } catch (idError) {
+                // Invalid ObjectId format, ignore
+              }
+            }
+          }
+          if (!user && session.metadata.walletAddress) {
             user = await getOrCreateUser(session.metadata.walletAddress);
-          } else if (session.metadata.email) {
+          }
+          if (!user && session.metadata.email) {
             user = await User.findOne({ email: session.metadata.email.toLowerCase() });
           }
 
@@ -1525,10 +1536,62 @@ app.post('/api/wan-animate/upload-image', async (req, res) => {
 
 // Wan 2.2 Animate Replace API endpoint
 // Documentation: https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api
-// SECURITY: Requires credits check before making external API calls
-// Minimum 2 credits required for video generation (2 credits per second)
+// SECURITY: Requires credits check and DEDUCTION before making external API calls
+// Minimum 2 credits deducted at submission (2 credits per second, minimum 1 second)
+// Additional credits deducted at completion based on actual video duration
 app.post('/api/wan-animate/submit', wanSubmitLimiter, requireCredits(2), async (req, res) => {
   try {
+    // SECURITY: Deduct minimum credits IMMEDIATELY before making any API calls
+    const user = req.user;
+    const minimumCreditsToDeduct = 2; // Minimum charge for any video (1 second at 2 credits/sec)
+    
+    // Build update query
+    const updateQuery = buildUserUpdateQuery(user);
+    if (!updateQuery) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User account must have wallet address, userId, or email' 
+      });
+    }
+    
+    // Atomic credit deduction with condition to prevent race conditions and negative credits
+    const previousCredits = user.credits || 0;
+    const updateResult = await User.findOneAndUpdate(
+      {
+        ...updateQuery,
+        credits: { $gte: minimumCreditsToDeduct } // Only update if user has enough credits
+      },
+      { 
+        $inc: { credits: -minimumCreditsToDeduct, totalCreditsSpent: minimumCreditsToDeduct } 
+      },
+      { new: true }
+    );
+    
+    if (!updateResult) {
+      // User doesn't have enough credits or race condition
+      const currentUser = await User.findOne(updateQuery);
+      const currentCredits = currentUser?.credits || 0;
+      
+      logger.warn('Video submit credit deduction failed - insufficient credits or race condition', {
+        updateQuery,
+        previousCredits,
+        currentCredits,
+        minimumCreditsToDeduct,
+        userId: user.userId
+      });
+      
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need at least ${minimumCreditsToDeduct} for video generation.`
+      });
+    }
+    
+    logger.debug('Minimum credits deducted for video submission', {
+      userId: user.userId,
+      creditsDeducted: minimumCreditsToDeduct,
+      remainingCredits: updateResult.credits
+    });
+    
     if (!FAL_API_KEY) {
       logger.error('AI service not configured');
       return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
@@ -1812,7 +1875,13 @@ app.post('/api/wan-animate/submit', wanSubmitLimiter, requireCredits(2), async (
       });
     }
     
-    res.json({ success: true, ...data });
+    res.json({ 
+      success: true, 
+      ...data,
+      creditsDeducted: minimumCreditsToDeduct,
+      remainingCredits: updateResult.credits,
+      note: 'Minimum 2 credits deducted. Additional credits may be deducted based on video duration.'
+    });
   } catch (error) {
     logger.error('Wan-animate submit proxy error', { error: error.message, stack: error.stack });
     res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to submit video generation request') });
@@ -2148,6 +2217,57 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
  */
 app.post('/api/extract-layers', freeImageRateLimiter, requireCredits(1), async (req, res) => {
   try {
+    // SECURITY: Deduct credits IMMEDIATELY before making any API calls
+    const user = req.user;
+    const creditsToDeduct = req.requiredCredits || 1;
+    
+    // Build update query
+    const updateQuery = buildUserUpdateQuery(user);
+    if (!updateQuery) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User account must have wallet address, userId, or email' 
+      });
+    }
+    
+    // Atomic credit deduction with condition to prevent race conditions and negative credits
+    const previousCredits = user.credits || 0;
+    const updateResult = await User.findOneAndUpdate(
+      {
+        ...updateQuery,
+        credits: { $gte: creditsToDeduct } // Only update if user has enough credits
+      },
+      { 
+        $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct } 
+      },
+      { new: true }
+    );
+    
+    if (!updateResult) {
+      // User doesn't have enough credits or race condition
+      const currentUser = await User.findOne(updateQuery);
+      const currentCredits = currentUser?.credits || 0;
+      
+      logger.warn('Layer extraction credit deduction failed - insufficient credits or race condition', {
+        updateQuery,
+        previousCredits,
+        currentCredits,
+        creditsToDeduct,
+        userId: user.userId
+      });
+      
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsToDeduct}.`
+      });
+    }
+    
+    logger.debug('Credits deducted for layer extraction', {
+      userId: user.userId,
+      creditsDeducted: creditsToDeduct,
+      remainingCredits: updateResult.credits
+    });
+    
     if (!FAL_API_KEY) {
       return res.status(500).json({ success: false, error: getSafeErrorMessage(new Error('AI service not configured'), 'Image generation service unavailable. Please contact support.') });
     }
@@ -2289,12 +2409,16 @@ app.post('/api/extract-layers', freeImageRateLimiter, requireCredits(1), async (
         layerCount: imageUrls.length,
         userId: req.user?.userId,
         email: req.user?.email,
-        walletAddress: req.user?.walletAddress
+        walletAddress: req.user?.walletAddress,
+        creditsDeducted: creditsToDeduct,
+        remainingCredits: updateResult.credits
       });
-      // Return only clean URLs, no metadata
+      // Return images and remaining credits (credits already deducted)
       res.json({ 
         success: true, 
-        images: imageUrls
+        images: imageUrls,
+        remainingCredits: updateResult.credits,
+        creditsDeducted: creditsToDeduct
       });
     } else {
       logger.error('No layers in AI service response', { service: 'fal.ai' });
@@ -2694,8 +2818,11 @@ app.post('/api/wan-animate/complete', authenticateToken, async (req, res) => {
       });
     }
     
-    // Calculate credits (2 credits per second, minimum 2 credits)
-    const creditsToDeduct = Math.max(Math.ceil(duration * 2), 2);
+    // Calculate total credits required (2 credits per second, minimum 2 credits)
+    // Minimum 2 credits were already deducted at submission, so only charge additional credits
+    const totalCreditsRequired = Math.max(Math.ceil(duration * 2), 2);
+    const creditsAlreadyPaid = 2; // Deducted at /api/wan-animate/submit
+    const creditsToDeduct = Math.max(0, totalCreditsRequired - creditsAlreadyPaid);
     
     // SECURITY: Build update query using authenticated user's identifier (supports wallet, email, or userId)
     const updateQuery = buildUserUpdateQuery(user);
@@ -2706,14 +2833,14 @@ app.post('/api/wan-animate/complete', authenticateToken, async (req, res) => {
       });
     }
     
-    // Prepare generation and gallery items
+    // Prepare generation and gallery items (record TOTAL credits used, not just additional)
     const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const generation = {
       id: generationId,
       prompt: 'Video Animate Replace',
       style: 'Wan 2.2 Animate',
       videoUrl,
-      creditsUsed: creditsToDeduct,
+      creditsUsed: totalCreditsRequired, // Total credits including those paid at submission
       timestamp: new Date()
     };
     
@@ -2722,68 +2849,101 @@ app.post('/api/wan-animate/complete', authenticateToken, async (req, res) => {
       prompt: 'Video Animate Replace',
       style: 'Wan 2.2 Animate',
       videoUrl,
-      creditsUsed: creditsToDeduct,
+      creditsUsed: totalCreditsRequired, // Total credits including those paid at submission
       timestamp: new Date()
     };
     
-    // Atomic credit deduction with condition to prevent race conditions and negative credits
-    // Only deduct if user has enough credits (prevents abuse from concurrent requests)
+    let updateResult;
     const previousCredits = user.credits || 0;
-    const updateResult = await User.findOneAndUpdate(
-      {
-        ...updateQuery,
-        credits: { $gte: creditsToDeduct } // Only update if user has enough credits
-      },
-      {
-        $inc: { 
-          credits: -creditsToDeduct,
-          totalCreditsSpent: creditsToDeduct
-        },
-        $push: {
-          generationHistory: generation,
-          gallery: galleryItem
-        }
-      },
-      { new: true }
-    );
     
-    if (!updateResult) {
-      // User doesn't have enough credits or was modified between check and update (race condition)
-      // Refetch to get current credits
-      const currentUser = await User.findOne(updateQuery);
-      const currentCredits = currentUser?.credits || 0;
-      
-      logger.warn('Video credit deduction failed - insufficient credits or race condition', {
+    // If no additional credits needed (short video), just add to gallery without credit deduction
+    if (creditsToDeduct <= 0) {
+      updateResult = await User.findOneAndUpdate(
         updateQuery,
-        previousCredits,
-        currentCredits,
-        creditsToDeduct,
-        duration,
-        userId: user.userId
-      });
+        {
+          $push: {
+            generationHistory: generation,
+            gallery: galleryItem
+          }
+        },
+        { new: true }
+      );
       
-      return res.status(400).json({
-        success: false,
-        error: `Insufficient credits. Video requires ${creditsToDeduct} credits (${duration}s × 2), but you only have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''}.`
+      logger.info('Video generation completed (no additional credits needed)', {
+        userId: user.userId,
+        email: user.email,
+        walletAddress: user.walletAddress,
+        generationId,
+        requestId,
+        duration,
+        totalCreditsRequired,
+        creditsAlreadyPaid,
+        remainingCredits: updateResult?.credits
+      });
+    } else {
+      // Atomic credit deduction with condition to prevent race conditions and negative credits
+      // Only deduct if user has enough credits (prevents abuse from concurrent requests)
+      updateResult = await User.findOneAndUpdate(
+        {
+          ...updateQuery,
+          credits: { $gte: creditsToDeduct } // Only update if user has enough credits
+        },
+        {
+          $inc: { 
+            credits: -creditsToDeduct,
+            totalCreditsSpent: creditsToDeduct
+          },
+          $push: {
+            generationHistory: generation,
+            gallery: galleryItem
+          }
+        },
+        { new: true }
+      );
+      
+      if (!updateResult) {
+        // User doesn't have enough credits or was modified between check and update (race condition)
+        // Refetch to get current credits
+        const currentUser = await User.findOne(updateQuery);
+        const currentCredits = currentUser?.credits || 0;
+        
+        logger.warn('Video credit deduction failed - insufficient credits or race condition', {
+          updateQuery,
+          previousCredits,
+          currentCredits,
+          creditsToDeduct,
+          totalCreditsRequired,
+          creditsAlreadyPaid,
+          duration,
+          userId: user.userId
+        });
+        
+        return res.status(400).json({
+          success: false,
+          error: `Insufficient credits. Video requires ${creditsToDeduct} additional credit${creditsToDeduct !== 1 ? 's' : ''} (${duration}s × 2 = ${totalCreditsRequired} total, minus ${creditsAlreadyPaid} already paid), but you only have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''}.`
+        });
+      }
+      
+      logger.info('Video generation completed and additional credits deducted', {
+        userId: user.userId,
+        email: user.email,
+        walletAddress: user.walletAddress,
+        generationId,
+        requestId,
+        duration,
+        totalCreditsRequired,
+        creditsAlreadyPaid,
+        additionalCreditsDeducted: creditsToDeduct,
+        remainingCredits: updateResult.credits
       });
     }
-    
-    logger.info('Video generation completed and credits deducted', {
-      userId: user.userId,
-      email: user.email,
-      walletAddress: user.walletAddress,
-      generationId,
-      requestId,
-      duration,
-      creditsToDeduct,
-      remainingCredits: updateResult.credits
-    });
     
     res.json({
       success: true,
       generationId,
-      remainingCredits: updateResult.credits,
-      creditsDeducted: creditsToDeduct,
+      remainingCredits: updateResult?.credits,
+      totalCreditsUsed: totalCreditsRequired,
+      additionalCreditsDeducted: creditsToDeduct,
       duration
     });
   } catch (error) {

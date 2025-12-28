@@ -259,10 +259,22 @@ const ImageGallery = () => {
   if (loading) {
     return (
       <div className="text-center py-16 md:py-24 fade-in">
-        <div className="glass-card w-32 h-32 mx-auto mb-8 flex items-center justify-center rounded-2xl">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+        <div className="glass-card w-32 h-32 mx-auto mb-8 flex items-center justify-center rounded-2xl relative overflow-hidden">
+          <div className="absolute inset-0 rounded-full" style={{
+            background: 'conic-gradient(from 0deg, transparent, #00d4ff, transparent)',
+            animation: 'spin 1.5s linear infinite'
+          }}></div>
+          <div className="absolute inset-2 rounded-2xl" style={{
+            background: 'linear-gradient(135deg, #f0f0f8, #e8e8f0)',
+            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8)'
+          }}></div>
+          <Sparkles className="w-10 h-10 relative z-10 animate-pulse" style={{ color: '#00d4ff' }} />
         </div>
-        <h3 className="text-2xl md:text-3xl font-semibold gradient-text mb-3">Loading Gallery...</h3>
+        <h3 className="text-2xl md:text-3xl font-bold mb-3 tracking-wide" style={{ 
+          color: '#000000', 
+          textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
+          fontFamily: "'VT323', monospace"
+        }}>LOADING GALLERY...</h3>
       </div>
     );
   }
@@ -270,16 +282,35 @@ const ImageGallery = () => {
   if (filteredHistory.length === 0 && galleryItems.length === 0) {
     return (
       <div className="text-center py-16 md:py-24 fade-in">
-        <div className="glass-card w-32 h-32 mx-auto mb-8 flex items-center justify-center rounded-2xl">
-          <svg viewBox="0 0 24 24" fill="none" className="w-16 h-16 text-gray-400">
+        <div className="glass-card w-36 h-36 mx-auto mb-8 flex items-center justify-center rounded-2xl relative overflow-hidden">
+          {/* Corner accents */}
+          <div className="absolute top-2 left-2 w-4 h-4" style={{
+            borderTop: '2px solid #00b8a9',
+            borderLeft: '2px solid #00b8a9',
+            opacity: 0.5
+          }}></div>
+          <div className="absolute bottom-2 right-2 w-4 h-4" style={{
+            borderBottom: '2px solid #f59e0b',
+            borderRight: '2px solid #f59e0b',
+            opacity: 0.5
+          }}></div>
+          <svg viewBox="0 0 24 24" fill="none" className="w-16 h-16" style={{ color: '#a0a0b8' }}>
             <path
               d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
               fill="currentColor"
             />
           </svg>
         </div>
-        <h3 className="text-2xl md:text-3xl font-semibold gradient-text mb-3">No Images Yet</h3>
-        <p className="text-gray-400 text-lg mb-8">Start generating images to see them here</p>
+        <h3 className="text-2xl md:text-3xl font-bold mb-3 tracking-wide" style={{ 
+          color: '#000000', 
+          textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
+          fontFamily: "'VT323', monospace"
+        }}>NO IMAGES YET</h3>
+        <p className="text-base mb-8" style={{ 
+          color: '#1a1a2e', 
+          textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)',
+          fontFamily: "'IBM Plex Mono', monospace"
+        }}>Start generating images to see them here</p>
         <button
           onClick={() => window.location.href = '#generate'}
           className="btn-primary flex items-center gap-2 mx-auto slide-up"
@@ -296,14 +327,23 @@ const ImageGallery = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
         <div className="slide-up">
-          <h2 className="text-3xl md:text-4xl font-bold gradient-text mb-2">Your Gallery</h2>
-          <p className="text-gray-400 text-base">
+          <h2 className="text-3xl md:text-4xl font-bold mb-2 tracking-wide" style={{ 
+            color: '#000000', 
+            textShadow: '2px 2px 0 rgba(255, 255, 255, 0.9), 0 0 10px rgba(0, 212, 255, 0.2)',
+            fontFamily: "'VT323', monospace",
+            letterSpacing: '0.05em'
+          }}>YOUR GALLERY</h2>
+          <p className="text-base" style={{ 
+            color: '#1a1a2e', 
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.7)',
+            fontFamily: "'IBM Plex Mono', monospace"
+          }}>
             {galleryItems.length} {galleryItems.length === 1 ? 'item' : 'items'}
           </p>
         </div>
         <button
           onClick={clearAll}
-          className="btn-secondary flex items-center gap-2 slide-up"
+          className="btn-primary flex items-center gap-2 slide-up px-4 py-2"
           style={{ animationDelay: '100ms' }}
         >
           <Trash2 className="w-4 h-4" />
@@ -362,17 +402,30 @@ const ImageGallery = () => {
                   </div>
                 </div>
               </div>
-            <div className="p-4 bg-gradient-to-b from-white/5 to-transparent">
+            <div className="p-3" style={{ 
+              background: 'linear-gradient(to bottom, rgba(255, 255, 255, 0.05), transparent)'
+            }}>
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xl">{item.style?.emoji}</span>
-                <h3 className="font-semibold text-sm truncate text-white">{item.style?.name || 'Untitled'}</h3>
+                <span className="text-lg">{item.style?.emoji}</span>
+                <h3 className="font-semibold text-xs truncate" style={{ 
+                  color: '#000000', 
+                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
+                  fontFamily: "'IBM Plex Mono', monospace"
+                }}>{item.style?.name || 'Untitled'}</h3>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-3">
-                <Calendar className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1.5 text-[10px] mb-2" style={{ 
+                color: '#1a1a2e', 
+                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+              }}>
+                <Calendar className="w-3 h-3" />
                 {formatDate(item.timestamp)}
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-purple-400 font-semibold bg-purple-500/10 px-2 py-1 rounded-md">
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded" style={{ 
+                  background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 184, 230, 0.1))',
+                  color: '#006688',
+                  border: '1px solid rgba(0, 212, 255, 0.3)'
+                }}>
                   {item.style?.category || 'Uncategorized'}
                 </span>
                 <button
@@ -380,9 +433,13 @@ const ImageGallery = () => {
                     e.stopPropagation();
                     handleDownload(displayUrl, item.style?.name, isVideo);
                   }}
-                  className="p-2 rounded-lg hover:bg-white/20 transition-all duration-300 hover:scale-110"
+                  className="p-1.5 rounded transition-all duration-300 hover:scale-110"
+                  style={{
+                    background: 'linear-gradient(135deg, #f0f0f0, #e0e0e0)',
+                    border: '1px solid #d0d0d0'
+                  }}
                 >
-                  <Download className="w-4 h-4 text-gray-300 group-hover:text-white transition-colors" />
+                  <Download className="w-3.5 h-3.5" style={{ color: '#000000' }} />
                 </button>
               </div>
             </div>
@@ -396,11 +453,11 @@ const ImageGallery = () => {
       {selectedItem && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-card rounded-2xl max-w-4xl max-h-[90vh] overflow-hidden slide-up">
-            <div className="p-6 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-pink-500/10">
+            <div className="p-6 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-teal-500/10 to-blue-500/10">
               <div className="flex items-center gap-4">
-                <div className="p-2 bg-purple-500/20 rounded-lg">
+                <div className="p-2 bg-teal-500/20 rounded-lg">
                   {selectedItem.isVideo ? (
-                    <Video className="w-6 h-6 text-purple-400" />
+                    <Video className="w-6 h-6 text-teal-400" />
                   ) : (
                     <span className="text-3xl">{selectedItem.style?.emoji || '🎨'}</span>
                   )}

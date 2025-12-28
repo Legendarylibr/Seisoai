@@ -74,7 +74,7 @@ import logger from '../utils/logger.js';
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-r from-teal-500 to-blue-500 rounded-xl flex items-center justify-center">
                 <Zap className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -91,31 +91,38 @@ import logger from '../utils/logger.js';
   return (
     <header className="sticky top-0 z-[999997]" style={{ 
       position: 'sticky',
-      background: 'linear-gradient(to bottom, #e8e8f0, #d8d8e8, #d0d0d8)',
-      borderBottom: '2px outset #e0e0e8',
+      background: 'linear-gradient(to bottom, #e8e8f4, #d8d8ec, #c8c8dc)',
+      borderBottom: '2px outset #d0d0e0',
       boxShadow: 
         'inset 0 2px 0 rgba(255, 255, 255, 1), ' +
-        'inset 0 -2px 0 rgba(0, 0, 0, 0.2), ' +
-        '0 4px 8px rgba(0, 0, 0, 0.25), ' +
-        '0 2px 4px rgba(0, 0, 0, 0.15)'
+        'inset 0 -1px 0 rgba(0, 0, 0, 0.15), ' +
+        '0 4px 12px rgba(0, 0, 0, 0.2), ' +
+        '0 2px 4px rgba(0, 0, 0, 0.1)'
     }}>
-      <div className="container mx-auto px-4 py-2">
+      {/* Subtle gradient accent line */}
+      <div className="absolute top-0 left-0 right-0 h-[2px]" style={{
+        background: 'linear-gradient(90deg, #00b8a9 0%, #3b82f6 50%, #f59e0b 100%)',
+        opacity: 0.6
+      }}></div>
+      <div className="container mx-auto px-4 py-2.5">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3 group">
-            <div className="rounded transition-all duration-300" style={{
-              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+            <div className="rounded-lg transition-all duration-300 group-hover:scale-105" style={{
+              background: 'linear-gradient(135deg, #f0f0f8, #e0e0e8, #d0d0d8)',
               border: '2px outset #f0f0f0',
               padding: '6px',
-              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 8px rgba(0, 0, 0, 0.15)'
             }}>
-              <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-8 h-8 rounded-lg object-cover" />
+              <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-8 h-8 rounded-md object-cover" />
             </div>
             <div>
-              <h1 className="text-xl font-bold" style={{ 
+              <h1 className="text-xl font-bold tracking-wide" style={{ 
+                fontFamily: "'VT323', monospace",
                 color: '#000000', 
-                textShadow: '3px 3px 0 rgba(255, 255, 255, 1), 2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 2px rgba(0, 0, 0, 0.3)'
-              }}>Seiso AI</h1>
+                textShadow: '0 0 10px rgba(0, 212, 255, 0.3), 2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 2px rgba(0, 0, 0, 0.2)',
+                letterSpacing: '0.05em'
+              }}>SEISO AI</h1>
             </div>
           </div>
 

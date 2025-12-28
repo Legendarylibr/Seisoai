@@ -558,15 +558,46 @@ const ImageOutput = () => {
   if (isGenerating) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-4">
-        <div className="glass-card p-6 rounded-lg text-center slide-up">
-          <div className="relative w-16 h-16 mx-auto mb-4">
-            <div className="animate-spin w-full h-full border-4 border-purple-500/30 border-t-purple-500 rounded-full"></div>
+        <div className="glass-card p-8 rounded-xl text-center scale-in relative overflow-hidden">
+          {/* Shimmer overlay */}
+          <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none"></div>
+          
+          {/* Animated spinner with glow */}
+          <div className="relative w-20 h-20 mx-auto mb-5">
+            <div className="absolute inset-0 rounded-full" style={{
+              background: 'conic-gradient(from 0deg, transparent, #00d4ff, transparent)',
+              animation: 'spin 1.5s linear infinite'
+            }}></div>
+            <div className="absolute inset-1 rounded-full" style={{
+              background: 'linear-gradient(135deg, #f0f0f8, #e8e8f0)',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.1)'
+            }}></div>
             <div className="absolute inset-0 flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-purple-400 animate-pulse" />
+              <Sparkles className="w-7 h-7 animate-pulse" style={{ color: '#00d4ff', filter: 'drop-shadow(0 0 6px rgba(0, 212, 255, 0.6))' }} />
             </div>
           </div>
-          <p className="text-sm mb-1 font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Creating your masterpiece...</p>
-          <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>This may take a few moments</p>
+          
+          <p className="text-sm mb-1.5 font-bold tracking-wide" style={{ 
+            color: '#000000', 
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
+            fontFamily: "'IBM Plex Mono', monospace"
+          }}>Creating your masterpiece...</p>
+          <p className="text-xs" style={{ 
+            color: '#1a1a2e', 
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)',
+            fontFamily: "'IBM Plex Mono', monospace"
+          }}>This may take a few moments</p>
+          
+          {/* Decorative dots */}
+          <div className="flex justify-center gap-1.5 mt-4">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="w-1.5 h-1.5 rounded-full" style={{
+                background: '#00d4ff',
+                boxShadow: '0 0 4px rgba(0, 212, 255, 0.6)',
+                animation: `pulse 1s ease-in-out ${i * 0.2}s infinite`
+              }}></div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -631,17 +662,56 @@ const ImageOutput = () => {
   if (imagesToDisplay.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-4">
-        <div className="glass-card p-6 rounded-lg text-center max-w-md slide-up">
-          <div className="w-20 h-20 mx-auto mb-4 opacity-60">
-            <svg viewBox="0 0 24 24" fill="none" className="w-full h-full text-gray-400">
-              <path
-                d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
-                fill="currentColor"
-              />
-            </svg>
+        <div className="glass-card p-8 rounded-xl text-center max-w-md slide-up relative overflow-hidden">
+          {/* Decorative background pattern */}
+          <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
+            backgroundImage: 'repeating-linear-gradient(45deg, #000 0, #000 1px, transparent 1px, transparent 8px)'
+          }}></div>
+          
+          {/* Stylized image placeholder */}
+          <div className="w-24 h-24 mx-auto mb-5 relative">
+            <div className="absolute inset-0 rounded-lg" style={{
+              background: 'linear-gradient(135deg, #e8e8f0, #d8d8e0)',
+              border: '2px dashed #b0b0c0',
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.6)'
+            }}></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" className="w-12 h-12" style={{ color: '#a0a0b8' }}>
+                <path
+                  d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
+                  fill="currentColor"
+                />
+              </svg>
+            </div>
+            {/* Corner accents */}
+            <div className="absolute -top-1 -left-1 w-3 h-3" style={{
+              borderTop: '2px solid #00b8a9',
+              borderLeft: '2px solid #00b8a9',
+              opacity: 0.6
+            }}></div>
+            <div className="absolute -bottom-1 -right-1 w-3 h-3" style={{
+              borderBottom: '2px solid #f59e0b',
+              borderRight: '2px solid #f59e0b',
+              opacity: 0.6
+            }}></div>
           </div>
-          <p className="text-sm text-gray-300 mb-1 font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Your generated image will appear here</p>
-          <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Enter a prompt and click generate to create your image</p>
+          
+          <p className="text-sm mb-2 font-semibold tracking-wide" style={{ 
+            color: '#000000', 
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
+            fontFamily: "'IBM Plex Mono', monospace"
+          }}>Your creation awaits</p>
+          <p className="text-xs leading-relaxed" style={{ 
+            color: '#1a1a2e', 
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)',
+            fontFamily: "'IBM Plex Mono', monospace"
+          }}>Enter a prompt and click generate to bring your imagination to life</p>
+          
+          {/* Subtle hint */}
+          <div className="mt-4 flex items-center justify-center gap-1.5 opacity-60">
+            <span className="text-[10px]" style={{ color: '#808090' }}>✨</span>
+            <span className="text-[10px]" style={{ color: '#808090', fontFamily: "'IBM Plex Mono', monospace" }}>Tip: Be descriptive for best results</span>
+          </div>
         </div>
       </div>
     );

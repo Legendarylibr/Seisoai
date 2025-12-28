@@ -85,23 +85,35 @@ const EmailSignIn = () => {
 
   return (
     <div className="w-full max-w-md md:max-w-xl mx-auto">
-      <div className="glass-card rounded-xl p-6 md:p-8 space-y-6 md:space-y-8">
+      <div className="glass-card rounded-xl p-6 md:p-8 space-y-6 md:space-y-8 relative overflow-hidden">
+        {/* Shimmer overlay */}
+        <div className="absolute inset-0 -translate-x-full hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/5 to-transparent pointer-events-none"></div>
+        
         {/* Header */}
-        <div className="text-center">
+        <div className="text-center relative z-10">
           <div 
-            className="w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6"
+            className="w-16 h-16 md:w-20 md:h-20 rounded-xl flex items-center justify-center mx-auto mb-4 md:mb-6 transition-transform duration-300 hover:scale-105"
             style={{
-              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+              background: 'linear-gradient(135deg, #f0f0f8, #e0e0e8, #d0d0d8)',
               border: '2px outset #f0f0f0',
-              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15)'
             }}
           >
-            <Mail className="w-8 h-8 md:w-10 md:h-10" style={{ color: '#000000' }} />
+            <Mail className="w-8 h-8 md:w-10 md:h-10" style={{ color: '#000000', filter: 'drop-shadow(0 0 4px rgba(0, 212, 255, 0.3))' }} />
           </div>
-          <h2 className="text-2xl md:text-3xl font-bold mb-2 md:mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-            {isSignUp ? 'Create Account' : 'Sign In'}
+          <h2 className="text-2xl md:text-3xl font-bold mb-2 md:mb-3 tracking-wide" style={{ 
+            color: '#000000', 
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.9)',
+            fontFamily: "'VT323', monospace",
+            letterSpacing: '0.05em'
+          }}>
+            {isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN'}
           </h2>
-          <p className="text-sm md:text-base" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+          <p className="text-sm md:text-base" style={{ 
+            color: '#1a1a2e', 
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
+            fontFamily: "'IBM Plex Mono', monospace"
+          }}>
             {isSignUp ? 'Sign up with email to get started' : 'Sign in with your email'}
           </p>
         </div>
