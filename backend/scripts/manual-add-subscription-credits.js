@@ -30,11 +30,12 @@ const Stripe = (await import('stripe')).default;
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Connect to MongoDB
-const mongoUri = process.env.MONGODB_URI || 'mongodb+srv://legendarylibraries_db_user:8UCbUAxScIZVgeM0@cluster0.yqlccoa.mongodb.net/seisoai?appName=Cluster0';
-if (!mongoUri) {
-  console.error('❌ MONGODB_URI not found');
+if (!process.env.MONGODB_URI) {
+  console.error('❌ MONGODB_URI not found in environment');
+  console.error('Make sure backend.env exists with MONGODB_URI');
   process.exit(1);
 }
+const mongoUri = process.env.MONGODB_URI;
 await mongoose.connect(mongoUri);
 const User = mongoose.models.User || mongoose.model('User', new mongoose.Schema({}, { strict: false }));
 

@@ -506,6 +506,19 @@ const wanResultLimiter = rateLimit({
   legacyHeaders: false
 });
 
+// Authentication rate limiter - prevent brute force attacks
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 auth attempts per 15 minutes
+  message: {
+    error: 'Too many authentication attempts. Please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false // Count all requests, even successful ones
+});
+
 // Endpoints that should allow requests without origin (webhooks, health checks, monitoring)
 // Defined early so it's available to all middleware
 const noOriginAllowedPaths = [
@@ -3753,6 +3766,20 @@ const TOKEN_CONFIGS = {
 // Credit calculation constants
 const STANDARD_CREDITS_PER_USDC = 6.67; // $0.15 per credit
 
+// Solana token configurations
+const SOLANA_TOKEN_CONFIGS = {
+  'USDC': { 
+    mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', 
+    decimals: 6, 
+    creditRate: 6.67 
+  },
+  'USDT': { 
+    mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', 
+    decimals: 6, 
+    creditRate: 6.67 
+  }
+};
+
 // Qualifying NFT collections and token contracts for discount/benefits
 const QUALIFYING_NFT_COLLECTIONS = [
   // Your NFT Collections
@@ -4720,6 +4747,225 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
   }
 }
 
+/**
+ * Verify Solana payment transaction
+ * SECURITY: Verifies transaction on-chain to prevent spoofed payments
+ */
+async function verifySolanaPayment(txHash, walletAddress, tokenSymbol, amount) {
+  try {
+    // Get Solana RPC endpoint
+    const rpcUrls = [
+      process.env.SOLANA_RPC_URL,
+      'https://api.mainnet-beta.solana.com',
+      'https://solana-mainnet.g.alchemy.com/v2/demo',
+      'https://rpc.ankr.com/solana'
+    ].filter(Boolean);
+
+    let connection = null;
+    let lastError = null;
+
+    // Try each RPC endpoint until one works
+    for (const rpcUrl of rpcUrls) {
+      try {
+        connection = new Connection(rpcUrl, 'confirmed');
+        // Test connection with a simple call
+        await Promise.race([
+          connection.getLatestBlockhash(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 5000))
+        ]);
+        logger.debug('Using Solana RPC endpoint for verification', { rpcUrl });
+        break;
+      } catch (error) {
+        logger.debug('Failed to connect to Solana RPC', { rpcUrl, error: error.message });
+        lastError = error;
+        connection = null;
+        continue;
+      }
+    }
+
+    if (!connection) {
+      throw new Error(`All Solana RPC endpoints failed. Last error: ${lastError?.message}`);
+    }
+
+    // Get the payment wallet
+    const paymentWallet = PAYMENT_WALLETS['solana'];
+    if (!paymentWallet) {
+      throw new Error('Solana payment wallet not configured');
+    }
+
+    // Get token config
+    const tokenConfig = SOLANA_TOKEN_CONFIGS[tokenSymbol];
+    if (!tokenConfig) {
+      throw new Error(`Token ${tokenSymbol} not supported on Solana`);
+    }
+
+    logger.debug('Verifying Solana transaction', { txHash, walletAddress, tokenSymbol, amount });
+
+    // Fetch the transaction
+    const tx = await connection.getParsedTransaction(txHash, {
+      maxSupportedTransactionVersion: 0,
+      commitment: 'confirmed'
+    });
+
+    if (!tx) {
+      throw new Error('Transaction not found on Solana blockchain');
+    }
+
+    // Verify transaction succeeded
+    if (tx.meta?.err) {
+      throw new Error(`Transaction failed: ${JSON.stringify(tx.meta.err)}`);
+    }
+
+    // Verify the transaction is confirmed (not pending)
+    if (!tx.blockTime) {
+      throw new Error('Transaction not yet confirmed');
+    }
+
+    // Check if transaction is too old (more than 1 hour) - potential replay attack
+    const txAge = Date.now() / 1000 - tx.blockTime;
+    if (txAge > 3600) {
+      logger.warn('Solana transaction is old', { txHash, txAge, blockTime: tx.blockTime });
+      throw new Error('Transaction is too old. Please use a recent transaction.');
+    }
+
+    // Parse the transaction to find SPL token transfers
+    let validTransfer = false;
+    let actualAmount = 0;
+    let senderAddress = null;
+
+    // Look through inner instructions for token transfers
+    const allInstructions = [
+      ...(tx.transaction.message.instructions || []),
+      ...(tx.meta?.innerInstructions?.flatMap(i => i.instructions) || [])
+    ];
+
+    for (const instruction of allInstructions) {
+      // Check for parsed SPL Token transfer instructions
+      if (instruction.program === 'spl-token' && instruction.parsed) {
+        const { type, info } = instruction.parsed;
+        
+        // Handle both 'transfer' and 'transferChecked' instructions
+        if (type === 'transfer' || type === 'transferChecked') {
+          const tokenMint = info.mint || null;
+          
+          // For regular transfer, we need to check the source account's mint
+          // For transferChecked, the mint is directly available
+          if (type === 'transferChecked' && tokenMint !== tokenConfig.mint) {
+            continue; // Not the token we're looking for
+          }
+          
+          // Get source and destination (these are token accounts, not wallet addresses)
+          const sourceTokenAccount = info.source;
+          const destTokenAccount = info.destination;
+          
+          // Get the token amount
+          let transferAmount;
+          if (type === 'transferChecked') {
+            transferAmount = parseFloat(info.tokenAmount?.uiAmount || 0);
+          } else {
+            // For regular transfer, convert from raw amount
+            transferAmount = parseFloat(info.amount) / Math.pow(10, tokenConfig.decimals);
+          }
+          
+          // Get account info to verify the destination is our payment wallet
+          try {
+            const destAccountInfo = await connection.getParsedAccountInfo(new PublicKey(destTokenAccount));
+            const destAccountData = destAccountInfo?.value?.data?.parsed?.info;
+            
+            if (destAccountData) {
+              const destOwner = destAccountData.owner;
+              const destMint = destAccountData.mint;
+              
+              // Verify this is a transfer TO our payment wallet of the correct token
+              if (destOwner === paymentWallet && destMint === tokenConfig.mint) {
+                // Also verify the source (sender)
+                const sourceAccountInfo = await connection.getParsedAccountInfo(new PublicKey(sourceTokenAccount));
+                const sourceAccountData = sourceAccountInfo?.value?.data?.parsed?.info;
+                
+                if (sourceAccountData) {
+                  senderAddress = sourceAccountData.owner;
+                  
+                  // Verify sender matches the claimed wallet address
+                  if (senderAddress === walletAddress) {
+                    validTransfer = true;
+                    actualAmount = transferAmount;
+                    logger.debug('Valid Solana transfer found', { 
+                      from: senderAddress, 
+                      to: destOwner, 
+                      amount: actualAmount,
+                      mint: destMint
+                    });
+                    break;
+                  } else {
+                    logger.warn('Solana transfer sender mismatch', { 
+                      claimedWallet: walletAddress, 
+                      actualSender: senderAddress 
+                    });
+                  }
+                }
+              }
+            }
+          } catch (accountError) {
+            logger.warn('Error fetching Solana token account info', { error: accountError.message });
+            continue;
+          }
+        }
+      }
+    }
+
+    if (!validTransfer) {
+      // More detailed error for debugging
+      logger.warn('No valid Solana transfer found', { 
+        txHash, 
+        walletAddress, 
+        paymentWallet,
+        tokenMint: tokenConfig.mint,
+        instructionCount: allInstructions.length
+      });
+      throw new Error('No valid token transfer to payment wallet found in transaction');
+    }
+
+    // Verify amount is within tolerance (allow 1% difference for floating point)
+    const expectedAmount = parseFloat(amount);
+    const tolerance = expectedAmount * 0.01;
+    if (actualAmount < expectedAmount - tolerance) {
+      logger.warn('Solana payment amount mismatch', { 
+        expected: expectedAmount, 
+        actual: actualAmount, 
+        tolerance 
+      });
+      throw new Error(`Payment amount mismatch. Expected: ${expectedAmount}, Got: ${actualAmount}`);
+    }
+
+    // Calculate credits
+    const credits = Math.floor(actualAmount * tokenConfig.creditRate);
+
+    logger.info('Solana payment verified successfully', {
+      txHash,
+      walletAddress,
+      actualAmount,
+      credits,
+      slot: tx.slot
+    });
+
+    return {
+      success: true,
+      credits,
+      actualAmount,
+      txHash,
+      slot: tx.slot
+    };
+
+  } catch (error) {
+    logger.error('Solana payment verification error:', { 
+      error: error.message, 
+      txHash, 
+      walletAddress 
+    });
+    throw new Error(`Solana payment verification failed: ${error.message}`);
+  }
+}
+
 // API Routes
 
 /**
@@ -5048,7 +5294,7 @@ app.get('/', (req, res) => {
 /**
  * Sign up with email and password
  */
-app.post('/api/auth/signup', async (req, res) => {
+app.post('/api/auth/signup', authRateLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -5159,7 +5405,7 @@ app.post('/api/auth/signup', async (req, res) => {
     const token = jwt.sign(
       { userId: user.userId, email: user.email, type: 'access' },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '24h' }
     );
     
     const refreshToken = jwt.sign(
@@ -5232,7 +5478,7 @@ app.post('/api/auth/signup', async (req, res) => {
 /**
  * Sign in with email and password
  */
-app.post('/api/auth/signin', async (req, res) => {
+app.post('/api/auth/signin', authRateLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -5277,7 +5523,7 @@ app.post('/api/auth/signin', async (req, res) => {
     const token = jwt.sign(
       { userId: user.userId, email: user.email, type: 'access' },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '24h' }
     );
     
     const refreshToken = jwt.sign(
@@ -5406,7 +5652,7 @@ app.post('/api/auth/refresh', async (req, res) => {
     const newAccessToken = jwt.sign(
       { userId: user.userId, email: user.email, type: 'access' },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '24h' }
     );
 
     logger.info('Access token refreshed', { userId: user.userId });
@@ -6655,14 +6901,21 @@ app.post('/api/payments/verify', async (req, res) => {
 
     let verification;
     if (walletType === 'solana') {
-      // Calculate credits based on NFT holder status
-      const credits = calculateCreditsFromAmount(parseFloat(amount), creditsPerUSDC);
-      verification = {
-        success: true,
-        credits: credits,
-        actualAmount: parseFloat(amount),
-        txHash
-      };
+      // SECURITY: Verify Solana payment on-chain (prevents spoofed payments)
+      logger.debug('Verifying Solana payment', { txHash, walletAddress, tokenSymbol, amount });
+      verification = await verifySolanaPayment(txHash, walletAddress, tokenSymbol, amount);
+      logger.debug('Solana payment verification result', { verification });
+      
+      // Recalculate credits based on NFT holder status if verification succeeded
+      if (verification.success && verification.actualAmount) {
+        verification.credits = calculateCreditsFromAmount(verification.actualAmount, creditsPerUSDC);
+        logger.debug('Recalculated Solana credits', {
+          isNFTHolder,
+          creditsPerUSDC,
+          actualAmount: verification.actualAmount,
+          credits: verification.credits
+        });
+      }
     } else {
       logger.debug('Verifying EVM payment', { txHash, walletAddress, tokenSymbol, amount, chainId });
       verification = await verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chainId);
