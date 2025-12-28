@@ -19,7 +19,18 @@ if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' &&
   logger.error('⚠️ VITE_API_URL is not set correctly for production!', {
     currentAPI_URL: API_URL,
     hostname: window.location.hostname,
-    expectedFormat: 'https://your-backend-domain.com'
+    expectedFormat: 'https://your-backend-domain.com',
+    envVar: import.meta.env.VITE_API_URL
+  });
+  // Show user-friendly error in console
+  console.error('❌ API URL Configuration Error:', 'VITE_API_URL environment variable is not set. Credits will not load.');
+}
+
+// Validate API URL format
+if (typeof window !== 'undefined' && API_URL && !API_URL.startsWith('http')) {
+  logger.error('⚠️ Invalid API_URL format!', {
+    currentAPI_URL: API_URL,
+    expectedFormat: 'http://... or https://...'
   });
 }
 
@@ -43,10 +54,17 @@ export const EmailAuthProvider = ({ children }) => {
         return;
       }
 
+      // Validate API_URL before making request
+      if (!API_URL || API_URL.includes('localhost') && window.location.hostname !== 'localhost') {
+        const errorMsg = 'API URL is not configured. Please set VITE_API_URL environment variable.';
+        logger.error(errorMsg, { API_URL, hostname: window.location.hostname });
+        throw new Error(errorMsg);
+      }
+
       // Add cache-busting for mobile browsers (they cache aggressively)
       const cacheBuster = `t=${Date.now()}`;
       const url = `${API_URL}/api/auth/me?${cacheBuster}`;
-      logger.debug('Fetching email user data', { url, API_URL });
+      logger.info('Fetching email user data', { url, API_URL, isMobile: /Mobile|Android|iPhone/i.test(navigator.userAgent) });
       
       const response = await fetch(url, {
         method: 'GET',
@@ -54,7 +72,8 @@ export const EmailAuthProvider = ({ children }) => {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        cache: 'no-store' // Prevent browser caching (critical for mobile) - this is sufficient
+        cache: 'no-store', // Prevent browser caching (critical for mobile)
+        credentials: 'include' // Include cookies for CORS
       });
 
       if (!response.ok) {
@@ -66,7 +85,11 @@ export const EmailAuthProvider = ({ children }) => {
           API_URL,
           url
         });
-        // Token invalid
+        // Token invalid - reset credits to 0 before signing out
+        // This ensures credits are always in a known state
+        setCredits(0);
+        setTotalCreditsEarned(0);
+        setTotalCreditsSpent(0);
         signOutService();
         setIsAuthenticated(false);
         setIsLoading(false);
@@ -90,11 +113,20 @@ export const EmailAuthProvider = ({ children }) => {
         const rawTotalEarned = data.user.totalCreditsEarned;
         const rawTotalSpent = data.user.totalCreditsSpent;
         
-        // Convert to numbers, defaulting to 0 only if null/undefined
-        // Important: 0 is a valid credit value, so we use ?? not ||
-        const credits = rawCredits != null ? Number(rawCredits) : 0;
-        const totalEarned = rawTotalEarned != null ? Number(rawTotalEarned) : 0;
-        const totalSpent = rawTotalSpent != null ? Number(rawTotalSpent) : 0;
+        // Validate and convert credit values
+        // Ensures credits are non-negative integers within safe range
+        const validateCredits = (value) => {
+          if (value == null) return 0;
+          const num = Number(value);
+          if (isNaN(num)) return 0;
+          // Ensure non-negative and within safe integer range
+          const validated = Math.max(0, Math.min(Math.floor(num), Number.MAX_SAFE_INTEGER));
+          return validated;
+        };
+        
+        const credits = validateCredits(rawCredits);
+        const totalEarned = validateCredits(rawTotalEarned);
+        const totalSpent = validateCredits(rawTotalSpent);
         
         logger.info('Email user data parsed from response', {
           credits,
@@ -109,25 +141,12 @@ export const EmailAuthProvider = ({ children }) => {
           API_URL
         });
         
-        // Always update credits - 0 is a valid value
-        // Only skip if it's NaN (which shouldn't happen with proper Number conversion)
-        if (!isNaN(credits)) {
-          setCredits(credits);
-          logger.debug('Credits updated successfully', { credits });
-        } else {
-          logger.warn('Invalid credits value (NaN), keeping current value', { 
-            rawCredits,
-            credits 
-          });
-        }
-        
-        if (!isNaN(totalEarned)) {
-          setTotalCreditsEarned(totalEarned);
-        }
-        
-        if (!isNaN(totalSpent)) {
-          setTotalCreditsSpent(totalSpent);
-        }
+        // Always update credits - validation ensures valid number (never NaN)
+        // No blocking conditions - credits are always updated
+        setCredits(credits);
+        setTotalCreditsEarned(totalEarned);
+        setTotalCreditsSpent(totalSpent);
+        logger.debug('Credits updated successfully', { credits, totalEarned, totalSpent });
         
         // Set user info even if credits parsing failed
         if (data.user.email) {
@@ -319,12 +338,17 @@ export const EmailAuthProvider = ({ children }) => {
 
   // Function to manually set credits for instant UI updates (before backend confirmation)
   const setCreditsManually = useCallback((newCredits) => {
-    const creditsValue = Number(newCredits ?? 0);
-    if (!isNaN(creditsValue)) {
-      setCredits(creditsValue);
-    } else {
-      logger.warn('setCreditsManually called with invalid value', { newCredits });
-    }
+    // Validate credits before setting
+    const validateCredits = (value) => {
+      if (value == null) return 0;
+      const num = Number(value);
+      if (isNaN(num)) return 0;
+      return Math.max(0, Math.min(Math.floor(num), Number.MAX_SAFE_INTEGER));
+    };
+    
+    const creditsValue = validateCredits(newCredits);
+    setCredits(creditsValue);
+    logger.debug('Credits updated manually', { newCredits, validatedCredits: creditsValue });
   }, []);
 
   const value = {

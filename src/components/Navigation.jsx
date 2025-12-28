@@ -10,12 +10,44 @@ import logger from '../utils/logger.js';
   const emailContext = useEmailAuth();
   
   // Support both auth methods
-  const isConnected = walletContext.isConnected || emailContext.isAuthenticated;
+  // Priority: Email auth takes precedence if both are active (prevents race conditions)
   const isEmailAuth = emailContext.isAuthenticated;
+  const isWalletAuth = walletContext.isConnected;
+  const isConnected = isEmailAuth || isWalletAuth;
   const address = walletContext.address;
-  // Use credits from the active auth method (email or wallet)
-  const credits = isEmailAuth ? (emailContext.credits ?? 0) : (walletContext.credits ?? 0);
-  const totalCreditsEarned = isEmailAuth ? (emailContext.totalCreditsEarned ?? 0) : (walletContext.totalCreditsEarned ?? 0);
+  
+  // Validate and select credits from the active auth method
+  // Email auth takes priority to prevent race conditions when both are active
+  const validateCredits = (value) => {
+    if (value == null || typeof value !== 'number') return 0;
+    if (isNaN(value)) return 0;
+    return Math.max(0, Math.min(Math.floor(value), Number.MAX_SAFE_INTEGER));
+  };
+  
+  // Use email credits if email auth is active, otherwise use wallet credits
+  // This prevents flickering when both contexts are active
+  const credits = isEmailAuth 
+    ? validateCredits(emailContext.credits)
+    : validateCredits(walletContext.credits);
+    
+  const totalCreditsEarned = isEmailAuth 
+    ? validateCredits(emailContext.totalCreditsEarned)
+    : validateCredits(walletContext.totalCreditsEarned);
+  
+  // Debug logging for mobile issues
+  useEffect(() => {
+    const isMobile = /Mobile|Android|iPhone/i.test(navigator.userAgent);
+    if (isMobile && isConnected) {
+      logger.debug('Mobile credits state', {
+        isEmailAuth,
+        emailCredits: emailContext.credits,
+        walletCredits: walletContext.credits,
+        finalCredits: credits,
+        emailLoading: emailContext.isLoading,
+        walletLoading: walletContext.isLoading
+      });
+    }
+  }, [credits, isConnected, isEmailAuth, emailContext.credits, walletContext.credits, emailContext.isLoading, walletContext.isLoading]);
   const disconnectWallet = walletContext.disconnectWallet;
   const signOut = emailContext.signOut;
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -259,7 +291,7 @@ import logger from '../utils/logger.js';
                 >
                   <Coins className="w-4 h-4" style={{ color: '#000000' }} />
                   <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                    {credits} credits
+                    {(isEmailAuth ? emailContext.isLoading : walletContext.isLoading) ? '...' : credits} credits
                   </span>
                   <ChevronDown className={`w-3 h-3 transition-transform ${showCreditsDropdown ? 'rotate-180' : ''}`} style={{ color: '#000000' }} />
                 </button>
@@ -519,7 +551,7 @@ import logger from '../utils/logger.js';
                 >
                   <Coins className="w-4 h-4" style={{ color: '#000000' }} />
                   <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                    {credits}
+                    {credits ?? 0}
                   </span>
                   {/* Buy Credits Button - Show Stripe for email users, Token for wallet users */}
                   {isEmailAuth && onShowStripePayment ? (

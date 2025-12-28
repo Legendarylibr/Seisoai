@@ -102,7 +102,7 @@ const SimpleWalletConnect = () => {
           </div>
           <div className="flex items-center gap-1">
             <span className="font-bold text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-              {credits}
+              {isLoading ? '...' : (typeof credits === 'number' && !isNaN(credits) ? Math.max(0, Math.floor(credits)) : 0)}
             </span>
             <button
               onClick={() => fetchCredits(address)}

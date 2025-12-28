@@ -167,7 +167,7 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     // Calculate credits that will be deducted
     const creditsToDeduct = multiImageModel === 'nano-banana-pro' ? 2 : 1;
     
-    // Optimistically update UI for instant feedback
+    // Optimistically update UI for instant feedback (backend deducts immediately)
     const currentCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
     const newCredits = Math.max(0, currentCredits - creditsToDeduct);
     
@@ -224,13 +224,33 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       const imageUrls = imageResult.images;
       const imageUrl = imageUrls[0];
       
-      // Update credits from response immediately (backend already returns remainingCredits)
+      // Always update credits from response (backend deducts immediately, so this is authoritative)
+      // Validate and update credits from backend response - NO BLOCKING CONDITIONS
       if (imageResult.remainingCredits !== undefined) {
-        if (isEmailAuth && emailContext.setCreditsManually) {
-          emailContext.setCreditsManually(imageResult.remainingCredits);
-        } else if (!isEmailAuth && setCreditsManually) {
-          setCreditsManually(imageResult.remainingCredits);
+        const validatedCredits = Math.max(0, Math.floor(Number(imageResult.remainingCredits) || 0));
+        // Update immediately if function exists, but always refresh afterward to ensure accuracy
+        try {
+          if (isEmailAuth && emailContext.setCreditsManually) {
+            emailContext.setCreditsManually(validatedCredits);
+          } else if (!isEmailAuth && setCreditsManually) {
+            setCreditsManually(validatedCredits);
+          }
+        } catch (updateError) {
+          logger.warn('Failed to update credits manually, will refresh from backend', { error: updateError.message });
         }
+      }
+      
+      // ALWAYS refresh credits from backend to ensure accuracy (even if we updated from response)
+      // This handles edge cases and ensures credits are never stale
+      try {
+        if (isEmailAuth && emailContext.refreshCredits) {
+          await emailContext.refreshCredits();
+        } else if (!isEmailAuth && refreshCredits && address) {
+          await refreshCredits();
+        }
+      } catch (refreshError) {
+        logger.warn('Failed to refresh credits after generation', { error: refreshError.message });
+        // Don't throw - credits were already updated from response if available
       }
 
       setError(null);
@@ -281,15 +301,36 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       } catch (error) {
         const errorMessage = error.message || 'Failed to generate image. Please try again.';
       
-        // Refresh credits after error
-        try {
-          if (isEmailAuth && emailContext.refreshCredits) {
-            await emailContext.refreshCredits();
-          } else if (!isEmailAuth && refreshCredits && address) {
-            await refreshCredits();
+        // Always refresh credits after error to ensure accurate balance
+        // Backend may have deducted credits even if generation failed
+        let refreshAttempts = 0;
+        const maxRefreshAttempts = 3;
+        
+        while (refreshAttempts < maxRefreshAttempts) {
+          try {
+            if (isEmailAuth && emailContext.refreshCredits) {
+              await emailContext.refreshCredits();
+              break; // Success, exit retry loop
+            } else if (!isEmailAuth && refreshCredits && address) {
+              await refreshCredits();
+              break; // Success, exit retry loop
+            } else {
+              break; // No refresh function available
+            }
+          } catch (refreshError) {
+            refreshAttempts++;
+            if (refreshAttempts >= maxRefreshAttempts) {
+              logger.error('Failed to refresh credits after error (max attempts reached)', { 
+                error: refreshError.message,
+                originalError: error.message
+              });
+              // Show error to user if refresh fails completely
+              setError('Failed to update credits. Please refresh the page to see your current balance.');
+            } else {
+              // Wait before retry (exponential backoff)
+              await new Promise(resolve => setTimeout(resolve, 100 * refreshAttempts));
+            }
           }
-        } catch (refreshError) {
-          // Ignore refresh errors
         }
       
         // Show payment modal if insufficient credits

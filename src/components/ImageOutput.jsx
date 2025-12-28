@@ -433,35 +433,72 @@ const ImageOutput = () => {
           isEmailAuth
         });
         
-        // Update UI immediately with the remaining credits from the response
-        if (deductionResult.remainingCredits !== undefined) {
-          if (isEmailAuth && emailContext.setCreditsManually) {
-            // For email users, update credits directly
-            emailContext.setCreditsManually(deductionResult.remainingCredits);
-            logger.debug('Updated email user credits immediately', { remainingCredits: deductionResult.remainingCredits });
-          } else if (!isEmailAuth && setCreditsManually) {
-            // For wallet users, update credits directly
-            setCreditsManually(deductionResult.remainingCredits);
-            logger.debug('Updated wallet user credits immediately', { remainingCredits: deductionResult.remainingCredits });
+        // Validate and update credits from response
+        const validateCredits = (value) => {
+          if (value == null) return undefined;
+          const num = Number(value);
+          if (isNaN(num)) return undefined;
+          return Math.max(0, Math.min(Math.floor(num), Number.MAX_SAFE_INTEGER));
+        };
+        
+        // Update UI immediately with validated credits from the response - NO BLOCKING CONDITIONS
+        const validatedCredits = validateCredits(deductionResult.remainingCredits);
+        if (validatedCredits !== undefined) {
+          // Update immediately if function exists, but always refresh afterward to ensure accuracy
+          try {
+            if (isEmailAuth && emailContext.setCreditsManually) {
+              // For email users, update credits directly
+              emailContext.setCreditsManually(validatedCredits);
+              logger.debug('Updated email user credits immediately', { remainingCredits: validatedCredits });
+            } else if (!isEmailAuth && setCreditsManually) {
+              // For wallet users, update credits directly
+              setCreditsManually(validatedCredits);
+              logger.debug('Updated wallet user credits immediately', { remainingCredits: validatedCredits });
+            }
+          } catch (updateError) {
+            logger.warn('Failed to update credits manually, will refresh from backend', { error: updateError.message });
           }
         }
         
-        // Force immediate credit refresh to ensure UI is in sync with backend
-        logger.debug('Refreshing credits from backend');
-        if (isEmailAuth && emailContext.refreshCredits) {
-          // For email users, refresh from backend (will update credits automatically)
-          await emailContext.refreshCredits();
-          logger.debug('Email user credits refreshed from backend', { remainingCredits: deductionResult.remainingCredits });
-        } else if (!isEmailAuth && refreshCredits && address) {
-          // For wallet users, refresh from backend
-          await refreshCredits();
-          logger.debug('Wallet user credits refreshed from backend', { remainingCredits: deductionResult.remainingCredits });
-        } else {
-          logger.warn('Cannot refresh credits - missing refreshCredits function or address', { 
-            isEmailAuth, 
-            hasRefreshCredits: !!emailContext.refreshCredits || !!refreshCredits,
-            hasAddress: !!address 
-          });
+        // Always refresh credits from backend to ensure accuracy (even if we updated from response)
+        // This handles edge cases where response might be stale or missing
+        logger.debug('Refreshing credits from backend to ensure accuracy');
+        let refreshSuccess = false;
+        let refreshAttempts = 0;
+        const maxRefreshAttempts = 3;
+        
+        while (!refreshSuccess && refreshAttempts < maxRefreshAttempts) {
+          try {
+            if (isEmailAuth && emailContext.refreshCredits) {
+              // For email users, refresh from backend (will update credits automatically)
+              await emailContext.refreshCredits();
+              refreshSuccess = true;
+              logger.debug('Email user credits refreshed from backend');
+            } else if (!isEmailAuth && refreshCredits && address) {
+              // For wallet users, refresh from backend
+              await refreshCredits();
+              refreshSuccess = true;
+              logger.debug('Wallet user credits refreshed from backend');
+            } else {
+              // No refresh function available, exit
+              logger.warn('Cannot refresh credits - missing refreshCredits function or address', { 
+                isEmailAuth, 
+                hasRefreshCredits: !!emailContext.refreshCredits || !!refreshCredits,
+                hasAddress: !!address 
+              });
+              break;
+            }
+          } catch (refreshError) {
+            refreshAttempts++;
+            if (refreshAttempts >= maxRefreshAttempts) {
+              logger.error('Failed to refresh credits after regeneration (max attempts reached)', { 
+                error: refreshError.message 
+              });
+            } else {
+              // Wait before retry (exponential backoff)
+              await new Promise(resolve => setTimeout(resolve, 100 * refreshAttempts));
+            }
+          }
         }
       } catch (error) {
         logger.error('Error saving generation', { error: error.message, userIdentifier, isEmailAuth });

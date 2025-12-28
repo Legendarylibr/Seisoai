@@ -12,7 +12,18 @@ if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' &&
   logger.error('⚠️ VITE_API_URL is not set correctly for production!', {
     currentAPI_URL: API_URL,
     hostname: window.location.hostname,
-    expectedFormat: 'https://your-backend-domain.com'
+    expectedFormat: 'https://your-backend-domain.com',
+    envVar: import.meta.env.VITE_API_URL
+  });
+  // Show user-friendly error in console
+  console.error('❌ API URL Configuration Error:', 'VITE_API_URL environment variable is not set. Credits will not load.');
+}
+
+// Validate API URL format
+if (typeof window !== 'undefined' && API_URL && !API_URL.startsWith('http')) {
+  logger.error('⚠️ Invalid API_URL format!', {
+    currentAPI_URL: API_URL,
+    expectedFormat: 'http://... or https://...'
   });
 }
 
@@ -75,17 +86,26 @@ export const SimpleWalletProvider = ({ children }) => {
     // Fetch from API with cache-busting for mobile browsers
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
+        // Validate API_URL before making request
+        if (!API_URL || (API_URL.includes('localhost') && typeof window !== 'undefined' && window.location.hostname !== 'localhost')) {
+          const errorMsg = 'API URL is not configured. Please set VITE_API_URL environment variable.';
+          logger.error(errorMsg, { API_URL, hostname: typeof window !== 'undefined' ? window.location.hostname : 'unknown' });
+          throw new Error(errorMsg);
+        }
+
         // Add cache-busting timestamp for mobile browsers (they cache aggressively)
         const cacheBuster = `t=${Date.now()}&attempt=${attempt}`;
         const url = `${API_URL}/api/users/${normalizedAddress}?skipNFTs=true&${cacheBuster}`;
-        logger.debug('Fetching credits', { url, attempt, API_URL });
+        const isMobile = typeof window !== 'undefined' && /Mobile|Android|iPhone/i.test(navigator.userAgent);
+        logger.info('Fetching credits', { url, attempt, API_URL, isMobile });
         
         const response = await fetch(url, {
           method: 'GET',
           headers: { 
             'Content-Type': 'application/json'
           },
-          cache: 'no-store', // Prevent browser caching (critical for mobile) - this is sufficient
+          cache: 'no-store', // Prevent browser caching (critical for mobile)
+          credentials: 'include', // Include cookies for CORS
           signal: AbortSignal.timeout(20000) // Increased timeout for mobile networks
         });
         
@@ -109,11 +129,20 @@ export const SimpleWalletProvider = ({ children }) => {
           const rawTotalEarned = user?.totalCreditsEarned ?? data?.user?.totalCreditsEarned ?? data?.totalCreditsEarned;
           const rawTotalSpent = user?.totalCreditsSpent ?? data?.user?.totalCreditsSpent ?? data?.totalCreditsSpent;
           
-          // Convert to numbers, defaulting to 0 only if null/undefined
-          // Important: 0 is a valid credit value, so we use != null check
-          const currentCredits = rawCredits != null ? Number(rawCredits) : 0;
-          const rewardedAmount = rawTotalEarned != null ? Number(rawTotalEarned) : 0;
-          const spentAmount = rawTotalSpent != null ? Number(rawTotalSpent) : 0;
+          // Validate and convert credit values
+          // Ensures credits are non-negative integers within safe range
+          const validateCredits = (value) => {
+            if (value == null) return 0;
+            const num = Number(value);
+            if (isNaN(num)) return 0;
+            // Ensure non-negative and within safe integer range
+            const validated = Math.max(0, Math.min(Math.floor(num), Number.MAX_SAFE_INTEGER));
+            return validated;
+          };
+          
+          const currentCredits = validateCredits(rawCredits);
+          const rewardedAmount = validateCredits(rawTotalEarned);
+          const spentAmount = validateCredits(rawTotalSpent);
           
           logger.info('Wallet credits parsed from response', { 
             currentCredits, 
@@ -130,40 +159,25 @@ export const SimpleWalletProvider = ({ children }) => {
             API_URL 
           });
           
-          // Always update credits - 0 is a valid value
-          // Only skip if it's NaN (which shouldn't happen with proper Number conversion)
-          if (!isNaN(currentCredits)) {
-            setCredits(currentCredits);
-            logger.debug('Credits updated successfully', { currentCredits });
-          } else {
-            logger.warn('Invalid credits value (NaN), keeping current value', { 
-              rawCredits,
-              currentCredits 
-            });
+          // Always update credits - validation ensures valid number (never NaN)
+          // No blocking conditions - credits are always updated
+          setCredits(currentCredits);
+          setTotalCreditsEarned(rewardedAmount);
+          setTotalCreditsSpent(spentAmount);
+          logger.debug('Credits updated successfully', { currentCredits, rewardedAmount, spentAmount });
+          
+          // Cache result (validation ensures currentCredits is always valid)
+          try {
+            sessionStorage.setItem(cacheKey, JSON.stringify({
+              data: { credits: currentCredits, totalCreditsEarned: rewardedAmount, totalCreditsSpent: spentAmount },
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            // Ignore cache errors - credits are still updated
           }
           
-          if (!isNaN(rewardedAmount)) {
-            setTotalCreditsEarned(rewardedAmount);
-          }
-          
-          if (!isNaN(spentAmount)) {
-            setTotalCreditsSpent(spentAmount);
-          }
-          
-          // Cache result only if we got valid data
-          if (!isNaN(currentCredits)) {
-            try {
-              sessionStorage.setItem(cacheKey, JSON.stringify({
-                data: { credits: currentCredits, totalCreditsEarned: rewardedAmount, totalCreditsSpent: spentAmount },
-                timestamp: Date.now()
-              }));
-            } catch (e) {
-              // Ignore cache errors
-            }
-          }
-          
-          // Return the credits we set (or 0 if invalid)
-          return isNaN(currentCredits) ? 0 : currentCredits;
+          // Return the credits we set (validation ensures it's always a valid number)
+          return currentCredits;
         } else {
           // Log non-OK responses for debugging
           const errorText = await response.text().catch(() => 'Unable to read error response');
@@ -315,12 +329,20 @@ export const SimpleWalletProvider = ({ children }) => {
       // Handle different wallet types
       switch (walletType) {
         case 'metamask':
+          // Handle wallet extension conflicts gracefully
           if (!window.ethereum) {
             throw new Error('MetaMask not found. Please install MetaMask extension.');
           }
           
-          provider = window.ethereum.providers?.find(p => p.isMetaMask && !p.isRabby)
-            || (window.ethereum.isMetaMask ? window.ethereum : null);
+          // Try to get provider, handling multiple wallet extensions
+          try {
+            provider = window.ethereum.providers?.find(p => p.isMetaMask && !p.isRabby)
+              || (window.ethereum.isMetaMask ? window.ethereum : null);
+          } catch (e) {
+            // If there's a conflict, try to use the first available provider
+            logger.warn('Wallet extension conflict detected, trying fallback', { error: e.message });
+            provider = window.ethereum.providers?.[0] || window.ethereum;
+          }
           
           if (!provider) {
             throw new Error('MetaMask not found. Please make sure MetaMask is installed and enabled.');
@@ -339,9 +361,15 @@ export const SimpleWalletProvider = ({ children }) => {
             throw new Error('No wallet found. Please install Rabby Wallet extension.');
           }
           
-          provider = window.ethereum.providers?.find(p => p.isRabby) 
-            || (window.ethereum.isRabby ? window.ethereum : null)
-            || window.ethereum;
+          // Handle wallet extension conflicts gracefully
+          try {
+            provider = window.ethereum.providers?.find(p => p.isRabby) 
+              || (window.ethereum.isRabby ? window.ethereum : null)
+              || window.ethereum;
+          } catch (e) {
+            logger.warn('Wallet extension conflict detected, trying fallback', { error: e.message });
+            provider = window.ethereum.providers?.[0] || window.ethereum;
+          }
           
           if (!provider?.request) {
             throw new Error('Rabby wallet provider not ready. Please try again.');
@@ -514,9 +542,19 @@ export const SimpleWalletProvider = ({ children }) => {
     }
   };
 
-  // Function to manually set credits for testing
+  // Function to manually set credits for instant UI updates (before backend confirmation)
   const setCreditsManually = (newCredits) => {
-    setCredits(newCredits);
+    // Validate credits before setting
+    const validateCredits = (value) => {
+      if (value == null) return 0;
+      const num = Number(value);
+      if (isNaN(num)) return 0;
+      return Math.max(0, Math.min(Math.floor(num), Number.MAX_SAFE_INTEGER));
+    };
+    
+    const creditsValue = validateCredits(newCredits);
+    setCredits(creditsValue);
+    logger.debug('Credits updated manually', { newCredits, validatedCredits: creditsValue });
   };
 
   const value = {

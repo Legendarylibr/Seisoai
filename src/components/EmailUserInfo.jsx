@@ -7,8 +7,14 @@ const EmailUserInfo = ({ onShowStripePayment }) => {
     email, 
     credits, 
     refreshCredits,
-    signOut
+    signOut,
+    isLoading
   } = useEmailAuth();
+  
+  // Validate credits display
+  const displayCredits = typeof credits === 'number' && !isNaN(credits) 
+    ? Math.max(0, Math.floor(credits))
+    : 0;
 
   return (
     <div>
@@ -51,7 +57,7 @@ const EmailUserInfo = ({ onShowStripePayment }) => {
           </div>
           <div className="flex items-center gap-1">
             <span className="font-bold text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-              {credits}
+              {isLoading ? '...' : displayCredits}
             </span>
             <button
               onClick={refreshCredits}
