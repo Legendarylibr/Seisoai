@@ -2962,9 +2962,13 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
     }
 
     // Build request body for Veo 3.1 API
+    // Note: Veo 3.1 API only accepts '16:9' or '9:16', not 'auto'
+    // Map 'auto' to '16:9' as the default
+    const apiAspectRatio = aspect_ratio === 'auto' ? '16:9' : aspect_ratio;
+    
     const requestBody = {
       prompt: prompt.trim(),
-      aspect_ratio,
+      aspect_ratio: apiAspectRatio,
       duration,
       resolution,
       generate_audio
@@ -2989,7 +2993,8 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
       quality,
       duration,
       resolution,
-      aspect_ratio,
+      aspect_ratio: apiAspectRatio,
+      originalAspectRatio: aspect_ratio,
       promptLength: prompt.length,
       userId: req.user?.userId
     });
