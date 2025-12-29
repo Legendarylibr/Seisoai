@@ -3053,7 +3053,24 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
       });
     }
 
-    logger.info('Video generation submitted', { requestId });
+    logger.info('Video generation submitted', { requestId, endpoint });
+
+    // Check if the submit response already contains the video (synchronous completion)
+    if (submitData.video && submitData.video.url) {
+      logger.info('Video completed synchronously', { requestId });
+      const videoData = {
+        url: submitData.video.url,
+        content_type: submitData.video.content_type || 'video/mp4',
+        file_name: submitData.video.file_name || `video-${requestId}.mp4`,
+        file_size: submitData.video.file_size
+      };
+      return res.json({
+        success: true,
+        video: videoData,
+        remainingCredits: updateResult.credits,
+        creditsDeducted: creditsToDeduct
+      });
+    }
 
     // Poll for completion (video generation can take 1-3 minutes)
     // Build status and result endpoints using the same endpoint structure as submit
@@ -3062,17 +3079,27 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
       statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1/requests/${requestId}/status`;
       resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1/requests/${requestId}`;
     } else {
+      // For image-to-video and first-last-frame, match the submit endpoint exactly
       const qualityPath = quality === 'quality' ? '' : '/fast';
       statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}/status`;
       resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}`;
     }
     
+    logger.debug('Polling endpoints', { statusEndpoint, resultEndpoint });
+    
     const maxWaitTime = 5 * 60 * 1000; // 5 minutes max wait
-    const pollInterval = 5000; // Poll every 5 seconds
+    const pollInterval = 3000; // Poll every 3 seconds (faster polling)
     const startTime = Date.now();
     
+    // Check status immediately first (don't wait before first check)
+    let firstCheck = true;
+    
     while (Date.now() - startTime < maxWaitTime) {
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      // Wait before polling (except for first check)
+      if (!firstCheck) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+      firstCheck = false;
       
       const statusResponse = await fetch(statusEndpoint, {
         headers: {
@@ -3081,11 +3108,12 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
       });
       
       if (!statusResponse.ok) {
-        logger.warn('Video status check failed', { status: statusResponse.status });
+        logger.warn('Video status check failed', { status: statusResponse.status, statusEndpoint });
         continue;
       }
       
       const statusData = await statusResponse.json();
+      logger.debug('Video status', { requestId, status: statusData.status });
       
       if (statusData.status === 'COMPLETED') {
         // Fetch the result

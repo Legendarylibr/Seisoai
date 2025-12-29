@@ -8,6 +8,7 @@ import logger from '../utils/logger.js';
 import { WIN95 } from '../utils/buttonStyles.js';
 
 // Generation mode options - all Veo 3.1 variants
+// Note: Actual endpoint construction is handled by the backend
 const GENERATION_MODES = [
   { 
     value: 'text-to-video', 
@@ -15,8 +16,7 @@ const GENERATION_MODES = [
     icon: '✍️',
     description: 'Generate video from text prompt only',
     requiresFirstFrame: false,
-    requiresLastFrame: false,
-    endpoint: 'fal-ai/veo3.1/fast/text-to-video'
+    requiresLastFrame: false
   },
   { 
     value: 'image-to-video', 
@@ -24,8 +24,7 @@ const GENERATION_MODES = [
     icon: '🖼️',
     description: 'Animate a single image',
     requiresFirstFrame: true,
-    requiresLastFrame: false,
-    endpoint: 'fal-ai/veo3.1/fast/image-to-video'
+    requiresLastFrame: false
   },
   { 
     value: 'first-last-frame', 
@@ -33,8 +32,7 @@ const GENERATION_MODES = [
     icon: '🎞️',
     description: 'Animate between two frames',
     requiresFirstFrame: true,
-    requiresLastFrame: true,
-    endpoint: 'fal-ai/veo3.1/fast/first-last-frame-to-video'
+    requiresLastFrame: true
   }
 ];
 
@@ -394,24 +392,39 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
   useEffect(() => {
     if (generatedVideoUrl && videoRef.current) {
       setVideoReady(false);
+      setError(null);
       const video = videoRef.current;
       
       // Force load and play when video is ready
       const handleCanPlay = () => {
         setVideoReady(true);
-        video.play().catch(e => {
-          // Autoplay was blocked, try muted
-          logger.debug('Autoplay blocked, trying muted playback', { error: e.message });
-          video.muted = true;
-          video.play().catch(() => {});
+        // Start muted for autoplay compatibility, then unmute
+        video.muted = true;
+        video.play().then(() => {
+          // Autoplay succeeded, try to unmute
+          video.muted = false;
+        }).catch(e => {
+          // Autoplay blocked even muted, just show controls
+          logger.debug('Autoplay blocked', { error: e.message });
+          setVideoReady(true);
         });
       };
       
+      const handleError = (e) => {
+        logger.error('Video load error', { error: e.target?.error?.message, src: generatedVideoUrl?.substring(0, 50) });
+        setVideoReady(true);
+      };
+      
       video.addEventListener('canplay', handleCanPlay);
-      video.load(); // Force reload to ensure immediate loading
+      video.addEventListener('error', handleError);
+      
+      // Set source and load
+      video.src = generatedVideoUrl;
+      video.load();
       
       return () => {
         video.removeEventListener('canplay', handleCanPlay);
+        video.removeEventListener('error', handleError);
       };
     }
   }, [generatedVideoUrl]);
@@ -770,13 +783,26 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
                     src={generatedVideoUrl}
                     controls
                     autoPlay
+                    muted
                     loop
                     playsInline
                     preload="auto"
+                    crossOrigin="anonymous"
                     className="flex-1 w-full object-contain"
                     style={{ maxHeight: 'calc(100% - 40px)', opacity: videoReady ? 1 : 0 }}
                     onLoadedData={() => setVideoReady(true)}
                     onCanPlay={() => setVideoReady(true)}
+                    onLoadedMetadata={() => {
+                      // Unmute after autoplay starts successfully
+                      if (videoRef.current) {
+                        videoRef.current.muted = false;
+                      }
+                    }}
+                    onError={(e) => {
+                      logger.error('Video playback error', { error: e.target?.error?.message });
+                      setError('Failed to load video. Please try downloading instead.');
+                      setVideoReady(true);
+                    }}
                   />
                   <div className="flex justify-center gap-2 p-2" style={{ background: WIN95.bg }}>
                     <Win95Button onClick={handleDownload}>

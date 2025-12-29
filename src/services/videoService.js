@@ -3,21 +3,19 @@ import logger from '../utils/logger.js';
 import { API_URL } from '../utils/apiConfig.js';
 
 // Generation mode configurations
+// Note: Actual endpoint construction is handled by the backend
 const GENERATION_MODES = {
   'text-to-video': {
     requiresFirstFrame: false,
-    requiresLastFrame: false,
-    endpoint: 'text-to-video'
+    requiresLastFrame: false
   },
   'image-to-video': {
     requiresFirstFrame: true,
-    requiresLastFrame: false,
-    endpoint: 'image-to-video'
+    requiresLastFrame: false
   },
   'first-last-frame': {
     requiresFirstFrame: true,
-    requiresLastFrame: true,
-    endpoint: 'first-last-frame-to-video'
+    requiresLastFrame: true
   }
 };
 
