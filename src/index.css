@@ -40,13 +40,25 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     position: relative;
-    height: 100vh;
+    min-height: 100vh;
     overflow-x: hidden;
+  }
+  
+  @media (min-width: 1024px) {
+    body {
+      height: 100vh;
+      overflow-y: hidden;
+    }
   }
   
   #root {
     height: 100%;
-    overflow: hidden;
+  }
+  
+  @media (min-width: 1024px) {
+    #root {
+      overflow: hidden;
+    }
   }
 
   h1, h2, h3 {
@@ -66,8 +78,15 @@
   /* ===== NEUTRAL ANIMATED BACKGROUND ===== */
   .animated-bg {
     position: relative;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     background: linear-gradient(135deg, #d4d4d8 0%, #c4c4c8 50%, #b4b4b8 100%);
+  }
+  
+  @media (min-width: 1024px) {
+    .animated-bg {
+      overflow: hidden;
+    }
   }
   
   .animated-bg::before {
@@ -347,8 +366,23 @@
 }
 
 /* ===== RESPONSIVE ===== */
+@media (max-width: 1023px) {
+  body { 
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #root {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .animated-bg {
+    min-height: 100vh;
+    height: auto;
+  }
+}
+
 @media (max-width: 768px) {
-  body { overflow-x: hidden; }
   .container { @apply px-4; }
   button, .btn { @apply min-h-[48px]; }
   
