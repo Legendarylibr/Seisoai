@@ -136,7 +136,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
   }, []);
 
   return (
-    <div className="h-screen animated-bg flex flex-col p-2" style={{ position: 'relative', zIndex: 0 }}>
+    <div className="min-h-screen lg:h-screen animated-bg flex flex-col p-2" style={{ position: 'relative', zIndex: 0 }}>
       <Navigation 
         activeTab={currentTab} 
         setActiveTab={(tab) => {
@@ -148,7 +148,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
         onShowStripePayment={handleShowStripePayment}
       />
       
-      <main className="flex-1 container mx-auto px-2 py-1 overflow-hidden">
+      <main className="flex-1 container mx-auto px-2 py-1 overflow-auto lg:overflow-hidden">
         <div className="fade-in h-full">
           <AppContent 
             activeTab={currentTab} 
@@ -238,14 +238,14 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
         )}
       </div>
 
-      {/* Main Content - Constrained height with bottom space */}
+      {/* Main Content - Constrained height with bottom space on desktop, scrollable on mobile */}
       <div className="flex-1 min-h-0 flex flex-col pb-4">
-        {/* Main Generation Area - Two Columns, fixed max height */}
-        <div className="grid grid-cols-1 lg:grid-cols-2" style={{ maxHeight: 'calc(100% - 8px)' }}>
+        {/* Main Generation Area - Two Columns on desktop, stacked on mobile */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 lg:h-full" style={{ maxHeight: 'none' }}>
           {/* Left Column: Input Section - Scrollable with generate button at end */}
-          <div className="flex flex-col" style={{ animationDelay: '100ms', maxHeight: '100%' }}>
-            {/* Scrollable content area */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex flex-col" style={{ animationDelay: '100ms' }}>
+            {/* Scrollable content area on desktop, natural flow on mobile */}
+            <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
             {/* How to Use - Collapsible and Compact */}
             <CollapsibleHowToUse />
             
@@ -322,13 +322,13 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
             </div>
           </div>
 
-          {/* Right Column: Output Section - Compact height matching left column */}
-          <div className="flex flex-col" style={{ maxHeight: '100%' }}>
-            <div className="note-blue rounded-none lg:rounded-r p-1 flex flex-col h-full" style={{ borderLeft: 'none' }}>
+          {/* Right Column: Output Section - Compact on desktop, natural height on mobile */}
+          <div className="flex flex-col mt-2 lg:mt-0">
+            <div className="note-blue rounded-none lg:rounded-r p-1 flex flex-col" style={{ borderLeft: 'none' }}>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <span className="text-[10px] font-bold" style={{ color: '#1e40af' }}>🎨 Output</span>
               </div>
-              <div className="flex-1 flex flex-col overflow-hidden min-h-0 mt-0.5" style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '2px', maxHeight: '280px' }}>
+              <div className="flex flex-col overflow-hidden mt-0.5" style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '2px', minHeight: '200px', maxHeight: '280px' }}>
                 <ImageOutput />
               </div>
             </div>
