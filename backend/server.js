@@ -788,6 +788,73 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
+// Flexible Authentication Middleware - supports both JWT tokens and wallet addresses
+// Tries JWT first (for email users), falls back to wallet address (for wallet users)
+const authenticateFlexible = async (req, res, next) => {
+  try {
+    // First, try JWT token authentication
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        
+        // Reject refresh tokens used as access tokens
+        if (decoded.type === 'refresh') {
+          // Fall through to wallet address authentication
+        } else {
+          // Find user by userId or email
+          const User = mongoose.model('User');
+          const user = await User.findOne({
+            $or: [
+              { userId: decoded.userId },
+              { email: decoded.email }
+            ]
+          }).select('-password');
+
+          if (user) {
+            req.user = user;
+            return next();
+          }
+        }
+      } catch (jwtError) {
+        // JWT verification failed, fall through to wallet address authentication
+        logger.debug('JWT authentication failed, trying wallet address', { error: jwtError.message });
+      }
+    }
+
+    // Fall back to wallet address authentication
+    const { walletAddress, userId, email } = req.body;
+    
+    if (!walletAddress && !userId && !email) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required. Please provide a token or wallet address/userId/email.'
+      });
+    }
+
+    // Get user from wallet address, userId, or email
+    const user = await getUserFromRequest(req);
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    logger.error('Flexible authentication error:', error);
+    return res.status(403).json({
+      success: false,
+      error: 'Authentication failed'
+    });
+  }
+};
+
 // Stripe webhook needs raw body - MUST be before express.json()
 app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
   // Check if Stripe is configured
@@ -1209,6 +1276,224 @@ if (!fs.existsSync(distPath)) {
 // IMPORTANT: Only use backend environment variable for security
 // Never use VITE_FAL_API_KEY in backend (it's exposed to frontend)
 const FAL_API_KEY = process.env.FAL_API_KEY;
+
+// Log FAL API key status at startup
+if (FAL_API_KEY && FAL_API_KEY !== 'your_fal_api_key_here') {
+  logger.info('FAL API key configured', { prefix: FAL_API_KEY.substring(0, 8) + '...' });
+} else {
+  logger.error('FAL API key NOT configured or using placeholder!');
+}
+
+// ============================================================================
+// PROMPT OPTIMIZATION SERVICE - Uses LLM to enhance prompts for each model
+// ============================================================================
+
+/**
+ * Model-specific prompt optimization guidelines
+ * Each model has different strengths and prompt styles
+ */
+const MODEL_PROMPT_GUIDELINES = {
+  'flux': {
+    name: 'FLUX Kontext',
+    style: 'image editing',
+    guidelines: `Enhance prompts intelligently to improve image generation outcomes.
+
+For IMAGE EDITING (when reference images are provided):
+1. Rephrase vague prompts to be clearer and more specific
+2. Keep the same meaning - don't add new ideas
+3. Don't add style words (photorealistic, 8K, cinematic, etc.)
+4. Keep it short and natural
+
+For TEXT-TO-IMAGE (when no reference images):
+1. Analyze if the prompt needs more detail for better results
+2. If the prompt is too simple or vague, add helpful details like:
+   - Lighting conditions (natural light, soft lighting, dramatic shadows)
+   - Composition (close-up, wide angle, centered)
+   - Mood/atmosphere (serene, energetic, mysterious)
+   - Visual quality hints (sharp focus, depth of field)
+3. Only add details that enhance the core concept - don't change the meaning
+4. Keep it natural and not overly verbose
+
+Examples for editing:
+- "hat" → "add a hat"
+- "blue" → "change to blue"  
+- "no glasses" → "remove the glasses"
+- "bigger smile" → "make the smile bigger"
+
+Examples for text-to-image:
+- "cat" → "a cat, natural lighting, soft focus, peaceful atmosphere"
+- "mountain landscape" → "mountain landscape, golden hour lighting, dramatic sky, wide composition"
+- "portrait of a woman" → "portrait of a woman, soft natural lighting, shallow depth of field, professional photography"`
+  },
+  'flux-multi': {
+    name: 'FLUX Kontext Multi',
+    style: 'multi-image blending',
+    guidelines: `Enhance prompts for multi-image blending to improve results.
+
+Rules:
+1. Describe how to blend/combine the images more clearly
+2. If the prompt is vague, add details about:
+   - How elements should be combined (seamlessly, with transitions, etc.)
+   - What aspects to preserve from each image
+   - The desired outcome style
+3. Keep the same meaning - don't add new ideas
+4. Keep it natural and concise
+
+Examples:
+- "combine" → "blend these images together seamlessly, preserving the best elements from each"
+- "mix styles" → "combine the styles from both images, creating a harmonious blend"
+- "merge" → "merge these images, maintaining the composition and color palette from the first image"`
+  },
+  'nano-banana-pro': {
+    name: 'Nano Banana Pro',
+    style: 'image editing',
+    guidelines: `Enhance prompts intelligently for better image editing outcomes.
+
+For IMAGE EDITING (when reference images are provided):
+1. Rephrase vague prompts to be clearer and more specific
+2. Keep the same meaning - don't add new ideas
+3. Don't add style or artistic words
+4. Keep it short and natural
+
+For TEXT-TO-IMAGE (when no reference images):
+1. If the prompt is simple, add helpful details like lighting, composition, or mood
+2. Only enhance what's already implied - don't change the core concept
+3. Keep it natural and concise
+
+Examples for editing:
+- "red" → "change to red"
+- "taller" → "make it taller"
+- "sunset" → "add a sunset background"
+
+Examples for text-to-image:
+- "dog" → "a dog, natural lighting, sharp focus, friendly expression"
+- "city at night" → "city at night, neon lights, urban atmosphere, cinematic composition"`
+  }
+};
+
+/**
+ * Optimize a prompt using fal.ai's LLM for the specific image model
+ * @param {string} originalPrompt - The user's original prompt
+ * @param {string} model - The target image generation model
+ * @param {boolean} hasReferenceImages - Whether reference images are provided
+ * @param {number} imageCount - Number of reference images
+ * @returns {Promise<{optimizedPrompt: string, reasoning: string}>}
+ */
+async function optimizePromptForModel(originalPrompt, model, hasReferenceImages = false, imageCount = 0) {
+  // Skip optimization for empty prompts or layer extraction
+  if (!originalPrompt || originalPrompt.trim() === '' || model === 'qwen-image-layered') {
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
+  }
+
+  // Check if FAL_API_KEY is available
+  if (!FAL_API_KEY) {
+    logger.warn('Prompt optimization skipped: FAL_API_KEY not configured');
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'API key not configured' };
+  }
+
+  // Determine the actual model guidelines to use
+  let modelKey = model;
+  if (model === 'flux' && imageCount >= 2) {
+    modelKey = 'flux-multi';
+  } else if (model === 'flux' || model === 'flux-multi') {
+    modelKey = hasReferenceImages && imageCount >= 2 ? 'flux-multi' : 'flux';
+  }
+
+  const modelConfig = MODEL_PROMPT_GUIDELINES[modelKey] || MODEL_PROMPT_GUIDELINES['flux'];
+
+  // Determine the context for better optimization
+  const isTextToImage = !hasReferenceImages;
+  const contextDescription = hasReferenceImages 
+    ? `This is for editing ${imageCount} image(s). Focus on clarity and specificity.`
+    : 'This is for generating a new image from scratch. Analyze if the prompt needs more detail for better results.';
+
+  const systemPrompt = `${modelConfig.guidelines}
+
+Your job: Intelligently enhance the prompt to improve image generation outcomes.
+
+${contextDescription}
+
+Analysis approach:
+1. First, analyze the prompt - is it too simple or vague?
+2. For text-to-image: If it lacks detail, add helpful visual details (lighting, composition, mood) that enhance the core concept
+3. For image editing: Focus on clarity and specificity without adding new ideas
+4. Always preserve the original meaning and intent
+5. Keep it natural - don't make it sound robotic or overly verbose
+
+JSON only:
+{"optimizedPrompt": "enhanced version of the prompt", "reasoning": "what you enhanced and why"}`;
+
+  try {
+    // Use AbortController for timeout - reduced to 8 seconds for speed
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const userPrompt = isTextToImage
+      ? `User prompt: "${originalPrompt}"\n\nAnalyze this prompt. If it's too simple or vague, enhance it with helpful visual details (lighting, composition, mood, atmosphere) that will improve the image quality. Only add details that enhance the core concept - don't change the meaning.`
+      : `User prompt: "${originalPrompt}"\n\nMake this clearer and more specific for the image editing model. Keep the same meaning, just rephrase if needed.`;
+
+    const response = await fetch('https://fal.run/fal-ai/any-llm', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3-haiku', // Using Haiku for speed - 3x faster than Sonnet
+        prompt: userPrompt,
+        system_prompt: systemPrompt,
+        temperature: 0.6, // Slightly higher for more creative enhancements
+        max_tokens: 250 // Increased to allow for more detailed enhancements
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      logger.warn('Prompt optimization LLM request failed', { status: response.status, error: errorText });
+      return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM request failed' };
+    }
+
+    const data = await response.json();
+    const output = data.output || data.text || data.response || '';
+
+    // Try to parse JSON response
+    try {
+      // Extract JSON from the response (may be wrapped in markdown code blocks)
+      const jsonMatch = output.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          optimizedPrompt: parsed.optimizedPrompt || originalPrompt,
+          reasoning: parsed.reasoning || null,
+          skipped: false
+        };
+      }
+    } catch (parseError) {
+      // If JSON parsing fails, use the raw output as the optimized prompt
+      if (output && output.length > 10) {
+        return {
+          optimizedPrompt: output.trim(),
+          reasoning: 'Enhanced by AI',
+          skipped: false
+        };
+      }
+    }
+
+    // Fallback to original prompt if optimization failed
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'Failed to parse LLM response' };
+
+  } catch (error) {
+    logger.error('Prompt optimization error', { error: error.message });
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: error.message };
+  }
+}
+
+// ============================================================================
+// END PROMPT OPTIMIZATION SERVICE
+// ============================================================================
 
 // Wan 2.2 Animate Replace endpoints
 // Direct file upload endpoint (for large files via FormData)
@@ -1972,7 +2257,8 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       image_urls,
       aspect_ratio,
       seed,
-      model
+      model,
+      optimizePrompt = true // Enable prompt optimization by default
     } = req.body;
 
     // Validate required inputs
@@ -1980,11 +2266,51 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       return res.status(400).json({ success: false, error: 'prompt is required and must be a non-empty string' });
     }
 
+    // Calculate image count for optimization context
+    const imageCount = image_urls && Array.isArray(image_urls) ? image_urls.length : (image_url ? 1 : 0);
+    const hasImages = imageCount > 0;
+
+    // Optimize prompt using LLM if enabled
+    let finalPrompt = prompt.trim();
+    let promptOptimizationResult = null;
+    
+    if (optimizePrompt && model !== 'qwen-image-layered') {
+      try {
+        promptOptimizationResult = await optimizePromptForModel(
+          prompt.trim(),
+          model || 'flux',
+          hasImages,
+          imageCount
+        );
+        
+        if (promptOptimizationResult && !promptOptimizationResult.skipped && promptOptimizationResult.optimizedPrompt) {
+          finalPrompt = promptOptimizationResult.optimizedPrompt;
+          logger.debug('Prompt optimized', { 
+            original: prompt.substring(0, 50) + '...', 
+            optimized: finalPrompt.substring(0, 50) + '...',
+            model: model || 'flux'
+          });
+        } else {
+          logger.debug('Prompt optimization skipped or returned no result, using original prompt');
+        }
+      } catch (optError) {
+        // Log but don't fail - continue with original prompt
+        logger.warn('Prompt optimization failed, using original prompt', { 
+          error: optError.message,
+          name: optError.name,
+          stack: optError.stack?.substring(0, 200)
+        });
+        promptOptimizationResult = null;
+        // Ensure finalPrompt is still set to original
+        finalPrompt = prompt.trim();
+      }
+    }
+
     // Determine endpoint based on whether reference images are provided and model selection
     let endpoint;
     const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
     const isSingleImage = image_url || (image_urls && image_urls.length === 1);
-    const hasImages = isMultipleImages || isSingleImage;
+    // hasImages already declared above for prompt optimization
     const isNanoBananaPro = model === 'nano-banana-pro';
     
     if (isNanoBananaPro) {
@@ -2011,9 +2337,9 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
     
     if (isNanoBananaPro) {
       // Nano Banana Pro API format
-      // Styles are already included in the prompt from the frontend
+      // Use the optimized prompt (or original if optimization was skipped)
       requestBody = {
-        prompt: prompt.trim() // Prompt includes style if selected
+        prompt: finalPrompt // Optimized prompt or original with style
       };
       
       // For Nano Banana Pro, use image_urls for multiple images or single image
@@ -2040,14 +2366,15 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       }
     } else {
       // FLUX Kontext API format
+      // Use the optimized prompt (or original if optimization was skipped)
       requestBody = {
-        prompt: prompt.trim(),
+        prompt: finalPrompt, // Optimized prompt or original
         guidance_scale: guidanceScale,
         num_images: numImages,
         output_format: 'jpeg',
         safety_tolerance: '6',
         prompt_safety_tolerance: '6',
-        enhance_prompt: true
+        enhance_prompt: true // FLUX's built-in enhancement works alongside our LLM optimization
       };
 
       // Add seed if provided
@@ -2071,9 +2398,13 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       }
     }
 
-    // Reduced logging for performance - only log essential info
-    logger.debug('Image generation request', {
+    // Log request details for debugging
+    logger.info('Image generation request', {
       model: isNanoBananaPro ? 'nano-banana-pro' : 'flux',
+      endpoint,
+      originalPrompt: prompt.substring(0, 100),
+      finalPrompt: finalPrompt.substring(0, 100),
+      wasOptimized: promptOptimizationResult && !promptOptimizationResult.skipped,
       userId: req.user?.userId
     });
 
@@ -2087,11 +2418,18 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       body: JSON.stringify(requestBody)
     });
 
+    logger.info('FAL API response', { 
+      status: response.status, 
+      ok: response.ok,
+      statusText: response.statusText
+    });
+
     if (!response.ok) {
       let errorMessage = `HTTP error! status: ${response.status}`;
       let errorData = null;
       try {
         errorData = await response.json();
+        logger.error('FAL API error response body', { errorData });
         if (errorData.detail) {
           errorMessage = Array.isArray(errorData.detail)
             ? errorData.detail.map(err => err.msg || err).join('; ')
@@ -2103,6 +2441,7 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
         }
       } catch (parseError) {
         const errorText = await response.text();
+        logger.error('FAL API error response text', { errorText });
         errorMessage = errorText || errorMessage;
       }
       
@@ -2120,8 +2459,9 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
         logger.error('AI service authentication failed in image generation', {
           status: response.status,
           errorMessage,
-          service: 'fal.ai'
-          // Removed API key metadata to prevent information leakage
+          service: 'fal.ai',
+          hasApiKey: !!FAL_API_KEY,
+          apiKeyPrefix: FAL_API_KEY ? FAL_API_KEY.substring(0, 8) + '...' : 'none'
         });
         // Don't expose API key details or configuration info
         return res.status(401).json({ 
@@ -2174,12 +2514,24 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
         imageCount: imageUrls.length
       });
       // Return images and remaining credits (credits already deducted)
-      res.json({ 
+      // Include prompt optimization info if available
+      const responseData = { 
         success: true, 
         images: imageUrls,
         remainingCredits: updateResult.credits,
         creditsDeducted: creditsToDeduct
-      });
+      };
+      
+      // Add prompt optimization details if optimization was performed
+      if (promptOptimizationResult && !promptOptimizationResult.skipped) {
+        responseData.promptOptimization = {
+          originalPrompt: prompt.trim(),
+          optimizedPrompt: promptOptimizationResult.optimizedPrompt,
+          reasoning: promptOptimizationResult.reasoning
+        };
+      }
+      
+      res.json(responseData);
     } else {
       logger.error('No images in AI service response', { 
         service: 'fal.ai',
@@ -7857,11 +8209,11 @@ app.post('/api/payment/instant-check', instantCheckLimiter, async (req, res) => 
 
 /**
  * Add generation to history
- * SECURITY: Requires authentication - uses authenticated user from token
+ * SECURITY: Requires authentication - supports both JWT tokens (email users) and wallet addresses (wallet users)
  */
-app.post('/api/generations/add', authenticateToken, async (req, res) => {
+app.post('/api/generations/add', authenticateFlexible, async (req, res) => {
   try {
-    // SECURITY: Use authenticated user from token, ignore user identifiers in body
+    // SECURITY: Use authenticated user from token or wallet address
     const user = req.user;
     
     logger.debug('Generation add request received', {

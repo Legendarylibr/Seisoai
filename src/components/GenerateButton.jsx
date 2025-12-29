@@ -52,7 +52,9 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
     multiImageModel,
     controlNetImage,
     controlNetImageDimensions,
-    setCurrentGeneration
+    setCurrentGeneration,
+    optimizePrompt,
+    setPromptOptimizationResult
   } = useImageGenerator();
   
   const {
@@ -198,7 +200,8 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         userId: isEmailAuth ? emailContext.userId : undefined, // Pass userId for email users
         email: isEmailAuth ? emailContext.email : undefined, // Pass email for email users
         isNFTHolder: isNFTHolder || false, // Pass NFT holder status for routing
-        referenceImageDimensions: controlNetImageDimensions // Pass dimensions to maintain resolution
+        referenceImageDimensions: controlNetImageDimensions, // Pass dimensions to maintain resolution
+        optimizePrompt // Pass prompt optimization toggle to backend
       };
 
       logger.info('Starting image generation');
@@ -223,6 +226,16 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
       
       const imageUrls = imageResult.images;
       const imageUrl = imageUrls[0];
+      
+      // Store prompt optimization result if available
+      if (imageResult.promptOptimization) {
+        setPromptOptimizationResult(imageResult.promptOptimization);
+        logger.debug('Prompt optimization result stored', {
+          hasReasoning: !!imageResult.promptOptimization.reasoning
+        });
+      } else {
+        setPromptOptimizationResult(null);
+      }
       
       // Always update credits from response (backend deducts immediately, so this is authoritative)
       // Validate and update credits from backend response - NO BLOCKING CONDITIONS
@@ -273,7 +286,11 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         email: isEmailAuth ? emailContext.email : undefined
       }).catch(error => {
         // Silently fail - image was already generated successfully
-        logger.debug('Failed to save generation to history', { error: error.message });
+        // Gallery save is non-critical, so we don't block the UI
+        logger.debug('Failed to save generation to history (non-blocking)', { 
+          error: error.message,
+          identifier: userIdentifier
+        });
       });
       
       // Show image immediately (no artificial delay)

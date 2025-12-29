@@ -65,8 +65,8 @@ export const addGeneration = async (identifier, generationData) => {
       let errorMessage = errorData.error || `Failed to add generation: ${response.status} ${response.statusText}`;
       
       if (response.status === 401 || response.status === 403) {
-        errorMessage = 'Authentication failed. Please sign in again.';
-        logger.warn('Authentication error when saving generation - token may be expired', { 
+        errorMessage = 'Authentication failed. Please provide wallet address, userId, or email.';
+        logger.warn('Authentication error when saving generation', { 
           status: response.status,
           identifier: normalizedIdentifier 
         });
