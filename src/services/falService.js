@@ -2,7 +2,7 @@
 // SECURITY: All API calls now route through backend to ensure credit checks
 import { VISUAL_STYLES } from '../utils/styles.js';
 import logger from '../utils/logger.js';
-import { optimizeImages, needsOptimization } from '../utils/imageOptimizer.js';
+import { optimizeImages, needsOptimization, stripImagesMetadataToDataUri } from '../utils/imageOptimizer.js';
 import { API_URL } from '../utils/apiConfig.js';
 
 // Note: VITE_FAL_API_KEY is no longer used in frontend for security
@@ -292,10 +292,24 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       // Extract all image URLs
       const imageUrls = data.images.map(img => img.url || img);
       
+      // SECURITY: Strip metadata from all images before returning
+      // This removes EXIF data, location info, and other sensitive metadata
+      // Note: This adds ~1-2 seconds per image but ensures all outputs are clean
+      // Downloads also clean metadata as a safety measure
+      let cleanedImageUrls;
+      try {
+        cleanedImageUrls = await stripImagesMetadataToDataUri(imageUrls, { format: 'png' });
+        logger.debug('Metadata stripped from generated images', { count: cleanedImageUrls.length });
+      } catch (error) {
+        logger.warn('Failed to strip metadata from images, using originals', { error: error.message });
+        // Fallback to original URLs if metadata stripping fails
+        cleanedImageUrls = imageUrls;
+      }
+      
       // Always return object with images and credits info for consistency
       const result = {
-        images: imageUrls,
-        imageUrl: imageUrls[0], // First image for backward compatibility
+        images: Array.isArray(cleanedImageUrls) ? cleanedImageUrls : [cleanedImageUrls],
+        imageUrl: Array.isArray(cleanedImageUrls) ? cleanedImageUrls[0] : cleanedImageUrls, // First image for backward compatibility
         remainingCredits: data.remainingCredits,
         creditsDeducted: data.creditsDeducted
       };

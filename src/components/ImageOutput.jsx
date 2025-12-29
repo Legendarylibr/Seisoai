@@ -8,6 +8,7 @@ import { addGeneration } from '../services/galleryService';
 import { X, Sparkles, Zap, Layers, Brain, Wand2, Download, RotateCcw, Trash2 } from 'lucide-react';
 import { BTN, TEXT, hoverHandlers, pressHandlers } from '../utils/buttonStyles';
 import logger from '../utils/logger.js';
+import { stripImageMetadata } from '../utils/imageOptimizer.js';
 
 // PERFORMANCE: Memoized presentational components
 const ActionButton = memo(({ children, onClick, disabled, className = '', variant = 'default', ...props }) => {
@@ -114,22 +115,8 @@ const ImageOutput = () => {
     setModalOptimizePrompt(optimizePrompt);
   }, [optimizePrompt]);
 
-  // Strip metadata from image
-  const stripImageMetadata = useCallback((imageUrl) => new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        canvas.getContext('2d').drawImage(img, 0, 0);
-        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Blob conversion failed')), 'image/png');
-      } catch (e) { reject(e); }
-    };
-    img.onerror = () => reject(new Error('Image load failed'));
-    img.src = imageUrl;
-  }), []);
+  // Strip metadata from image using utility function
+  const stripImageMetadataLocal = useCallback((imageUrl) => stripImageMetadata(imageUrl, { format: 'png' }), []);
 
   const handleDownload = useCallback(async (imageUrl = null) => {
     const img = imageUrl || generatedImage;
@@ -142,7 +129,7 @@ const ImageOutput = () => {
       localStorage.setItem(key, String(idx));
       const filename = `seiso${idx}.png`;
       
-      const blob = await stripImageMetadata(img);
+      const blob = await stripImageMetadataLocal(img);
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
@@ -156,7 +143,7 @@ const ImageOutput = () => {
     } finally {
       setIsDownloading(false);
     }
-  }, [generatedImage, isDownloading, stripImageMetadata]);
+  }, [generatedImage, isDownloading, stripImageMetadataLocal]);
 
   const handleRegenerate = useCallback(async () => {
     if (!currentGeneration || isRegenerating || isGenerating || !isConnected) return;
@@ -377,14 +364,14 @@ const ImageOutput = () => {
   // Empty state - uniform background with centered content
   if (!hasImage) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center" style={{ background: 'linear-gradient(135deg, #f5f5f8, #e8e8f0)' }}>
-        <div className="w-12 h-12 mb-3 flex items-center justify-center" style={{ color: '#a0a0b8' }}>
+      <div className="h-full w-full flex flex-col items-center justify-center" style={{ background: '#c0c0c0' }}>
+        <div className="w-12 h-12 mb-3 flex items-center justify-center" style={{ color: '#808080' }}>
           <svg viewBox="0 0 24 24" fill="none" className="w-10 h-10">
             <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" fill="currentColor" />
           </svg>
         </div>
-        <p className="text-xs font-semibold" style={{ color: '#666', fontFamily: "'IBM Plex Mono', monospace" }}>Your creation awaits</p>
-        <p className="text-[10px] mt-0.5" style={{ color: '#888', fontFamily: "'IBM Plex Mono', monospace" }}>Enter a prompt and click generate</p>
+        <p className="text-xs font-semibold text-center" style={{ color: '#000000', fontFamily: "'IBM Plex Mono', monospace" }}>Your creation awaits</p>
+        <p className="text-[10px] mt-0.5 text-center" style={{ color: '#404040', fontFamily: "'IBM Plex Mono', monospace" }}>Enter a prompt and click generate</p>
       </div>
     );
   }

@@ -115,3 +115,103 @@ export const needsOptimization = (dataUri, thresholdKB = 500) => {
   return sizeKB > thresholdKB;
 };
 
+/**
+ * Strip metadata from an image by redrawing it on canvas
+ * This removes all EXIF data, location info, and other metadata
+ * @param {string} imageUrl - URL or data URI of the image
+ * @param {Object} options - Options for metadata stripping
+ * @param {string} options.format - Output format: 'png' or 'jpeg' (default: 'png')
+ * @param {number} options.quality - JPEG quality 0-1 (default: 0.92, only for JPEG)
+ * @returns {Promise<Blob>} - Blob with cleaned image (no metadata)
+ */
+export const stripImageMetadata = (imageUrl, options = {}) => {
+  const { format = 'png', quality = 0.92 } = options;
+  
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        
+        // Draw image to canvas - this strips all metadata
+        ctx.drawImage(img, 0, 0);
+        
+        // Convert to blob with specified format
+        const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+        const outputQuality = format === 'jpeg' ? quality : undefined;
+        
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Failed to convert image to blob'));
+            }
+          },
+          mimeType,
+          outputQuality
+        );
+      } catch (error) {
+        logger.error('Metadata stripping error', { error: error.message });
+        reject(error);
+      }
+    };
+    
+    img.onerror = () => {
+      logger.error('Failed to load image for metadata stripping', { imageUrl: imageUrl?.substring(0, 100) });
+      reject(new Error('Failed to load image'));
+    };
+    
+    img.src = imageUrl;
+  });
+};
+
+/**
+ * Strip metadata from an image and return as data URI
+ * @param {string} imageUrl - URL or data URI of the image
+ * @param {Object} options - Options for metadata stripping
+ * @param {string} options.format - Output format: 'png' or 'jpeg' (default: 'png')
+ * @param {number} options.quality - JPEG quality 0-1 (default: 0.92, only for JPEG)
+ * @returns {Promise<string>} - Data URI with cleaned image (no metadata)
+ */
+export const stripImageMetadataToDataUri = async (imageUrl, options = {}) => {
+  const blob = await stripImageMetadata(imageUrl, options);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
+/**
+ * Strip metadata from multiple images
+ * @param {string[]|string} imageUrls - Single URL or array of URLs
+ * @param {Object} options - Options for metadata stripping
+ * @returns {Promise<Blob[]|Blob>} - Cleaned image blob(s)
+ */
+export const stripImagesMetadata = async (imageUrls, options = {}) => {
+  if (Array.isArray(imageUrls)) {
+    return Promise.all(imageUrls.map(url => stripImageMetadata(url, options)));
+  }
+  return stripImageMetadata(imageUrls, options);
+};
+
+/**
+ * Strip metadata from multiple images and return as data URIs
+ * @param {string[]|string} imageUrls - Single URL or array of URLs
+ * @param {Object} options - Options for metadata stripping
+ * @returns {Promise<string[]|string>} - Cleaned image data URI(s)
+ */
+export const stripImagesMetadataToDataUri = async (imageUrls, options = {}) => {
+  if (Array.isArray(imageUrls)) {
+    return Promise.all(imageUrls.map(url => stripImageMetadataToDataUri(url, options)));
+  }
+  return stripImageMetadataToDataUri(imageUrls, options);
+};
+

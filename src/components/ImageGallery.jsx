@@ -380,7 +380,8 @@ const ImageGallery = () => {
                       className="w-full h-full object-cover"
                       muted
                       playsInline
-                      onMouseEnter={(e) => e.target.play()}
+                      preload="metadata"
+                      onMouseEnter={(e) => e.target.play().catch(() => {})}
                       onMouseLeave={(e) => {
                         e.target.pause();
                         e.target.currentTime = 0;
@@ -515,6 +516,10 @@ const ImageGallery = () => {
                   <video
                     src={selectedItem.videoUrl || selectedItem.image}
                     controls
+                    autoPlay
+                    loop
+                    playsInline
+                    preload="auto"
                     className="max-w-full max-h-[60vh] mx-auto block"
                   />
                 ) : (

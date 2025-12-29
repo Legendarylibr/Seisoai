@@ -2699,6 +2699,8 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
     // FLUX returns: { images: [{ url: ... }, ...] }
     // Nano Banana Pro returns: { images: [{ url: ... }, ...] } or similar format
     // Extract only clean URLs, removing any metadata
+    // NOTE: Metadata cleaning (EXIF, location data, etc.) is performed on the frontend
+    // when images are received to ensure all outputs are clean
     let imageUrls = [];
     if (data.images && Array.isArray(data.images)) {
       imageUrls = data.images.map(img => {
@@ -2993,7 +2995,13 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
     });
 
     // Build endpoint URL based on mode and quality
-    const qualityPath = quality === 'quality' ? '' : '/fast';
+    // Note: text-to-video mode doesn't support /fast path, use quality endpoint instead
+    let qualityPath = quality === 'quality' ? '' : '/fast';
+    if (generation_mode === 'text-to-video' && quality === 'fast') {
+      // text-to-video doesn't have a /fast endpoint, use quality tier instead
+      qualityPath = '';
+      logger.info('text-to-video mode: fast quality not available, using quality tier');
+    }
     const endpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}`;
     
     const submitResponse = await fetch(endpoint, {
@@ -3034,6 +3042,7 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
 
     // Poll for completion (video generation can take 1-3 minutes)
     // Build status and result endpoints using the same mode and quality as the submit endpoint
+    // Use the same qualityPath that was used for the submit endpoint
     const statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}/status`;
     const resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}`;
     
@@ -3076,6 +3085,11 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
             requestId,
             videoUrl: resultData.video.url.substring(0, 50) + '...'
           });
+          
+          // NOTE: Video metadata cleaning (creation date, camera info, location, etc.) 
+          // can be performed using the videoMetadata utility if FFmpeg is installed.
+          // Videos from fal.ai typically have minimal metadata, but the utility is available
+          // for additional cleaning if needed: backend/utils/videoMetadata.js
           
           return res.json({
             success: true,
@@ -3498,6 +3512,8 @@ app.post('/api/extract-layers', freeImageRateLimiter, requireCredits(1), async (
     
     // Qwen Image Layered returns: { images: [{ url: ... }, ...], seed, timings, has_nsfw_concepts }
     // Extract only clean URLs, removing any metadata
+    // NOTE: Metadata cleaning (EXIF, location data, etc.) is performed on the frontend
+    // when images are received to ensure all outputs are clean
     let imageUrls = [];
     if (data.images && Array.isArray(data.images)) {
       imageUrls = data.images.map(img => {

@@ -134,6 +134,10 @@ export const generateVideo = async ({
     if (data.video && data.video.url) {
       logger.debug('Video generated successfully');
       
+      // NOTE: Video metadata cleaning (creation date, camera info, location, etc.)
+      // Videos from fal.ai typically have minimal metadata. For additional cleaning,
+      // use backend FFmpeg processing (backend/utils/videoMetadata.js) if needed.
+      
       return {
         videoUrl: data.video.url,
         contentType: data.video.content_type,

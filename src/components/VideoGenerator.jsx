@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, memo } from 'react';
+import React, { useState, useRef, useCallback, memo, useEffect } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateVideo } from '../services/videoService';
@@ -387,6 +387,34 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState(null);
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState(null);
+  const [videoReady, setVideoReady] = useState(false);
+  const videoRef = useRef(null);
+
+  // Auto-play video when URL changes and video is ready
+  useEffect(() => {
+    if (generatedVideoUrl && videoRef.current) {
+      setVideoReady(false);
+      const video = videoRef.current;
+      
+      // Force load and play when video is ready
+      const handleCanPlay = () => {
+        setVideoReady(true);
+        video.play().catch(e => {
+          // Autoplay was blocked, try muted
+          logger.debug('Autoplay blocked, trying muted playback', { error: e.message });
+          video.muted = true;
+          video.play().catch(() => {});
+        });
+      };
+      
+      video.addEventListener('canplay', handleCanPlay);
+      video.load(); // Force reload to ensure immediate loading
+      
+      return () => {
+        video.removeEventListener('canplay', handleCanPlay);
+      };
+    }
+  }, [generatedVideoUrl]);
 
   // Get current mode configuration
   const currentMode = GENERATION_MODES.find(m => m.value === generationMode) || GENERATION_MODES[2];
@@ -492,7 +520,7 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
         <div className="flex-1 flex flex-col gap-2">
           {/* Generation Mode & Quality */}
           <Win95GroupBox title="Generation Mode" className="flex-shrink-0">
-            <div className="grid grid-cols-2 gap-2">
+            <div className={`grid ${generationMode === 'text-to-video' ? 'grid-cols-1' : 'grid-cols-2'} gap-2`}>
               {/* Mode Selector */}
               <div>
                 <label className="text-[9px] font-bold flex items-center gap-1 mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
@@ -501,7 +529,14 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
                 <Win95Panel sunken className="px-1 py-0.5">
                   <select 
                     value={generationMode}
-                    onChange={(e) => setGenerationMode(e.target.value)}
+                    onChange={(e) => {
+                      const newMode = e.target.value;
+                      setGenerationMode(newMode);
+                      // Force quality to 'quality' for text-to-video (fast not supported)
+                      if (newMode === 'text-to-video') {
+                        setQuality('quality');
+                      }
+                    }}
                     className="w-full text-[10px] bg-transparent focus:outline-none"
                     style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
                   >
@@ -512,30 +547,33 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
                 </Win95Panel>
                 <div className="text-[8px] mt-0.5" style={{ color: WIN95.textDisabled }}>
                   {currentMode.description}
+                  {generationMode === 'text-to-video' && ' (Quality tier only)'}
                 </div>
               </div>
               
-              {/* Quality Selector */}
-              <div>
-                <label className="text-[9px] font-bold flex items-center gap-1 mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                  <Zap className="w-3 h-3" /> Quality
-                </label>
-                <div className="flex gap-0.5">
-                  {QUALITY_OPTIONS.map((opt) => (
-                    <Win95Button
-                      key={opt.value}
-                      onClick={() => setQuality(opt.value)}
-                      active={quality === opt.value}
-                      className="flex-1"
-                    >
-                      {opt.label}
-                    </Win95Button>
-                  ))}
+              {/* Quality Selector - hidden for text-to-video mode */}
+              {generationMode !== 'text-to-video' && (
+                <div>
+                  <label className="text-[9px] font-bold flex items-center gap-1 mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                    <Zap className="w-3 h-3" /> Quality
+                  </label>
+                  <div className="flex gap-0.5">
+                    {QUALITY_OPTIONS.map((opt) => (
+                      <Win95Button
+                        key={opt.value}
+                        onClick={() => setQuality(opt.value)}
+                        active={quality === opt.value}
+                        className="flex-1"
+                      >
+                        {opt.label}
+                      </Win95Button>
+                    ))}
+                  </div>
+                  <div className="text-[8px] mt-0.5" style={{ color: WIN95.textDisabled }}>
+                    {QUALITY_OPTIONS.find(q => q.value === quality)?.description}
+                  </div>
                 </div>
-                <div className="text-[8px] mt-0.5" style={{ color: WIN95.textDisabled }}>
-                  {QUALITY_OPTIONS.find(q => q.value === quality)?.description}
-                </div>
-              </div>
+              )}
             </div>
           </Win95GroupBox>
 
@@ -718,20 +756,34 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
                 </div>
               ) : generatedVideoUrl ? (
                 <div className="w-full h-full flex flex-col">
+                  {/* Loading indicator while video buffers */}
+                  {!videoReady && (
+                    <div className="absolute inset-0 flex items-center justify-center z-10" style={{ background: WIN95.inputBg }}>
+                      <div className="text-center">
+                        <div className="w-6 h-6 mx-auto mb-2 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: WIN95.highlight, borderTopColor: 'transparent' }} />
+                        <p className="text-[10px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Loading video...</p>
+                      </div>
+                    </div>
+                  )}
                   <video 
+                    ref={videoRef}
                     src={generatedVideoUrl}
                     controls
                     autoPlay
                     loop
+                    playsInline
+                    preload="auto"
                     className="flex-1 w-full object-contain"
-                    style={{ maxHeight: 'calc(100% - 40px)' }}
+                    style={{ maxHeight: 'calc(100% - 40px)', opacity: videoReady ? 1 : 0 }}
+                    onLoadedData={() => setVideoReady(true)}
+                    onCanPlay={() => setVideoReady(true)}
                   />
                   <div className="flex justify-center gap-2 p-2" style={{ background: WIN95.bg }}>
                     <Win95Button onClick={handleDownload}>
                       <Download className="w-3.5 h-3.5 mr-1" />
                       Download
                     </Win95Button>
-                    <Win95Button onClick={() => setGeneratedVideoUrl(null)}>
+                    <Win95Button onClick={() => { setGeneratedVideoUrl(null); setVideoReady(false); }}>
                       New Video
                     </Win95Button>
                   </div>

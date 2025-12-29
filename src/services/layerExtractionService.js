@@ -2,6 +2,7 @@
 // SECURITY: All API calls route through backend to ensure credit checks
 import logger from '../utils/logger.js';
 import { API_URL } from '../utils/apiConfig.js';
+import { stripImagesMetadataToDataUri } from '../utils/imageOptimizer.js';
 
 /**
  * Extract layers from an image using Qwen Image Layered
@@ -112,15 +113,30 @@ export const extractLayers = async (imageUrl, options = {}) => {
       throw new Error('No layers extracted from image');
     }
 
+    // SECURITY: Strip metadata from all layer images before returning
+    // This removes EXIF data, location info, and other sensitive metadata
+    // Note: This adds ~1-2 seconds per image but ensures all outputs are clean
+    // Downloads also clean metadata as a safety measure
+    let cleanedLayerUrls;
+    try {
+      cleanedLayerUrls = await stripImagesMetadataToDataUri(layerUrls, { format: 'png' });
+      logger.debug('Metadata stripped from layer images', { count: cleanedLayerUrls.length });
+    } catch (error) {
+      logger.warn('Failed to strip metadata from layer images, using originals', { error: error.message });
+      // Fallback to original URLs if metadata stripping fails
+      cleanedLayerUrls = layerUrls;
+    }
+
     logger.info('Layer extraction completed', { 
-      layerCount: layerUrls.length,
+      layerCount: cleanedLayerUrls.length,
       seed: data.seed
     });
 
     // Return object with images array for consistency with falService
+    const cleanedArray = Array.isArray(cleanedLayerUrls) ? cleanedLayerUrls : [cleanedLayerUrls];
     return {
-      images: layerUrls,
-      imageUrl: layerUrls[0],
+      images: cleanedArray,
+      imageUrl: cleanedArray[0],
       remainingCredits: data.remainingCredits,
       creditsDeducted: data.creditsDeducted
     };
