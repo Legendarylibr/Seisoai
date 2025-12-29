@@ -41,11 +41,12 @@
     -moz-osx-font-smoothing: grayscale;
     position: relative;
     height: 100vh;
-    overflow: hidden;
+    overflow-x: hidden;
   }
   
   #root {
     height: 100%;
+    overflow: hidden;
   }
 
   h1, h2, h3 {

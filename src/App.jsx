@@ -136,7 +136,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
   }, []);
 
   return (
-    <div className="h-screen animated-bg flex flex-col overflow-hidden" style={{ position: 'relative', zIndex: 0 }}>
+    <div className="h-screen animated-bg flex flex-col" style={{ position: 'relative', zIndex: 0 }}>
       <Navigation 
         activeTab={currentTab} 
         setActiveTab={(tab) => {
