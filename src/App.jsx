@@ -304,8 +304,10 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
       <div className="flex-1 min-h-0 overflow-hidden">
         {/* Main Generation Area - Balanced Columns */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-1 h-full">
-          {/* Left Column: Input Section - Scrollable */}
-          <div className="flex flex-col h-full overflow-y-auto lg:overflow-y-auto" style={{ animationDelay: '100ms' }}>
+          {/* Left Column: Input Section - Scrollable with sticky generate button */}
+          <div className="flex flex-col h-full" style={{ animationDelay: '100ms' }}>
+            {/* Scrollable content area */}
+            <div className="flex-1 min-h-0 overflow-y-auto">
             {/* How to Use - Collapsible and Compact */}
             <CollapsibleHowToUse />
             
@@ -323,7 +325,7 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
                     <h2 className="section-title text-xs" style={{ color: '#92400e' }}>🖼️ Reference</h2>
                   </div>
                 </div>
-                <div className="h-[100px] lg:h-[80px] overflow-hidden rounded-lg" style={{
+                <div className="h-[90px] overflow-hidden rounded-lg" style={{
                   background: 'rgba(255, 255, 255, 0.5)',
                   border: '2px dashed rgba(217, 119, 6, 0.3)'
                 }}>
@@ -372,7 +374,7 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
                   </div>
                   <h2 className="section-title text-xs" style={{ color: '#92400e' }}>🖼️ Reference (optional)</h2>
                 </div>
-                <div className="h-[80px] lg:h-[70px] overflow-hidden rounded-lg" style={{
+                <div className="h-[80px] overflow-hidden rounded-lg" style={{
                   background: 'rgba(255, 255, 255, 0.5)',
                   border: '2px dashed rgba(217, 119, 6, 0.3)'
                 }}>
@@ -395,18 +397,17 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
 
             {/* Style Selection */}
             {!isQwenSelected && (
-              <div className="note-slate rounded-lg p-1.5 lg:p-2 rounded-t-none" style={{ borderTop: 'none', marginTop: '-2px' }}>
+              <div className="note-slate rounded-lg p-1.5 lg:p-2 rounded-b-none" style={{ borderBottom: 'none' }}>
                 <StyleSelector />
               </div>
             )}
-
-            {/* Generate Button */}
-            <div className="rounded-lg lg:rounded-bl-xl p-1.5 lg:p-2 rounded-t-none flex-shrink-0" style={{ 
+            </div>
+            
+            {/* Generate Button - Always visible at bottom */}
+            <div className="flex-shrink-0 rounded-lg lg:rounded-bl-xl p-1.5 lg:p-2" style={{ 
               background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%)',
               border: '2px solid #10b981',
-              borderTop: 'none',
-              marginTop: '-2px',
-              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.9), 0 4px 12px rgba(16, 185, 129, 0.2)'
+              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.9), 0 -2px 8px rgba(16, 185, 129, 0.15)'
             }}>
               <GenerateButton 
                 customPrompt={customPrompt}
