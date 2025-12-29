@@ -57,7 +57,7 @@ const AuthGuard = ({ children, requireCredits = true, fallback = null }) => {
   // Always show the UI - credits will be checked at the component level
 
   // User is authenticated and has credits (or free access)
-  return children;
+  return <div className="h-full">{children}</div>;
 };
 
 export default AuthGuard;

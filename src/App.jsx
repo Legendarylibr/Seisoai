@@ -136,7 +136,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
   }, []);
 
   return (
-    <div className="min-h-screen animated-bg" style={{ position: 'relative', zIndex: 0 }}>
+    <div className="h-screen animated-bg flex flex-col overflow-hidden" style={{ position: 'relative', zIndex: 0 }}>
       <Navigation 
         activeTab={currentTab} 
         setActiveTab={(tab) => {
@@ -148,8 +148,8 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
         onShowStripePayment={handleShowStripePayment}
       />
       
-      <main className="container mx-auto px-3 md:px-6 lg:px-4 py-1.5 md:py-2 lg:py-1.5">
-        <div className="fade-in">
+      <main className="flex-1 container mx-auto px-3 md:px-6 lg:px-4 py-1 overflow-hidden">
+        <div className="fade-in h-full">
           <AppContent 
             activeTab={currentTab} 
             onShowTokenPayment={handleShowTokenPayment}
@@ -189,14 +189,13 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
 }
 
 function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
-  // Allow UI access without authentication - users can see the interface and try to generate
-  // Authentication will be prompted when they try to generate if needed
-  // New users get 2 credits when they sign up, so we allow them to see the UI
   return (
-    <AuthGuard requireCredits={false}>
-      {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
-      {activeTab === 'gallery' && <GalleryTab />}
-    </AuthGuard>
+    <div className="h-full">
+      <AuthGuard requireCredits={false}>
+        {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
+        {activeTab === 'gallery' && <GalleryTab />}
+      </AuthGuard>
+    </div>
   );
 }
 
@@ -275,48 +274,38 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
   const isEmailAuth = emailContext.isAuthenticated;
 
   return (
-    <div className="fade-in">
+    <div className="fade-in h-full flex flex-col">
       {/* Top Row - Header and User Info - Compact */}
-      <div className="mb-0.5 lg:mb-1">
-          {/* Compact Header with Neon Effect */}
-          <div className="text-center py-1 lg:py-1.5 mb-0.5 lg:mb-1 relative">
-            {/* Decorative pixel corners */}
-            <div className="absolute top-0 left-0 w-3 h-3 opacity-60" style={{
-              background: 'linear-gradient(90deg, #00b8a9 33%, transparent 33%), linear-gradient(180deg, #00b8a9 33%, transparent 33%)',
-              backgroundSize: '3px 3px'
-            }}></div>
-            <div className="absolute top-0 right-0 w-3 h-3 opacity-60" style={{
-              background: 'linear-gradient(270deg, #f59e0b 33%, transparent 33%), linear-gradient(180deg, #f59e0b 33%, transparent 33%)',
-              backgroundSize: '3px 3px'
-            }}></div>
-            <h1 className="hero-title text-xl md:text-2xl lg:text-xl font-bold mb-0.5" style={{ 
-              fontFamily: "'VT323', monospace",
-              letterSpacing: '0.08em'
-            }}>SEISO AI</h1>
-            <p className="text-[10px] md:text-xs lg:text-[10px] tracking-wide" style={{ 
-              color: '#ffffff', 
-              textShadow: '0 0 8px rgba(0, 184, 169, 0.6), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9)',
-              fontFamily: "'IBM Plex Mono', monospace"
-            }}>Generate • Edit • Extract Layers</p>
-          </div>
+      <div className="flex-shrink-0 mb-0.5">
+        {/* Compact Header with Neon Effect */}
+        <div className="text-center py-0.5 relative">
+          <h1 className="hero-title text-lg lg:text-xl font-bold" style={{ 
+            fontFamily: "'VT323', monospace",
+            letterSpacing: '0.08em'
+          }}>SEISO AI</h1>
+          <p className="text-[9px] tracking-wide" style={{ 
+            color: '#ffffff', 
+            textShadow: '0 0 8px rgba(0, 184, 169, 0.6), 2px 2px 0 rgba(0, 0, 0, 0.8)',
+            fontFamily: "'IBM Plex Mono', monospace"
+          }}>Generate • Edit • Extract Layers</p>
+        </div>
 
         {/* User Info - Email or Wallet */}
-        <div className="glass-card rounded-lg p-0.5 lg:p-1 mb-0.5 lg:mb-1 slide-up">
+        <div className="glass-card rounded-lg p-0.5 slide-up">
           {isEmailAuth ? (
             <EmailUserInfo onShowStripePayment={onShowStripePayment} />
           ) : (
             <SimpleWalletConnect />
           )}
         </div>
-
       </div>
 
-      {/* Main Content - Improved User Flow Layout */}
-      <div>
+      {/* Main Content - Fill remaining space */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         {/* Main Generation Area - Balanced Columns */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-1 lg:gap-1 lg:items-stretch">
-          {/* Left Column: Input Section - Optimized Flow */}
-          <div className="slide-up flex flex-col" style={{ animationDelay: '100ms' }}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-1 h-full">
+          {/* Left Column: Input Section - Scrollable */}
+          <div className="flex flex-col h-full overflow-y-auto lg:overflow-y-auto" style={{ animationDelay: '100ms' }}>
             {/* How to Use - Collapsible and Compact */}
             <CollapsibleHowToUse />
             
@@ -324,22 +313,17 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
             {hasReferenceImages && (
               <div 
                 key="reference-image-section-active"
-                className="note-amber rounded-lg lg:rounded-tl-xl lg:rounded-tr-none p-2 lg:p-2.5 rounded-b-none animate-slide-up"
+                className="note-amber rounded-lg lg:rounded-tl-xl lg:rounded-tr-none p-1.5 lg:p-2 rounded-b-none"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="p-1.5 rounded-lg icon-box-amber">
-                    <Image className="w-4 h-4" style={{ color: '#d97706' }} />
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="p-1 rounded-lg icon-box-amber">
+                    <Image className="w-3 h-3" style={{ color: '#d97706' }} />
                   </div>
                   <div>
-                    <h2 className="section-title text-sm md:text-base" style={{ color: '#92400e' }}>
-                      🖼️ Reference Image
-                    </h2>
-                    <p className="text-[10px] leading-tight" style={{ color: '#b45309' }}>
-                      <strong>1:</strong> edit • <strong>2+:</strong> blend
-                    </p>
+                    <h2 className="section-title text-xs" style={{ color: '#92400e' }}>🖼️ Reference</h2>
                   </div>
                 </div>
-                <div className="h-[160px] md:h-[190px] lg:h-[150px] overflow-hidden rounded-lg" style={{
+                <div className="h-[100px] lg:h-[80px] overflow-hidden rounded-lg" style={{
                   background: 'rgba(255, 255, 255, 0.5)',
                   border: '2px dashed rgba(217, 119, 6, 0.3)'
                 }}>
@@ -348,70 +332,47 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
               </div>
             )}
 
-            {/* Prompt Input - Primary when no reference, Secondary (below) when reference exists */}
+            {/* Prompt Input */}
             {!isQwenSelected && (
               <div 
                 key={hasReferenceImages ? 'prompt-below-image' : 'prompt-primary'}
-                className={`note-teal rounded-lg p-2 lg:p-2.5 transition-all duration-300 ${
-                  hasReferenceImages 
-                    ? 'rounded-t-none animate-slide-down' 
-                    : 'lg:rounded-tl-xl lg:rounded-tr-none rounded-b-none'
+                className={`note-teal rounded-lg p-1.5 lg:p-2 ${
+                  hasReferenceImages ? 'rounded-t-none' : 'lg:rounded-tl-xl lg:rounded-tr-none rounded-b-none'
                 }`} 
                 style={hasReferenceImages ? { borderTop: 'none', marginTop: '-2px' } : {}}
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="p-1.5 rounded-lg icon-box-teal">
-                    <Sparkles className="w-4 h-4" style={{ color: '#009688' }} />
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="p-1 rounded-lg icon-box-teal">
+                    <Sparkles className="w-3 h-3" style={{ color: '#009688' }} />
                   </div>
-                  <div>
-                    <h2 className="section-title text-sm md:text-base" style={{ color: '#00695c' }}>
-                      {hasReferenceImages ? '✏️ Describe Changes' : '✨ Prompt'}
-                    </h2>
-                    {hasReferenceImages && (
-                      <p className="text-[10px] leading-tight" style={{ color: '#00897b', fontStyle: 'italic' }}>Optional - describe what to change</p>
-                    )}
-                  </div>
+                  <h2 className="section-title text-xs" style={{ color: '#00695c' }}>
+                    {hasReferenceImages ? '✏️ Changes' : '✨ Prompt'}
+                  </h2>
                 </div>
                 <textarea
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder={
-                    hasReferenceImages 
-                      ? "e.g., 'make it more vibrant', 'add sunset colors'..." 
-                      : "Describe your image... e.g., 'a futuristic city at sunset with neon lights'"
-                  }
-                  className="w-full p-2 lg:p-2.5 rounded-lg resize-none text-sm transition-all duration-300 win95-input"
-                  rows={3}
+                  placeholder={hasReferenceImages ? "Describe changes..." : "Describe your image..."}
+                  className="w-full p-1.5 rounded-lg resize-none text-xs win95-input"
+                  rows={2}
                 />
-                {!hasReferenceImages && (
-                  <p className="text-[10px] mt-1.5 leading-tight" style={{ color: '#00695c' }}>
-                    💡 Be specific with colors, mood, and style for best results
-                  </p>
-                )}
               </div>
             )}
 
-            {/* Reference Image Input - Only shown here when NO reference image (upload prompt) */}
+            {/* Reference Image Input - Only shown when NO reference image */}
             {!hasReferenceImages && (
               <div 
                 key="reference-image-section-empty"
-                className="note-amber rounded-lg p-2 lg:p-2.5 rounded-t-none" 
+                className="note-amber rounded-lg p-1.5 lg:p-2 rounded-t-none" 
                 style={{ borderTop: 'none', marginTop: '-2px' }}
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="p-1.5 rounded-lg icon-box-amber">
-                    <Image className="w-4 h-4" style={{ color: '#d97706' }} />
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="p-1 rounded-lg icon-box-amber">
+                    <Image className="w-3 h-3" style={{ color: '#d97706' }} />
                   </div>
-                  <div>
-                    <h2 className="section-title text-sm md:text-base" style={{ color: '#92400e' }}>
-                      🖼️ Reference Image
-                    </h2>
-                    <p className="text-[10px] leading-tight" style={{ color: '#b45309' }}>
-                      <strong>0:</strong> generate new • <strong>1:</strong> edit • <strong>2+:</strong> blend
-                    </p>
-                  </div>
+                  <h2 className="section-title text-xs" style={{ color: '#92400e' }}>🖼️ Reference (optional)</h2>
                 </div>
-                <div className="h-[160px] md:h-[190px] lg:h-[150px] overflow-hidden rounded-lg" style={{
+                <div className="h-[80px] lg:h-[70px] overflow-hidden rounded-lg" style={{
                   background: 'rgba(255, 255, 255, 0.5)',
                   border: '2px dashed rgba(217, 119, 6, 0.3)'
                 }}>
@@ -422,33 +383,25 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
 
             {/* Model Selection */}
             {(!hasReferenceImages && !isQwenSelected) || hasReferenceImages ? (
-              <div 
-                className="glass-card rounded-lg p-2 lg:p-2.5 rounded-t-none" 
-                style={{ borderTop: 'none', marginTop: '-2px' }}
-              >
+              <div className="glass-card rounded-lg p-1.5 lg:p-2 rounded-t-none" style={{ borderTop: 'none', marginTop: '-2px' }}>
                 <MultiImageModelSelector customPrompt={customPrompt} />
               </div>
             ) : null}
 
             {/* AI Prompt Reasoning Toggle */}
-            <div 
-              className="glass-card rounded-lg p-2 lg:p-2.5 mt-1" 
-            >
+            <div className="glass-card rounded-lg p-1.5 lg:p-2 mt-0.5">
               <PromptOptimizer />
             </div>
 
             {/* Style Selection */}
             {!isQwenSelected && (
-              <div 
-                className="note-slate rounded-lg p-2 lg:p-2.5 rounded-t-none" 
-                style={{ borderTop: 'none', marginTop: '-2px' }}
-              >
+              <div className="note-slate rounded-lg p-1.5 lg:p-2 rounded-t-none" style={{ borderTop: 'none', marginTop: '-2px' }}>
                 <StyleSelector />
               </div>
             )}
 
             {/* Generate Button */}
-            <div className="rounded-lg lg:rounded-bl-xl p-2 lg:p-2.5 rounded-t-none" style={{ 
+            <div className="rounded-lg lg:rounded-bl-xl p-1.5 lg:p-2 rounded-t-none flex-shrink-0" style={{ 
               background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%)',
               border: '2px solid #10b981',
               borderTop: 'none',
@@ -462,19 +415,16 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
             </div>
           </div>
 
-          {/* Right Column: Output Section */}
-          <div className="slide-up flex flex-col" style={{ animationDelay: '200ms' }}>
-            <div className="note-blue rounded-lg lg:rounded-tr-xl lg:rounded-tl-none lg:rounded-br-xl p-2 lg:p-2.5 flex flex-col h-full lg:h-full">
-              <div className="flex items-center gap-2 mb-2 flex-shrink-0">
-                <div className="p-1.5 rounded-lg icon-box-blue">
-                  <Sparkles className="w-4 h-4" style={{ color: '#2563eb' }} />
+          {/* Right Column: Output Section - Fill height */}
+          <div className="flex flex-col h-full min-h-0" style={{ animationDelay: '200ms' }}>
+            <div className="note-blue rounded-lg lg:rounded-tr-xl lg:rounded-tl-none lg:rounded-br-xl p-1.5 lg:p-2 flex flex-col flex-1 min-h-0">
+              <div className="flex items-center gap-1.5 mb-1 flex-shrink-0">
+                <div className="p-1 rounded-lg icon-box-blue">
+                  <Sparkles className="w-3 h-3" style={{ color: '#2563eb' }} />
                 </div>
-                <h2 className="section-title text-sm md:text-base" style={{ color: '#1e40af' }}>
-                  🎨 Generated Image
-                </h2>
+                <h2 className="section-title text-xs" style={{ color: '#1e40af' }}>🎨 Output</h2>
               </div>
-              <div className="flex-1 flex flex-col overflow-hidden min-h-[200px] lg:min-h-0 rounded-lg" style={{ 
-                minHeight: '200px',
+              <div className="flex-1 flex flex-col overflow-hidden min-h-0 rounded-lg" style={{ 
                 background: 'rgba(255, 255, 255, 0.6)',
                 border: '2px solid rgba(59, 130, 246, 0.25)'
               }}>
@@ -490,8 +440,8 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
 
 // PERFORMANCE: Memoized gallery tab with lazy loading
 const GalleryTab = memo(() => (
-  <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /></div>}>
-    <ImageGallery />
+  <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /></div>}>
+    <div className="h-full overflow-auto"><ImageGallery /></div>
   </Suspense>
 ));
 
