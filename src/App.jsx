@@ -238,12 +238,12 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
         )}
       </div>
 
-      {/* Main Content - Fill remaining space */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {/* Main Generation Area - Two Columns, no gap */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 h-full">
-          {/* Left Column: Input Section - Scrollable with sticky generate button */}
-          <div className="flex flex-col h-full" style={{ animationDelay: '100ms' }}>
+      {/* Main Content - Constrained height with bottom space */}
+      <div className="flex-1 min-h-0 flex flex-col pb-4">
+        {/* Main Generation Area - Two Columns, fixed max height */}
+        <div className="grid grid-cols-1 lg:grid-cols-2" style={{ maxHeight: 'calc(100% - 8px)' }}>
+          {/* Left Column: Input Section - Scrollable with generate button at end */}
+          <div className="flex flex-col" style={{ animationDelay: '100ms', maxHeight: '100%' }}>
             {/* Scrollable content area */}
             <div className="flex-1 min-h-0 overflow-y-auto">
             {/* How to Use - Collapsible and Compact */}
@@ -309,7 +309,7 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
             )}
             </div>
             
-            {/* Generate Button - Always visible at bottom */}
+            {/* Generate Button - Flush with output bottom */}
             <div className="flex-shrink-0 rounded-b p-1" style={{ 
               background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%)',
               border: '2px solid #10b981',
@@ -322,13 +322,13 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
             </div>
           </div>
 
-          {/* Right Column: Output Section - Fill height */}
-          <div className="flex flex-col h-full min-h-0">
-            <div className="note-blue rounded-none lg:rounded-r p-1 flex flex-col flex-1 min-h-0" style={{ borderLeft: 'none' }}>
+          {/* Right Column: Output Section - Compact height matching left column */}
+          <div className="flex flex-col" style={{ maxHeight: '100%' }}>
+            <div className="note-blue rounded-none lg:rounded-r p-1 flex flex-col h-full" style={{ borderLeft: 'none' }}>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <span className="text-[10px] font-bold" style={{ color: '#1e40af' }}>🎨 Output</span>
               </div>
-              <div className="flex-1 flex flex-col overflow-hidden min-h-0 mt-0.5" style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '2px' }}>
+              <div className="flex-1 flex flex-col overflow-hidden min-h-0 mt-0.5" style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '2px', maxHeight: '280px' }}>
                 <ImageOutput />
               </div>
             </div>
