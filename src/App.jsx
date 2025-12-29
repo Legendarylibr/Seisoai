@@ -8,6 +8,7 @@ import ImageOutput from './components/ImageOutput';
 import Navigation from './components/Navigation';
 import ReferenceImageInput from './components/ReferenceImageInput';
 import MultiImageModelSelector from './components/MultiImageModelSelector';
+import PromptOptimizer from './components/PromptOptimizer';
 import TokenPaymentModal from './components/TokenPaymentModal';
 import StripePaymentModal from './components/StripePaymentModal';
 import PaymentSuccessModal from './components/PaymentSuccessModal';
@@ -422,6 +423,13 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
                 <MultiImageModelSelector customPrompt={customPrompt} />
               </div>
             ) : null}
+
+            {/* AI Prompt Reasoning Toggle */}
+            <div 
+              className="glass-card rounded-lg p-2 lg:p-2.5 mt-1" 
+            >
+              <PromptOptimizer />
+            </div>
 
             {/* Style Selection */}
             {!isQwenSelected && (

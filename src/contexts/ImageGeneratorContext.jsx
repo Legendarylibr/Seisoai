@@ -23,7 +23,10 @@ const initialState = {
   // ControlNet settings
   controlNetType: null,
   controlNetImage: null,
-  controlNetImageDimensions: null // Store reference image dimensions
+  controlNetImageDimensions: null, // Store reference image dimensions
+  // Prompt optimization
+  optimizePrompt: true, // Enable LLM-based prompt optimization by default
+  promptOptimizationResult: null // Store the optimization result (original, optimized, reasoning)
 };
 
 const imageGeneratorReducer = (state, action) => {
@@ -125,6 +128,12 @@ const imageGeneratorReducer = (state, action) => {
         controlNetImageDimensions: action.payload?.dimensions || null
       };
     
+    case 'SET_OPTIMIZE_PROMPT':
+      return { ...state, optimizePrompt: action.payload };
+    
+    case 'SET_PROMPT_OPTIMIZATION_RESULT':
+      return { ...state, promptOptimizationResult: action.payload };
+    
     default:
       return state;
   }
@@ -198,6 +207,14 @@ export const ImageGeneratorProvider = ({ children }) => {
     dispatch({ type: 'SET_CURRENT_GENERATION', payload: generation });
   };
 
+  const setOptimizePrompt = (enabled) => {
+    dispatch({ type: 'SET_OPTIMIZE_PROMPT', payload: enabled });
+  };
+
+  const setPromptOptimizationResult = (result) => {
+    dispatch({ type: 'SET_PROMPT_OPTIMIZATION_RESULT', payload: result });
+  };
+
   const value = {
     ...state,
     selectStyle,
@@ -215,7 +232,9 @@ export const ImageGeneratorProvider = ({ children }) => {
     setSafetyChecker,
     setGenerationMode,
     setMultiImageModel,
-    setCurrentGeneration
+    setCurrentGeneration,
+    setOptimizePrompt,
+    setPromptOptimizationResult
   };
 
   return (
