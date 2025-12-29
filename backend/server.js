@@ -3033,8 +3033,9 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
     logger.info('Video generation submitted', { requestId });
 
     // Poll for completion (video generation can take 1-3 minutes)
-    const statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/first-last-frame-to-video/requests/${requestId}/status`;
-    const resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/first-last-frame-to-video/requests/${requestId}`;
+    // Build status and result endpoints using the same mode and quality as the submit endpoint
+    const statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}/status`;
+    const resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}`;
     
     const maxWaitTime = 5 * 60 * 1000; // 5 minutes max wait
     const pollInterval = 5000; // Poll every 5 seconds

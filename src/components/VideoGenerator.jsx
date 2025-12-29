@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, memo } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateVideo } from '../services/videoService';
+import { addGeneration } from '../services/galleryService';
 import { Film, Upload, Play, X, Clock, Monitor, Volume2, VolumeX, Sparkles, Download, AlertCircle, ChevronDown, Square, Zap, Image, Layers } from 'lucide-react';
 import logger from '../utils/logger.js';
 import { WIN95 } from '../utils/buttonStyles.js';
@@ -433,6 +434,20 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
         emailContext.refreshCredits();
       } else if (walletContext.fetchCredits && walletContext.address) {
         walletContext.fetchCredits(walletContext.address, 3, true);
+      }
+      
+      // Save to gallery (non-blocking)
+      const creditsUsed = result.creditsDeducted || calculateVideoCredits(duration, generateAudio, quality);
+      const identifier = isEmailAuth ? emailContext.userId : walletContext.address;
+      if (identifier) {
+        addGeneration(identifier, {
+          prompt: prompt.trim() || 'Video generation',
+          style: `${currentMode.label} - ${quality === 'quality' ? 'Quality' : 'Fast'}`,
+          videoUrl: result.videoUrl,
+          creditsUsed: creditsUsed,
+          userId: isEmailAuth ? emailContext.userId : undefined,
+          email: isEmailAuth ? emailContext.email : undefined
+        }).catch(e => logger.debug('Gallery save failed', { error: e.message }));
       }
       
       logger.info('Video generated successfully', { 
