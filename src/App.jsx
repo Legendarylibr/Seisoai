@@ -505,9 +505,9 @@ const ImageModeContent = memo(function ImageModeContent({ mode, onShowTokenPayme
       {/* Right Column: Output Section */}
       <div className="flex-1 flex flex-col">
         <Win95GroupBox title="🎨 Output" titleColor="#000080" className="flex-1 flex flex-col">
-          <Win95Panel sunken className="flex-1 overflow-hidden" style={{ minHeight: '200px' }}>
+          <div className="flex-1 overflow-hidden" style={{ minHeight: '200px', background: WIN95.bg }}>
             <ImageOutput />
-          </Win95Panel>
+          </div>
         </Win95GroupBox>
       </div>
     </div>

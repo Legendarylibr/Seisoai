@@ -112,7 +112,8 @@ export function isLikelyVPN(ip) {
 
 /**
  * Rate limiter specifically for free image generation
- * Stricter limits to prevent abuse
+ * Stricter limits to prevent abuse - but SKIPS authenticated users
+ * Authenticated users are managed by the requireCredits middleware instead
  */
 export function createFreeImageRateLimiter(rateLimit) {
   return rateLimit({
@@ -129,6 +130,22 @@ export function createFreeImageRateLimiter(rateLimit) {
       // Use IP + browser fingerprint for more accurate tracking
       const fingerprint = generateBrowserFingerprint(req);
       return `${req.ip || 'unknown'}-${fingerprint}`;
+    },
+    // Skip rate limiting for authenticated users (they'll be checked by requireCredits middleware)
+    skip: (req) => {
+      // Check for user identification in request body (how the app sends auth info)
+      const body = req.body || {};
+      const hasWallet = body.walletAddress;
+      const hasUserId = body.userId;
+      const hasEmail = body.email;
+      
+      // Skip rate limiting if user is authenticated (they have credits system instead)
+      // The requireCredits middleware will handle credit checks for authenticated users
+      if (hasWallet || hasUserId || hasEmail) {
+        return true;
+      }
+      
+      return false;
     }
   });
 }

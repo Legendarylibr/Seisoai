@@ -361,17 +361,17 @@ const ImageOutput = () => {
     );
   }
 
-  // Empty state - uniform background with centered content
+  // Empty state - uniform gray background matching Win95 style
   if (!hasImage) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center" style={{ background: '#c0c0c0' }}>
-        <div className="w-12 h-12 mb-3 flex items-center justify-center" style={{ color: '#808080' }}>
-          <svg viewBox="0 0 24 24" fill="none" className="w-10 h-10">
+        <div className="w-10 h-10 mb-2 flex items-center justify-center" style={{ color: '#808080' }}>
+          <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
             <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" fill="currentColor" />
           </svg>
         </div>
-        <p className="text-xs font-semibold text-center" style={{ color: '#000000', fontFamily: "'IBM Plex Mono', monospace" }}>Your creation awaits</p>
-        <p className="text-[10px] mt-0.5 text-center" style={{ color: '#404040', fontFamily: "'IBM Plex Mono', monospace" }}>Enter a prompt and click generate</p>
+        <p className="text-[11px] font-bold text-center" style={{ color: '#000000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Your creation awaits</p>
+        <p className="text-[10px] mt-0.5 text-center" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Enter a prompt and click generate</p>
       </div>
     );
   }
