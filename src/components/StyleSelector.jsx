@@ -7,7 +7,7 @@ import { BTN, TEXT, hoverHandlers } from '../utils/buttonStyles';
 // PERFORMANCE: Pre-compute categories once
 const CATEGORIES = ['All', ...new Set(VISUAL_STYLES.map(s => s.category))];
 
-const StyleSelector = memo(() => {
+const StyleSelector = memo(({ openUpward = false }) => {
   const { selectedStyle, selectStyle } = useImageGenerator();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
@@ -22,7 +22,7 @@ const StyleSelector = memo(() => {
   }), [selectedCategory, searchTerm]);
 
   return (
-    <div className="w-full space-y-2 relative overflow-hidden rounded-lg p-2.5" style={{ 
+    <div className={`w-full space-y-2 relative rounded-lg p-2.5 ${openUpward ? 'lg:overflow-visible overflow-hidden' : 'overflow-hidden'}`} style={{ 
       background: 'linear-gradient(135deg, #ffffee 0%, #ffffdd 50%, #ffffc8 100%)',
       border: '2px outset #ffffcc',
       boxShadow: 'inset 2px 2px 0 rgba(255,255,255,0.9), inset -2px -2px 0 rgba(0,0,0,0.15)'
@@ -66,9 +66,18 @@ const StyleSelector = memo(() => {
         {showStyleOptions ? <ChevronUp className="w-4 h-4" style={{color:'#000'}} /> : <ChevronDown className="w-4 h-4" style={{color:'#000'}} />}
       </button>
 
-      {/* Style Options */}
+      {/* Style Options - Opens upward on desktop when openUpward is true */}
       {showStyleOptions && (
-        <div className="space-y-2">
+        <div 
+          className={`space-y-2 ${openUpward ? 'lg:absolute lg:bottom-full lg:left-0 lg:right-0 lg:mb-1 lg:z-50' : ''}`}
+          style={openUpward ? {
+            background: 'linear-gradient(135deg, #ffffee 0%, #ffffdd 50%, #ffffc8 100%)',
+            border: '2px outset #ffffcc',
+            borderRadius: '8px',
+            padding: '8px',
+            boxShadow: '0 -4px 20px rgba(0,0,0,0.15)'
+          } : {}}
+        >
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{color:'#000'}} />
@@ -98,7 +107,7 @@ const StyleSelector = memo(() => {
           </div>
 
           {/* Styles Grid */}
-          <div className="max-h-60 overflow-y-auto">
+          <div className={`overflow-y-auto ${openUpward ? 'max-h-48 lg:max-h-64' : 'max-h-60'}`}>
             <div className="grid grid-cols-3 gap-2">
               {filteredStyles.map(style => (
                 <button
