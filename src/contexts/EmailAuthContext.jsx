@@ -167,8 +167,13 @@ export const EmailAuthProvider = ({ children }) => {
     }
   }, [fetchUserData]);
 
-  const handleSignOut = useCallback(() => {
-    signOutService();
+  const handleSignOut = useCallback(async () => {
+    // SECURITY: Call async signOut to revoke tokens on server
+    try {
+      await signOutService();
+    } catch (e) {
+      // Ignore errors - still clear local state
+    }
     setIsAuthenticated(false);
     setEmail(null);
     setUserId(null);

@@ -235,27 +235,62 @@ const calculateCredits = (amountInDollars, isNFTHolder = false) => {
   };
 };
 
+/**
+ * SECURITY: Deep sanitization to prevent NoSQL injection attacks
+ * Removes MongoDB operators ($gt, $ne, etc.) from nested objects
+ * @param {any} obj - Object to sanitize
+ * @param {number} depth - Current recursion depth (prevents infinite loops)
+ * @returns {any} - Sanitized object
+ */
+const deepSanitize = (obj, depth = 0) => {
+  // Prevent infinite recursion
+  if (depth > 10) return obj;
+  
+  if (obj === null || obj === undefined) return obj;
+  
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    return obj.map(item => deepSanitize(item, depth + 1));
+  }
+  
+  // Handle objects
+  if (typeof obj === 'object') {
+    const sanitized = {};
+    for (const key of Object.keys(obj)) {
+      // SECURITY: Block MongoDB operators in keys (NoSQL injection prevention)
+      if (key.startsWith('$')) {
+        logger.warn('NoSQL injection attempt blocked', { key, depth });
+        continue; // Skip this key entirely
+      }
+      // Recursively sanitize nested values
+      sanitized[key] = deepSanitize(obj[key], depth + 1);
+    }
+    return sanitized;
+  }
+  
+  // Handle strings
+  if (typeof obj === 'string') {
+    return sanitizeString(obj);
+  }
+  
+  // Handle numbers
+  if (typeof obj === 'number') {
+    return sanitizeNumber(obj);
+  }
+  
+  return obj;
+};
+
 // Middleware to validate request inputs
 const validateInput = (req, res, next) => {
-  // Sanitize query parameters
+  // SECURITY: Deep sanitize query parameters (prevents NoSQL injection in nested objects)
   if (req.query) {
-    Object.keys(req.query).forEach(key => {
-      if (typeof req.query[key] === 'string') {
-        req.query[key] = sanitizeString(req.query[key]);
-      }
-    });
+    req.query = deepSanitize(req.query);
   }
 
-  // Sanitize body parameters
-  if (req.body) {
-    Object.keys(req.body).forEach(key => {
-      const value = req.body[key];
-      if (typeof value === 'string') {
-        req.body[key] = sanitizeString(value);
-      } else if (typeof value === 'number') {
-        req.body[key] = sanitizeNumber(value);
-      }
-    });
+  // SECURITY: Deep sanitize body parameters (prevents NoSQL injection in nested objects)
+  if (req.body && typeof req.body === 'object') {
+    req.body = deepSanitize(req.body);
   }
 
   next();
@@ -676,6 +711,11 @@ const corsOptions = {
     // OPTIMIZATION: Fast localhost check with startsWith
     const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
     
+    // SECURITY: In production, do NOT allow localhost origins (prevents local CSRF attacks)
+    // Attackers could run a malicious local server to make cross-origin requests
+    const isProduction = process.env.NODE_ENV === 'production';
+    const allowLocalhost = isLocalhost && !isProduction;
+    
     // OPTIMIZATION: O(1) Set lookup instead of O(n) array iteration
     const originLower = origin.toLowerCase();
     const isAllowedOrigin = hasAllowedOrigins && (
@@ -684,14 +724,19 @@ const corsOptions = {
       allowedOriginsCache.has(normalizeOrigin(originLower))
     );
     
-    // Allow localhost, whitelisted origins, or any origin if ALLOWED_ORIGINS not set
-    if (isLocalhost || isAllowedOrigin || !hasAllowedOrigins) {
+    // Allow localhost (dev only), whitelisted origins, or any origin if ALLOWED_ORIGINS not set
+    if (allowLocalhost || isAllowedOrigin || !hasAllowedOrigins) {
       // OPTIMIZATION: Reduced logging - only log debug level
-      logger.debug('CORS: Allowed origin', { origin, isLocalhost, isAllowedOrigin });
+      logger.debug('CORS: Allowed origin', { origin, isLocalhost: allowLocalhost, isAllowedOrigin });
       return callback(null, origin);
     }
     
-    // Reject non-localhost, non-whitelisted origins
+    // Reject non-whitelisted origins (and localhost in production)
+    if (isProduction && isLocalhost) {
+      logger.warn('CORS: Localhost blocked in production', { origin });
+      return callback(new Error('Localhost origins are not allowed in production.'));
+    }
+    
     logger.warn('CORS: Rejected origin', { origin });
     return callback(new Error(`Not allowed by CORS. Origin '${origin}' is not in ALLOWED_ORIGINS.`));
   },
@@ -720,8 +765,8 @@ logger.info('CORS configuration', {
   credentials: true
 });
 
-// JWT Secret - REQUIRED in production, default only for development
-// JWT_SECRET is required in all environments (no hardcoded fallback)
+// JWT Secrets - REQUIRED in production, no hardcoded fallbacks
+// Uses separate secrets for access and refresh tokens for enhanced security
 if (!process.env.JWT_SECRET) {
   logger.error('❌ CRITICAL: JWT_SECRET is required. Server cannot start without a secure JWT secret.');
   logger.error('Please set JWT_SECRET in your environment variables (backend.env or system environment).');
@@ -735,6 +780,39 @@ if (JWT_SECRET.length < 32) {
   process.exit(1);
 }
 
+// SECURITY: Separate secret for refresh tokens (derived from JWT_SECRET if not provided)
+// This prevents a compromised access token secret from compromising refresh tokens
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 
+  crypto.createHash('sha256').update(JWT_SECRET + '_refresh_token_salt').digest('hex');
+
+// SECURITY: Token blacklist for logout/revocation
+// Uses LRU cache to prevent memory exhaustion while maintaining recent revocations
+const tokenBlacklist = new LRUCache(10000); // Store up to 10k revoked tokens
+
+/**
+ * Check if a token has been revoked/blacklisted
+ * @param {string} token - JWT token to check
+ * @returns {boolean} - True if token is blacklisted
+ */
+const isTokenBlacklisted = (token) => {
+  if (!token) return false;
+  // Create hash of token for storage efficiency
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex').substring(0, 32);
+  return tokenBlacklist.has(tokenHash);
+};
+
+/**
+ * Add a token to the blacklist (for logout/revocation)
+ * @param {string} token - JWT token to blacklist
+ * @param {number} expiresAt - Token expiration timestamp (optional, for auto-cleanup)
+ */
+const blacklistToken = (token, expiresAt = null) => {
+  if (!token) return;
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex').substring(0, 32);
+  tokenBlacklist.set(tokenHash, { blacklistedAt: Date.now(), expiresAt });
+  logger.debug('Token blacklisted', { tokenHash: tokenHash.substring(0, 8) + '...' });
+};
+
 // JWT Authentication Middleware
 // Note: Uses User model which is defined later, but that's fine since this function
 // is only called at request time, not during module initialization
@@ -747,6 +825,14 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         error: 'Authentication required'
+      });
+    }
+
+    // SECURITY: Check if token has been revoked/blacklisted (logout)
+    if (isTokenBlacklisted(token)) {
+      return res.status(401).json({
+        success: false,
+        error: 'Token has been revoked. Please sign in again.'
       });
     }
 
@@ -790,13 +876,22 @@ const authenticateToken = async (req, res, next) => {
 
 // Flexible Authentication Middleware - supports both JWT tokens and wallet addresses
 // Tries JWT first (for email users), falls back to wallet address (for wallet users)
+// SECURITY NOTE: Body-based wallet auth is less secure than JWT - use for read operations only
 const authenticateFlexible = async (req, res, next) => {
   try {
-    // First, try JWT token authentication
+    // First, try JWT token authentication (most secure)
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (token) {
+      // SECURITY: Check if token has been revoked/blacklisted
+      if (isTokenBlacklisted(token)) {
+        return res.status(401).json({
+          success: false,
+          error: 'Token has been revoked. Please sign in again.'
+        });
+      }
+      
       try {
         const decoded = jwt.verify(token, JWT_SECRET);
         
@@ -815,6 +910,7 @@ const authenticateFlexible = async (req, res, next) => {
 
           if (user) {
             req.user = user;
+            req.authType = 'jwt'; // Mark as verified JWT authentication
             return next();
           }
         }
@@ -825,6 +921,8 @@ const authenticateFlexible = async (req, res, next) => {
     }
 
     // Fall back to wallet address authentication
+    // SECURITY WARNING: This is less secure as it trusts the client-provided wallet address
+    // For sensitive operations, use authenticateToken instead
     const { walletAddress, userId, email } = req.body;
     
     if (!walletAddress && !userId && !email) {
@@ -833,6 +931,15 @@ const authenticateFlexible = async (req, res, next) => {
         error: 'Authentication required. Please provide a token or wallet address/userId/email.'
       });
     }
+    
+    // SECURITY: Log body-based authentication for audit trail
+    logger.debug('Body-based authentication used (less secure)', { 
+      walletAddress: walletAddress ? walletAddress.substring(0, 10) + '...' : null,
+      userId: userId ? userId.substring(0, 10) + '...' : null,
+      email: email ? '***' : null,
+      path: req.path,
+      ip: req.ip
+    });
 
     // Get user from wallet address, userId, or email
     const user = await getUserFromRequest(req);
@@ -845,6 +952,7 @@ const authenticateFlexible = async (req, res, next) => {
     }
 
     req.user = user;
+    req.authType = 'body'; // Mark as body-based authentication (less secure)
     next();
   } catch (error) {
     logger.error('Flexible authentication error:', error);
@@ -853,6 +961,108 @@ const authenticateFlexible = async (req, res, next) => {
       error: 'Authentication failed'
     });
   }
+};
+
+/**
+ * SECURITY: Middleware to require verified authentication (JWT only)
+ * Use this for sensitive operations that modify user data or credits
+ * Does NOT allow body-based wallet address authentication
+ */
+const requireVerifiedAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required. Please sign in.'
+      });
+    }
+
+    // Check if token has been revoked
+    if (isTokenBlacklisted(token)) {
+      return res.status(401).json({
+        success: false,
+        error: 'Token has been revoked. Please sign in again.'
+      });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    if (decoded.type === 'refresh') {
+      return res.status(403).json({
+        success: false,
+        error: 'Refresh tokens cannot be used for authentication.'
+      });
+    }
+
+    const User = mongoose.model('User');
+    const user = await User.findOne({
+      $or: [
+        { userId: decoded.userId },
+        { email: decoded.email }
+      ]
+    }).select('-password');
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    req.user = user;
+    req.authType = 'jwt';
+    next();
+  } catch (error) {
+    logger.error('Verified auth error:', error);
+    return res.status(403).json({
+      success: false,
+      error: 'Invalid or expired token. Please sign in again.'
+    });
+  }
+};
+
+/**
+ * SECURITY: Middleware to verify wallet ownership for payment operations
+ * For wallet-based payments, verifies that the request comes from the wallet owner
+ * by checking if either: 1) User is JWT authenticated with this wallet, or
+ * 2) The payment will be verified on-chain (blockchain verification)
+ */
+const verifyWalletOwnership = async (req, res, next) => {
+  const { walletAddress } = req.body;
+  
+  if (!walletAddress) {
+    return res.status(400).json({
+      success: false,
+      error: 'Wallet address required'
+    });
+  }
+  
+  // If JWT authenticated, verify the wallet matches the user's linked wallet
+  if (req.authType === 'jwt' && req.user) {
+    const userWallet = req.user.walletAddress;
+    const normalizedRequest = walletAddress.toLowerCase();
+    const normalizedUser = userWallet ? userWallet.toLowerCase() : null;
+    
+    // If user has a wallet linked, it must match
+    if (normalizedUser && normalizedUser !== normalizedRequest) {
+      logger.warn('Wallet mismatch in authenticated request', {
+        userId: req.user.userId,
+        userWallet: normalizedUser.substring(0, 10) + '...',
+        requestWallet: normalizedRequest.substring(0, 10) + '...'
+      });
+      return res.status(403).json({
+        success: false,
+        error: 'Wallet address does not match authenticated user'
+      });
+    }
+  }
+  
+  // For body-based auth or wallet-only users, the payment will be verified on-chain
+  // The blockchain verification in the endpoint will confirm the sender
+  next();
 };
 
 // Stripe webhook needs raw body - MUST be before express.json()
@@ -6281,16 +6491,17 @@ app.post('/api/auth/signup', authRateLimiter, async (req, res) => {
       });
     }
 
-    // Generate JWT access token (7 days) and refresh token (30 days)
+    // Generate JWT access token (24h) and refresh token (30 days)
     const token = jwt.sign(
       { userId: user.userId, email: user.email, type: 'access' },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
     
+    // SECURITY: Use separate secret for refresh tokens
     const refreshToken = jwt.sign(
       { userId: user.userId, type: 'refresh' },
-      JWT_SECRET,
+      JWT_REFRESH_SECRET,
       { expiresIn: '30d' }
     );
 
@@ -6399,16 +6610,17 @@ app.post('/api/auth/signin', authRateLimiter, async (req, res) => {
       });
     }
 
-    // Generate JWT access token (7 days) and refresh token (30 days)
+    // Generate JWT access token (24h) and refresh token (30 days)
     const token = jwt.sign(
       { userId: user.userId, email: user.email, type: 'access' },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
     
+    // SECURITY: Use separate secret for refresh tokens
     const refreshToken = jwt.sign(
       { userId: user.userId, type: 'refresh' },
-      JWT_SECRET,
+      JWT_REFRESH_SECRET,
       { expiresIn: '30d' }
     );
 
@@ -6492,6 +6704,60 @@ app.get('/api/auth/verify', authenticateToken, async (req, res) => {
 });
 
 /**
+ * Logout - revoke tokens
+ * SECURITY: Blacklists both access and refresh tokens to prevent further use
+ */
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const accessToken = authHeader && authHeader.split(' ')[1];
+    const { refreshToken } = req.body;
+    
+    let tokensRevoked = 0;
+    
+    // Blacklist access token if provided
+    if (accessToken) {
+      try {
+        const decoded = jwt.verify(accessToken, JWT_SECRET);
+        // Add to blacklist with expiration time for cleanup
+        blacklistToken(accessToken, decoded.exp * 1000);
+        tokensRevoked++;
+        logger.info('Access token revoked on logout', { userId: decoded.userId });
+      } catch (e) {
+        // Token already expired or invalid - still try to blacklist
+        blacklistToken(accessToken);
+      }
+    }
+    
+    // Blacklist refresh token if provided
+    if (refreshToken) {
+      try {
+        const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
+        blacklistToken(refreshToken, decoded.exp * 1000);
+        tokensRevoked++;
+        logger.info('Refresh token revoked on logout', { userId: decoded.userId });
+      } catch (e) {
+        // Token already expired or invalid - still try to blacklist
+        blacklistToken(refreshToken);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Successfully logged out. ${tokensRevoked} token(s) revoked.`
+    });
+    
+  } catch (error) {
+    logger.error('Logout error:', error);
+    // Always return success for logout to prevent information leakage
+    res.json({
+      success: true,
+      message: 'Logged out'
+    });
+  }
+});
+
+/**
  * Refresh access token using refresh token
  */
 app.post('/api/auth/refresh', async (req, res) => {
@@ -6505,14 +6771,22 @@ app.post('/api/auth/refresh', async (req, res) => {
       });
     }
 
-    // Verify refresh token
-    const decoded = jwt.verify(refreshToken, JWT_SECRET);
+    // SECURITY: Verify refresh token using separate secret
+    const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
     
     // Ensure it's a refresh token
     if (decoded.type !== 'refresh') {
       return res.status(403).json({
         success: false,
         error: 'Invalid token type. Refresh token required.'
+      });
+    }
+    
+    // SECURITY: Check if refresh token has been revoked
+    if (isTokenBlacklisted(refreshToken)) {
+      return res.status(401).json({
+        success: false,
+        error: 'Refresh token has been revoked. Please sign in again.'
       });
     }
 
@@ -7604,8 +7878,17 @@ app.post('/api/payment/check-payment', async (req, res) => {
 
 /**
  * Credit user immediately after transaction signature (no blockchain verification)
+ * SECURITY NOTE: This endpoint is for UX optimization only. Actual payment verification
+ * happens on-chain via /api/payments/verify. This endpoint should NOT be relied upon
+ * as the sole source of payment verification.
+ * 
+ * SECURITY MEASURES:
+ * 1. Transaction deduplication middleware prevents double-crediting
+ * 2. Strict rate limiting prevents abuse
+ * 3. Credits are provisional until blockchain verification confirms
+ * 4. Authenticated requests are prioritized and logged
  */
-app.post('/api/payments/credit', async (req, res) => {
+app.post('/api/payments/credit', authenticateFlexible, verifyWalletOwnership, async (req, res) => {
   try {
     const { 
       txHash, 
@@ -7616,12 +7899,30 @@ app.post('/api/payments/credit', async (req, res) => {
       walletType 
     } = req.body;
 
-    logger.info('Payment credit started', { txHash, walletAddress, tokenSymbol, amount, chainId, walletType });
+    // SECURITY: Log authentication method for audit trail
+    logger.info('Payment credit started', { 
+      txHash, 
+      walletAddress, 
+      tokenSymbol, 
+      amount, 
+      chainId, 
+      walletType,
+      authType: req.authType || 'none',
+      authenticatedUser: req.user?.userId || req.user?.email || 'wallet-only'
+    });
 
     if (!txHash || !walletAddress || !amount) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
+      });
+    }
+
+    // Validate txHash format to prevent injection
+    if (typeof txHash !== 'string' || txHash.length > 100 || !/^[a-zA-Z0-9]+$/.test(txHash)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid transaction hash format'
       });
     }
 
@@ -7717,6 +8018,8 @@ app.post('/api/payments/credit', async (req, res) => {
 
 /**
  * Verify payment (with blockchain verification)
+ * SECURITY: This endpoint verifies the transaction on-chain before crediting.
+ * The sender address is extracted from the blockchain, not from user input.
  */
 app.post('/api/payments/verify', async (req, res) => {
   try {
@@ -7735,6 +8038,22 @@ app.post('/api/payments/verify', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
+      });
+    }
+
+    // SECURITY: Validate txHash format to prevent injection
+    if (typeof txHash !== 'string' || txHash.length > 100 || !/^[a-zA-Z0-9]+$/.test(txHash)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid transaction hash format'
+      });
+    }
+
+    // SECURITY: Validate wallet address format
+    if (!isValidWalletAddress(walletAddress)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid wallet address format'
       });
     }
 

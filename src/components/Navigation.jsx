@@ -88,8 +88,12 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
     setShowCreditsDropdown(false);
   }, [isEmailAuth, emailContext, walletContext, address]);
 
-  const handleSignOut = useCallback(() => {
-    isEmailAuth ? emailContext.signOut() : walletContext.disconnectWallet();
+  const handleSignOut = useCallback(async () => {
+    if (isEmailAuth) {
+      await emailContext.signOut();
+    } else {
+      walletContext.disconnectWallet();
+    }
   }, [isEmailAuth, emailContext, walletContext]);
 
   const handleBuyCredits = useCallback(() => {
@@ -106,46 +110,34 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
         className="flex items-center gap-2 px-2 py-1"
         style={TITLEBAR.active}
       >
-        <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-4 h-4 rounded-sm object-cover" />
+        <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-8 h-8 rounded-sm object-cover" />
         <span className="text-[11px] font-bold">Seiso AI - Image • Video • Music Generation</span>
         <div className="flex-1" />
-        <div className="flex gap-0.5">
-          <button 
-            className="w-4 h-4 flex items-center justify-center text-[10px]"
-            style={{ ...BTN.base, fontSize: '9px', padding: 0 }}
-          >_</button>
-          <button 
-            className="w-4 h-4 flex items-center justify-center text-[10px]"
-            style={{ ...BTN.base, fontSize: '9px', padding: 0 }}
-          >□</button>
-          <button 
-            className="w-4 h-4 flex items-center justify-center text-[10px]"
-            style={{ ...BTN.base, fontSize: '9px', padding: 0 }}
-          >×</button>
-        </div>
       </div>
       
       {/* Menu bar */}
       <div className="px-2 py-1" style={{ borderBottom: `1px solid ${WIN95.bgDark}` }}>
         <div className="container mx-auto">
           <div className="flex items-center justify-between">
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-1">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <Win95NavButton
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    active={isActive}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span>{tab.name}</span>
-                  </Win95NavButton>
-                );
-              })}
-            </nav>
+            {/* Desktop Navigation - only show when authenticated */}
+            {isConnected && (
+              <nav className="hidden md:flex items-center gap-1">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <Win95NavButton
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      active={isActive}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{tab.name}</span>
+                    </Win95NavButton>
+                  );
+                })}
+              </nav>
+            )}
 
             {/* Desktop Right Section */}
             {isConnected && (
@@ -292,16 +284,18 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
               </div>
             )}
 
-            {/* Mobile Menu Button */}
-            <button 
-              onClick={() => setShowMobileMenu(!showMobileMenu)} 
-              className="md:hidden p-2"
-              style={BTN.base}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: WIN95.text }}>
-                {showMobileMenu ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
-              </svg>
-            </button>
+            {/* Mobile Menu Button - only show when authenticated */}
+            {isConnected && (
+              <button 
+                onClick={() => setShowMobileMenu(!showMobileMenu)} 
+                className="md:hidden p-2"
+                style={BTN.base}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: WIN95.text }}>
+                  {showMobileMenu ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
+                </svg>
+              </button>
+            )}
 
             {/* Mobile Credits & Menu */}
             <div className="md:hidden flex items-center gap-1">
@@ -334,8 +328,8 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
             </div>
           </div>
 
-          {/* Mobile Navigation Menu */}
-          {showMobileMenu && (
+          {/* Mobile Navigation Menu - only show when authenticated */}
+          {showMobileMenu && isConnected && (
             <div className="md:hidden pt-2 mt-2 slide-up" style={{ borderTop: `1px solid ${WIN95.bgDark}` }}>
               <nav className="flex flex-col gap-1">
                 {tabs.map((tab) => {

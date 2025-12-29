@@ -133,11 +133,14 @@ export const signUp = async (email, password) => {
       throw new Error(data.error || 'Sign up failed');
     }
 
-    // Store token in localStorage
+    // Store tokens in localStorage
     if (data.token) {
       safeSetItem('authToken', data.token);
       safeSetItem('userEmail', trimmedEmail);
       safeSetItem('authType', 'email');
+    }
+    if (data.refreshToken) {
+      safeSetItem('refreshToken', data.refreshToken);
     }
 
     return {
@@ -190,11 +193,14 @@ export const signIn = async (email, password) => {
       throw new Error(errorMsg);
     }
 
-    // Store token in localStorage
+    // Store tokens in localStorage
     if (data.token) {
       safeSetItem('authToken', data.token);
       safeSetItem('userEmail', trimmedEmail);
       safeSetItem('authType', 'email');
+    }
+    if (data.refreshToken) {
+      safeSetItem('refreshToken', data.refreshToken);
     }
 
     return {
@@ -212,10 +218,33 @@ export const signIn = async (email, password) => {
 };
 
 /**
- * Sign out
+ * Sign out - revokes tokens on server and clears local storage
+ * SECURITY: Calls backend logout to blacklist tokens server-side
  */
-export const signOut = () => {
+export const signOut = async () => {
+  const token = safeGetItem('authToken');
+  const refreshToken = safeGetItem('refreshToken');
+  
+  // Try to revoke tokens on server (best effort - don't block on failure)
+  if (token || refreshToken) {
+    try {
+      await fetch(`${API_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        body: JSON.stringify({ refreshToken })
+      });
+    } catch (e) {
+      // Ignore errors - we still want to clear local storage
+      logger.debug('Logout request failed (non-critical)', { error: e.message });
+    }
+  }
+  
+  // Always clear local storage regardless of server response
   safeRemoveItem('authToken');
+  safeRemoveItem('refreshToken');
   safeRemoveItem('userEmail');
   safeRemoveItem('authType');
   safeRemoveItem('userId');
