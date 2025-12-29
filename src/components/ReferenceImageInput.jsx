@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { X } from 'lucide-react';
 import logger from '../utils/logger.js';
@@ -6,6 +6,7 @@ import logger from '../utils/logger.js';
 const ReferenceImageInput = ({ singleImageOnly = false }) => {
   const { controlNetImage, setControlNetImage } = useImageGenerator();
   const fileInputRef = useRef(null);
+  const [previewImage, setPreviewImage] = useState(null); // For enlarged view
 
   const handleImageUpload = (event) => {
     const files = Array.from(event.target.files || []);
@@ -77,15 +78,15 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
           {Array.isArray(controlNetImage) && controlNetImage.length > 1 ? (
             <div className="flex-1 flex gap-0.5 h-full overflow-x-auto">
               {controlNetImage.slice(0, 4).map((url, i) => (
-                <div key={i} className="h-full aspect-square relative flex-shrink-0">
-                  <img src={url} alt={`Ref ${i+1}`} className="h-full w-full object-cover rounded" />
+                <div key={i} className="h-full aspect-square relative flex-shrink-0 cursor-pointer" onClick={() => setPreviewImage(url)} title="Click to enlarge">
+                  <img src={url} alt={`Ref ${i+1}`} className="h-full w-full object-cover rounded hover:opacity-80 transition-opacity" />
                 </div>
               ))}
               {controlNetImage.length > 4 && <span className="text-[9px] self-center">+{controlNetImage.length - 4}</span>}
             </div>
           ) : (
-            <div className="h-full aspect-square relative">
-              <img src={Array.isArray(controlNetImage) ? controlNetImage[0] : controlNetImage} alt="Ref" className="h-full w-full object-cover rounded" />
+            <div className="h-full aspect-square relative cursor-pointer" onClick={() => setPreviewImage(Array.isArray(controlNetImage) ? controlNetImage[0] : controlNetImage)} title="Click to enlarge">
+              <img src={Array.isArray(controlNetImage) ? controlNetImage[0] : controlNetImage} alt="Ref" className="h-full w-full object-cover rounded hover:opacity-80 transition-opacity" />
             </div>
           )}
           <div className="flex flex-col gap-0.5">
@@ -95,6 +96,33 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
         </div>
       )}
       <input ref={fileInputRef} type="file" accept="image/*" multiple={!singleImageOnly} onChange={handleImageUpload} className="hidden" />
+      
+      {/* Enlarged image preview modal */}
+      {previewImage && (
+        <div 
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src={previewImage} 
+              alt="Enlarged reference" 
+              className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            />
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute -top-2 -right-2 p-1.5 rounded-full shadow-lg transition-colors"
+              style={{ 
+                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0)',
+                border: '2px outset #f0f0f0'
+              }}
+              title="Close preview"
+            >
+              <X className="w-4 h-4" style={{ color: '#000' }} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
