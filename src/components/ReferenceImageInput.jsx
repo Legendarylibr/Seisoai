@@ -74,24 +74,24 @@ const ReferenceImageInput = ({ singleImageOnly = false }) => {
           </button>
         </div>
       ) : (
-        <div className="h-full flex items-center gap-1 p-0.5">
+        <div className="h-full flex items-center gap-0.5 p-0.5 overflow-hidden">
           {Array.isArray(controlNetImage) && controlNetImage.length > 1 ? (
-            <div className="flex-1 flex gap-0.5 h-full overflow-x-auto">
-              {controlNetImage.slice(0, 4).map((url, i) => (
+            <div className="flex-1 flex gap-0.5 h-full overflow-x-auto min-w-0">
+              {controlNetImage.slice(0, 3).map((url, i) => (
                 <div key={i} className="h-full aspect-square relative flex-shrink-0 cursor-pointer" onClick={() => setPreviewImage(url)} title="Click to enlarge">
                   <img src={url} alt={`Ref ${i+1}`} className="h-full w-full object-cover rounded hover:opacity-80 transition-opacity" />
                 </div>
               ))}
-              {controlNetImage.length > 4 && <span className="text-[9px] self-center">+{controlNetImage.length - 4}</span>}
+              {controlNetImage.length > 3 && <span className="text-[8px] self-center flex-shrink-0">+{controlNetImage.length - 3}</span>}
             </div>
           ) : (
-            <div className="h-full aspect-square relative cursor-pointer" onClick={() => setPreviewImage(Array.isArray(controlNetImage) ? controlNetImage[0] : controlNetImage)} title="Click to enlarge">
+            <div className="h-full aspect-square relative cursor-pointer flex-shrink-0" onClick={() => setPreviewImage(Array.isArray(controlNetImage) ? controlNetImage[0] : controlNetImage)} title="Click to enlarge">
               <img src={Array.isArray(controlNetImage) ? controlNetImage[0] : controlNetImage} alt="Ref" className="h-full w-full object-cover rounded hover:opacity-80 transition-opacity" />
             </div>
           )}
-          <div className="flex flex-col gap-0.5">
-            <button onClick={handleClick} className="px-1 py-0.5 rounded text-[9px]" style={{ background: 'linear-gradient(to bottom,#f0f0f0,#e0e0e0)', border: '1px outset #e0e0e0', color: '#000' }}>Change</button>
-            <button onClick={handleRemove} className="px-1 py-0.5 rounded text-[9px]" style={{ background: 'linear-gradient(to bottom,#fecaca,#fca5a5)', border: '1px outset #fca5a5', color: '#7f1d1d' }}>Remove</button>
+          <div className="flex gap-0.5 flex-shrink-0">
+            <button onClick={handleClick} className="px-1 py-0.5 rounded text-[8px] leading-none" style={{ background: 'linear-gradient(to bottom,#f0f0f0,#e0e0e0)', border: '1px outset #e0e0e0', color: '#000' }} title="Change image">✏️</button>
+            <button onClick={handleRemove} className="px-1 py-0.5 rounded text-[8px] leading-none" style={{ background: 'linear-gradient(to bottom,#fecaca,#fca5a5)', border: '1px outset #fca5a5', color: '#7f1d1d' }} title="Remove image">✕</button>
           </div>
         </div>
       )}
