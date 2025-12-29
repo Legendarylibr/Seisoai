@@ -309,22 +309,17 @@ const ImageOutput = () => {
   else if (generatedImage) imagesToDisplay = Array.isArray(generatedImage) ? generatedImage : [generatedImage];
   const hasMultipleImages = imagesToDisplay.length > 1;
 
-  // Empty state
+  // Empty state - uniform background with centered content
   if (!imagesToDisplay.length) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-4">
-        <div className="glass-card p-8 rounded-xl text-center max-w-md">
-          <div className="w-24 h-24 mx-auto mb-5 relative">
-            <div className="absolute inset-0 rounded-lg" style={{ background: 'linear-gradient(135deg, #e8e8f0, #d8d8e0)', border: '2px dashed #b0b0c0' }} />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <svg viewBox="0 0 24 24" fill="none" className="w-12 h-12" style={{ color: '#a0a0b8' }}>
-                <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" fill="currentColor" />
-              </svg>
-            </div>
-          </div>
-          <p className="text-sm mb-2 font-semibold" style={{ ...TEXT.primary, fontFamily: "'IBM Plex Mono', monospace" }}>Your creation awaits</p>
-          <p className="text-xs" style={{ ...TEXT.secondary, fontFamily: "'IBM Plex Mono', monospace" }}>Enter a prompt and click generate</p>
+      <div className="h-full w-full flex flex-col items-center justify-center" style={{ background: 'linear-gradient(135deg, #f5f5f8, #e8e8f0)' }}>
+        <div className="w-12 h-12 mb-3 flex items-center justify-center" style={{ color: '#a0a0b8' }}>
+          <svg viewBox="0 0 24 24" fill="none" className="w-10 h-10">
+            <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" fill="currentColor" />
+          </svg>
         </div>
+        <p className="text-xs font-semibold" style={{ color: '#666', fontFamily: "'IBM Plex Mono', monospace" }}>Your creation awaits</p>
+        <p className="text-[10px] mt-0.5" style={{ color: '#888', fontFamily: "'IBM Plex Mono', monospace" }}>Enter a prompt and click generate</p>
       </div>
     );
   }
