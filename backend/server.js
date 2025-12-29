@@ -3065,12 +3065,15 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
     let syncVideoUrl = null;
     let syncVideoMeta = null;
     
-    if (submitData.video && submitData.video.url) {
+    if (submitData.video?.url) {
       syncVideoUrl = submitData.video.url;
       syncVideoMeta = submitData.video;
     } else if (submitData.data?.video?.url) {
       syncVideoUrl = submitData.data.video.url;
       syncVideoMeta = submitData.data.video;
+    } else if (submitData.output?.video?.url) {
+      syncVideoUrl = submitData.output.video.url;
+      syncVideoMeta = submitData.output.video;
     } else if (submitData.data?.video && typeof submitData.data.video === 'string') {
       syncVideoUrl = submitData.data.video;
     } else if (submitData.video && typeof submitData.video === 'string') {
@@ -3079,6 +3082,8 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
       syncVideoUrl = submitData.url;
     } else if (submitData.video_url) {
       syncVideoUrl = submitData.video_url;
+    } else if (submitData.output?.url) {
+      syncVideoUrl = submitData.output.url;
     }
     
     if (syncVideoUrl) {
@@ -3161,21 +3166,28 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
       
       // Check if status response already contains the video (some modes return it directly)
       let statusVideoUrl = null;
+      let statusVideoMeta = null;
       if (statusData.video?.url) {
         statusVideoUrl = statusData.video.url;
+        statusVideoMeta = statusData.video;
       } else if (statusData.data?.video?.url) {
         statusVideoUrl = statusData.data.video.url;
+        statusVideoMeta = statusData.data.video;
+      } else if (statusData.output?.video?.url) {
+        statusVideoUrl = statusData.output.video.url;
+        statusVideoMeta = statusData.output.video;
       } else if (statusData.response?.video?.url) {
         statusVideoUrl = statusData.response.video.url;
+        statusVideoMeta = statusData.response.video;
       }
       
       if (statusVideoUrl) {
-        logger.info('Video found in status response', { requestId, pollCount });
+        logger.info('Video found in status response - RETURNING', { requestId, pollCount, statusVideoUrl });
         const videoData = {
           url: statusVideoUrl,
-          content_type: statusData.video?.content_type || statusData.data?.video?.content_type || 'video/mp4',
-          file_name: statusData.video?.file_name || statusData.data?.video?.file_name || `video-${requestId}.mp4`,
-          file_size: statusData.video?.file_size || statusData.data?.video?.file_size
+          content_type: statusVideoMeta?.content_type || 'video/mp4',
+          file_name: statusVideoMeta?.file_name || `video-${requestId}.mp4`,
+          file_size: statusVideoMeta?.file_size
         };
         return res.json({
           success: true,
@@ -3234,28 +3246,52 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
         });
         
         // Handle different possible response structures from fal.ai
+        // The queue result API can return data in various nested structures
         let videoUrl = null;
         let videoMeta = null;
         
-        if (resultData.video && resultData.video.url) {
+        // Direct video object
+        if (resultData.video?.url) {
           videoUrl = resultData.video.url;
           videoMeta = resultData.video;
-        } else if (resultData.data?.video?.url) {
+        }
+        // Nested in data
+        else if (resultData.data?.video?.url) {
           videoUrl = resultData.data.video.url;
           videoMeta = resultData.data.video;
-        } else if (resultData.data?.video && typeof resultData.data.video === 'string') {
+        }
+        // Nested in output (some fal.ai models use this)
+        else if (resultData.output?.video?.url) {
+          videoUrl = resultData.output.video.url;
+          videoMeta = resultData.output.video;
+        }
+        // Nested in response
+        else if (resultData.response?.video?.url) {
+          videoUrl = resultData.response.video.url;
+          videoMeta = resultData.response.video;
+        }
+        // Video as string
+        else if (resultData.data?.video && typeof resultData.data.video === 'string') {
           videoUrl = resultData.data.video;
-        } else if (resultData.video && typeof resultData.video === 'string') {
+        }
+        else if (resultData.video && typeof resultData.video === 'string') {
           videoUrl = resultData.video;
-        } else if (resultData.url) {
-          // Sometimes the URL is directly in the response
+        }
+        // Direct URL fields
+        else if (resultData.url) {
           videoUrl = resultData.url;
-        } else if (resultData.video_url) {
+        }
+        else if (resultData.video_url) {
           videoUrl = resultData.video_url;
-        } else if (resultData.data?.url) {
+        }
+        else if (resultData.data?.url) {
           videoUrl = resultData.data.url;
-        } else if (resultData.data?.video_url) {
+        }
+        else if (resultData.data?.video_url) {
           videoUrl = resultData.data.video_url;
+        }
+        else if (resultData.output?.url) {
+          videoUrl = resultData.output.url;
         }
         
         if (videoUrl) {
