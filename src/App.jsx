@@ -148,7 +148,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
         onShowStripePayment={handleShowStripePayment}
       />
       
-      <main className="flex-1 px-2 py-1 lg:px-0 lg:py-0 overflow-auto lg:overflow-hidden">
+      <main className="flex-1 px-2 py-1 lg:px-4 lg:py-0 lg:mt-6 overflow-auto lg:overflow-hidden">
         <div className="fade-in h-full">
           <AppContent 
             activeTab={currentTab} 
