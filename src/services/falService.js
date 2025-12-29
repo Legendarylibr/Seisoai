@@ -216,7 +216,7 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
 
     // SECURITY: Route through backend to ensure credit checks
     // Extract user identification from advancedSettings
-    const { walletAddress, userId, email, multiImageModel } = advancedSettings;
+    const { walletAddress, userId, email, multiImageModel, optimizePrompt = true } = advancedSettings;
     
     if (!walletAddress && !userId && !email) {
       throw new Error('User identification required. Please provide walletAddress, userId, or email in advancedSettings.');
@@ -243,7 +243,8 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
         walletAddress,
         userId,
         email,
-        model // Pass model selection to backend
+        model, // Pass model selection to backend
+        optimizePrompt // Pass prompt optimization toggle to backend
       })
     });
 
@@ -292,12 +293,23 @@ export const generateImage = async (style, customPrompt = '', advancedSettings =
       const imageUrls = data.images.map(img => img.url || img);
       
       // Always return object with images and credits info for consistency
-      return {
+      const result = {
         images: imageUrls,
         imageUrl: imageUrls[0], // First image for backward compatibility
         remainingCredits: data.remainingCredits,
         creditsDeducted: data.creditsDeducted
       };
+      
+      // Include prompt optimization info if available
+      if (data.promptOptimization) {
+        result.promptOptimization = data.promptOptimization;
+        logger.debug('Prompt was optimized', { 
+          original: data.promptOptimization.originalPrompt?.substring(0, 30) + '...',
+          reasoning: data.promptOptimization.reasoning
+        });
+      }
+      
+      return result;
     } else {
       throw new Error('No image generated');
     }

@@ -1,17 +1,15 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
-  signUp, 
-  signIn, 
-  signOut as signOutService, 
-  getAuthToken, 
-  getUserEmail, 
-  getAuthType,
-  verifyToken
+  signUp, signIn, signOut as signOutService, 
+  getAuthToken, getAuthType, verifyToken
 } from '../services/emailAuthService';
 import logger from '../utils/logger';
 import { API_URL } from '../utils/apiConfig';
 
 const EmailAuthContext = createContext();
+
+// PERFORMANCE: Increased polling interval from 30s to 60s - credits don't change that often
+const REFRESH_INTERVAL = 60000;
 
 export const EmailAuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -22,9 +20,19 @@ export const EmailAuthProvider = ({ children }) => {
   const [totalCreditsSpent, setTotalCreditsSpent] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // PERFORMANCE: Track last fetch time to prevent rapid refetches
+  const lastFetchRef = useRef(0);
+  const MIN_FETCH_INTERVAL = 5000; // Minimum 5s between fetches
 
-  // Simple credit fetching - always fetch fresh from backend
-  const fetchUserData = useCallback(async () => {
+  const fetchUserData = useCallback(async (force = false) => {
+    // PERFORMANCE: Debounce - prevent fetching more than once per 5 seconds unless forced
+    const now = Date.now();
+    if (!force && now - lastFetchRef.current < MIN_FETCH_INTERVAL) {
+      return;
+    }
+    lastFetchRef.current = now;
+
     const token = getAuthToken();
     if (!token) {
       setIsAuthenticated(false);
@@ -36,21 +44,16 @@ export const EmailAuthProvider = ({ children }) => {
     }
 
     try {
-      // OPTIMIZATION: Remove redundant timestamp query param, rely on cache headers
       const response = await fetch(`${API_URL}/api/auth/me`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache' // Request fresh data but allow conditional caching
+          'Cache-Control': 'no-cache'
         }
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        logger.error('Auth API error', { status: response.status, error: errorText.substring(0, 200) });
-        
-        // Token invalid - sign out
         signOutService();
         setIsAuthenticated(false);
         setCredits(0);
@@ -63,28 +66,15 @@ export const EmailAuthProvider = ({ children }) => {
       const data = await response.json();
       
       if (data.success && data.user) {
-        const userCredits = Math.max(0, Math.floor(Number(data.user.credits) || 0));
-        const userTotalEarned = Math.max(0, Math.floor(Number(data.user.totalCreditsEarned) || 0));
-        const userTotalSpent = Math.max(0, Math.floor(Number(data.user.totalCreditsSpent) || 0));
-        
-        setCredits(userCredits);
-        setTotalCreditsEarned(userTotalEarned);
-        setTotalCreditsSpent(userTotalSpent);
-        
+        setCredits(Math.max(0, Math.floor(Number(data.user.credits) || 0)));
+        setTotalCreditsEarned(Math.max(0, Math.floor(Number(data.user.totalCreditsEarned) || 0)));
+        setTotalCreditsSpent(Math.max(0, Math.floor(Number(data.user.totalCreditsSpent) || 0)));
         if (data.user.email) setEmail(data.user.email);
         if (data.user.userId) setUserId(data.user.userId);
-        
         setIsAuthenticated(true);
-        logger.debug('Email user data fetched', { credits: userCredits, email: data.user.email });
-      } else {
-        logger.warn('Unexpected API response', { data });
-        setCredits(0);
-        setTotalCreditsEarned(0);
-        setTotalCreditsSpent(0);
       }
-    } catch (error) {
-      logger.error('Failed to fetch user data', { error: error.message });
-      // Don't sign out on network errors - token might still be valid
+    } catch (e) {
+      logger.error('Failed to fetch user data', { error: e.message });
     } finally {
       setIsLoading(false);
     }
@@ -99,7 +89,7 @@ export const EmailAuthProvider = ({ children }) => {
       if (token && authType === 'email') {
         const verified = await verifyToken();
         if (verified) {
-          await fetchUserData();
+          await fetchUserData(true);
         } else {
           setIsLoading(false);
         }
@@ -107,25 +97,23 @@ export const EmailAuthProvider = ({ children }) => {
         setIsLoading(false);
       }
     };
-
     checkAuth();
   }, [fetchUserData]);
 
-  // Periodic refresh when authenticated
+  // PERFORMANCE: Smarter periodic refresh - only when visible and at longer intervals
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // Refresh every 30 seconds
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         fetchUserData();
       }
-    }, 30000);
+    }, REFRESH_INTERVAL);
 
-    // Refresh when tab becomes visible
+    // PERFORMANCE: Only refresh on visibility change if enough time has passed
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        fetchUserData();
+        fetchUserData(); // Debounce inside fetchUserData handles rapid calls
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -136,18 +124,16 @@ export const EmailAuthProvider = ({ children }) => {
     };
   }, [isAuthenticated, fetchUserData]);
 
-  // Sign up
-  const handleSignUp = async (userEmail, password) => {
+  const handleSignUp = useCallback(async (userEmail, password) => {
     try {
       setIsLoading(true);
       setError(null);
-      
       const result = await signUp(userEmail, password);
       if (result.success) {
         setEmail(userEmail);
         setUserId(result.user.userId);
         setIsAuthenticated(true);
-        await fetchUserData();
+        await fetchUserData(true);
       }
       return result;
     } catch (err) {
@@ -156,14 +142,12 @@ export const EmailAuthProvider = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fetchUserData]);
 
-  // Sign in
-  const handleSignIn = async (userEmail, password) => {
+  const handleSignIn = useCallback(async (userEmail, password) => {
     try {
       setIsLoading(true);
       setError(null);
-      
       const result = await signIn(userEmail, password);
       if (result.success) {
         setEmail(userEmail);
@@ -172,22 +156,18 @@ export const EmailAuthProvider = ({ children }) => {
         setTotalCreditsEarned(Number(result.user.totalCreditsEarned) || 0);
         setTotalCreditsSpent(Number(result.user.totalCreditsSpent) || 0);
         setIsAuthenticated(true);
-        
-        // Fetch fresh data
-        await fetchUserData();
+        await fetchUserData(true);
       }
       return result;
     } catch (err) {
-      logger.error('Sign in failed', { error: err.message });
       setError(err.message);
       throw err;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fetchUserData]);
 
-  // Sign out
-  const handleSignOut = () => {
+  const handleSignOut = useCallback(() => {
     signOutService();
     setIsAuthenticated(false);
     setEmail(null);
@@ -196,49 +176,29 @@ export const EmailAuthProvider = ({ children }) => {
     setTotalCreditsEarned(0);
     setTotalCreditsSpent(0);
     setError(null);
-  };
-
-  // Manual refresh
-  const refreshCredits = useCallback(async () => {
-    if (isAuthenticated) {
-      await fetchUserData();
-    }
-  }, [isAuthenticated, fetchUserData]);
-
-  // Manual credit setter for optimistic UI updates
-  const setCreditsManually = useCallback((newCredits) => {
-    const validated = Math.max(0, Math.floor(Number(newCredits) || 0));
-    setCredits(validated);
   }, []);
 
-  const value = {
-    isAuthenticated,
-    email,
-    userId,
-    credits,
-    totalCreditsEarned,
-    totalCreditsSpent,
-    isLoading,
-    error,
-    signUp: handleSignUp,
-    signIn: handleSignIn,
-    signOut: handleSignOut,
-    refreshCredits,
-    fetchUserData,
-    setCreditsManually
-  };
+  const refreshCredits = useCallback(async () => {
+    if (isAuthenticated) await fetchUserData(true);
+  }, [isAuthenticated, fetchUserData]);
 
-  return (
-    <EmailAuthContext.Provider value={value}>
-      {children}
-    </EmailAuthContext.Provider>
-  );
+  const setCreditsManually = useCallback((newCredits) => {
+    setCredits(Math.max(0, Math.floor(Number(newCredits) || 0)));
+  }, []);
+
+  // PERFORMANCE: Memoize context value to prevent unnecessary re-renders
+  const value = useMemo(() => ({
+    isAuthenticated, email, userId, credits, totalCreditsEarned, totalCreditsSpent,
+    isLoading, error, signUp: handleSignUp, signIn: handleSignIn, signOut: handleSignOut,
+    refreshCredits, fetchUserData, setCreditsManually
+  }), [isAuthenticated, email, userId, credits, totalCreditsEarned, totalCreditsSpent, 
+      isLoading, error, handleSignUp, handleSignIn, handleSignOut, refreshCredits, fetchUserData, setCreditsManually]);
+
+  return <EmailAuthContext.Provider value={value}>{children}</EmailAuthContext.Provider>;
 };
 
 export const useEmailAuth = () => {
   const context = useContext(EmailAuthContext);
-  if (!context) {
-    throw new Error('useEmailAuth must be used within an EmailAuthProvider');
-  }
+  if (!context) throw new Error('useEmailAuth must be used within an EmailAuthProvider');
   return context;
 };

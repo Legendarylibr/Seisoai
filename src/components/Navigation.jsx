@@ -1,34 +1,38 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo, useCallback } from 'react';
 import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard, Mail, Settings } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import SubscriptionManagement from './SubscriptionManagement';
-import logger from '../utils/logger.js';
+import { BTN, PANEL, TEXT, hoverHandlers, pressHandlers } from '../utils/buttonStyles';
 
-  const Navigation = ({ activeTab, setActiveTab, tabs, onShowPayment, onShowTokenPayment, onShowStripePayment }) => {
+// PERFORMANCE: Memoized reusable button
+const NavButton = memo(({ children, onClick, disabled, style, className = '', ...props }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`flex items-center gap-2 px-3 py-2 rounded transition-all ${className}`}
+    style={{ ...BTN.base, ...style }}
+    {...hoverHandlers}
+    {...props}
+  >
+    {children}
+  </button>
+));
+
+const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, onShowStripePayment }) => {
   const walletContext = useSimpleWallet();
   const emailContext = useEmailAuth();
   
-  // Support both auth methods
-  // Priority: Email auth takes precedence if both are active (prevents race conditions)
   const isEmailAuth = emailContext.isAuthenticated;
   const isWalletAuth = walletContext.isConnected;
   const isConnected = isEmailAuth || isWalletAuth;
   const address = walletContext.address;
   
-  // Get credits from active auth method (email takes priority)
-  const getCredits = (value) => {
-    const num = Number(value ?? 0);
-    return isNaN(num) ? 0 : Math.max(0, Math.floor(num));
-  };
-  
+  const getCredits = (value) => Math.max(0, Math.floor(Number(value ?? 0) || 0));
   const credits = getCredits(isEmailAuth ? emailContext?.credits : walletContext?.credits);
   const totalCreditsEarned = getCredits(isEmailAuth ? emailContext?.totalCreditsEarned : walletContext?.totalCreditsEarned);
+  const isLoading = isEmailAuth ? emailContext.isLoading : walletContext.isLoading;
   
-  // OPTIMIZATION: Removed excessive debug logging that ran on every credit change
-  // Use browser DevTools or explicit debug mode if needed
-  const disconnectWallet = walletContext.disconnectWallet;
-  const signOut = emailContext.signOut;
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showCreditsDropdown, setShowCreditsDropdown] = useState(false);
@@ -36,29 +40,16 @@ import logger from '../utils/logger.js';
   const dropdownRef = useRef(null);
   const creditsDropdownRef = useRef(null);
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowUserDropdown(false);
-      }
-      if (creditsDropdownRef.current && !creditsDropdownRef.current.contains(event.target)) {
-        setShowCreditsDropdown(false);
-      }
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setShowUserDropdown(false);
+      if (creditsDropdownRef.current && !creditsDropdownRef.current.contains(e.target)) setShowCreditsDropdown(false);
     };
-
-    if (showUserDropdown || showCreditsDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    if (showUserDropdown || showCreditsDropdown) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showUserDropdown, showCreditsDropdown]);
 
-  // Safety check to prevent the error
   if (!tabs || !Array.isArray(tabs)) {
-    logger.error('Navigation: tabs prop is missing or not an array', { tabs, activeTab, hasSetActiveTab: !!setActiveTab });
     return (
       <header className="bg-black/20 backdrop-blur-md border-b border-white/10 sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
@@ -67,637 +58,200 @@ import logger from '../utils/logger.js';
               <div className="w-10 h-10 bg-gradient-to-r from-teal-500 to-blue-500 rounded-xl flex items-center justify-center">
                 <Zap className="w-6 h-6 text-white" />
               </div>
-              <div>
-                <h1 className="text-xl font-bold gradient-text">Seiso AI</h1>
-              </div>
+              <h1 className="text-xl font-bold gradient-text">Seiso AI</h1>
             </div>
-            <div className="text-red-400 text-sm">Navigation Error - Check Console</div>
+            <div className="text-red-400 text-sm">Navigation Error</div>
           </div>
         </div>
       </header>
     );
   }
 
+  const formatAddr = (addr) => addr ? `${addr.slice(0,6)}...${addr.slice(-4)}` : '';
+
+  // PERFORMANCE: useCallback for handlers to prevent child re-renders
+  const handleRefreshCredits = useCallback(() => {
+    isEmailAuth ? emailContext.refreshCredits() : walletContext.fetchCredits(address, 3, true);
+    setShowCreditsDropdown(false);
+  }, [isEmailAuth, emailContext, walletContext, address]);
+
+  const handleSignOut = useCallback(() => {
+    isEmailAuth ? emailContext.signOut() : walletContext.disconnectWallet();
+  }, [isEmailAuth, emailContext, walletContext]);
+
+  const handleBuyCredits = useCallback(() => {
+    isEmailAuth && onShowStripePayment ? onShowStripePayment() : onShowTokenPayment?.();
+  }, [isEmailAuth, onShowStripePayment, onShowTokenPayment]);
+
   return (
     <header className="sticky top-0 z-[999997]" style={{ 
-      position: 'sticky',
       background: 'linear-gradient(to bottom, #e8e8f4, #d8d8ec, #c8c8dc)',
       borderBottom: '2px outset #d0d0e0',
-      boxShadow: 
-        'inset 0 2px 0 rgba(255, 255, 255, 1), ' +
-        'inset 0 -1px 0 rgba(0, 0, 0, 0.15), ' +
-        '0 4px 12px rgba(0, 0, 0, 0.2), ' +
-        '0 2px 4px rgba(0, 0, 0, 0.1)'
+      boxShadow: 'inset 0 2px 0 rgba(255,255,255,1), 0 4px 12px rgba(0,0,0,0.2)'
     }}>
-      {/* Subtle gradient accent line */}
       <div className="absolute top-0 left-0 right-0 h-[2px]" style={{
         background: 'linear-gradient(90deg, #00b8a9 0%, #3b82f6 50%, #f59e0b 100%)',
         opacity: 0.6
-      }}></div>
+      }} />
+      
       <div className="container mx-auto px-4 py-2.5">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3 group">
-            <div className="rounded-lg transition-all duration-300 group-hover:scale-105" style={{
-              background: 'linear-gradient(135deg, #f0f0f8, #e0e0e8, #d0d0d8)',
-              border: '2px outset #f0f0f0',
-              padding: '6px',
-              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 8px rgba(0, 0, 0, 0.15)'
-            }}>
+            <div className="rounded-lg p-1.5" style={{...BTN.base, padding: '6px'}}>
               <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-8 h-8 rounded-md object-cover" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-wide" style={{ 
-                fontFamily: "'VT323', monospace",
-                color: '#000000', 
-                textShadow: '0 0 10px rgba(0, 212, 255, 0.3), 2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 2px rgba(0, 0, 0, 0.2)',
-                letterSpacing: '0.05em'
-              }}>SEISO AI</h1>
-            </div>
+            <h1 className="text-xl font-bold tracking-wide" style={{ 
+              fontFamily: "'VT323', monospace",
+              ...TEXT.primary,
+              textShadow: '0 0 10px rgba(0,212,255,0.3), 2px 2px 0 rgba(255,255,255,1)'
+            }}>SEISO AI</h1>
           </div>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-2">
             {tabs.map((tab) => {
               const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`
-                    flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-300 group
-                    ${activeTab === tab.id 
-                      ? '' 
-                      : ''
-                    }
-                    style={activeTab === tab.id ? {
-                      background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
-                      color: '#000000',
-                      border: '2px inset #c0c0c0',
-                      boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
-                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
-                    } : {
-                      color: '#000000',
-                      border: '2px outset #f0f0f0',
-                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (activeTab !== tab.id) {
-                        e.target.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                        e.target.style.border = '2px outset #f8f8f8';
-                        e.target.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (activeTab !== tab.id) {
-                        e.target.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                        e.target.style.border = '2px outset #f0f0f0';
-                        e.target.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                      }
-                    }}
-                  `}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all group"
+                  style={isActive ? BTN.active : BTN.base}
+                  {...(isActive ? {} : hoverHandlers)}
                 >
-                  <Icon className={`w-4 h-4 transition-transform duration-300 ${activeTab === tab.id ? 'scale-110' : 'group-hover:scale-110'}`} />
+                  <Icon className={`w-4 h-4 transition-transform ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />
                   <span className="font-semibold">{tab.name}</span>
                 </button>
               );
             })}
           </nav>
 
-          {/* Credits Dropdown */}
+          {/* Desktop Right Section */}
           {isConnected && (
             <div className="hidden md:flex items-center space-x-3">
-              {/* Wallet Address Display (only if wallet is connected) */}
+              {/* Wallet Address */}
               {address && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded transition-all duration-300" style={{
-                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                  border: '2px outset #f0f0f0',
-                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                  e.currentTarget.style.border = '2px outset #f8f8f8';
-                  e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                  e.currentTarget.style.border = '2px outset #f0f0f0';
-                  e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}>
-                  <Wallet className="w-4 h-4" style={{ color: '#000000' }} />
-                  <span className="text-xs font-mono" style={{ color: '#000000' }}>
-                    {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : ''}
-                  </span>
+                <div className="flex items-center gap-2 px-3 py-2 rounded" style={BTN.base} {...hoverHandlers}>
+                  <Wallet className="w-4 h-4" style={{color:'#000'}} />
+                  <span className="text-xs font-mono" style={{color:'#000'}}>{formatAddr(address)}</span>
                 </div>
               )}
               
-              {/* Email User Dropdown (for email users) */}
+              {/* Email User Dropdown */}
               {isEmailAuth && (
                 <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setShowUserDropdown(!showUserDropdown)}
-                    className="flex items-center gap-2 px-3 py-2 rounded transition-all duration-300"
-                    style={{
-                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                      border: '2px outset #f0f0f0',
-                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                      e.currentTarget.style.border = '2px outset #f8f8f8';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                      e.currentTarget.style.border = '2px outset #f0f0f0';
-                    }}
-                  >
-                    <Mail className="w-4 h-4" style={{ color: '#000000' }} />
-                    <span className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                      {emailContext.email}
-                    </span>
-                    <ChevronDown className={`w-3 h-3 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`} style={{ color: '#000000' }} />
+                  <button onClick={() => setShowUserDropdown(!showUserDropdown)} className="flex items-center gap-2 px-3 py-2 rounded" style={BTN.base} {...hoverHandlers}>
+                    <Mail className="w-4 h-4" style={{color:'#000'}} />
+                    <span className="text-xs" style={TEXT.primary}>{emailContext.email}</span>
+                    <ChevronDown className={`w-3 h-3 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`} style={{color:'#000'}} />
                   </button>
-
-                  {/* Dropdown Menu */}
                   {showUserDropdown && (
-                    <div className="absolute right-0 mt-2 w-56 rounded z-50 overflow-hidden" style={{
-                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                      border: '2px outset #e8e8e8',
-                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3)'
-                    }}>
-                      <div className="py-1">
-                        <button
-                          onClick={() => {
-                            signOut();
-                            setShowUserDropdown(false);
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
-                          style={{
-                            color: '#000000',
-                            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'linear-gradient(to bottom, #e8e8e8, #d8d8d8, #d0d0d0)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          <LogOut className="w-4 h-4" style={{ color: '#000000' }} />
-                          <span>Sign Out</span>
-                        </button>
-                      </div>
+                    <div className="absolute right-0 mt-2 w-56 rounded z-50 overflow-hidden" style={PANEL.card}>
+                      <button onClick={() => { emailContext.signOut(); setShowUserDropdown(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-gray-100" style={TEXT.primary}>
+                        <LogOut className="w-4 h-4" style={{color:'#000'}} />
+                        <span>Sign Out</span>
+                      </button>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Credits Display with Dropdown */}
+              {/* Credits Dropdown */}
               <div className="relative" ref={creditsDropdownRef}>
-                <button
-                  onClick={() => setShowCreditsDropdown(!showCreditsDropdown)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded transition-all duration-200"
-                  style={{
-                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                    border: '2px outset #f0f0f0',
-                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                    e.currentTarget.style.border = '2px outset #f8f8f8';
-                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                    e.currentTarget.style.border = '2px outset #f0f0f0';
-                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                  }}
-                >
-                  <Coins className="w-4 h-4" style={{ color: '#000000' }} />
-                  <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                    {(isEmailAuth ? emailContext.isLoading : walletContext.isLoading) ? '...' : credits} credits
-                  </span>
-                  <ChevronDown className={`w-3 h-3 transition-transform ${showCreditsDropdown ? 'rotate-180' : ''}`} style={{ color: '#000000' }} />
+                <button onClick={() => setShowCreditsDropdown(!showCreditsDropdown)} className="flex items-center gap-1.5 px-3 py-2 rounded" style={BTN.base} {...hoverHandlers}>
+                  <Coins className="w-4 h-4" style={{color:'#000'}} />
+                  <span className="text-sm font-semibold" style={TEXT.primary}>{isLoading ? '...' : credits} credits</span>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showCreditsDropdown ? 'rotate-180' : ''}`} style={{color:'#000'}} />
                 </button>
-
-                {/* Credits Dropdown Menu */}
                 {showCreditsDropdown && (
-                  <div className="absolute right-0 mt-2 w-64 rounded z-50 overflow-hidden" style={{
-                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                    border: '2px outset #e8e8e8',
-                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3)'
-                  }}>
-                    <div className="py-1">
-                      {/* Credit Details Section */}
-                      <div className="px-4 py-2.5 border-b" style={{ borderColor: '#d0d0d0' }}>
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Current Balance:</span>
-                            <span className="text-sm font-bold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{credits}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Total Earned:</span>
-                            <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{totalCreditsEarned}</span>
-                          </div>
-                        </div>
+                  <div className="absolute right-0 mt-2 w-64 rounded z-50 overflow-hidden" style={PANEL.card}>
+                    <div className="px-4 py-2.5 border-b" style={{borderColor:'#d0d0d0'}}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span style={TEXT.secondary}>Current Balance:</span>
+                        <span className="font-bold" style={TEXT.primary}>{credits}</span>
                       </div>
-                      
-                      {/* Manage Subscription - Only show for email users */}
-                      {isEmailAuth && (
-                        <>
-                          <button
-                            onClick={() => {
-                              setShowSubscriptionManagement(true);
-                              setShowCreditsDropdown(false);
-                            }}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
-                            style={{
-                              color: '#000000',
-                              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = 'linear-gradient(to bottom, #e8e8e8, #d8d8d8, #d0d0d0)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = 'transparent';
-                            }}
-                          >
-                            <Settings className="w-4 h-4" style={{ color: '#000000' }} />
-                            <span>Manage Subscription</span>
-                          </button>
-                          <div className="border-t my-1" style={{ borderColor: '#d0d0d0' }}></div>
-                        </>
-                      )}
-                      {/* Refresh Credits */}
-                      <button
-                        onClick={() => {
-                          if (isEmailAuth) {
-                            emailContext.refreshCredits();
-                          } else {
-                            walletContext.fetchCredits(address, 3, true); // Force refresh, skip cache
-                          }
-                          setShowCreditsDropdown(false);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors"
-                        style={{
-                          color: '#000000',
-                          textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'linear-gradient(to bottom, #e8e8e8, #d8d8d8, #d0d0d0)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'transparent';
-                        }}
-                      >
-                        <RefreshCw className="w-4 h-4" style={{ color: '#000000' }} />
-                        <span>Refresh Credits</span>
-                      </button>
+                      <div className="flex justify-between text-xs">
+                        <span style={TEXT.secondary}>Total Earned:</span>
+                        <span className="font-semibold" style={TEXT.primary}>{totalCreditsEarned}</span>
+                      </div>
                     </div>
+                    {isEmailAuth && (
+                      <button onClick={() => { setShowSubscriptionManagement(true); setShowCreditsDropdown(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-gray-100" style={TEXT.primary}>
+                        <Settings className="w-4 h-4" style={{color:'#000'}} />
+                        <span>Manage Subscription</span>
+                      </button>
+                    )}
+                    <button onClick={handleRefreshCredits} className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-gray-100" style={TEXT.primary}>
+                      <RefreshCw className="w-4 h-4" style={{color:'#000'}} />
+                      <span>Refresh Credits</span>
+                    </button>
                   </div>
                 )}
               </div>
               
-              <div className="flex items-center gap-2">
-                
-                {/* Buy Credits Button - Show Stripe for email users, Token for wallet users */}
-                {isEmailAuth && onShowStripePayment ? (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onShowStripePayment) {
-                        onShowStripePayment();
-                      }
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded transition-all duration-200"
-                    style={{ 
-                      position: 'relative', 
-                      zIndex: 999998,
-                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                      border: '2px outset #f0f0f0',
-                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-                      color: '#000000',
-                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                      e.currentTarget.style.border = '2px outset #f8f8f8';
-                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                      e.currentTarget.style.border = '2px outset #f0f0f0';
-                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                    }}
-                    onMouseDown={(e) => {
-                      e.currentTarget.style.border = '2px inset #c0c0c0';
-                      e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-                    }}
-                    onMouseUp={(e) => {
-                      e.currentTarget.style.border = '2px outset #f0f0f0';
-                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                    }}
-                  >
-                    <CreditCard className="w-4 h-4" style={{ color: '#000000' }} />
-                    <span className="text-sm font-semibold">Buy Credits</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onShowTokenPayment) {
-                        onShowTokenPayment();
-                      }
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded transition-all duration-200"
-                    style={{ 
-                      position: 'relative', 
-                      zIndex: 999998,
-                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                      border: '2px outset #f0f0f0',
-                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-                      color: '#000000',
-                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                      e.currentTarget.style.border = '2px outset #f8f8f8';
-                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                      e.currentTarget.style.border = '2px outset #f0f0f0';
-                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                    }}
-                    onMouseDown={(e) => {
-                      e.currentTarget.style.border = '2px inset #c0c0c0';
-                      e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-                    }}
-                    onMouseUp={(e) => {
-                      e.currentTarget.style.border = '2px outset #f0f0f0';
-                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                    }}
-                  >
-                    <Coins className="w-4 h-4" style={{ color: '#000000' }} />
-                    <span className="text-sm font-semibold">Buy Credits</span>
-                  </button>
-                )}
-              </div>
+              {/* Buy Credits Button */}
+              <button onClick={handleBuyCredits} className="flex items-center gap-2 px-4 py-2 rounded" style={{...BTN.base, zIndex: 999998}} {...pressHandlers}>
+                {isEmailAuth ? <CreditCard className="w-4 h-4" style={{color:'#000'}} /> : <Coins className="w-4 h-4" style={{color:'#000'}} />}
+                <span className="text-sm font-semibold">Buy Credits</span>
+              </button>
 
-              {/* Sign Out / Disconnect Button (only for wallet users, email users have dropdown) */}
+              {/* Sign Out (wallet users only) */}
               {!isEmailAuth && (
-                <button
-                  onClick={disconnectWallet}
-                  className="flex items-center gap-2 px-3 py-2 rounded transition-all duration-200"
-                  title="Disconnect Wallet"
-                  style={{
-                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                    border: '2px outset #f0f0f0',
-                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-                    color: '#000000',
-                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                    e.currentTarget.style.border = '2px outset #f8f8f8';
-                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                    e.currentTarget.style.border = '2px outset #f0f0f0';
-                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                  }}
-                  onMouseDown={(e) => {
-                    e.currentTarget.style.border = '2px inset #c0c0c0';
-                    e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-                  }}
-                  onMouseUp={(e) => {
-                    e.currentTarget.style.border = '2px outset #f0f0f0';
-                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                  }}
-                >
-                  <LogOut className="w-4 h-4" style={{ color: '#000000' }} />
-                  <span className="text-sm font-medium hidden lg:inline" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                    Disconnect
-                  </span>
+                <button onClick={walletContext.disconnectWallet} className="flex items-center gap-2 px-3 py-2 rounded" style={BTN.base} {...pressHandlers} title="Disconnect Wallet">
+                  <LogOut className="w-4 h-4" style={{color:'#000'}} />
+                  <span className="text-sm font-medium hidden lg:inline" style={TEXT.primary}>Disconnect</span>
                 </button>
               )}
             </div>
           )}
 
           {/* Mobile Menu Button */}
-          <button
-            onClick={() => setShowMobileMenu(!showMobileMenu)}
-            className="md:hidden p-2 rounded transition-all duration-200"
-            style={{
-              background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-              border: '2px outset #f0f0f0',
-              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-              e.currentTarget.style.border = '2px outset #f8f8f8';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-              e.currentTarget.style.border = '2px outset #f0f0f0';
-            }}
-            onMouseDown={(e) => {
-              e.currentTarget.style.border = '2px inset #c0c0c0';
-              e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-            }}
-            onMouseUp={(e) => {
-              e.currentTarget.style.border = '2px outset #f0f0f0';
-              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-            }}
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#000000' }}>
-              {showMobileMenu ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
+          <button onClick={() => setShowMobileMenu(!showMobileMenu)} className="md:hidden p-2 rounded" style={BTN.base} {...pressHandlers}>
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{color:'#000'}}>
+              {showMobileMenu ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
             </svg>
           </button>
 
           {/* Mobile Credits & Menu */}
           <div className="md:hidden flex items-center gap-2">
-            {isConnected ? (
+            {isConnected && (
               <>
-                {/* Combined Credits Card with Buy Button - Mobile */}
-                <div 
-                  className="flex items-center gap-2 px-3 py-2 rounded transition-all duration-200"
-                  style={{
-                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                    border: '2px outset #f0f0f0',
-                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
-                  }}
-                >
-                  <Coins className="w-4 h-4" style={{ color: '#000000' }} />
-                  <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                    {(isEmailAuth ? emailContext.isLoading : walletContext.isLoading) ? '...' : credits}
-                  </span>
-                  {/* Buy Credits Button - Show Stripe for email users, Token for wallet users */}
-                  {isEmailAuth && onShowStripePayment ? (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (onShowStripePayment) {
-                          onShowStripePayment();
-                        }
-                      }}
-                      className="ml-1 px-2 py-1 rounded transition-all duration-200"
-                      title="Buy Credits"
-                      style={{ 
-                        position: 'relative', 
-                        zIndex: 999998,
-                        background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                        border: '2px outset #f0f0f0',
-                        boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
-                      }}
-                      onMouseDown={(e) => {
-                        e.currentTarget.style.border = '2px inset #c0c0c0';
-                        e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-                      }}
-                      onMouseUp={(e) => {
-                        e.currentTarget.style.border = '2px outset #f0f0f0';
-                        e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                      }}
-                    >
-                      <CreditCard className="w-3.5 h-3.5" style={{ color: '#000000' }} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (onShowTokenPayment) {
-                          onShowTokenPayment();
-                        }
-                      }}
-                      className="ml-1 px-2 py-1 rounded transition-all duration-200"
-                      title="Buy Credits"
-                      style={{ 
-                        position: 'relative', 
-                        zIndex: 999998,
-                        background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                        border: '2px outset #f0f0f0',
-                        boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
-                      }}
-                      onMouseDown={(e) => {
-                        e.currentTarget.style.border = '2px inset #c0c0c0';
-                        e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-                      }}
-                      onMouseUp={(e) => {
-                        e.currentTarget.style.border = '2px outset #f0f0f0';
-                        e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                      }}
-                    >
-                      <Coins className="w-3.5 h-3.5" style={{ color: '#000000' }} />
-                    </button>
-                  )}
+                <div className="flex items-center gap-2 px-3 py-2 rounded" style={BTN.base}>
+                  <Coins className="w-4 h-4" style={{color:'#000'}} />
+                  <span className="text-xs font-semibold" style={TEXT.primary}>{isLoading ? '...' : credits}</span>
+                  <button onClick={handleBuyCredits} className="ml-1 px-2 py-1 rounded" style={{...BTN.small, zIndex: 999998}}>
+                    {isEmailAuth ? <CreditCard className="w-3.5 h-3.5" style={{color:'#000'}} /> : <Coins className="w-3.5 h-3.5" style={{color:'#000'}} />}
+                  </button>
                 </div>
-                
-                <button
-                  onClick={isEmailAuth ? signOut : disconnectWallet}
-                  className="p-2 rounded transition-all duration-200"
-                  title={isEmailAuth ? "Sign Out" : "Disconnect"}
-                  style={{
-                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                    border: '2px outset #f0f0f0',
-                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
-                  }}
-                  onMouseDown={(e) => {
-                    e.currentTarget.style.border = '2px inset #c0c0c0';
-                    e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-                  }}
-                  onMouseUp={(e) => {
-                    e.currentTarget.style.border = '2px outset #f0f0f0';
-                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                  }}
-                >
-                  <LogOut className="w-4 h-4" style={{ color: '#000000' }} />
+                <button onClick={handleSignOut} className="p-2 rounded" style={BTN.base} title={isEmailAuth ? "Sign Out" : "Disconnect"}>
+                  <LogOut className="w-4 h-4" style={{color:'#000'}} />
                 </button>
               </>
-            ) : null}
+            )}
           </div>
         </div>
 
         {/* Mobile Navigation Menu */}
         {showMobileMenu && (
-          <div className="md:hidden border-t pt-4 mt-4 px-4 pb-4 slide-up" style={{ borderColor: '#d0d0d0' }}>
+          <div className="md:hidden border-t pt-4 mt-4 px-4 pb-4 slide-up" style={{borderColor:'#d0d0d0'}}>
             <nav className="flex flex-col space-y-2">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
                 return (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      setActiveTab(tab.id);
-                      setShowMobileMenu(false);
-                    }}
-                    className="flex items-center gap-3 px-4 py-3 rounded transition-all duration-300"
-                    style={isActive ? {
-                      background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
-                      color: '#000000',
-                      border: '2px inset #c0c0c0',
-                      boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2)',
-                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
-                    } : {
-                      color: '#000000',
-                      border: '2px outset #f0f0f0',
-                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                        e.currentTarget.style.border = '2px outset #f8f8f8';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                        e.currentTarget.style.border = '2px outset #f0f0f0';
-                      }
-                    }}
-                  >
-                    <Icon className="w-5 h-5" style={{ color: '#000000' }} />
+                  <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowMobileMenu(false); }} className="flex items-center gap-3 px-4 py-3 rounded" style={isActive ? BTN.active : BTN.base} {...(isActive ? {} : hoverHandlers)}>
+                    <Icon className="w-5 h-5" style={{color:'#000'}} />
                     <span className="font-semibold">{tab.name}</span>
                   </button>
                 );
               })}
-              
-              {/* Subscription Management for Email Users */}
               {isEmailAuth && (
                 <>
-                  <div className="border-t my-2" style={{ borderColor: '#d0d0d0' }}></div>
-                  <button
-                    onClick={() => {
-                      setShowSubscriptionManagement(true);
-                      setShowMobileMenu(false);
-                    }}
-                    className="flex items-center gap-3 px-4 py-3 rounded transition-all duration-300"
-                    style={{
-                      color: '#000000',
-                      border: '2px outset #f0f0f0',
-                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                      e.currentTarget.style.border = '2px outset #f8f8f8';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                      e.currentTarget.style.border = '2px outset #f0f0f0';
-                    }}
-                  >
-                    <Settings className="w-5 h-5" style={{ color: '#000000' }} />
+                  <div className="border-t my-2" style={{borderColor:'#d0d0d0'}} />
+                  <button onClick={() => { setShowSubscriptionManagement(true); setShowMobileMenu(false); }} className="flex items-center gap-3 px-4 py-3 rounded" style={BTN.base} {...hoverHandlers}>
+                    <Settings className="w-5 h-5" style={{color:'#000'}} />
                     <span className="font-semibold">Manage Subscription</span>
                   </button>
                 </>
@@ -707,15 +261,9 @@ import logger from '../utils/logger.js';
         )}
       </div>
 
-      {/* Subscription Management Modal */}
-      {isEmailAuth && (
-        <SubscriptionManagement
-          isOpen={showSubscriptionManagement}
-          onClose={() => setShowSubscriptionManagement(false)}
-        />
-      )}
+      {isEmailAuth && <SubscriptionManagement isOpen={showSubscriptionManagement} onClose={() => setShowSubscriptionManagement(false)} />}
     </header>
   );
-};
+});
 
 export default Navigation;

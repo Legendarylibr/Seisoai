@@ -1,58 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, memo, useMemo } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { VISUAL_STYLES } from '../utils/styles';
 import { Search, ChevronDown, ChevronUp, Palette } from 'lucide-react';
+import { BTN, TEXT, hoverHandlers } from '../utils/buttonStyles';
 
-const StyleSelector = () => {
+// PERFORMANCE: Pre-compute categories once
+const CATEGORIES = ['All', ...new Set(VISUAL_STYLES.map(s => s.category))];
+
+const StyleSelector = memo(() => {
   const { selectedStyle, selectStyle } = useImageGenerator();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [showStyleOptions, setShowStyleOptions] = useState(false);
 
-  // Get unique categories
-  const categories = ['All', ...new Set(VISUAL_STYLES.map(style => style.category))];
-
-  // Filter styles based on category and search
-  const filteredStyles = VISUAL_STYLES.filter(style => {
+  // PERFORMANCE: Memoize filtered styles
+  const filteredStyles = useMemo(() => VISUAL_STYLES.filter(style => {
     const matchesCategory = selectedCategory === 'All' || style.category === selectedCategory;
     const matchesSearch = style.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          style.description.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
-  });
+  }), [selectedCategory, searchTerm]);
 
   return (
-    <div className="w-full space-y-2 relative overflow-hidden" style={{ 
+    <div className="w-full space-y-2 relative overflow-hidden rounded-lg p-2.5" style={{ 
       background: 'linear-gradient(135deg, #ffffee 0%, #ffffdd 50%, #ffffc8 100%)',
       border: '2px outset #ffffcc',
-      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.9), inset -2px -2px 0 rgba(0, 0, 0, 0.15), 0 3px 8px rgba(0, 0, 0, 0.12)',
-      padding: '0.625rem',
-      borderRadius: '0.5rem'
+      boxShadow: 'inset 2px 2px 0 rgba(255,255,255,0.9), inset -2px -2px 0 rgba(0,0,0,0.15)'
     }}>
-      {/* Subtle pattern overlay */}
-      <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
-        backgroundImage: 'repeating-linear-gradient(45deg, #000 0, #000 1px, transparent 1px, transparent 6px)'
-      }}></div>
-      
-      {/* Style Selection Header */}
+      {/* Header */}
       <div className="flex items-center gap-2 mb-2 relative z-10">
-        <div className="p-1.5 rounded transition-transform duration-200 hover:scale-105" style={{ 
-          background: 'linear-gradient(135deg, #e8e8f0, #d8d8e0)',
-          border: '2px outset #e0e0e8',
-          boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.25)'
-        }}>
-          <Palette className="w-4 h-4" style={{ color: '#000000' }} />
+        <div className="p-1.5 rounded" style={BTN.small}>
+          <Palette className="w-4 h-4" style={{color:'#000'}} />
         </div>
         <div>
-          <h3 className="text-xs font-bold tracking-wide" style={{ 
-            color: '#000000', 
-            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.9)',
-            fontFamily: "'IBM Plex Mono', monospace"
-          }}>Style (Optional)</h3>
-          <p className="text-[10px]" style={{ 
-            color: '#1a1a2e', 
-            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.7)',
-            fontFamily: "'IBM Plex Mono', monospace"
-          }}>
+          <h3 className="text-xs font-bold" style={{...TEXT.primary, fontFamily:"'IBM Plex Mono', monospace"}}>Style (Optional)</h3>
+          <p className="text-[10px]" style={{...TEXT.secondary, fontFamily:"'IBM Plex Mono', monospace"}}>
             {selectedStyle ? `✓ ${selectedStyle.name} applied` : 'Works with Flux & Nano Banana Pro'}
           </p>
         </div>
@@ -60,135 +42,55 @@ const StyleSelector = () => {
 
       {/* Selected Style Display */}
       {selectedStyle && (
-        <div className="p-2 rounded mb-2" style={{ 
-          background: 'linear-gradient(to bottom, #f5f5f5, #eeeeee)',
-          border: '2px outset #e8e8e8',
-          boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25)'
-        }}>
+        <div className="p-2 rounded mb-2" style={BTN.base}>
           <div className="flex items-center gap-2">
             <div className="text-lg">{selectedStyle.emoji}</div>
             <div className="flex-1">
-              <h4 className="font-semibold text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{selectedStyle.name}</h4>
-              <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>{selectedStyle.description}</p>
+              <h4 className="font-semibold text-xs" style={TEXT.primary}>{selectedStyle.name}</h4>
+              <p className="text-xs" style={TEXT.secondary}>{selectedStyle.description}</p>
             </div>
-            <button
-              onClick={() => selectStyle(null)}
-              className="p-1 rounded transition-all"
-              style={{
-                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0)',
-                border: '2px outset #f0f0f0',
-                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)',
-                color: '#000000'
-              }}
-              title="Clear selection"
-            >
-              ✕
-            </button>
+            <button onClick={() => selectStyle(null)} className="p-1 rounded" style={BTN.small} title="Clear">✕</button>
           </div>
         </div>
       )}
 
-      {/* Style Selection Button */}
-    <button
-      onClick={() => setShowStyleOptions(!showStyleOptions)}
-      aria-label={selectedStyle ? `Change style from ${selectedStyle}` : 'Choose style'}
-      aria-expanded={showStyleOptions}
-      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded transition-all duration-200"
-      style={selectedStyle ? {
-        background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
-        border: '2px inset #c0c0c0',
-        boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
-        color: '#000000',
-        textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
-      } : {
-        background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-        border: '2px outset #f0f0f0',
-        boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-        color: '#000000',
-        textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-      }}
-      onMouseEnter={(e) => {
-        if (!selectedStyle) {
-          e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-          e.currentTarget.style.border = '2px outset #f8f8f8';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!selectedStyle) {
-          e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-          e.currentTarget.style.border = '2px outset #f0f0f0';
-        }
-      }}
-    >
-        <Palette className="w-4 h-4" style={{ color: '#000000' }} />
+      {/* Toggle Button */}
+      <button
+        onClick={() => setShowStyleOptions(!showStyleOptions)}
+        className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded"
+        style={selectedStyle ? BTN.active : BTN.base}
+        {...(selectedStyle ? {} : hoverHandlers)}
+      >
+        <Palette className="w-4 h-4" style={{color:'#000'}} />
         <span className="text-xs font-medium">{selectedStyle ? 'Change Style' : 'Select Style (Optional)'}</span>
-        {showStyleOptions ? <ChevronUp className="w-4 h-4" style={{ color: '#000000' }} /> : <ChevronDown className="w-4 h-4" style={{ color: '#000000' }} />}
+        {showStyleOptions ? <ChevronUp className="w-4 h-4" style={{color:'#000'}} /> : <ChevronDown className="w-4 h-4" style={{color:'#000'}} />}
       </button>
 
-      {/* Style Options Dropdown */}
+      {/* Style Options */}
       {showStyleOptions && (
         <div className="space-y-2">
-          {/* Search Bar */}
+          {/* Search */}
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: '#000000' }} />
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{color:'#000'}} />
             <input
               type="text"
               placeholder="Search styles..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              aria-label="Search for styles"
-              className="w-full pl-8 pr-3 py-2 rounded text-xs transition-all duration-300"
-              style={{
-                background: '#ffffff',
-                border: '2px inset #c0c0c0',
-                color: '#000000',
-                boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)'
-              }}
-              onFocus={(e) => {
-                e.target.style.border = '2px inset #808080';
-                e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.3)';
-                e.target.style.background = '#fffffe';
-              }}
-              onBlur={(e) => {
-                e.target.style.border = '2px inset #c0c0c0';
-                e.target.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.15), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-                e.target.style.background = '#ffffff';
-              }}
+              className="w-full pl-8 pr-3 py-2 rounded text-xs"
+              style={{background:'#fff', border:'2px inset #c0c0c0', color:'#000'}}
             />
           </div>
 
-          {/* Category Filter */}
+          {/* Categories */}
           <div className="flex flex-wrap gap-2">
-            {categories.map((category) => (
+            {CATEGORIES.map(category => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className="px-2 py-1 rounded text-xs font-medium transition-all duration-200"
-                style={selectedCategory === category ? {
-                  background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
-                  border: '2px inset #c0c0c0',
-                  boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)',
-                  color: '#000000',
-                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
-                } : {
-                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                  border: '2px outset #f0f0f0',
-                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-                  color: '#000000',
-                  textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedCategory !== category) {
-                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                    e.currentTarget.style.border = '2px outset #f8f8f8';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedCategory !== category) {
-                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                    e.currentTarget.style.border = '2px outset #f0f0f0';
-                  }
-                }}
+                className="px-2 py-1 rounded text-xs font-medium"
+                style={selectedCategory === category ? BTN.active : BTN.base}
+                {...(selectedCategory === category ? {} : hoverHandlers)}
               >
                 {category}
               </button>
@@ -198,69 +100,38 @@ const StyleSelector = () => {
           {/* Styles Grid */}
           <div className="max-h-60 overflow-y-auto">
             <div className="grid grid-cols-3 gap-2">
-              {filteredStyles.map((style) => (
+              {filteredStyles.map(style => (
                 <button
                   key={style.id}
-                  onClick={() => {
-                    selectStyle(style);
-                    setShowStyleOptions(false);
-                  }}
-                  aria-label={`Select ${style.name} style from ${style.category} category`}
-                  className="relative p-2 rounded transition-all duration-300 group"
-                  style={selectedStyle?.id === style.id ? {
-                    background: 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)',
-                    border: '2px inset #c0c0c0',
-                    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5), 0 2px 4px rgba(0, 0, 0, 0.2)'
-                  } : {
-                    background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
-                    border: '2px outset #e8e8e8',
-                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15)'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (selectedStyle?.id !== style.id) {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #f0f0f0)';
-                      e.currentTarget.style.border = '2px outset #f0f0f0';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (selectedStyle?.id !== style.id) {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #ffffff, #f5f5f5)';
-                      e.currentTarget.style.border = '2px outset #e8e8e8';
-                    }
-                  }}
+                  onClick={() => { selectStyle(style); setShowStyleOptions(false); }}
+                  className="relative p-2 rounded group"
+                  style={selectedStyle?.id === style.id ? BTN.active : {...BTN.base, background:'linear-gradient(to bottom, #fff, #f5f5f5)'}}
+                  {...(selectedStyle?.id === style.id ? {} : hoverHandlers)}
                 >
                   <div className="text-center">
-                    <div className="text-base mb-1 group-hover:scale-110 transition-transform duration-200">
-                      {style.emoji}
-                    </div>
-                    <h3 className="font-bold text-xs mb-0.5" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{style.name}</h3>
-                    <div className="text-xs font-medium" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>{style.category}</div>
+                    <div className="text-base mb-1 group-hover:scale-110 transition-transform">{style.emoji}</div>
+                    <h3 className="font-bold text-xs mb-0.5" style={TEXT.primary}>{style.name}</h3>
+                    <div className="text-xs" style={TEXT.secondary}>{style.category}</div>
                   </div>
                   {selectedStyle?.id === style.id && (
-                    <div className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full" style={{ 
-                      background: 'linear-gradient(135deg, #00d4ff, #00b8e6)',
-                      boxShadow: '0 0 6px rgba(0, 212, 255, 0.6), 0 0 2px rgba(255, 255, 255, 0.8)'
-                    }} />
+                    <div className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full" style={{background:'linear-gradient(135deg,#00d4ff,#00b8e6)'}} />
                   )}
                 </button>
               ))}
             </div>
 
-            {/* No Results */}
             {filteredStyles.length === 0 && (
               <div className="text-center py-6">
                 <div className="text-xl mb-2">🔍</div>
-                <h3 className="text-xs font-semibold mb-1" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>No styles found</h3>
-                <p className="text-xs" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Try adjusting your search or category filter</p>
+                <h3 className="text-xs font-semibold mb-1" style={TEXT.primary}>No styles found</h3>
+                <p className="text-xs" style={TEXT.secondary}>Try adjusting your search</p>
               </div>
             )}
           </div>
         </div>
       )}
-
-      {/* Help Section - REMOVED */}
     </div>
   );
-};
+});
 
 export default StyleSelector;

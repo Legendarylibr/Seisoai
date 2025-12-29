@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense, memo } from 'react';
 import { ImageGeneratorProvider, useImageGenerator } from './contexts/ImageGeneratorContext';
 import { SimpleWalletProvider, useSimpleWallet } from './contexts/SimpleWalletContext';
 import { EmailAuthProvider, useEmailAuth } from './contexts/EmailAuthContext';
@@ -9,16 +9,18 @@ import Navigation from './components/Navigation';
 import ReferenceImageInput from './components/ReferenceImageInput';
 import MultiImageModelSelector from './components/MultiImageModelSelector';
 import PromptOptimizer from './components/PromptOptimizer';
-import TokenPaymentModal from './components/TokenPaymentModal';
-import StripePaymentModal from './components/StripePaymentModal';
-import PaymentSuccessModal from './components/PaymentSuccessModal';
 import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
-import ImageGallery from './components/ImageGallery';
 import GenerateButton from './components/GenerateButton';
-import { Grid, Sparkles, Image, ChevronDown, ChevronUp } from 'lucide-react';
+import { Grid, Sparkles, Image, ChevronDown } from 'lucide-react';
 import logger from './utils/logger.js';
 import { API_URL } from './utils/apiConfig.js';
+
+// PERFORMANCE: Lazy load heavy modals and gallery - not needed on initial render
+const TokenPaymentModal = lazy(() => import('./components/TokenPaymentModal'));
+const StripePaymentModal = lazy(() => import('./components/StripePaymentModal'));
+const PaymentSuccessModal = lazy(() => import('./components/PaymentSuccessModal'));
+const ImageGallery = lazy(() => import('./components/ImageGallery'));
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
@@ -156,28 +158,32 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
         </div>
       </main>
       
-      <TokenPaymentModal 
-        isOpen={showTokenPaymentModal} 
-        onClose={() => {
-          setShowTokenPaymentModal(false);
-        }} 
-      />
-      
-      <StripePaymentModal 
-        isOpen={showStripePaymentModal} 
-        onClose={() => setShowStripePaymentModal(false)} 
-      />
+      {/* PERFORMANCE: Lazy loaded modals with Suspense */}
+      <Suspense fallback={null}>
+        {showTokenPaymentModal && (
+          <TokenPaymentModal 
+            isOpen={showTokenPaymentModal} 
+            onClose={() => setShowTokenPaymentModal(false)} 
+          />
+        )}
+        
+        {showStripePaymentModal && (
+          <StripePaymentModal 
+            isOpen={showStripePaymentModal} 
+            onClose={() => setShowStripePaymentModal(false)} 
+          />
+        )}
 
-      {/* Subscription Success Modal */}
-      {subscriptionSuccess && (
-        <PaymentSuccessModal
-          isOpen={!!subscriptionSuccess}
-          onClose={() => setSubscriptionSuccess(null)}
-          planName={subscriptionSuccess.planName}
-          planPrice={subscriptionSuccess.planPrice}
-          sessionId={subscriptionSuccess.sessionId}
-        />
-      )}
+        {subscriptionSuccess && (
+          <PaymentSuccessModal
+            isOpen={!!subscriptionSuccess}
+            onClose={() => setSubscriptionSuccess(null)}
+            planName={subscriptionSuccess.planName}
+            planPrice={subscriptionSuccess.planPrice}
+            sessionId={subscriptionSuccess.sessionId}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }
@@ -194,8 +200,8 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   );
 }
 
-// Collapsible How to Use Component
-function CollapsibleHowToUse() {
+// PERFORMANCE: Memoized collapsible component
+const CollapsibleHowToUse = memo(function CollapsibleHowToUse() {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -257,9 +263,9 @@ function CollapsibleHowToUse() {
       </div>
     </div>
   );
-}
+});
 
-function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
+const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
   const [customPrompt, setCustomPrompt] = useState('');
   const emailContext = useEmailAuth();
   const { controlNetImage, multiImageModel } = useImageGenerator();
@@ -480,10 +486,13 @@ function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
       </div>
     </div>
   );
-}
+});
 
-function GalleryTab() {
-  return <ImageGallery />;
-}
+// PERFORMANCE: Memoized gallery tab with lazy loading
+const GalleryTab = memo(() => (
+  <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /></div>}>
+    <ImageGallery />
+  </Suspense>
+));
 
 export default App;

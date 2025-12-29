@@ -1,76 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo, useCallback } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
+import { BTN, TEXT, pressHandlers } from '../utils/buttonStyles';
 import logger from '../utils/logger.js';
 
-// Constants for generation timing
-const GENERATION_TIMES = {
-  FLUX_PRO: 17.5,
-  FLUX_MULTI: 35,
-  DEFAULT: 17.5
-};
+const GENERATION_TIMES = { FLUX_PRO: 17.5, FLUX_MULTI: 35, DEFAULT: 17.5 };
+const PROGRESS_INTERVAL = 500;
+const MAX_PROGRESS = 75;
 
-// Constants for progress tracking
-const PROGRESS_CONFIG = {
-  INTERVAL_MS: 500, // OPTIMIZATION: Reduced from 200ms to 500ms - visually identical, 60% less CPU
-  COMPLETION_DELAY_MS: 0, // Removed artificial delay - show image immediately
-  MAX_PROGRESS_PERCENT: 75,
-  PROGRESS_MULTIPLIER: 80
-};
-
-// Helper function to sanitize error messages
-const sanitizeError = (error) => {
-  const message = error?.message || 'An unknown error occurred';
-  // Remove potential sensitive information and limit length
-  return message
-    .replace(/password|secret|key|token|api[_-]?key/gi, '[REDACTED]')
-    .substring(0, 200);
-};
-
-// Helper function to get prompt for display
-const getPromptForDisplay = (trimmedPrompt, selectedStyle) => {
-  return trimmedPrompt.length > 0 
-    ? trimmedPrompt 
-    : (selectedStyle ? selectedStyle.prompt : 'No prompt');
-};
-
-const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
+const GenerateButton = memo(({ customPrompt = '', onShowTokenPayment }) => {
   const {
-    selectedStyle,
-    isGenerating,
-    setGenerating,
-    setGeneratedImage,
-    setError,
-    guidanceScale,
-    imageSize,
-    numImages,
-    enableSafetyChecker,
-    generationMode,
-    multiImageModel,
-    controlNetImage,
-    controlNetImageDimensions,
-    setCurrentGeneration,
-    optimizePrompt,
-    setPromptOptimizationResult
+    selectedStyle, isGenerating, setGenerating, setGeneratedImage, setError,
+    guidanceScale, imageSize, numImages, enableSafetyChecker, generationMode,
+    multiImageModel, controlNetImage, controlNetImageDimensions, setCurrentGeneration,
+    optimizePrompt, setPromptOptimizationResult
   } = useImageGenerator();
   
-  const {
-    isConnected,
-    address,
-    credits,
-    isLoading: walletLoading,
-    isNFTHolder,
-    refreshCredits,
-    setCreditsManually
-  } = useSimpleWallet();
-  
+  const { isConnected, address, credits, isLoading: walletLoading, isNFTHolder, refreshCredits, setCreditsManually } = useSimpleWallet();
   const emailContext = useEmailAuth();
   const isEmailAuth = emailContext.isAuthenticated;
-  
-  // Use credits from email auth if available, otherwise wallet
   const availableCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
 
   const [progress, setProgress] = useState(0);
@@ -80,336 +31,137 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
   const [isLoading, setIsLoading] = useState(false);
   const timeoutRef = useRef(null);
 
-  // Progress tracking effect with loading steps
+  // Progress tracking
   useEffect(() => {
-    let interval = null;
-    
-    if ((isGenerating || isLoading) && generationStartTime) {
-      // Get estimated generation time based on mode - moved inside effect to fix dependency
-      const getEstimatedTime = () => {
-        switch (generationMode) {
-          case 'flux-pro':
-            return GENERATION_TIMES.FLUX_PRO;
-          case 'flux-multi':
-            return GENERATION_TIMES.FLUX_MULTI;
-          default:
-            return GENERATION_TIMES.DEFAULT;
-        }
-      };
-      
-      const estimatedTime = getEstimatedTime();
-      
-      interval = setInterval(() => {
-        const elapsed = (Date.now() - generationStartTime) / 1000;
-        // More conservative progress - slower progression
-        const progressPercent = Math.min(
-          (elapsed / estimatedTime) * PROGRESS_CONFIG.PROGRESS_MULTIPLIER, 
-          PROGRESS_CONFIG.MAX_PROGRESS_PERCENT
-        );
-        const remaining = Math.max(estimatedTime - elapsed, 0);
-        
-        // Update progress and time
-        setProgress(progressPercent);
-        setTimeRemaining(Math.ceil(remaining));
-        
-        // Update loading step based on progress - more realistic timing
-        if (progressPercent < 15) {
-          setCurrentStep('Initializing...');
-        } else if (progressPercent < 30) {
-          setCurrentStep('Processing prompt...');
-        } else if (progressPercent < 50) {
-          setCurrentStep('Generating image...');
-        } else if (progressPercent < 65) {
-          setCurrentStep('Enhancing details...');
-        } else if (progressPercent < PROGRESS_CONFIG.MAX_PROGRESS_PERCENT) {
-          setCurrentStep('Finalizing...');
-        } else {
-          setCurrentStep('Almost complete...');
-        }
-      }, PROGRESS_CONFIG.INTERVAL_MS);
-    } else {
-      setProgress(0);
-      setTimeRemaining(0);
-      setCurrentStep('');
+    if (!(isGenerating || isLoading) || !generationStartTime) {
+      setProgress(0); setTimeRemaining(0); setCurrentStep('');
+      return;
     }
-    
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
+
+    const estimatedTime = generationMode === 'flux-multi' ? GENERATION_TIMES.FLUX_MULTI : GENERATION_TIMES.FLUX_PRO;
+    const interval = setInterval(() => {
+      const elapsed = (Date.now() - generationStartTime) / 1000;
+      const pct = Math.min((elapsed / estimatedTime) * 80, MAX_PROGRESS);
+      setProgress(pct);
+      setTimeRemaining(Math.max(Math.ceil(estimatedTime - elapsed), 0));
+      setCurrentStep(pct < 15 ? 'Initializing...' : pct < 30 ? 'Processing prompt...' : pct < 50 ? 'Generating image...' : pct < 65 ? 'Enhancing details...' : 'Finalizing...');
+    }, PROGRESS_INTERVAL);
+
+    return () => clearInterval(interval);
   }, [isGenerating, isLoading, generationStartTime, generationMode]);
 
   const handleGenerate = async () => {
-    // Prevent multiple simultaneous requests
-    if (isGenerating || isLoading) {
-      logger.warn('Generation already in progress, ignoring duplicate request');
-      return;
-    }
+    if (isGenerating || isLoading) return;
     
-    // Check if authenticated (email or wallet)
     const isAuthenticated = isConnected || isEmailAuth;
+    const hasIdentifier = isEmailAuth ? emailContext.userId : address;
     
-    // For email users, use userId
-    // For wallet users, use address
-    const hasIdentifier = isEmailAuth 
-      ? emailContext.userId 
-      : address;
-    
-    // Require authentication to generate (but UI is accessible without auth)
     if (!isAuthenticated || !hasIdentifier) {
-      if (isEmailAuth) {
-        setError('Please sign in with your email account to generate images. New users get 2 credits!');
-      } else {
-        setError('Please connect your wallet or sign in with email to generate images. New users get 2 credits!');
-      }
+      setError('Please connect your wallet or sign in with email to generate images. New users get 2 credits!');
       return;
     }
 
-    // Calculate credits that will be deducted
     const creditsToDeduct = multiImageModel === 'nano-banana-pro' ? 2 : 1;
-    
-    // Optimistically update UI for instant feedback (backend deducts immediately)
     const currentCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
     const newCredits = Math.max(0, currentCredits - creditsToDeduct);
     
-    if (isEmailAuth && emailContext.setCreditsManually) {
-      emailContext.setCreditsManually(newCredits);
-    } else if (!isEmailAuth && setCreditsManually) {
-      setCreditsManually(newCredits);
-    }
-
-    // Style is optional - can generate with just prompt and reference image
+    // Optimistic update
+    if (isEmailAuth && emailContext.setCreditsManually) emailContext.setCreditsManually(newCredits);
+    else if (setCreditsManually) setCreditsManually(newCredits);
 
     try {
       setIsLoading(true);
       setGenerating(true);
       setError(null);
       setGenerationStartTime(Date.now());
-      setProgress(0);
-      setCurrentStep('Starting generation...');
 
       const advancedSettings = {
-        guidanceScale,
-        imageSize,
-        numImages,
-        enableSafetyChecker,
-        generationMode,
-        multiImageModel, // Pass model selection for multi-image editing
-        walletAddress: isEmailAuth ? undefined : address, // Pass wallet address for wallet users
-        userId: isEmailAuth ? emailContext.userId : undefined, // Pass userId for email users
-        email: isEmailAuth ? emailContext.email : undefined, // Pass email for email users
-        isNFTHolder: isNFTHolder || false, // Pass NFT holder status for routing
-        referenceImageDimensions: controlNetImageDimensions, // Pass dimensions to maintain resolution
-        optimizePrompt // Pass prompt optimization toggle to backend
+        guidanceScale, imageSize, numImages, enableSafetyChecker, generationMode, multiImageModel,
+        walletAddress: isEmailAuth ? undefined : address,
+        userId: isEmailAuth ? emailContext.userId : undefined,
+        email: isEmailAuth ? emailContext.email : undefined,
+        isNFTHolder: isNFTHolder || false,
+        referenceImageDimensions: controlNetImageDimensions,
+        optimizePrompt
       };
 
-      logger.info('Starting image generation');
-      
-      // Trim and validate prompt - only send if user actually entered something
-      // Empty or whitespace-only prompts should be treated as empty
-      const trimmedPrompt = customPrompt && typeof customPrompt === 'string' 
-        ? customPrompt.trim() 
-        : '';
-      
-      const imageResult = await generateImage(
-        selectedStyle || null,
-        trimmedPrompt,
-        advancedSettings,
-        controlNetImage
-      );
+      const trimmedPrompt = (customPrompt || '').trim();
+      const imageResult = await generateImage(selectedStyle || null, trimmedPrompt, advancedSettings, controlNetImage);
 
-      // Extract images and credits from response (always returns object with images array)
-      if (!imageResult || typeof imageResult !== 'object' || !Array.isArray(imageResult.images)) {
-        throw new Error('Invalid response format from generation service');
-      }
+      if (!imageResult?.images?.length) throw new Error('Invalid response from generation service');
       
       const imageUrls = imageResult.images;
-      const imageUrl = imageUrls[0];
       
-      // Store prompt optimization result if available
-      if (imageResult.promptOptimization) {
-        setPromptOptimizationResult(imageResult.promptOptimization);
-        logger.debug('Prompt optimization result stored', {
-          hasReasoning: !!imageResult.promptOptimization.reasoning
-        });
-      } else {
-        setPromptOptimizationResult(null);
-      }
+      if (imageResult.promptOptimization) setPromptOptimizationResult(imageResult.promptOptimization);
+      else setPromptOptimizationResult(null);
       
-      // Always update credits from response (backend deducts immediately, so this is authoritative)
-      // Validate and update credits from backend response - NO BLOCKING CONDITIONS
+      // Update credits from response
       if (imageResult.remainingCredits !== undefined) {
         const validatedCredits = Math.max(0, Math.floor(Number(imageResult.remainingCredits) || 0));
-        // Update immediately if function exists, but always refresh afterward to ensure accuracy
-        try {
-          if (isEmailAuth && emailContext.setCreditsManually) {
-            emailContext.setCreditsManually(validatedCredits);
-          } else if (!isEmailAuth && setCreditsManually) {
-            setCreditsManually(validatedCredits);
-          }
-        } catch (updateError) {
-          logger.warn('Failed to update credits manually, will refresh from backend', { error: updateError.message });
-        }
+        if (isEmailAuth && emailContext.setCreditsManually) emailContext.setCreditsManually(validatedCredits);
+        else if (setCreditsManually) setCreditsManually(validatedCredits);
       }
       
-      // ALWAYS refresh credits from backend to ensure accuracy (even if we updated from response)
-      // This handles edge cases and ensures credits are never stale
+      // Refresh credits from backend
       try {
-        if (isEmailAuth && emailContext.refreshCredits) {
-          await emailContext.refreshCredits();
-        } else if (!isEmailAuth && refreshCredits && address) {
-          await refreshCredits();
-        }
-      } catch (refreshError) {
-        logger.warn('Failed to refresh credits after generation', { error: refreshError.message });
-        // Don't throw - credits were already updated from response if available
-      }
+        if (isEmailAuth && emailContext.refreshCredits) await emailContext.refreshCredits();
+        else if (refreshCredits && address) await refreshCredits();
+      } catch (e) { logger.warn('Failed to refresh credits', { error: e.message }); }
 
       setError(null);
       setCurrentStep('Complete!');
       setProgress(100);
       
-      // Save generation to history (non-blocking - fire and forget)
-      const userIdentifier = isEmailAuth 
-        ? emailContext.userId 
-        : address;
-      const creditsUsed = multiImageModel === 'nano-banana-pro' ? 2 : 1;
-      
-      // Don't await - let it run in background
-      addGeneration(userIdentifier, {
-        prompt: getPromptForDisplay(trimmedPrompt, selectedStyle),
-        style: selectedStyle ? selectedStyle.name : 'No Style',
-        imageUrl,
-        creditsUsed,
+      // Save to gallery (non-blocking)
+      const promptForDisplay = trimmedPrompt || (selectedStyle?.prompt || 'No prompt');
+      addGeneration(isEmailAuth ? emailContext.userId : address, {
+        prompt: promptForDisplay,
+        style: selectedStyle?.name || 'No Style',
+        imageUrl: imageUrls[0],
+        creditsUsed: multiImageModel === 'nano-banana-pro' ? 2 : 1,
         userId: isEmailAuth ? emailContext.userId : undefined,
         email: isEmailAuth ? emailContext.email : undefined
-      }).catch(error => {
-        // Silently fail - image was already generated successfully
-        // Gallery save is non-critical, so we don't block the UI
-        logger.debug('Failed to save generation to history (non-blocking)', { 
-          error: error.message,
-          identifier: userIdentifier
-        });
-      });
+      }).catch(e => logger.debug('Gallery save failed', { error: e.message }));
       
-      // Show image immediately (no artificial delay)
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      
-      // Use requestAnimationFrame for immediate UI update
       requestAnimationFrame(() => {
-        setGeneratedImage(imageUrls.length > 1 ? imageUrls : imageUrl);
+        setGeneratedImage(imageUrls.length > 1 ? imageUrls : imageUrls[0]);
         setIsLoading(false);
-        
         setCurrentGeneration({
-          image: imageUrl,
-          prompt: getPromptForDisplay(trimmedPrompt, selectedStyle),
-          style: selectedStyle,
-          referenceImage: controlNetImage,
-          guidanceScale,
-          imageSize,
-          numImages,
-          enableSafetyChecker,
-          generationMode,
-          multiImageModel,
-          timestamp: new Date().toISOString()
+          image: imageUrls[0], prompt: promptForDisplay, style: selectedStyle,
+          referenceImage: controlNetImage, guidanceScale, imageSize, numImages,
+          enableSafetyChecker, generationMode, multiImageModel, timestamp: new Date().toISOString()
         });
       });
-      } catch (error) {
-        const errorMessage = error.message || 'Failed to generate image. Please try again.';
+    } catch (error) {
+      // Refresh credits on error
+      try {
+        if (isEmailAuth && emailContext.refreshCredits) await emailContext.refreshCredits();
+        else if (refreshCredits && address) await refreshCredits();
+      } catch (e) { logger.warn('Credit refresh failed', { error: e.message }); }
       
-        // Always refresh credits after error to ensure accurate balance
-        // Backend may have deducted credits even if generation failed
-        let refreshAttempts = 0;
-        const maxRefreshAttempts = 3;
-        
-        while (refreshAttempts < maxRefreshAttempts) {
-          try {
-            if (isEmailAuth && emailContext.refreshCredits) {
-              await emailContext.refreshCredits();
-              break; // Success, exit retry loop
-            } else if (!isEmailAuth && refreshCredits && address) {
-              await refreshCredits();
-              break; // Success, exit retry loop
-            } else {
-              break; // No refresh function available
-            }
-          } catch (refreshError) {
-            refreshAttempts++;
-            if (refreshAttempts >= maxRefreshAttempts) {
-              logger.error('Failed to refresh credits after error (max attempts reached)', { 
-                error: refreshError.message,
-                originalError: error.message
-              });
-              // Show error to user if refresh fails completely
-              setError('Failed to update credits. Please refresh the page to see your current balance.');
-            } else {
-              // Wait before retry (exponential backoff)
-              await new Promise(resolve => setTimeout(resolve, 100 * refreshAttempts));
-            }
-          }
-        }
-      
-        // Show payment modal if insufficient credits
-        if (errorMessage.includes('Insufficient credits') && isAuthenticated && onShowTokenPayment) {
-          setError('You\'ve used your credits! Please purchase more credits to generate more.');
-          onShowTokenPayment();
-        } else {
-          setError(sanitizeError(error));
-        }
-      
-        setProgress(0);
-        setCurrentStep('Error occurred');
-      } finally {
-        setIsLoading(false);
-        setGenerating(false);
-        setGenerationStartTime(null);
+      if (error.message?.includes('Insufficient credits') && onShowTokenPayment) {
+        setError('You\'ve used your credits! Please purchase more.');
+        onShowTokenPayment();
+      } else {
+        setError(error.message?.replace(/password|secret|key|token|api[_-]?key/gi, '[REDACTED]').substring(0, 200) || 'Failed to generate image');
       }
-    };
+      setProgress(0);
+      setCurrentStep('Error occurred');
+    } finally {
+      setIsLoading(false);
+      setGenerating(false);
+      setGenerationStartTime(null);
+    }
+  };
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
+  useEffect(() => () => timeoutRef.current && clearTimeout(timeoutRef.current), []);
 
   const isDisabled = isGenerating || walletLoading || (!isConnected && !isEmailAuth);
-  
-  // Button text and icon
   const buttonText = isGenerating 
     ? (multiImageModel === 'qwen-image-layered' ? 'Extracting Layers...' : 'Generating...')
-    : walletLoading 
-    ? 'Loading...'
-    : (!isConnected && !isEmailAuth)
-    ? 'Sign In to Generate'
+    : walletLoading ? 'Loading...'
+    : (!isConnected && !isEmailAuth) ? 'Sign In to Generate'
     : (multiImageModel === 'qwen-image-layered' ? 'Extract Layers' : 'Generate Image');
-  
-  const buttonIcon = isGenerating || walletLoading 
-    ? <span className="text-xs" style={{ color: '#000000' }}>⏳</span>
-    : (!isConnected && !isEmailAuth)
-    ? <span className="text-xs" style={{ color: '#000000' }}>🔗</span>
-    : <span className="text-xs" style={{ color: '#000000' }}>✨</span>;
-
-  // Button styles
-  const disabledButtonStyles = {
-    background: 'linear-gradient(to bottom, #c8c8c8, #b0b0b0)',
-    border: '2px inset #b8b8b8',
-    boxShadow: 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)',
-    color: '#666666',
-    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.5)',
-    cursor: 'not-allowed'
-  };
-
-  const enabledButtonStyles = {
-    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-    border: '2px outset #f0f0f0',
-    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.3)',
-    color: '#000000',
-    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-  };
 
   return (
     <>
@@ -417,172 +169,62 @@ const GenerateButton = ({ customPrompt = '', onShowTokenPayment }) => {
         <button
           onClick={handleGenerate}
           disabled={isDisabled}
-          aria-label={isGenerating ? 'Generating image...' : 'Generate AI image'}
-          aria-busy={isGenerating || isLoading}
-          aria-live="polite"
-          role="button"
-          className="generate-btn w-full flex items-center justify-center gap-2.5 px-5 py-3.5 md:py-3 font-bold rounded-lg transition-all duration-250 touch-manipulation relative overflow-hidden group"
-          style={isDisabled ? { 
-            ...disabledButtonStyles, 
+          aria-label={isGenerating ? 'Generating...' : 'Generate AI image'}
+          className="generate-btn w-full flex items-center justify-center gap-2.5 px-5 py-3.5 font-bold rounded-lg relative overflow-hidden group"
+          style={{
+            ...(isDisabled ? BTN.disabled : BTN.base),
             minHeight: '52px',
-            fontFamily: "'IBM Plex Mono', monospace"
-          } : {
-            ...enabledButtonStyles,
-            minHeight: '52px',
-            fontSize: '14px',
-            fontWeight: 'bold',
             fontFamily: "'IBM Plex Mono', monospace",
-            letterSpacing: '0.02em',
-            boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 212, 255, 0.1)'
+            boxShadow: isDisabled ? BTN.disabled.boxShadow : 'inset 2px 2px 0 rgba(255,255,255,1), inset -2px -2px 0 rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25)'
           }}
-          onMouseEnter={(e) => {
-            if (!isDisabled) {
-              e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-              e.currentTarget.style.border = '2px outset #f8f8f8';
-              e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
-              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2), 0 0 20px rgba(0, 212, 255, 0.2)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!isDisabled) {
-              e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-              e.currentTarget.style.border = '2px outset #f0f0f0';
-              e.currentTarget.style.transform = 'translateY(0) scale(1)';
-              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 212, 255, 0.1)';
-            }
-          }}
-          onMouseDown={(e) => {
-            if (!isDisabled) {
-              e.currentTarget.style.border = '2px inset #d0d0d0';
-              e.currentTarget.style.background = 'linear-gradient(to bottom, #d0d0d0, #c0c0c0, #b0b0b0)';
-              e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25), inset -1px -1px 0 rgba(255, 255, 255, 0.5)';
-              e.currentTarget.style.transform = 'translateY(0) scale(0.99)';
-            }
-          }}
-          onMouseUp={(e) => {
-            if (!isDisabled) {
-              e.currentTarget.style.border = '2px outset #f0f0f0';
-              e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-              e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15)';
-              e.currentTarget.style.transform = 'translateY(0) scale(1)';
-            }
-          }}
+          {...(isDisabled ? {} : pressHandlers)}
         >
-          {/* Shimmer effect on hover */}
-          <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" style={{ display: isDisabled ? 'none' : 'block' }}></span>
-          {/* Icon with pulse effect */}
-          <span className="relative z-10 text-sm" style={{ color: '#000000' }}>
-            {isGenerating || walletLoading ? '⏳' : (!isConnected && !isEmailAuth) ? '🔗' : '✨'}
-          </span>
+          {!isDisabled && <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />}
+          <span className="relative z-10">{isGenerating || walletLoading ? '⏳' : (!isConnected && !isEmailAuth) ? '🔗' : '✨'}</span>
           <span className="relative z-10 tracking-wide">{buttonText}</span>
         </button>
       </div>
 
-      {/* Enhanced Progress Bar with Loading Steps */}
       {(isGenerating || isLoading) && (
-        <div className="w-full mt-3 space-y-2.5 glass-card p-3 rounded-lg animate-scale-in">
-          {/* Progress Header */}
+        <div className="w-full mt-3 space-y-2.5 glass-card p-3 rounded-lg">
           <div className="flex justify-between items-center text-xs">
             <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ 
-                background: 'linear-gradient(135deg, #00d4ff, #00b8e6)',
-                boxShadow: '0 0 8px rgba(0, 212, 255, 0.6), 0 0 16px rgba(0, 212, 255, 0.3)',
-                animation: 'pulse 1.2s ease-in-out infinite'
-              }}></div>
-              <span className="font-medium tracking-wide" style={{ 
-                color: '#000000', 
-                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
-                fontFamily: "'IBM Plex Mono', monospace"
-              }}>{currentStep}</span>
+              <div className="w-2.5 h-2.5 rounded-full animate-pulse" style={{background:'linear-gradient(135deg,#00d4ff,#00b8e6)', boxShadow:'0 0 8px rgba(0,212,255,0.6)'}} />
+              <span className="font-medium" style={{...TEXT.primary, fontFamily:"'IBM Plex Mono', monospace"}}>{currentStep}</span>
             </div>
-            <span className="font-mono" style={{ 
-              color: '#1a1a2e', 
-              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)',
-              fontSize: '11px'
-            }}>
-              {timeRemaining > 0 ? `${timeRemaining}s` : '...'}
-            </span>
+            <span className="font-mono text-xs" style={TEXT.secondary}>{timeRemaining > 0 ? `${timeRemaining}s` : '...'}</span>
           </div>
           
-          {/* Progress Bar */}
-          <div className="w-full rounded-sm h-3 overflow-hidden relative" style={{
-            background: '#d0d0d8',
-            border: '2px inset #b8b8c0',
-            boxShadow: 'inset 2px 2px 0 rgba(0, 0, 0, 0.15)'
-          }}>
-            <div 
-              className="h-full transition-all duration-300 ease-out relative"
-              style={{ 
-                width: `${progress}%`,
-                background: 'linear-gradient(90deg, #00d4ff 0%, #00b8e6 50%, #00a0cc 100%)',
-                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.4), 0 0 10px rgba(0, 212, 255, 0.4)'
-              }}
-            >
-              {/* Animated shimmer effect */}
-              <div className="absolute inset-0" style={{
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%)',
-                animation: 'shimmer 1.5s ease-in-out infinite'
-              }}></div>
-            </div>
-            {/* Progress percentage */}
-            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold" style={{ 
-              color: progress > 50 ? '#ffffff' : '#000000', 
-              textShadow: progress > 50 ? '0 0 4px rgba(0, 0, 0, 0.5)' : '1px 1px 0 rgba(255, 255, 255, 0.8)',
-              fontFamily: "'IBM Plex Mono', monospace",
-              letterSpacing: '0.05em'
-            }}>
-              {Math.round(progress)}%
-            </div>
+          <div className="w-full rounded-sm h-3 overflow-hidden relative" style={{background:'#d0d0d8', border:'2px inset #b8b8c0'}}>
+            <div className="h-full transition-all duration-300" style={{width:`${progress}%`, background:'linear-gradient(90deg,#00d4ff,#00b8e6,#00a0cc)'}} />
+            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold" style={{color: progress > 50 ? '#fff' : '#000', fontFamily:"'IBM Plex Mono', monospace"}}>{Math.round(progress)}%</div>
           </div>
           
-          {/* Loading Steps Indicator */}
           <div className="flex justify-between px-1">
-            {['Init', 'Process', 'Generate', 'Enhance', 'Finish'].map((step, index) => {
-              const stepProgress = (index + 1) * 20;
-              const isActive = progress >= stepProgress - 10;
+            {['Init', 'Process', 'Generate', 'Enhance', 'Finish'].map((step, i) => {
+              const stepProgress = (i + 1) * 20;
               const isCompleted = progress >= stepProgress;
-              
+              const isActive = progress >= stepProgress - 10;
               return (
                 <div key={step} className="flex flex-col items-center gap-1">
-                  <div className="w-2 h-2 rounded-full transition-all duration-300" style={{
-                    background: isCompleted 
-                      ? 'linear-gradient(135deg, #00d4ff, #00b8e6)' 
-                      : isActive 
-                        ? 'linear-gradient(135deg, #00d4ff, #00b8e6)'
-                        : '#c0c0c8',
-                    boxShadow: isCompleted 
-                      ? '0 0 6px rgba(0, 212, 255, 0.6)' 
-                      : isActive 
-                        ? '0 0 4px rgba(0, 212, 255, 0.4)' 
-                        : 'none',
+                  <div className="w-2 h-2 rounded-full transition-all" style={{
+                    background: isCompleted || isActive ? 'linear-gradient(135deg,#00d4ff,#00b8e6)' : '#c0c0c8',
                     opacity: isCompleted ? 1 : isActive ? 0.8 : 0.4,
                     transform: isActive && !isCompleted ? 'scale(1.2)' : 'scale(1)'
-                  }}></div>
-                  <span className="text-[9px] font-medium transition-all duration-300" style={{
-                    color: isCompleted ? '#000000' : isActive ? '#1a1a2e' : '#909090',
-                    textShadow: (isCompleted || isActive) ? '1px 1px 0 rgba(255, 255, 255, 0.7)' : 'none',
-                    fontFamily: "'IBM Plex Mono', monospace"
-                  }}>
-                    {step}
-                  </span>
+                  }} />
+                  <span className="text-[9px]" style={{color: isCompleted ? '#000' : isActive ? '#1a1a2e' : '#909090', fontFamily:"'IBM Plex Mono', monospace"}}>{step}</span>
                 </div>
               );
             })}
           </div>
           
-          {/* Status Message with subtle animation */}
-          <div className="text-[10px] text-center pt-1" style={{ 
-            color: '#1a1a2e', 
-            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.7)',
-            fontFamily: "'IBM Plex Mono', monospace",
-            letterSpacing: '0.03em'
-          }}>
+          <div className="text-[10px] text-center" style={{...TEXT.secondary, fontFamily:"'IBM Plex Mono', monospace"}}>
             {generationMode === 'flux-multi' ? '◆ Creating multiple images...' : '◆ Creating your masterpiece...'}
           </div>
         </div>
       )}
     </>
   );
-};
+});
 
 export default GenerateButton;
