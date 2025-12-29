@@ -2546,6 +2546,569 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
 });
 
 /**
+ * Quality tier pricing for video generation
+ * Based on FAL pricing with 10% upcharge
+ * FAL Fast: $0.20/sec (no audio), $0.40/sec (with audio)
+ * FAL Quality: $0.50/sec (no audio), $0.75/sec (with audio)
+ * 1 credit = $0.10
+ */
+const VIDEO_QUALITY_PRICING = {
+  fast: {
+    pricePerSecNoAudio: 0.22,   // FAL $0.20 + 10% upcharge
+    pricePerSecWithAudio: 0.44  // FAL $0.40 + 10% upcharge
+  },
+  quality: {
+    pricePerSecNoAudio: 0.55,   // FAL $0.50 + 10% upcharge
+    pricePerSecWithAudio: 0.825 // FAL $0.75 + 10% upcharge
+  }
+};
+
+/**
+ * Calculate video generation credits based on duration, audio, and quality
+ * 1 credit = $0.10
+ */
+const calculateVideoCredits = (duration, generateAudio, quality = 'fast') => {
+  const seconds = parseInt(duration) || 8; // Parse '4s', '6s', '8s' to number
+  const pricing = VIDEO_QUALITY_PRICING[quality] || VIDEO_QUALITY_PRICING.fast;
+  const pricePerSec = generateAudio ? pricing.pricePerSecWithAudio : pricing.pricePerSecNoAudio;
+  // Convert dollars to credits (1 credit = $0.10)
+  const creditsPerSecond = pricePerSec / 0.10;
+  return Math.ceil(seconds * creditsPerSecond);
+};
+
+/**
+ * Dynamic credit requirement middleware for video generation
+ * Determines required credits based on duration, audio, and quality settings
+ */
+const requireCreditsForVideo = () => {
+  return async (req, res, next) => {
+    try {
+      const { duration = '8s', generate_audio = true, quality = 'fast' } = req.body;
+      const requiredCredits = calculateVideoCredits(duration, generate_audio, quality);
+      
+      // Store required credits for use in handler
+      req.requiredCreditsForVideo = requiredCredits;
+      
+      // Use requireCredits middleware with dynamic credit amount
+      return requireCredits(requiredCredits)(req, res, next);
+    } catch (error) {
+      logger.error('Error determining required video credits', { error: error.message });
+      return res.status(500).json({ success: false, error: 'Failed to determine required credits' });
+    }
+  };
+};
+
+/**
+ * Generation mode configurations for Veo 3.1
+ */
+const VIDEO_GENERATION_MODES = {
+  'text-to-video': {
+    requiresFirstFrame: false,
+    requiresLastFrame: false,
+    endpoint: 'text-to-video'
+  },
+  'image-to-video': {
+    requiresFirstFrame: true,
+    requiresLastFrame: false,
+    endpoint: 'image-to-video'
+  },
+  'first-last-frame': {
+    requiresFirstFrame: true,
+    requiresLastFrame: true,
+    endpoint: 'first-last-frame-to-video'
+  }
+};
+
+/**
+ * Video generation endpoint - Veo 3.1 (multiple modes)
+ * Documentation: https://fal.ai/models/fal-ai/veo3.1/fast/first-last-frame-to-video/api
+ * SECURITY: Requires credits check before making external API calls
+ * Dynamic pricing based on quality tier:
+ * - Fast: $0.22/sec (no audio), $0.44/sec (with audio)
+ * - Quality: $0.55/sec (no audio), $0.825/sec (with audio)
+ */
+app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), async (req, res) => {
+  try {
+    const {
+      prompt,
+      first_frame_url,
+      last_frame_url,
+      aspect_ratio = 'auto',
+      duration = '8s',
+      resolution = '720p',
+      generate_audio = true,
+      generation_mode = 'first-last-frame',
+      quality = 'fast'
+    } = req.body;
+
+    // Get mode configuration
+    const modeConfig = VIDEO_GENERATION_MODES[generation_mode] || VIDEO_GENERATION_MODES['first-last-frame'];
+
+    // Calculate credits based on actual request parameters
+    const creditsToDeduct = calculateVideoCredits(duration, generate_audio, quality);
+    
+    // SECURITY: Deduct credits IMMEDIATELY before making any API calls
+    const user = req.user;
+    
+    // Build update query
+    const updateQuery = buildUserUpdateQuery(user);
+    if (!updateQuery) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User account must have wallet address, userId, or email' 
+      });
+    }
+    
+    // Atomic credit deduction with condition to prevent race conditions and negative credits
+    const previousCredits = user.credits || 0;
+    const updateResult = await User.findOneAndUpdate(
+      {
+        ...updateQuery,
+        credits: { $gte: creditsToDeduct }
+      },
+      { 
+        $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct } 
+      },
+      { new: true }
+    );
+    
+    if (!updateResult) {
+      const currentUser = await User.findOne(updateQuery);
+      const currentCredits = currentUser?.credits || 0;
+      
+      logger.warn('Video generation credit deduction failed', {
+        updateQuery,
+        previousCredits,
+        currentCredits,
+        creditsToDeduct,
+        userId: user.userId
+      });
+      
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsToDeduct}.`
+      });
+    }
+    
+    logger.debug('Video generation credits deducted', {
+      userId: user.userId,
+      creditsDeducted: creditsToDeduct,
+      remainingCredits: updateResult.credits,
+      duration,
+      audioEnabled: generate_audio
+    });
+    
+    // Check API key
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ 
+        success: false, 
+        error: getSafeErrorMessage(new Error('AI service not configured'), 'Video generation service unavailable. Please contact support.') 
+      });
+    }
+
+    // Validate required inputs
+    if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+      return res.status(400).json({ success: false, error: 'prompt is required and must be a non-empty string' });
+    }
+    
+    // Validate frames based on mode requirements
+    if (modeConfig.requiresFirstFrame && !first_frame_url) {
+      return res.status(400).json({ success: false, error: 'first_frame_url is required for this mode' });
+    }
+    
+    if (modeConfig.requiresLastFrame && !last_frame_url) {
+      return res.status(400).json({ success: false, error: 'last_frame_url is required for this mode' });
+    }
+
+    // Validate aspect_ratio
+    const validAspectRatios = ['auto', '16:9', '9:16'];
+    if (!validAspectRatios.includes(aspect_ratio)) {
+      return res.status(400).json({ success: false, error: 'aspect_ratio must be auto, 16:9, or 9:16' });
+    }
+    
+    // Validate duration
+    const validDurations = ['4s', '6s', '8s'];
+    if (!validDurations.includes(duration)) {
+      return res.status(400).json({ success: false, error: 'duration must be 4s, 6s, or 8s' });
+    }
+    
+    // Validate resolution
+    const validResolutions = ['720p', '1080p'];
+    if (!validResolutions.includes(resolution)) {
+      return res.status(400).json({ success: false, error: 'resolution must be 720p or 1080p' });
+    }
+    
+    // Validate quality
+    const validQualities = ['fast', 'quality'];
+    if (!validQualities.includes(quality)) {
+      return res.status(400).json({ success: false, error: 'quality must be fast or quality' });
+    }
+    
+    // Validate generation_mode
+    if (!VIDEO_GENERATION_MODES[generation_mode]) {
+      return res.status(400).json({ success: false, error: 'generation_mode must be text-to-video, image-to-video, or first-last-frame' });
+    }
+
+    // Build request body for Veo 3.1 API
+    const requestBody = {
+      prompt: prompt.trim(),
+      aspect_ratio,
+      duration,
+      resolution,
+      generate_audio
+    };
+    
+    // Add frame URLs based on mode
+    if (modeConfig.requiresFirstFrame && first_frame_url) {
+      // For image-to-video mode, it's called 'image_url', for first-last-frame it's 'first_frame_url'
+      if (generation_mode === 'image-to-video') {
+        requestBody.image_url = first_frame_url;
+      } else {
+        requestBody.first_frame_url = first_frame_url;
+      }
+    }
+    if (modeConfig.requiresLastFrame && last_frame_url) {
+      requestBody.last_frame_url = last_frame_url;
+    }
+
+    logger.info('Video generation request', {
+      model: 'veo3.1',
+      mode: generation_mode,
+      quality,
+      duration,
+      resolution,
+      aspect_ratio,
+      promptLength: prompt.length,
+      userId: req.user?.userId
+    });
+
+    // Build endpoint URL based on mode and quality
+    const qualityPath = quality === 'quality' ? '' : '/fast';
+    const endpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}`;
+    
+    const submitResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!submitResponse.ok) {
+      let errorMessage = `HTTP error! status: ${submitResponse.status}`;
+      try {
+        const errorData = await submitResponse.json();
+        logger.error('Veo 3.1 API submit error', { errorData });
+        if (errorData.detail) {
+          errorMessage = Array.isArray(errorData.detail)
+            ? errorData.detail.map(err => err.msg || err).join('; ')
+            : errorData.detail;
+        } else if (errorData.error) {
+          errorMessage = errorData.error;
+        }
+      } catch (e) {
+        logger.error('Failed to parse Veo 3.1 error response', { e });
+      }
+      return res.status(submitResponse.status).json({ success: false, error: errorMessage });
+    }
+
+    const submitData = await submitResponse.json();
+    const requestId = submitData.request_id;
+    
+    if (!requestId) {
+      return res.status(500).json({ success: false, error: 'Failed to submit video generation request' });
+    }
+
+    logger.info('Video generation submitted', { requestId });
+
+    // Poll for completion (video generation can take 1-3 minutes)
+    const statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/first-last-frame-to-video/requests/${requestId}/status`;
+    const resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/first-last-frame-to-video/requests/${requestId}`;
+    
+    const maxWaitTime = 5 * 60 * 1000; // 5 minutes max wait
+    const pollInterval = 5000; // Poll every 5 seconds
+    const startTime = Date.now();
+    
+    while (Date.now() - startTime < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      
+      const statusResponse = await fetch(statusEndpoint, {
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`
+        }
+      });
+      
+      if (!statusResponse.ok) {
+        logger.warn('Video status check failed', { status: statusResponse.status });
+        continue;
+      }
+      
+      const statusData = await statusResponse.json();
+      
+      if (statusData.status === 'COMPLETED') {
+        // Fetch the result
+        const resultResponse = await fetch(resultEndpoint, {
+          headers: {
+            'Authorization': `Key ${FAL_API_KEY}`
+          }
+        });
+        
+        if (!resultResponse.ok) {
+          return res.status(500).json({ success: false, error: 'Failed to fetch video result' });
+        }
+        
+        const resultData = await resultResponse.json();
+        
+        if (resultData.video && resultData.video.url) {
+          logger.info('Video generation completed', { 
+            requestId,
+            videoUrl: resultData.video.url.substring(0, 50) + '...'
+          });
+          
+          return res.json({
+            success: true,
+            video: resultData.video,
+            remainingCredits: updateResult.credits,
+            creditsDeducted: creditsToDeduct
+          });
+        } else {
+          return res.status(500).json({ success: false, error: 'No video in response' });
+        }
+      } else if (statusData.status === 'FAILED') {
+        logger.error('Video generation failed', { requestId, statusData });
+        return res.status(500).json({ success: false, error: 'Video generation failed' });
+      }
+      
+      // Still in progress, continue polling
+      logger.debug('Video generation in progress', { requestId, status: statusData.status });
+    }
+    
+    // Timeout reached
+    return res.status(504).json({ success: false, error: 'Video generation timed out. Please try again.' });
+    
+  } catch (error) {
+    logger.error('Video generation proxy error', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to generate video') });
+  }
+});
+
+/**
+ * Calculate music credits based on duration
+ * 1 credit per minute (rounded up), minimum 1 credit
+ * @param {number} duration - Duration in seconds
+ * @returns {number} - Credits required
+ */
+function calculateMusicCredits(duration) {
+  const seconds = Math.max(10, Math.min(180, duration || 30));
+  const minutes = seconds / 60;
+  return Math.max(1, Math.ceil(minutes));
+}
+
+/**
+ * Music generation endpoint - CassetteAI Music Generator
+ * Documentation: https://fal.ai/models/cassetteai/music-generator/api
+ * SECURITY: Requires credits check before making external API calls
+ * Pricing: 1 credit per minute (rounded up), minimum 1 credit
+ * CassetteAI generates 30s in ~2s, 3min in ~10s at 44.1kHz stereo
+ */
+app.post('/api/generate/music', freeImageRateLimiter, requireCredits(1), async (req, res) => {
+  try {
+    const { prompt, duration = 30 } = req.body;
+
+    // Clamp duration between 10 and 180 seconds
+    const clampedDuration = Math.max(10, Math.min(180, parseInt(duration) || 30));
+    
+    // Calculate credits based on duration: 1 credit per minute (rounded up)
+    const creditsToDeduct = calculateMusicCredits(clampedDuration);
+    
+    // SECURITY: Deduct credits IMMEDIATELY before making any API calls
+    const user = req.user;
+    
+    // Build update query
+    const updateQuery = buildUserUpdateQuery(user);
+    if (!updateQuery) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User account must have wallet address, userId, or email' 
+      });
+    }
+    
+    // Atomic credit deduction with condition to prevent race conditions and negative credits
+    const previousCredits = user.credits || 0;
+    const updateResult = await User.findOneAndUpdate(
+      {
+        ...updateQuery,
+        credits: { $gte: creditsToDeduct }
+      },
+      { 
+        $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct } 
+      },
+      { new: true }
+    );
+    
+    if (!updateResult) {
+      const currentUser = await User.findOne(updateQuery);
+      const currentCredits = currentUser?.credits || 0;
+      
+      logger.warn('Music generation credit deduction failed', {
+        updateQuery,
+        previousCredits,
+        currentCredits,
+        creditsToDeduct,
+        userId: user.userId
+      });
+      
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsToDeduct}.`
+      });
+    }
+    
+    logger.debug('Music generation credits deducted', {
+      userId: user.userId,
+      creditsDeducted: creditsToDeduct,
+      remainingCredits: updateResult.credits,
+      duration: clampedDuration
+    });
+    
+    // Check API key
+    if (!FAL_API_KEY) {
+      return res.status(500).json({ 
+        success: false, 
+        error: getSafeErrorMessage(new Error('AI service not configured'), 'Music generation service unavailable. Please contact support.') 
+      });
+    }
+
+    // Validate required inputs
+    if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+      return res.status(400).json({ success: false, error: 'prompt is required and must be a non-empty string' });
+    }
+
+    // Build request body for CassetteAI API
+    const requestBody = {
+      prompt: prompt.trim(),
+      duration: clampedDuration
+    };
+
+    logger.info('Music generation request', {
+      model: 'cassetteai/music-generator',
+      duration: clampedDuration,
+      promptLength: prompt.length,
+      userId: req.user?.userId
+    });
+
+    // Make request to fal.ai CassetteAI API using subscribe pattern
+    const endpoint = 'https://queue.fal.run/CassetteAI/music-generator';
+    
+    const submitResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!submitResponse.ok) {
+      let errorMessage = `HTTP error! status: ${submitResponse.status}`;
+      try {
+        const errorData = await submitResponse.json();
+        logger.error('CassetteAI API submit error', { errorData });
+        if (errorData.detail) {
+          errorMessage = Array.isArray(errorData.detail)
+            ? errorData.detail.map(err => err.msg || err).join('; ')
+            : errorData.detail;
+        } else if (errorData.error) {
+          errorMessage = errorData.error;
+        }
+      } catch (e) {
+        logger.error('Failed to parse CassetteAI error response', { e });
+      }
+      return res.status(submitResponse.status).json({ success: false, error: errorMessage });
+    }
+
+    const submitData = await submitResponse.json();
+    const requestId = submitData.request_id;
+    
+    if (!requestId) {
+      return res.status(500).json({ success: false, error: 'Failed to submit music generation request' });
+    }
+
+    logger.info('Music generation submitted', { requestId });
+
+    // Poll for completion (music generation is fast: 30s in ~2s, 3min in ~10s)
+    const statusEndpoint = `https://queue.fal.run/CassetteAI/music-generator/requests/${requestId}/status`;
+    const resultEndpoint = `https://queue.fal.run/CassetteAI/music-generator/requests/${requestId}`;
+    
+    const maxWaitTime = 60 * 1000; // 1 minute max wait (should be much faster)
+    const pollInterval = 1000; // Poll every 1 second
+    const startTime = Date.now();
+    
+    while (Date.now() - startTime < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      
+      const statusResponse = await fetch(statusEndpoint, {
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`
+        }
+      });
+      
+      if (!statusResponse.ok) {
+        logger.warn('Music status check failed', { status: statusResponse.status });
+        continue;
+      }
+      
+      const statusData = await statusResponse.json();
+      
+      if (statusData.status === 'COMPLETED') {
+        // Fetch the result
+        const resultResponse = await fetch(resultEndpoint, {
+          headers: {
+            'Authorization': `Key ${FAL_API_KEY}`
+          }
+        });
+        
+        if (!resultResponse.ok) {
+          return res.status(500).json({ success: false, error: 'Failed to fetch music result' });
+        }
+        
+        const resultData = await resultResponse.json();
+        
+        if (resultData.audio_file && resultData.audio_file.url) {
+          logger.info('Music generation completed', { 
+            requestId,
+            audioUrl: resultData.audio_file.url.substring(0, 50) + '...'
+          });
+          
+          return res.json({
+            success: true,
+            audio_file: resultData.audio_file,
+            remainingCredits: updateResult.credits,
+            creditsDeducted: creditsToDeduct
+          });
+        } else {
+          return res.status(500).json({ success: false, error: 'No audio in response' });
+        }
+      } else if (statusData.status === 'FAILED') {
+        logger.error('Music generation failed', { requestId, statusData });
+        return res.status(500).json({ success: false, error: 'Music generation failed' });
+      }
+      
+      // Still in progress, continue polling
+      logger.debug('Music generation in progress', { requestId, status: statusData.status });
+    }
+    
+    // Timeout reached
+    return res.status(504).json({ success: false, error: 'Music generation timed out. Please try again.' });
+    
+  } catch (error) {
+    logger.error('Music generation proxy error', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to generate music') });
+  }
+});
+
+/**
  * Layer extraction endpoint - Qwen Image Layered
  * Documentation: https://fal.ai/models/fal-ai/qwen-image-layered/api
  * SECURITY: Requires credits check before making external API calls

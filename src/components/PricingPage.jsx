@@ -173,12 +173,19 @@ const PricingPage = () => {
           }}>
             CHOOSE YOUR PLAN
           </h1>
-          <p className="text-lg md:text-xl tracking-wide" style={{ 
+          <p className="text-lg md:text-xl tracking-wide mb-2" style={{ 
             color: '#ffffff', 
             textShadow: '0 0 10px rgba(0, 212, 255, 0.5), 2px 2px 0 rgba(0, 0, 0, 0.8)',
             fontFamily: "'IBM Plex Mono', monospace"
           }}>
-            Select the perfect pack for your needs
+            Unlock AI-Powered Image, Video & Music Generation
+          </p>
+          <p className="text-sm tracking-wide" style={{ 
+            color: '#e2e8f0', 
+            textShadow: '1px 1px 0 rgba(0, 0, 0, 0.5)',
+            fontFamily: "'IBM Plex Mono', monospace"
+          }}>
+            1 credit = $0.10 • Monthly subscriptions with savings up to 30%
           </p>
           {isAuthenticated && (
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
@@ -275,25 +282,144 @@ const PricingPage = () => {
         </div>
 
         {/* Additional Info */}
-        <div className="mt-12 text-center space-y-4">
-          <div className="glass-card rounded-xl p-6 max-w-2xl mx-auto">
-            <h3 className="text-lg font-semibold mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>What's Included</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-              <div className="flex items-center gap-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                <CheckCircle className="w-4 h-4 flex-shrink-0" style={{ color: '#006600' }} />
-                <span>All AI features</span>
+        <div className="mt-12 space-y-6">
+          {/* What's Included - Expanded */}
+          <div className="glass-card rounded-xl p-6 max-w-4xl mx-auto">
+            <h3 className="text-xl font-semibold mb-4 text-center" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)', fontFamily: "'VT323', monospace" }}>WHAT'S INCLUDED</h3>
+            
+            {/* Feature Categories */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Image Generation */}
+              <div className="p-4 rounded-lg" style={{ background: 'linear-gradient(135deg, #f0fdfb, #d1fae5)', border: '2px solid #10b981' }}>
+                <h4 className="font-bold text-sm mb-2 flex items-center gap-2" style={{ color: '#047857' }}>
+                  🎨 Image Generation
+                </h4>
+                <ul className="space-y-1.5 text-xs" style={{ color: '#1f2937' }}>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#10b981' }} />
+                    <span>Text-to-Image generation</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#10b981' }} />
+                    <span>Reference-based editing & blending</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#10b981' }} />
+                    <span>Layer extraction</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#10b981' }} />
+                    <span>20+ style presets (Anime, Cyberpunk, etc.)</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#10b981' }} />
+                    <span>AI Prompt Reasoning enhancement</span>
+                  </li>
+                </ul>
               </div>
-              <div className="flex items-center gap-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                <CheckCircle className="w-4 h-4 flex-shrink-0" style={{ color: '#006600' }} />
-                <span>Cancel anytime</span>
+              
+              {/* Video Generation */}
+              <div className="p-4 rounded-lg" style={{ background: 'linear-gradient(135deg, #faf5ff, #e9d5ff)', border: '2px solid #8b5cf6' }}>
+                <h4 className="font-bold text-sm mb-2 flex items-center gap-2" style={{ color: '#6d28d9' }}>
+                  🎬 Video Generation
+                </h4>
+                <ul className="space-y-1.5 text-xs" style={{ color: '#1f2937' }}>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#8b5cf6' }} />
+                    <span>Frame-to-frame AI animation</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#8b5cf6' }} />
+                    <span>4-8 second video clips</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#8b5cf6' }} />
+                    <span>720p & 1080p resolution</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#8b5cf6' }} />
+                    <span>AI-generated audio option</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#8b5cf6' }} />
+                    <span>Multiple aspect ratios (16:9, 9:16)</span>
+                  </li>
+                </ul>
               </div>
-              <div className="flex items-center gap-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                <CheckCircle className="w-4 h-4 flex-shrink-0" style={{ color: '#006600' }} />
-                <span>Secure payments</span>
+              
+              {/* Music Generation */}
+              <div className="p-4 rounded-lg" style={{ background: 'linear-gradient(135deg, #f0fdfa, #cffafe)', border: '2px solid #06b6d4' }}>
+                <h4 className="font-bold text-sm mb-2 flex items-center gap-2" style={{ color: '#0891b2' }}>
+                  🎵 Music Generation
+                </h4>
+                <ul className="space-y-1.5 text-xs" style={{ color: '#1f2937' }}>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#06b6d4' }} />
+                    <span>50+ genre presets (EDM, Jazz, Rock...)</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#06b6d4' }} />
+                    <span>15 seconds to 3 minute tracks</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#06b6d4' }} />
+                    <span>Ultra-fast (~2 seconds for 30s track)</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#06b6d4' }} />
+                    <span>High-quality WAV export</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: '#06b6d4' }} />
+                    <span>Custom tempo, key & instruments</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            
+            {/* Additional Benefits */}
+            <div className="mt-6 pt-4 border-t" style={{ borderColor: '#d1d5db' }}>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+                <div className="p-2 rounded" style={{ background: 'rgba(255,255,255,0.5)' }}>
+                  <div className="text-lg font-bold" style={{ color: '#059669' }}>∞</div>
+                  <div className="text-[10px]" style={{ color: '#374151' }}>Unlimited Downloads</div>
+                </div>
+                <div className="p-2 rounded" style={{ background: 'rgba(255,255,255,0.5)' }}>
+                  <div className="text-lg font-bold" style={{ color: '#059669' }}>🔒</div>
+                  <div className="text-[10px]" style={{ color: '#374151' }}>Secure Stripe Payments</div>
+                </div>
+                <div className="p-2 rounded" style={{ background: 'rgba(255,255,255,0.5)' }}>
+                  <div className="text-lg font-bold" style={{ color: '#059669' }}>📅</div>
+                  <div className="text-[10px]" style={{ color: '#374151' }}>Cancel Anytime</div>
+                </div>
+                <div className="p-2 rounded" style={{ background: 'rgba(255,255,255,0.5)' }}>
+                  <div className="text-lg font-bold" style={{ color: '#059669' }}>🎨</div>
+                  <div className="text-[10px]" style={{ color: '#374151' }}>Gallery Storage</div>
+                </div>
               </div>
             </div>
           </div>
-          <p className="text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+          
+          {/* Credit Value Info */}
+          <div className="glass-card rounded-xl p-4 max-w-2xl mx-auto">
+            <h4 className="font-bold text-sm mb-2 text-center" style={{ color: '#000', fontFamily: "'VT323', monospace" }}>CREDIT VALUES</h4>
+            <div className="grid grid-cols-3 gap-4 text-center text-xs">
+              <div>
+                <div className="font-bold" style={{ color: '#10b981' }}>🎨 Images</div>
+                <div style={{ color: '#374151' }}>1 credit = 1 image</div>
+              </div>
+              <div>
+                <div className="font-bold" style={{ color: '#8b5cf6' }}>🎬 Videos</div>
+                <div style={{ color: '#374151' }}>1-1.5 credits/second</div>
+              </div>
+              <div>
+                <div className="font-bold" style={{ color: '#06b6d4' }}>🎵 Music</div>
+                <div style={{ color: '#374151' }}>1 credit = any length</div>
+              </div>
+            </div>
+          </div>
+          
+          <p className="text-sm text-center" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
             All plans include access to all features. Cancel anytime. No hidden fees.
           </p>
         </div>

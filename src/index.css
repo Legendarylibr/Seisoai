@@ -1,33 +1,34 @@
-@import url('https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Neutral but vibrant color palette */
-  --color-teal: #00b8a9;
-  --color-teal-dark: #009688;
-  --color-amber: #f59e0b;
-  --color-amber-dark: #d97706;
-  --color-slate: #64748b;
-  --color-slate-dark: #475569;
-  --color-emerald: #10b981;
-  --color-emerald-dark: #059669;
-  --color-blue: #3b82f6;
-  --color-blue-dark: #2563eb;
-  --color-orange: #f97316;
-  --color-orange-dark: #ea580c;
+  /* Windows 95 Color Palette */
+  --win95-bg: #c0c0c0;
+  --win95-bg-light: #dfdfdf;
+  --win95-bg-dark: #808080;
+  --win95-border-light: #ffffff;
+  --win95-border-dark: #404040;
+  --win95-border-darker: #000000;
+  --win95-text: #000000;
+  --win95-text-disabled: #808080;
+  --win95-highlight: #000080;
+  --win95-highlight-text: #ffffff;
+  --win95-input-bg: #ffffff;
+  --win95-button-face: #c0c0c0;
   
-  /* UI Surface colors */
-  --surface-light: #f4f4f5;
-  --surface-mid: #e4e4e7;
-  --surface-dark: #d4d4d8;
+  /* Accent colors */
+  --win95-teal: #008080;
+  --win95-green: #008000;
+  --win95-red: #800000;
+  --win95-yellow: #808000;
 }
 
 @layer base {
   * {
-    @apply border-gray-200;
+    @apply border-gray-400;
   }
   
   html {
@@ -35,13 +36,14 @@
   }
   
   body {
-    @apply text-gray-900;
-    font-family: 'IBM Plex Mono', 'Chicago', 'Geneva', monospace;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    @apply text-black;
+    font-family: Tahoma, 'MS Sans Serif', Geneva, sans-serif;
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: auto;
     position: relative;
     min-height: 100vh;
     overflow-x: hidden;
+    background: var(--win95-bg);
   }
   
   @media (min-width: 1024px) {
@@ -62,25 +64,26 @@
   }
 
   h1, h2, h3 {
-    font-family: 'VT323', 'IBM Plex Mono', monospace;
-    letter-spacing: 0.02em;
+    font-family: Tahoma, 'MS Sans Serif', Geneva, sans-serif;
+    font-weight: bold;
+    letter-spacing: 0.01em;
   }
 
   input::placeholder,
   textarea::placeholder {
-    color: #71717a !important;
+    color: var(--win95-text-disabled) !important;
     opacity: 1;
-    font-style: italic;
+    font-style: normal;
   }
 }
 
 @layer components {
-  /* ===== NEUTRAL ANIMATED BACKGROUND ===== */
+  /* ===== WINDOWS 95 BACKGROUND ===== */
   .animated-bg {
     position: relative;
     overflow-x: hidden;
     overflow-y: auto;
-    background: linear-gradient(135deg, #d4d4d8 0%, #c4c4c8 50%, #b4b4b8 100%);
+    background: var(--win95-bg);
   }
   
   @media (min-width: 1024px) {
@@ -97,214 +100,219 @@
     right: 0;
     bottom: 0;
     background: 
-      /* Neutral gradient orbs */
-      radial-gradient(ellipse 500px 500px at 15% 25%, rgba(0, 184, 169, 0.18) 0%, transparent 50%),
-      radial-gradient(ellipse 450px 450px at 85% 75%, rgba(245, 158, 11, 0.15) 0%, transparent 50%),
-      radial-gradient(ellipse 400px 400px at 70% 15%, rgba(59, 130, 246, 0.12) 0%, transparent 50%),
-      radial-gradient(ellipse 380px 380px at 25% 85%, rgba(16, 185, 129, 0.12) 0%, transparent 50%),
-      /* Grid pattern */
-      linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-    background-size: 
-      100% 100%, 100% 100%, 100% 100%, 100% 100%,
-      50px 50px, 50px 50px;
-    animation: colorShift 20s ease-in-out infinite;
+      /* Subtle teal accent */
+      radial-gradient(ellipse 600px 600px at 10% 90%, rgba(0, 128, 128, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 500px 500px at 90% 10%, rgba(0, 0, 128, 0.06) 0%, transparent 50%);
     pointer-events: none;
     z-index: 0;
   }
-  
-  @keyframes colorShift {
-    0%, 100% { background-position: 0% 0%, 100% 100%, 50% 0%, 0% 50%, 0 0, 0 0; }
-    50% { background-position: 100% 50%, 0% 50%, 100% 50%, 50% 100%, 0 0, 0 0; }
-  }
 
-  /* ===== GLASS CARDS ===== */
+  /* ===== WINDOWS 95 PANELS ===== */
   .glass-card {
-    background: linear-gradient(135deg, #ffffff 0%, #fafafa 50%, #f5f5f5 100%);
-    border: 2px outset #e8e8ec;
-    border-radius: 8px;
+    background: var(--win95-bg);
     box-shadow: 
-      inset 3px 3px 0 rgba(255, 255, 255, 1),
-      inset -3px -3px 0 rgba(0, 0, 0, 0.12),
-      0 6px 20px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      inset 1px 1px 0 var(--win95-border-light),
+      inset -1px -1px 0 var(--win95-border-darker),
+      inset 2px 2px 0 var(--win95-bg-light),
+      inset -2px -2px 0 var(--win95-bg-dark);
+    border-radius: 0;
   }
 
   .glass-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 
-      inset 3px 3px 0 rgba(255, 255, 255, 1),
-      inset -3px -3px 0 rgba(0, 0, 0, 0.1),
-      0 10px 30px rgba(0, 0, 0, 0.12);
+    transform: none;
   }
 
   /* ===== HERO TITLE ===== */
   .hero-title {
-    font-family: 'VT323', monospace;
-    font-size: clamp(1.5rem, 4vw, 2.5rem);
-    color: #ffffff;
-    text-shadow: 
-      0 0 10px var(--color-teal),
-      0 0 20px rgba(0, 184, 169, 0.5),
-      3px 3px 0 rgba(0, 0, 0, 0.8);
-    letter-spacing: 0.08em;
-    animation: heroGlow 4s ease-in-out infinite;
-  }
-  
-  @keyframes heroGlow {
-    0%, 100% { text-shadow: 0 0 10px var(--color-teal), 0 0 20px rgba(0, 184, 169, 0.5), 3px 3px 0 rgba(0, 0, 0, 0.8); }
-    50% { text-shadow: 0 0 15px var(--color-amber), 0 0 25px rgba(245, 158, 11, 0.5), 3px 3px 0 rgba(0, 0, 0, 0.8); }
+    font-family: Tahoma, 'MS Sans Serif', sans-serif;
+    font-size: clamp(1.2rem, 3vw, 1.8rem);
+    color: var(--win95-text);
+    font-weight: bold;
+    letter-spacing: 0.02em;
   }
 
   /* ===== SECTION TITLE ===== */
   .section-title {
-    font-family: 'VT323', monospace;
-    font-size: 1rem;
+    font-family: Tahoma, 'MS Sans Serif', sans-serif;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.05em;
   }
 
-  /* ===== COLORFUL ICON CONTAINERS ===== */
-  .icon-box-teal {
-    background: linear-gradient(135deg, rgba(0, 184, 169, 0.15), rgba(0, 150, 136, 0.1));
-    border: 2px solid rgba(0, 184, 169, 0.35);
-    box-shadow: 0 0 8px rgba(0, 184, 169, 0.2), inset 1px 1px 0 rgba(255, 255, 255, 0.5);
-  }
-  
-  .icon-box-amber {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.1));
-    border: 2px solid rgba(245, 158, 11, 0.35);
-    box-shadow: 0 0 8px rgba(245, 158, 11, 0.2), inset 1px 1px 0 rgba(255, 255, 255, 0.5);
-  }
-  
-  .icon-box-blue {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.1));
-    border: 2px solid rgba(59, 130, 246, 0.35);
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.2), inset 1px 1px 0 rgba(255, 255, 255, 0.5);
-  }
-  
-  .icon-box-emerald {
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.1));
-    border: 2px solid rgba(16, 185, 129, 0.35);
-    box-shadow: 0 0 8px rgba(16, 185, 129, 0.2), inset 1px 1px 0 rgba(255, 255, 255, 0.5);
-  }
-
-  /* ===== BUTTON STYLES ===== */
+  /* ===== WINDOWS 95 BUTTONS ===== */
   .btn-primary {
-    @apply relative font-bold transition-all duration-200;
-    @apply text-sm md:text-base py-3 px-6;
-    font-family: 'IBM Plex Mono', monospace;
-    background: linear-gradient(180deg, var(--surface-light) 0%, var(--surface-mid) 50%, var(--surface-dark) 100%);
-    border: 2px outset #e4e4e7;
-    border-radius: 6px;
+    @apply relative font-bold transition-none;
+    @apply text-xs py-2 px-4;
+    font-family: Tahoma, 'MS Sans Serif', sans-serif;
+    background: var(--win95-button-face);
+    border: none;
     box-shadow: 
-      inset 2px 2px 0 rgba(255, 255, 255, 1),
-      inset -2px -2px 0 rgba(0, 0, 0, 0.2),
-      0 4px 8px rgba(0, 0, 0, 0.15);
-    color: #18181b;
-    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.8);
+      inset 1px 1px 0 var(--win95-border-light),
+      inset -1px -1px 0 var(--win95-border-darker),
+      inset 2px 2px 0 var(--win95-bg-light),
+      inset -2px -2px 0 var(--win95-bg-dark);
+    color: var(--win95-text);
   }
 
   .btn-primary:hover:not(:disabled) {
-    background: linear-gradient(180deg, #fafafa 0%, #ececf0 50%, #dcdce0 100%);
-    box-shadow: 
-      inset 2px 2px 0 rgba(255, 255, 255, 1),
-      inset -2px -2px 0 rgba(0, 0, 0, 0.15),
-      0 6px 16px rgba(0, 0, 0, 0.18);
-    transform: translateY(-2px);
+    background: #d0d0d0;
   }
 
   .btn-primary:active:not(:disabled) {
-    transform: translateY(0);
-    border: 2px inset #c4c4c8;
-    box-shadow: inset 3px 3px 0 rgba(0, 0, 0, 0.2);
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-darker),
+      inset -1px -1px 0 var(--win95-border-light);
+    transform: none;
   }
 
   .btn-primary:disabled {
-    @apply opacity-50 cursor-not-allowed;
-    background: linear-gradient(180deg, #d4d4d8 0%, #b4b4b8 100%);
-    border: 2px inset #c4c4c8;
+    @apply cursor-not-allowed;
+    background: var(--win95-button-face);
+    color: var(--win95-text-disabled);
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-bg-light),
+      inset -1px -1px 0 var(--win95-bg-dark);
   }
 
   /* ===== GENERATE BUTTON ===== */
   .generate-btn {
     position: relative;
     overflow: hidden;
-    background: linear-gradient(135deg, #e6fff5 0%, #d0fff0 50%, #b8ffe8 100%) !important;
-    border: 2px solid var(--color-emerald) !important;
+    background: var(--win95-button-face) !important;
+    border: none !important;
     box-shadow: 
-      inset 2px 2px 0 rgba(255, 255, 255, 1),
-      inset -2px -2px 0 rgba(5, 150, 105, 0.2),
-      0 4px 12px rgba(16, 185, 129, 0.25) !important;
+      inset 1px 1px 0 var(--win95-border-light),
+      inset -1px -1px 0 var(--win95-border-darker),
+      inset 2px 2px 0 var(--win95-bg-light),
+      inset -2px -2px 0 var(--win95-bg-dark) !important;
   }
   
   .generate-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, #f0fff8 0%, #e0fff5 50%, #c8fff0 100%) !important;
-    box-shadow: 
-      inset 2px 2px 0 rgba(255, 255, 255, 1),
-      inset -2px -2px 0 rgba(5, 150, 105, 0.15),
-      0 6px 20px rgba(16, 185, 129, 0.35) !important;
+    background: #d0d0d0 !important;
   }
 
-  /* ===== WIN95 COMPONENTS ===== */
-  .win95-btn {
-    font-family: 'IBM Plex Mono', monospace;
-    background: linear-gradient(180deg, var(--surface-light), var(--surface-mid), var(--surface-dark));
-    border: 2px outset #e4e4e7;
-    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.2);
-    color: #18181b;
-    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.8);
-    transition: all 0.2s ease;
-  }
-
-  .win95-btn:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-
+  /* ===== WIN95 INPUT ===== */
   .win95-input {
-    font-family: 'IBM Plex Mono', monospace;
-    background: #ffffff;
-    border: 2px inset #a1a1aa;
-    color: #18181b;
-    box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.08);
-    transition: all 0.2s ease;
+    font-family: Tahoma, 'MS Sans Serif', sans-serif;
+    background: var(--win95-input-bg);
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-dark),
+      inset -1px -1px 0 var(--win95-border-light),
+      inset 2px 2px 0 var(--win95-border-darker);
+    border: none;
+    color: var(--win95-text);
   }
 
   .win95-input:focus {
-    border: 2px inset #71717a;
-    box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.12), 0 0 0 3px rgba(0, 184, 169, 0.2);
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-dark),
+      inset -1px -1px 0 var(--win95-border-light),
+      inset 2px 2px 0 var(--win95-border-darker);
     outline: none;
   }
 
-  /* ===== NOTE PANELS ===== */
+  .win95-btn {
+    font-family: Tahoma, 'MS Sans Serif', sans-serif;
+    background: var(--win95-button-face);
+    border: none;
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-light),
+      inset -1px -1px 0 var(--win95-border-darker),
+      inset 2px 2px 0 var(--win95-bg-light),
+      inset -2px -2px 0 var(--win95-bg-dark);
+    color: var(--win95-text);
+    transition: none;
+  }
+
+  .win95-btn:hover:not(:disabled) {
+    background: #d0d0d0;
+    transform: none;
+  }
+
+  .win95-btn:active:not(:disabled) {
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-darker),
+      inset -1px -1px 0 var(--win95-border-light);
+  }
+
+  /* ===== WINDOWS 95 PANEL STYLES ===== */
   .note-teal {
-    background: linear-gradient(135deg, #f0fdfb 0%, #e6faf8 50%, #d4f5f2 100%);
-    border: 2px solid #14b8a6;
-    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.9), 0 3px 8px rgba(0, 0, 0, 0.08);
+    background: var(--win95-bg);
+    border: none;
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-light),
+      inset -1px -1px 0 var(--win95-border-darker);
   }
   
   .note-amber {
-    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%);
-    border: 2px solid #f59e0b;
-    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.9), 0 3px 8px rgba(0, 0, 0, 0.08);
+    background: var(--win95-bg);
+    border: none;
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-light),
+      inset -1px -1px 0 var(--win95-border-darker);
   }
   
   .note-slate {
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
-    border: 2px solid #94a3b8;
-    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.9), 0 3px 8px rgba(0, 0, 0, 0.08);
+    background: var(--win95-bg);
+    border: none;
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-light),
+      inset -1px -1px 0 var(--win95-border-darker);
   }
   
   .note-blue {
-    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #bfdbfe 100%);
-    border: 2px solid #3b82f6;
-    box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.9), 0 3px 8px rgba(0, 0, 0, 0.08);
+    background: var(--win95-bg);
+    border: none;
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-light),
+      inset -1px -1px 0 var(--win95-border-darker);
+  }
+
+  /* ===== WINDOWS 95 GROUP BOX ===== */
+  .win95-groupbox {
+    position: relative;
+    padding: 12px 8px 8px 8px;
+  }
+
+  .win95-groupbox::before {
+    content: '';
+    position: absolute;
+    inset: 6px 0 0 0;
+    border: 1px solid var(--win95-bg-dark);
+    border-top-color: var(--win95-border-light);
+    border-left-color: var(--win95-border-light);
+  }
+
+  .win95-groupbox::after {
+    content: '';
+    position: absolute;
+    inset: 7px 1px 1px 1px;
+    border: 1px solid var(--win95-border-light);
+    border-top-color: var(--win95-bg-dark);
+    border-left-color: var(--win95-bg-dark);
+  }
+
+  /* ===== WINDOWS 95 SUNKEN PANEL ===== */
+  .win95-sunken {
+    background: var(--win95-input-bg);
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-dark),
+      inset -1px -1px 0 var(--win95-border-light),
+      inset 2px 2px 0 var(--win95-border-darker);
+  }
+
+  /* ===== WINDOWS 95 RAISED PANEL ===== */
+  .win95-raised {
+    background: var(--win95-bg);
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-light),
+      inset -1px -1px 0 var(--win95-border-darker),
+      inset 2px 2px 0 var(--win95-bg-light),
+      inset -2px -2px 0 var(--win95-bg-dark);
   }
 
   /* ===== ANIMATIONS ===== */
   .fade-in {
-    animation: fadeIn 0.5s ease-out forwards;
+    animation: fadeIn 0.3s ease-out forwards;
     opacity: 0;
   }
 
@@ -313,9 +321,9 @@
   }
 
   .slide-up {
-    animation: slideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: slideUp 0.3s ease-out forwards;
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(10px);
   }
 
   @keyframes slideUp {
@@ -323,45 +331,35 @@
   }
 
   .scale-in {
-    animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    animation: scaleIn 0.3s ease-out forwards;
   }
 
   @keyframes scaleIn {
-    from { opacity: 0; transform: scale(0.9); }
+    from { opacity: 0; transform: scale(0.95); }
     to { opacity: 1; transform: scale(1); }
   }
 
   .animate-slide-down {
-    animation: slideDown 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: slideDown 0.2s ease-out forwards;
   }
 
   @keyframes slideDown {
-    from { opacity: 0; transform: translateY(-15px); }
+    from { opacity: 0; transform: translateY(-8px); }
     to { opacity: 1; transform: translateY(0); }
   }
 
   .animate-slide-up {
-    animation: animateSlideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: animateSlideUp 0.2s ease-out forwards;
   }
 
   @keyframes animateSlideUp {
-    from { opacity: 0; transform: translateY(15px); }
+    from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
   }
 
-  @keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
-
   .focus-ring:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(0, 184, 169, 0.3);
+    outline: 1px dotted var(--win95-text);
+    outline-offset: -4px;
   }
 }
 
@@ -383,10 +381,8 @@
 }
 
 @media (max-width: 768px) {
-  .container { @apply px-4; }
-  button, .btn { @apply min-h-[48px]; }
-  
-  .animated-bg::before { animation: none; }
+  .container { @apply px-2; }
+  button, .btn { @apply min-h-[40px]; }
 }
 
 @media (min-width: 768px) {
@@ -397,26 +393,45 @@
   .container { max-width: 1600px; }
 }
 
-/* ===== SCROLLBAR ===== */
+/* ===== WINDOWS 95 SCROLLBAR ===== */
 ::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #d4d4d8;
+  background: repeating-conic-gradient(var(--win95-bg) 0% 25%, var(--win95-bg-light) 0% 50%) 
+              50% / 2px 2px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #e4e4e7, #c4c4c8);
-  border: 2px outset #d4d4d8;
+  background: var(--win95-button-face);
+  box-shadow: 
+    inset 1px 1px 0 var(--win95-border-light),
+    inset -1px -1px 0 var(--win95-border-darker),
+    inset 2px 2px 0 var(--win95-bg-light),
+    inset -2px -2px 0 var(--win95-bg-dark);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #ececf0, #d4d4d8);
+  background: #d0d0d0;
+}
+
+::-webkit-scrollbar-button {
+  background: var(--win95-button-face);
+  box-shadow: 
+    inset 1px 1px 0 var(--win95-border-light),
+    inset -1px -1px 0 var(--win95-border-darker);
+  display: block;
+  height: 16px;
+  width: 16px;
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--win95-bg);
 }
 
 ::selection {
-  background: rgba(0, 184, 169, 0.3);
-  color: #18181b;
+  background: var(--win95-highlight);
+  color: var(--win95-highlight-text);
 }

@@ -4,7 +4,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
-import { BTN, TEXT, pressHandlers } from '../utils/buttonStyles';
+import { WIN95 } from '../utils/buttonStyles';
 import logger from '../utils/logger.js';
 
 const GENERATION_TIMES = { FLUX_PRO: 17.5, FLUX_MULTI: 35, DEFAULT: 17.5 };
@@ -178,56 +178,93 @@ const GenerateButton = memo(({ customPrompt = '', onShowTokenPayment }) => {
           onClick={handleGenerate}
           disabled={isDisabled}
           aria-label={isGenerating ? 'Generating...' : 'Generate AI image'}
-          className="generate-btn w-full flex items-center justify-center gap-2.5 px-5 py-3.5 font-bold rounded-lg relative overflow-hidden group"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 text-[11px] font-bold transition-none"
           style={{
-            ...(isDisabled ? BTN.disabled : BTN.base),
-            minHeight: '52px',
-            fontFamily: "'IBM Plex Mono', monospace",
-            boxShadow: isDisabled ? BTN.disabled.boxShadow : 'inset 2px 2px 0 rgba(255,255,255,1), inset -2px -2px 0 rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25)'
+            background: WIN95.buttonFace,
+            color: isDisabled ? WIN95.textDisabled : WIN95.text,
+            border: 'none',
+            boxShadow: isDisabled
+              ? `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.bgDark}`
+              : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
+            cursor: isDisabled ? 'default' : 'pointer',
+            fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
           }}
-          {...(isDisabled ? {} : pressHandlers)}
         >
-          {!isDisabled && <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />}
-          <span className="relative z-10">{isGenerating || walletLoading ? '⏳' : (!isConnected && !isEmailAuth) ? '🔗' : '✨'}</span>
-          <span className="relative z-10 tracking-wide">{buttonText}</span>
+          <span>{isGenerating || walletLoading ? '⏳' : (!isConnected && !isEmailAuth) ? '🔗' : '▶'}</span>
+          <span>{buttonText}</span>
         </button>
       </div>
 
       {(isGenerating || isLoading) && (
-        <div className="w-full mt-3 space-y-2.5 glass-card p-3 rounded-lg">
-          <div className="flex justify-between items-center text-xs">
+        <div 
+          className="w-full mt-2 p-2"
+          style={{
+            background: WIN95.bg,
+            boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
+          }}
+        >
+          <div className="flex justify-between items-center text-[10px] mb-1" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
             <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full animate-pulse" style={{background:'linear-gradient(135deg,#00d4ff,#00b8e6)', boxShadow:'0 0 8px rgba(0,212,255,0.6)'}} />
-              <span className="font-medium" style={{...TEXT.primary, fontFamily:"'IBM Plex Mono', monospace"}}>{currentStep}</span>
+              <div 
+                className="w-2 h-2 rounded-full animate-pulse" 
+                style={{ background: '#008000' }} 
+              />
+              <span style={{ color: WIN95.text }}>{currentStep}</span>
             </div>
-            <span className="font-mono text-xs" style={TEXT.secondary}>{timeRemaining > 0 ? `${timeRemaining}s` : '...'}</span>
+            <span className="font-mono" style={{ color: WIN95.textDisabled }}>{timeRemaining > 0 ? `${timeRemaining}s` : '...'}</span>
           </div>
           
-          <div className="w-full rounded-sm h-3 overflow-hidden relative" style={{background:'#d0d0d8', border:'2px inset #b8b8c0'}}>
-            <div className="h-full transition-all duration-300" style={{width:`${progress}%`, background:'linear-gradient(90deg,#00d4ff,#00b8e6,#00a0cc)'}} />
-            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold" style={{color: progress > 50 ? '#fff' : '#000', fontFamily:"'IBM Plex Mono', monospace"}}>{Math.round(progress)}%</div>
+          {/* Progress bar - Win95 style */}
+          <div 
+            className="w-full h-4 overflow-hidden"
+            style={{
+              background: WIN95.inputBg,
+              boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+            }}
+          >
+            <div 
+              className="h-full transition-all duration-300"
+              style={{ 
+                width: `${progress}%`,
+                background: 'repeating-linear-gradient(90deg, #000080 0px, #000080 8px, #0000a0 8px, #0000a0 16px)'
+              }} 
+            />
           </div>
           
-          <div className="flex justify-between px-1">
+          {/* Steps */}
+          <div className="flex justify-between px-1 mt-2">
             {['Init', 'Process', 'Generate', 'Enhance', 'Finish'].map((step, i) => {
               const stepProgress = (i + 1) * 20;
               const isCompleted = progress >= stepProgress;
               const isActive = progress >= stepProgress - 10;
               return (
-                <div key={step} className="flex flex-col items-center gap-1">
-                  <div className="w-2 h-2 rounded-full transition-all" style={{
-                    background: isCompleted || isActive ? 'linear-gradient(135deg,#00d4ff,#00b8e6)' : '#c0c0c8',
-                    opacity: isCompleted ? 1 : isActive ? 0.8 : 0.4,
-                    transform: isActive && !isCompleted ? 'scale(1.2)' : 'scale(1)'
-                  }} />
-                  <span className="text-[9px]" style={{color: isCompleted ? '#000' : isActive ? '#1a1a2e' : '#909090', fontFamily:"'IBM Plex Mono', monospace"}}>{step}</span>
+                <div key={step} className="flex flex-col items-center gap-0.5">
+                  <div 
+                    className="w-2 h-2 transition-all"
+                    style={{
+                      background: isCompleted ? '#008000' : isActive ? '#808000' : WIN95.bgDark,
+                      border: `1px solid ${WIN95.border.darker}`
+                    }} 
+                  />
+                  <span 
+                    className="text-[8px]" 
+                    style={{ 
+                      color: isCompleted ? WIN95.text : WIN95.textDisabled,
+                      fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                    }}
+                  >
+                    {step}
+                  </span>
                 </div>
               );
             })}
           </div>
           
-          <div className="text-[10px] text-center" style={{...TEXT.secondary, fontFamily:"'IBM Plex Mono', monospace"}}>
-            {generationMode === 'flux-multi' ? '◆ Creating multiple images...' : '◆ Creating your masterpiece...'}
+          <div 
+            className="text-[9px] text-center mt-1"
+            style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
+          >
+            {generationMode === 'flux-multi' ? '◆ Creating multiple images...' : '◆ Creating your image...'}
           </div>
         </div>
       )}

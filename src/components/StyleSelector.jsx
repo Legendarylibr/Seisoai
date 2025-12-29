@@ -35,7 +35,7 @@ const StyleSelector = memo(({ openUpward = false }) => {
         <div>
           <h3 className="text-xs font-bold" style={{...TEXT.primary, fontFamily:"'IBM Plex Mono', monospace"}}>Style (Optional)</h3>
           <p className="text-[10px]" style={{...TEXT.secondary, fontFamily:"'IBM Plex Mono', monospace"}}>
-            {selectedStyle ? `✓ ${selectedStyle.name} applied` : 'Works with Flux & Nano Banana Pro'}
+            {selectedStyle ? `✓ ${selectedStyle.name} applied` : 'Works with all models'}
           </p>
         </div>
       </div>

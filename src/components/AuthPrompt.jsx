@@ -35,7 +35,7 @@ const AuthPrompt = () => {
                 textShadow: '0 0 12px rgba(0, 184, 169, 0.5), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9)',
                 fontFamily: "'IBM Plex Mono', monospace"
               }}>
-                Generate • Edit • Extract Layers
+                Image • Video • Music • AI Studio
               </p>
             </div>
           </div>
@@ -159,7 +159,7 @@ const AuthPrompt = () => {
                     color: '#1a1a1a', 
                     textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
                   }}>
-                    Pay-per-credit • <strong>NFT: 5 credits</strong>
+                    Pay-per-credit • Crypto payments
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
@@ -186,7 +186,7 @@ const AuthPrompt = () => {
                 <div>• <strong>Generate</strong> from text</div>
                 <div>• <strong>Edit</strong> existing images</div>
                 <div>• <strong>Blend</strong> 2+ images</div>
-                <div>• <strong>Extract layers</strong> with Qwen</div>
+                <div>• <strong>Extract layers</strong> from images</div>
                 <div>• <strong>Multiple</strong> art styles</div>
               </div>
             </div>
@@ -206,7 +206,6 @@ const AuthPrompt = () => {
               </h2>
               <div className="space-y-1 text-[10px]" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
                 <div>• <strong>2 Credits</strong> for all new users</div>
-                <div>• <strong>5 Credits</strong> (NFT holders)</div>
                 <div>• No credit card required</div>
               </div>
             </div>
@@ -235,11 +234,11 @@ const AuthPrompt = () => {
                 </div>
                 <div className="flex items-start gap-1">
                   <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>3.</span>
-                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Multiple Reference Images:</strong> Upload 2+ images, select FLUX or Nano Banana Pro, and click Generate to blend them.</span>
+                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Multiple Reference Images:</strong> Upload 2+ images, select a model, and click Generate to blend them.</span>
                 </div>
                 <div className="flex items-start gap-1">
                   <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>4.</span>
-                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Layer Extract:</strong> Upload an image, select Qwen model, and click "Extract Layers" to separate into individual layers.</span>
+                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Layer Extract:</strong> Upload an image, switch to Extract mode, and click "Extract Layers" to separate into individual layers.</span>
                 </div>
               </div>
             </div>
