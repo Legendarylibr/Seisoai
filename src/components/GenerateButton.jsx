@@ -92,6 +92,14 @@ const GenerateButton = memo(({ customPrompt = '', onShowTokenPayment }) => {
       
       const imageUrls = imageResult.images;
       
+      // PERFORMANCE: Preload images immediately for faster display
+      imageUrls.forEach((url, i) => {
+        const img = new Image();
+        img.decoding = 'async';
+        img.fetchPriority = i === 0 ? 'high' : 'low';
+        img.src = url;
+      });
+      
       if (imageResult.promptOptimization) setPromptOptimizationResult(imageResult.promptOptimization);
       else setPromptOptimizationResult(null);
       

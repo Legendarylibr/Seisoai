@@ -1,4 +1,4 @@
-import React, { useState, memo, useCallback } from 'react';
+import React, { useState, useEffect, memo, useCallback } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
@@ -309,6 +309,20 @@ const ImageOutput = () => {
   else if (generatedImage) imagesToDisplay = Array.isArray(generatedImage) ? generatedImage : [generatedImage];
   const hasMultipleImages = imagesToDisplay.length > 1;
 
+  // PERFORMANCE: Preload images as soon as URLs are available
+  useEffect(() => {
+    if (imagesToDisplay.length > 0) {
+      imagesToDisplay.forEach((url, i) => {
+        if (url && typeof url === 'string') {
+          const img = new Image();
+          img.decoding = 'async';
+          img.fetchPriority = i === 0 ? 'high' : 'low';
+          img.src = url;
+        }
+      });
+    }
+  }, [generatedImage, generatedImages]);
+
   // Empty state - uniform background with centered content
   if (!imagesToDisplay.length) {
     return (
@@ -364,13 +378,27 @@ const ImageOutput = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {imagesToDisplay.map((url, i) => (
               <div key={i} className="glass-card rounded-lg overflow-hidden p-1.5">
-                <img src={url} alt={`Generated ${i + 1}`} className="w-full h-auto max-h-[200px] object-contain rounded-lg" loading="lazy" onError={(e) => e.target.style.display = 'none'} />
+                <img 
+                  src={url} 
+                  alt={`Generated ${i + 1}`} 
+                  className="w-full h-auto max-h-[200px] object-contain rounded-lg"
+                  decoding="async"
+                  fetchpriority={i === 0 ? "high" : "low"}
+                  onError={(e) => e.target.style.display = 'none'} 
+                />
               </div>
             ))}
           </div>
         ) : (
           <div className="glass-card rounded-lg overflow-hidden p-1.5 h-full flex items-center justify-center">
-            <img src={imagesToDisplay[0]} alt="Generated" className="max-w-full max-h-full object-contain rounded-lg" loading="lazy" onError={(e) => { setError('Failed to load image'); e.target.style.display = 'none'; }} />
+            <img 
+              src={imagesToDisplay[0]} 
+              alt="Generated" 
+              className="max-w-full max-h-full object-contain rounded-lg"
+              decoding="async"
+              fetchpriority="high"
+              onError={(e) => { setError('Failed to load image'); e.target.style.display = 'none'; }} 
+            />
           </div>
         )}
       </div>

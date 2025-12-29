@@ -15,6 +15,19 @@ const ImageGallery = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // PERFORMANCE: Handle item selection with preloading
+  const handleSelectItem = (item) => {
+    // Preload the full image immediately
+    const imageUrl = item.imageUrl || item.image;
+    if (imageUrl && !item.isVideo && !item.videoUrl) {
+      const img = new Image();
+      img.decoding = 'async';
+      img.fetchPriority = 'high';
+      img.src = imageUrl;
+    }
+    setSelectedItem(item);
+  };
+
   // Fetch gallery from database
   useEffect(() => {
     const fetchGallery = async () => {
@@ -362,7 +375,7 @@ const ImageGallery = () => {
             <div
               key={item.id}
               className="glass-card rounded-2xl overflow-hidden group cursor-pointer slide-up card-hover"
-              onClick={() => setSelectedItem(item)}
+              onClick={() => handleSelectItem(item)}
               style={{ animationDelay: `${index * 50}ms` }}
             >
               <div className="aspect-square relative overflow-hidden">
@@ -384,6 +397,7 @@ const ImageGallery = () => {
                     alt="Generated content"
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     loading="lazy"
+                    decoding="async"
                     onError={(e) => {
                       logger.error('Gallery item failed to load:', { imageUrl: displayUrl });
                       e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Crect fill="%23333" width="400" height="400"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em" font-family="sans-serif" font-size="14"%3EItem not available%3C/text%3E%3C/svg%3E';
@@ -496,7 +510,8 @@ const ImageGallery = () => {
                     height: 'auto',
                     display: 'block'
                   }}
-                  loading="lazy"
+                  decoding="async"
+                  fetchpriority="high"
                   onError={(e) => {
                     logger.error('Modal item failed to load:', { imageUrl: selectedItem.imageUrl || selectedItem.image });
                     e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="600"%3E%3Crect fill="%23333" width="800" height="600"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em" font-family="sans-serif" font-size="16"%3EItem not available%3C/text%3E%3C/svg%3E';
