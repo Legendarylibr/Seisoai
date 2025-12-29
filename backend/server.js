@@ -3108,7 +3108,16 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
       });
       
       if (!statusResponse.ok) {
-        logger.warn('Video status check failed', { status: statusResponse.status, statusEndpoint });
+        let errorBody = '';
+        try {
+          errorBody = await statusResponse.text();
+        } catch (e) { /* ignore */ }
+        logger.warn('Video status check failed', { 
+          status: statusResponse.status, 
+          statusText: statusResponse.statusText,
+          statusEndpoint,
+          errorBody: errorBody.substring(0, 300)
+        });
         continue;
       }
       
@@ -3124,7 +3133,29 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
         });
         
         if (!resultResponse.ok) {
-          return res.status(500).json({ success: false, error: 'Failed to fetch video result' });
+          let errorDetails = '';
+          try {
+            const errorBody = await resultResponse.text();
+            errorDetails = errorBody.substring(0, 500);
+            logger.error('Failed to fetch video result from fal.ai', {
+              requestId,
+              status: resultResponse.status,
+              statusText: resultResponse.statusText,
+              resultEndpoint,
+              errorBody: errorDetails
+            });
+          } catch (parseErr) {
+            logger.error('Failed to fetch video result from fal.ai (could not parse error)', {
+              requestId,
+              status: resultResponse.status,
+              statusText: resultResponse.statusText,
+              resultEndpoint
+            });
+          }
+          return res.status(500).json({ 
+            success: false, 
+            error: `Failed to fetch video result (${resultResponse.status}): ${errorDetails || resultResponse.statusText}` 
+          });
         }
         
         const resultData = await resultResponse.json();
