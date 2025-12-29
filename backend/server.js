@@ -3061,13 +3061,33 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
     logger.info('Video generation submitted', { requestId, endpoint });
 
     // Check if the submit response already contains the video (synchronous completion)
+    // Handle multiple possible response structures from fal.ai
+    let syncVideoUrl = null;
+    let syncVideoMeta = null;
+    
     if (submitData.video && submitData.video.url) {
-      logger.info('Video completed synchronously', { requestId });
+      syncVideoUrl = submitData.video.url;
+      syncVideoMeta = submitData.video;
+    } else if (submitData.data?.video?.url) {
+      syncVideoUrl = submitData.data.video.url;
+      syncVideoMeta = submitData.data.video;
+    } else if (submitData.data?.video && typeof submitData.data.video === 'string') {
+      syncVideoUrl = submitData.data.video;
+    } else if (submitData.video && typeof submitData.video === 'string') {
+      syncVideoUrl = submitData.video;
+    } else if (submitData.url) {
+      syncVideoUrl = submitData.url;
+    } else if (submitData.video_url) {
+      syncVideoUrl = submitData.video_url;
+    }
+    
+    if (syncVideoUrl) {
+      logger.info('Video completed synchronously', { requestId, hasVideoUrl: true });
       const videoData = {
-        url: submitData.video.url,
-        content_type: submitData.video.content_type || 'video/mp4',
-        file_name: submitData.video.file_name || `video-${requestId}.mp4`,
-        file_size: submitData.video.file_size
+        url: syncVideoUrl,
+        content_type: syncVideoMeta?.content_type || 'video/mp4',
+        file_name: syncVideoMeta?.file_name || `video-${requestId}.mp4`,
+        file_size: syncVideoMeta?.file_size
       };
       return res.json({
         success: true,
@@ -3093,11 +3113,12 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
     logger.debug('Polling endpoints', { statusEndpoint, resultEndpoint });
     
     const maxWaitTime = 5 * 60 * 1000; // 5 minutes max wait
-    const pollInterval = 3000; // Poll every 3 seconds (faster polling)
+    const pollInterval = 2000; // Poll every 2 seconds
     const startTime = Date.now();
     
     // Check status immediately first (don't wait before first check)
     let firstCheck = true;
+    let pollCount = 0;
     
     while (Date.now() - startTime < maxWaitTime) {
       // Wait before polling (except for first check)
@@ -3105,6 +3126,7 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
         await new Promise(resolve => setTimeout(resolve, pollInterval));
       }
       firstCheck = false;
+      pollCount++;
       
       const statusResponse = await fetch(statusEndpoint, {
         headers: {
@@ -3121,13 +3143,47 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
           status: statusResponse.status, 
           statusText: statusResponse.statusText,
           statusEndpoint,
-          errorBody: errorBody.substring(0, 300)
+          errorBody: errorBody.substring(0, 300),
+          pollCount
         });
         continue;
       }
       
       const statusData = await statusResponse.json();
-      logger.debug('Video status', { requestId, status: statusData.status });
+      logger.info('Video polling status', { 
+        requestId, 
+        status: statusData.status, 
+        pollCount, 
+        elapsed: Math.round((Date.now() - startTime) / 1000) + 's',
+        hasVideo: !!(statusData.video || statusData.data?.video || statusData.response?.video),
+        responseKeys: Object.keys(statusData)
+      });
+      
+      // Check if status response already contains the video (some modes return it directly)
+      let statusVideoUrl = null;
+      if (statusData.video?.url) {
+        statusVideoUrl = statusData.video.url;
+      } else if (statusData.data?.video?.url) {
+        statusVideoUrl = statusData.data.video.url;
+      } else if (statusData.response?.video?.url) {
+        statusVideoUrl = statusData.response.video.url;
+      }
+      
+      if (statusVideoUrl) {
+        logger.info('Video found in status response', { requestId, pollCount });
+        const videoData = {
+          url: statusVideoUrl,
+          content_type: statusData.video?.content_type || statusData.data?.video?.content_type || 'video/mp4',
+          file_name: statusData.video?.file_name || statusData.data?.video?.file_name || `video-${requestId}.mp4`,
+          file_size: statusData.video?.file_size || statusData.data?.video?.file_size
+        };
+        return res.json({
+          success: true,
+          video: videoData,
+          remainingCredits: updateResult.credits,
+          creditsDeducted: creditsToDeduct
+        });
+      }
       
       if (statusData.status === 'COMPLETED') {
         // Fetch the result
@@ -3169,20 +3225,36 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
         logger.debug('Video result response', { 
           requestId,
           hasVideo: !!resultData.video,
+          hasDataVideo: !!(resultData.data?.video),
           hasUrl: !!(resultData.video && resultData.video.url),
           responseKeys: Object.keys(resultData),
+          dataKeys: resultData.data ? Object.keys(resultData.data) : null,
           videoKeys: resultData.video ? Object.keys(resultData.video) : null
         });
         
-        // Handle different possible response structures
+        // Handle different possible response structures from fal.ai
         let videoUrl = null;
+        let videoMeta = null;
+        
         if (resultData.video && resultData.video.url) {
           videoUrl = resultData.video.url;
+          videoMeta = resultData.video;
+        } else if (resultData.data?.video?.url) {
+          videoUrl = resultData.data.video.url;
+          videoMeta = resultData.data.video;
+        } else if (resultData.data?.video && typeof resultData.data.video === 'string') {
+          videoUrl = resultData.data.video;
+        } else if (resultData.video && typeof resultData.video === 'string') {
+          videoUrl = resultData.video;
         } else if (resultData.url) {
           // Sometimes the URL is directly in the response
           videoUrl = resultData.url;
         } else if (resultData.video_url) {
           videoUrl = resultData.video_url;
+        } else if (resultData.data?.url) {
+          videoUrl = resultData.data.url;
+        } else if (resultData.data?.video_url) {
+          videoUrl = resultData.data.video_url;
         }
         
         if (videoUrl) {
@@ -3194,9 +3266,9 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
           // Build video object with all available metadata
           const videoData = {
             url: videoUrl,
-            content_type: resultData.video?.content_type || resultData.content_type || 'video/mp4',
-            file_name: resultData.video?.file_name || resultData.file_name || `video-${requestId}.mp4`,
-            file_size: resultData.video?.file_size || resultData.file_size
+            content_type: videoMeta?.content_type || resultData.video?.content_type || resultData.data?.video?.content_type || resultData.content_type || 'video/mp4',
+            file_name: videoMeta?.file_name || resultData.video?.file_name || resultData.data?.video?.file_name || resultData.file_name || `video-${requestId}.mp4`,
+            file_size: videoMeta?.file_size || resultData.video?.file_size || resultData.data?.video?.file_size || resultData.file_size
           };
           
           // NOTE: Video metadata cleaning (creation date, camera info, location, etc.) 

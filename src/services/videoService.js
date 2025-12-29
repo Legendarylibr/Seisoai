@@ -129,22 +129,41 @@ export const generateVideo = async ({
 
     const data = await response.json();
     
+    // Handle multiple possible response structures
+    let videoUrl = null;
+    let videoMeta = null;
+    
     if (data.video && data.video.url) {
-      logger.debug('Video generated successfully');
+      videoUrl = data.video.url;
+      videoMeta = data.video;
+    } else if (data.video && typeof data.video === 'string') {
+      videoUrl = data.video;
+    } else if (data.data?.video?.url) {
+      videoUrl = data.data.video.url;
+      videoMeta = data.data.video;
+    } else if (data.url) {
+      videoUrl = data.url;
+    } else if (data.video_url) {
+      videoUrl = data.video_url;
+    }
+    
+    if (videoUrl) {
+      logger.debug('Video generated successfully', { hasUrl: true });
       
       // NOTE: Video metadata cleaning (creation date, camera info, location, etc.)
       // Videos from fal.ai typically have minimal metadata. For additional cleaning,
       // use backend FFmpeg processing (backend/utils/videoMetadata.js) if needed.
       
       return {
-        videoUrl: data.video.url,
-        contentType: data.video.content_type,
-        fileName: data.video.file_name,
-        fileSize: data.video.file_size,
+        videoUrl: videoUrl,
+        contentType: videoMeta?.content_type || data.video?.content_type || 'video/mp4',
+        fileName: videoMeta?.file_name || data.video?.file_name,
+        fileSize: videoMeta?.file_size || data.video?.file_size,
         remainingCredits: data.remainingCredits,
         creditsDeducted: data.creditsDeducted
       };
     } else {
+      logger.error('No video URL in response', { responseKeys: Object.keys(data) });
       throw new Error('No video generated');
     }
   } catch (error) {
