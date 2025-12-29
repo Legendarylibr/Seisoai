@@ -2817,7 +2817,7 @@ const VIDEO_GENERATION_MODES = {
   'text-to-video': {
     requiresFirstFrame: false,
     requiresLastFrame: false,
-    endpoint: 'text-to-video'
+    endpoint: '' // Base model endpoint for text-to-video
   },
   'image-to-video': {
     requiresFirstFrame: true,
@@ -2995,14 +2995,17 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
     });
 
     // Build endpoint URL based on mode and quality
-    // Note: text-to-video mode doesn't support /fast path, use quality endpoint instead
-    let qualityPath = quality === 'quality' ? '' : '/fast';
-    if (generation_mode === 'text-to-video' && quality === 'fast') {
-      // text-to-video doesn't have a /fast endpoint, use quality tier instead
-      qualityPath = '';
-      logger.info('text-to-video mode: fast quality not available, using quality tier');
+    // For text-to-video, use base model endpoint: fal-ai/veo3.1
+    // For other modes, use: fal-ai/veo3.1/fast/{mode} or fal-ai/veo3.1/{mode}
+    let endpoint;
+    if (generation_mode === 'text-to-video') {
+      // Text-to-video uses base model endpoint (no /fast or /text-to-video suffix)
+      endpoint = 'https://queue.fal.run/fal-ai/veo3.1';
+    } else {
+      // For image-to-video and first-last-frame, use quality path
+      const qualityPath = quality === 'quality' ? '' : '/fast';
+      endpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}`;
     }
-    const endpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}`;
     
     const submitResponse = await fetch(endpoint, {
       method: 'POST',
@@ -3032,19 +3035,37 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
     }
 
     const submitData = await submitResponse.json();
-    const requestId = submitData.request_id;
+    
+    // Log submit response for debugging
+    logger.debug('Video submit response', { 
+      submitDataKeys: Object.keys(submitData),
+      submitData: JSON.stringify(submitData).substring(0, 200)
+    });
+    
+    // Handle different possible response structures for request_id
+    const requestId = submitData.request_id || submitData.requestId || submitData.id;
     
     if (!requestId) {
-      return res.status(500).json({ success: false, error: 'Failed to submit video generation request' });
+      logger.error('No request_id in submit response', { submitData });
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to submit video generation request. No request_id in response.' 
+      });
     }
 
     logger.info('Video generation submitted', { requestId });
 
     // Poll for completion (video generation can take 1-3 minutes)
-    // Build status and result endpoints using the same mode and quality as the submit endpoint
-    // Use the same qualityPath that was used for the submit endpoint
-    const statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}/status`;
-    const resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}`;
+    // Build status and result endpoints using the same endpoint structure as submit
+    let statusEndpoint, resultEndpoint;
+    if (generation_mode === 'text-to-video') {
+      statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1/requests/${requestId}/status`;
+      resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1/requests/${requestId}`;
+    } else {
+      const qualityPath = quality === 'quality' ? '' : '/fast';
+      statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}/status`;
+      resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}`;
+    }
     
     const maxWaitTime = 5 * 60 * 1000; // 5 minutes max wait
     const pollInterval = 5000; // Poll every 5 seconds
@@ -3080,11 +3101,39 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
         
         const resultData = await resultResponse.json();
         
+        // Log full response for debugging
+        logger.debug('Video result response', { 
+          requestId,
+          hasVideo: !!resultData.video,
+          hasUrl: !!(resultData.video && resultData.video.url),
+          responseKeys: Object.keys(resultData),
+          videoKeys: resultData.video ? Object.keys(resultData.video) : null
+        });
+        
+        // Handle different possible response structures
+        let videoUrl = null;
         if (resultData.video && resultData.video.url) {
+          videoUrl = resultData.video.url;
+        } else if (resultData.url) {
+          // Sometimes the URL is directly in the response
+          videoUrl = resultData.url;
+        } else if (resultData.video_url) {
+          videoUrl = resultData.video_url;
+        }
+        
+        if (videoUrl) {
           logger.info('Video generation completed', { 
             requestId,
-            videoUrl: resultData.video.url.substring(0, 50) + '...'
+            videoUrl: videoUrl.substring(0, 50) + '...'
           });
+          
+          // Build video object with all available metadata
+          const videoData = {
+            url: videoUrl,
+            content_type: resultData.video?.content_type || resultData.content_type || 'video/mp4',
+            file_name: resultData.video?.file_name || resultData.file_name || `video-${requestId}.mp4`,
+            file_size: resultData.video?.file_size || resultData.file_size
+          };
           
           // NOTE: Video metadata cleaning (creation date, camera info, location, etc.) 
           // can be performed using the videoMetadata utility if FFmpeg is installed.
@@ -3093,12 +3142,19 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
           
           return res.json({
             success: true,
-            video: resultData.video,
+            video: videoData,
             remainingCredits: updateResult.credits,
             creditsDeducted: creditsToDeduct
           });
         } else {
-          return res.status(500).json({ success: false, error: 'No video in response' });
+          logger.error('No video URL in response', { 
+            requestId, 
+            resultData: JSON.stringify(resultData).substring(0, 500) 
+          });
+          return res.status(500).json({ 
+            success: false, 
+            error: 'No video URL in response. Response structure: ' + JSON.stringify(Object.keys(resultData)) 
+          });
         }
       } else if (statusData.status === 'FAILED') {
         logger.error('Video generation failed', { requestId, statusData });
