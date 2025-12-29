@@ -286,13 +286,21 @@ function WalletPrompt({ onBack }) {
 
   const evmWallets = [
     { id: 'metamask', name: 'MetaMask', icon: '🦊' },
-    { id: 'rabby', name: 'Rabby', icon: '🐰' },
-    { id: 'coinbase', name: 'Coinbase Wallet', icon: '🔵' }
+    { id: 'walletconnect', name: 'WalletConnect', icon: '🔗' },
+    { id: 'coinbase', name: 'Coinbase Wallet', icon: '🔵' },
+    { id: 'rabby', name: 'Rabby Wallet', icon: '🐰' },
+    { id: 'phantom-evm', name: 'Phantom', icon: '👻' },
+    { id: 'rainbow', name: 'Rainbow Wallet', icon: '🌈' },
+    { id: 'trust', name: 'Trust Wallet', icon: '🛡️' },
+    { id: 'okx', name: 'OKX Wallet', icon: '⭕' },
+    { id: 'bitget', name: 'Bitget Wallet', icon: '💼' },
+    { id: 'brave', name: 'Brave Wallet', icon: '🦁' },
+    { id: 'frame', name: 'Frame', icon: '🖼️' }
   ];
 
   const solanaWallets = [
     { id: 'phantom', name: 'Phantom', icon: '👻' },
-    { id: 'solflare', name: 'Solflare', icon: '🔥' }
+    { id: 'solflare', name: 'Solflare', icon: '☀️' }
   ];
 
   const handleChainSelect = (chainId) => {
