@@ -3221,9 +3221,10 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
         
         const resultData = await resultResponse.json();
         
-        // Log full response for debugging
-        logger.debug('Video result response', { 
+        // Log full response for debugging - more verbose to find video URL
+        logger.info('Video result response FULL', { 
           requestId,
+          fullResponse: JSON.stringify(resultData).substring(0, 1000),
           hasVideo: !!resultData.video,
           hasDataVideo: !!(resultData.data?.video),
           hasUrl: !!(resultData.video && resultData.video.url),
@@ -3258,9 +3259,10 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
         }
         
         if (videoUrl) {
-          logger.info('Video generation completed', { 
+          logger.info('Video generation completed - RETURNING VIDEO', { 
             requestId,
-            videoUrl: videoUrl.substring(0, 50) + '...'
+            videoUrl: videoUrl.substring(0, 100) + '...',
+            videoUrlFull: videoUrl
           });
           
           // Build video object with all available metadata
@@ -3276,16 +3278,23 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
           // Videos from fal.ai typically have minimal metadata, but the utility is available
           // for additional cleaning if needed: backend/utils/videoMetadata.js
           
-          return res.json({
+          const responsePayload = {
             success: true,
             video: videoData,
             remainingCredits: updateResult.credits,
             creditsDeducted: creditsToDeduct
+          };
+          
+          logger.info('SENDING VIDEO RESPONSE TO CLIENT', {
+            requestId,
+            responsePayload: JSON.stringify(responsePayload).substring(0, 500)
           });
+          
+          return res.json(responsePayload);
         } else {
-          logger.error('No video URL in response', { 
+          logger.error('No video URL found in response - FULL DUMP', { 
             requestId, 
-            resultData: JSON.stringify(resultData).substring(0, 500) 
+            resultDataFull: JSON.stringify(resultData)
           });
           return res.status(500).json({ 
             success: false, 
