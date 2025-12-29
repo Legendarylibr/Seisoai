@@ -124,7 +124,7 @@ export const needsOptimization = (dataUri, thresholdKB = 500) => {
  * @param {number} options.quality - JPEG quality 0-1 (default: 0.92, only for JPEG)
  * @returns {Promise<Blob>} - Blob with cleaned image (no metadata)
  */
-export const stripImageMetadata = (imageUrl, options = {}) => {
+export function stripImageMetadata(imageUrl, options = {}) {
   const { format = 'png', quality = 0.92 } = options;
   
   return new Promise((resolve, reject) => {
@@ -169,7 +169,7 @@ export const stripImageMetadata = (imageUrl, options = {}) => {
     
     img.src = imageUrl;
   });
-};
+}
 
 /**
  * Strip metadata from an image and return as data URI
@@ -213,5 +213,17 @@ export const stripImagesMetadataToDataUri = async (imageUrls, options = {}) => {
     return Promise.all(imageUrls.map(url => stripImageMetadataToDataUri(url, options)));
   }
   return stripImageMetadataToDataUri(imageUrls, options);
+};
+
+// Default export for better module resolution
+export default {
+  optimizeImage,
+  optimizeImages,
+  getDataUriSize,
+  needsOptimization,
+  stripImageMetadata,
+  stripImageMetadataToDataUri,
+  stripImagesMetadata,
+  stripImagesMetadataToDataUri
 };
 
