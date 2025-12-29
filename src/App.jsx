@@ -204,25 +204,14 @@ const CollapsibleHowToUse = memo(function CollapsibleHowToUse() {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="rounded p-1 rounded-b-none relative" style={{ 
-      background: 'linear-gradient(135deg, #f8fafc, #e2e8f0)',
-      border: '1px solid #cbd5e1',
-      borderBottom: 'none'
-    }}>
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between gap-1"
-        aria-expanded={isExpanded}
-      >
-        <span className="text-[10px] font-bold" style={{ color: '#000' }}>💡 How to Use</span>
-        <ChevronDown className="w-3 h-3" style={{ color: '#000', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+    <div className="rounded-none p-1" style={{ background: 'linear-gradient(135deg, #f8fafc, #e2e8f0)', border: '1px solid #cbd5e1', borderTop: 'none' }}>
+      <button onClick={() => setIsExpanded(!isExpanded)} className="w-full flex items-center justify-between">
+        <span className="text-[9px] font-bold" style={{ color: '#000' }}>💡 Tips</span>
+        <ChevronDown className="w-2.5 h-2.5" style={{ color: '#000', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
       </button>
       {isExpanded && (
-        <div className="mt-1 space-y-0.5 text-[9px]" style={{ color: '#1a1a1a' }}>
-          <div><strong>1.</strong> Text→Image: Type prompt, generate</div>
-          <div><strong>2.</strong> Edit: Upload 1 image + describe changes</div>
-          <div><strong>3.</strong> Blend: Upload 2+ images</div>
-          <div><strong>4.</strong> Layers: Upload + select Qwen</div>
+        <div className="mt-0.5 text-[8px] leading-tight" style={{ color: '#1a1a1a' }}>
+          1. Text→Image 2. Edit: 1 img 3. Blend: 2+ imgs 4. Layers: Qwen
         </div>
       )}
     </div>
@@ -240,22 +229,19 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
 
   return (
     <div className="fade-in h-full flex flex-col">
-      {/* Top Row - Header and User Info - Compact */}
-      <div className="flex-shrink-0 mb-0.5">
-        {/* User Info - Email or Wallet */}
-        <div className="glass-card rounded p-0.5 slide-up">
-          {isEmailAuth ? (
-            <EmailUserInfo onShowStripePayment={onShowStripePayment} />
-          ) : (
-            <SimpleWalletConnect />
-          )}
-        </div>
+      {/* User Info - Email or Wallet */}
+      <div className="flex-shrink-0 glass-card rounded-t p-0.5">
+        {isEmailAuth ? (
+          <EmailUserInfo onShowStripePayment={onShowStripePayment} />
+        ) : (
+          <SimpleWalletConnect />
+        )}
       </div>
 
       {/* Main Content - Fill remaining space */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        {/* Main Generation Area - Balanced Columns */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-1 h-full">
+        {/* Main Generation Area - Two Columns, no gap */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 h-full">
           {/* Left Column: Input Section - Scrollable with sticky generate button */}
           <div className="flex flex-col h-full" style={{ animationDelay: '100ms' }}>
             {/* Scrollable content area */}
@@ -265,17 +251,11 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
             
             {/* When reference image exists, show it first */}
             {hasReferenceImages && (
-              <div 
-                key="reference-image-section-active"
-                className="note-amber rounded p-1 rounded-b-none"
-              >
-                <div className="flex items-center gap-1 mb-0.5">
+              <div key="reference-image-section-active" className="note-amber rounded-none p-1" style={{ borderTop: 'none' }}>
+                <div className="flex items-center gap-1">
                   <span className="text-[10px] font-bold" style={{ color: '#92400e' }}>🖼️ Reference</span>
                 </div>
-                <div className="h-[60px] overflow-hidden rounded" style={{
-                  background: 'rgba(255, 255, 255, 0.5)',
-                  border: '2px dashed rgba(217, 119, 6, 0.3)'
-                }}>
+                <div className="h-[50px] overflow-hidden rounded mt-0.5" style={{ background: 'rgba(255,255,255,0.5)', border: '1px dashed rgba(217,119,6,0.3)' }}>
                   <ReferenceImageInput />
                 </div>
               </div>
@@ -283,23 +263,15 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
 
             {/* Prompt Input */}
             {!isQwenSelected && (
-              <div 
-                key={hasReferenceImages ? 'prompt-below-image' : 'prompt-primary'}
-                className={`note-teal rounded p-1 ${
-                  hasReferenceImages ? 'rounded-t-none' : 'rounded-b-none'
-                }`} 
-                style={hasReferenceImages ? { borderTop: 'none', marginTop: '-1px' } : {}}
-              >
-                <div className="flex items-center gap-1 mb-0.5">
-                  <span className="text-[10px] font-bold" style={{ color: '#00695c' }}>
-                    {hasReferenceImages ? '✏️ Changes' : '✨ Prompt'}
-                  </span>
+              <div key={hasReferenceImages ? 'prompt-below-image' : 'prompt-primary'} className="note-teal rounded-none p-1" style={{ borderTop: 'none' }}>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-bold" style={{ color: '#00695c' }}>{hasReferenceImages ? '✏️ Changes' : '✨ Prompt'}</span>
                 </div>
                 <textarea
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
                   placeholder={hasReferenceImages ? "Describe changes..." : "Describe your image..."}
-                  className="w-full p-1 rounded resize-none text-[11px] win95-input"
+                  className="w-full p-1 rounded resize-none text-[10px] win95-input mt-0.5"
                   rows={2}
                 />
               </div>
@@ -307,18 +279,11 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
 
             {/* Reference Image Input - Only shown when NO reference image */}
             {!hasReferenceImages && (
-              <div 
-                key="reference-image-section-empty"
-                className="note-amber rounded p-1 rounded-t-none" 
-                style={{ borderTop: 'none', marginTop: '-1px' }}
-              >
-                <div className="flex items-center gap-1 mb-0.5">
+              <div key="reference-image-section-empty" className="note-amber rounded-none p-1" style={{ borderTop: 'none' }}>
+                <div className="flex items-center gap-1">
                   <span className="text-[10px] font-bold" style={{ color: '#92400e' }}>🖼️ Reference (optional)</span>
                 </div>
-                <div className="h-[55px] overflow-hidden rounded" style={{
-                  background: 'rgba(255, 255, 255, 0.5)',
-                  border: '2px dashed rgba(217, 119, 6, 0.3)'
-                }}>
+                <div className="h-[45px] overflow-hidden rounded mt-0.5" style={{ background: 'rgba(255,255,255,0.5)', border: '1px dashed rgba(217,119,6,0.3)' }}>
                   <ReferenceImageInput />
                 </div>
               </div>
@@ -326,29 +291,29 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
 
             {/* Model Selection */}
             {(!hasReferenceImages && !isQwenSelected) || hasReferenceImages ? (
-              <div className="glass-card rounded p-1 rounded-t-none" style={{ borderTop: 'none', marginTop: '-1px' }}>
+              <div className="glass-card rounded-none p-1" style={{ borderTop: 'none' }}>
                 <MultiImageModelSelector customPrompt={customPrompt} />
               </div>
             ) : null}
 
             {/* AI Prompt Reasoning Toggle */}
-            <div className="glass-card rounded p-1 mt-0.5">
+            <div className="glass-card rounded-none p-1" style={{ borderTop: 'none' }}>
               <PromptOptimizer />
             </div>
 
             {/* Style Selection */}
             {!isQwenSelected && (
-              <div className="note-slate rounded p-1 rounded-b-none" style={{ borderBottom: 'none' }}>
+              <div className="note-slate rounded-none p-1" style={{ borderTop: 'none' }}>
                 <StyleSelector />
               </div>
             )}
             </div>
             
             {/* Generate Button - Always visible at bottom */}
-            <div className="flex-shrink-0 rounded p-1" style={{ 
+            <div className="flex-shrink-0 rounded-b p-1" style={{ 
               background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%)',
               border: '2px solid #10b981',
-              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.9), 0 -2px 8px rgba(16, 185, 129, 0.15)'
+              borderTop: 'none'
             }}>
               <GenerateButton 
                 customPrompt={customPrompt}
@@ -358,15 +323,12 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
           </div>
 
           {/* Right Column: Output Section - Fill height */}
-          <div className="flex flex-col h-full min-h-0" style={{ animationDelay: '200ms' }}>
-            <div className="note-blue rounded p-1 flex flex-col flex-1 min-h-0">
-              <div className="flex items-center gap-1 mb-0.5 flex-shrink-0">
+          <div className="flex flex-col h-full min-h-0">
+            <div className="note-blue rounded-none lg:rounded-r p-1 flex flex-col flex-1 min-h-0" style={{ borderLeft: 'none' }}>
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <span className="text-[10px] font-bold" style={{ color: '#1e40af' }}>🎨 Output</span>
               </div>
-              <div className="flex-1 flex flex-col overflow-hidden min-h-0 rounded" style={{ 
-                background: 'rgba(255, 255, 255, 0.6)',
-                border: '2px solid rgba(59, 130, 246, 0.25)'
-              }}>
+              <div className="flex-1 flex flex-col overflow-hidden min-h-0 mt-0.5" style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '2px' }}>
                 <ImageOutput />
               </div>
             </div>
