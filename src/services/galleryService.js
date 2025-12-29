@@ -114,21 +114,45 @@ export const addGeneration = async (identifier, generationData) => {
  */
 export const getGallery = async (identifier, page = 1, limit = 20, userId = null, email = null) => {
   try {
-    if (!API_URL) {
+    if (!API_URL && API_URL !== '') {
+      // Empty string is valid (same origin), but undefined/null is not
       throw new Error('API URL not configured');
     }
 
-    let url = `${API_URL}/api/gallery/${identifier}?page=${page}&limit=${limit}`;
+    if (!identifier) {
+      throw new Error('Identifier is required');
+    }
+
+    let url = `${API_URL}/api/gallery/${encodeURIComponent(identifier)}?page=${page}&limit=${limit}`;
     if (userId) url += `&userId=${encodeURIComponent(userId)}`;
     if (email) url += `&email=${encodeURIComponent(email)}`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch gallery');
+      let errorMessage = `Failed to fetch gallery: ${response.status} ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.error) {
+          errorMessage = errorData.error;
+        }
+      } catch {
+        // If response is not JSON, use default error message
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
+    
+    // Ensure response has expected structure
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid response format from gallery API');
+    }
+    
     return data;
   } catch (error) {
     logger.error('Error fetching gallery:', { error: error.message, identifier, page, limit });

@@ -6,6 +6,7 @@ import { Download, Trash2, Eye, Calendar, Palette, Sparkles, X, Video, Play, Ima
 import { getGallery } from '../services/galleryService';
 import logger from '../utils/logger.js';
 import { WIN95 } from '../utils/buttonStyles';
+import { stripImageMetadata } from '../utils/imageOptimizer.js';
 
 // Win95 button component
 const Win95Button = ({ children, onClick, disabled, className = '', style = {} }) => (
@@ -55,12 +56,32 @@ const ImageGallery = () => {
     const fetchGallery = async () => {
       try {
         setLoading(true);
+        setError(null);
         const isEmailAuth = emailContext.isAuthenticated;
         const userIdentifier = isEmailAuth 
           ? emailContext.userId 
           : walletContext.address;
 
+        // Always show generation history items even if no user identifier
+        const memoryItems = generationHistory.map(item => ({
+          id: item.id,
+          image: item.image,
+          imageUrl: item.image,
+          videoUrl: null,
+          prompt: item.prompt,
+          style: item.style,
+          timestamp: item.timestamp,
+          isVideo: false
+        }));
+
         if (!userIdentifier) {
+          // No user identifier, just show memory items
+          logger.debug('No user identifier, showing memory items only', { 
+            memoryItemsCount: memoryItems.length 
+          });
+          setGalleryItems(memoryItems.sort((a, b) => 
+            new Date(b.timestamp) - new Date(a.timestamp)
+          ));
           setLoading(false);
           return;
         }
@@ -72,43 +93,53 @@ const ImageGallery = () => {
           ? userIdentifier.toLowerCase() 
           : userIdentifier;
 
-        const response = await getGallery(normalizedIdentifier);
-        
-        if (response.success && response.gallery) {
-          const dbItems = response.gallery.map(item => ({
-            id: item.id,
-            image: item.imageUrl || item.videoUrl,
-            imageUrl: item.imageUrl,
-            videoUrl: item.videoUrl,
-            prompt: item.prompt,
-            style: { name: item.style || 'Unknown' },
-            timestamp: item.timestamp,
-            isVideo: !!item.videoUrl
-          }));
+        try {
+          const response = await getGallery(normalizedIdentifier);
           
-          const memoryItems = generationHistory.map(item => ({
-            id: item.id,
-            image: item.image,
-            imageUrl: item.image,
-            videoUrl: null,
-            prompt: item.prompt,
-            style: item.style,
-            timestamp: item.timestamp,
-            isVideo: false
-          }));
-          
-          const allItems = [...dbItems, ...memoryItems];
-          const uniqueItems = Array.from(
-            new Map(allItems.map(item => [item.id, item])).values()
-          );
-          
-          setGalleryItems(uniqueItems.sort((a, b) => 
+          if (response && response.success && Array.isArray(response.gallery)) {
+            const dbItems = response.gallery.map(item => ({
+              id: item.id,
+              image: item.imageUrl || item.videoUrl,
+              imageUrl: item.imageUrl,
+              videoUrl: item.videoUrl,
+              prompt: item.prompt,
+              style: { name: item.style || 'Unknown' },
+              timestamp: item.timestamp,
+              isVideo: !!item.videoUrl
+            }));
+            
+            const allItems = [...dbItems, ...memoryItems];
+            const uniqueItems = Array.from(
+              new Map(allItems.map(item => [item.id, item])).values()
+            );
+            
+            setGalleryItems(uniqueItems.sort((a, b) => 
+              new Date(b.timestamp) - new Date(a.timestamp)
+            ));
+            logger.debug('Gallery items loaded', { 
+              dbItems: dbItems.length, 
+              memoryItems: memoryItems.length, 
+              total: uniqueItems.length 
+            });
+          } else {
+            // API returned but format unexpected, use memory items
+            logger.warn('Gallery API response format unexpected', { response });
+            setGalleryItems(memoryItems.sort((a, b) => 
+              new Date(b.timestamp) - new Date(a.timestamp)
+            ));
+          }
+        } catch (apiErr) {
+          // API call failed, but still show memory items
+          logger.error('Failed to fetch gallery from API', { error: apiErr.message });
+          setError(apiErr.message);
+          setGalleryItems(memoryItems.sort((a, b) => 
             new Date(b.timestamp) - new Date(a.timestamp)
           ));
         }
       } catch (err) {
         logger.error('Failed to fetch gallery', { error: err.message });
         setError(err.message);
+        // Fallback to generation history
         setGalleryItems(generationHistory.map(item => ({
           id: item.id,
           image: item.image,
@@ -125,43 +156,10 @@ const ImageGallery = () => {
     };
 
     fetchGallery();
-  }, [walletContext.address, emailContext.isAuthenticated, emailContext.userId, generationHistory.length]);
+  }, [walletContext.address, emailContext.isAuthenticated, emailContext.userId, generationHistory]);
 
   const filteredHistory = galleryItems;
 
-  // Helper function to strip metadata from image
-  const stripImageMetadata = (imageUrl) => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0);
-          
-          canvas.toBlob((blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error('Failed to convert image to blob'));
-            }
-          }, 'image/png');
-        } catch (error) {
-          reject(error);
-        }
-      };
-      
-      img.onerror = () => {
-        reject(new Error('Failed to load image'));
-      };
-      
-      img.src = imageUrl;
-    });
-  };
 
   const handleDownload = async (url, styleName, isVideo = false) => {
     if (!url) return;
@@ -182,10 +180,15 @@ const ImageGallery = () => {
 
       let blob;
       if (isVideo) {
+        // Videos: Download directly without metadata cleaning
+        // Note: Browser-based video metadata cleaning is limited. Videos from AI services
+        // (like fal.ai) typically have minimal metadata. For thorough metadata removal,
+        // use backend FFmpeg processing (backend/utils/videoMetadata.js).
         const response = await fetch(url);
         blob = await response.blob();
       } else {
-        blob = await stripImageMetadata(url);
+        // Images: Strip metadata before download
+        blob = await stripImageMetadata(url, { format: 'png' });
       }
       
       const blobUrl = window.URL.createObjectURL(blob);
@@ -346,13 +349,17 @@ const ImageGallery = () => {
       {/* Gallery Grid */}
       <div className="flex-1 overflow-auto p-2">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-          {filteredHistory.map((item, index) => {
+          {filteredHistory.filter(item => {
+            // Only show items with valid URLs
+            const displayUrl = item.videoUrl || item.imageUrl || item.image;
+            return displayUrl && typeof displayUrl === 'string' && displayUrl.trim() !== '';
+          }).map((item, index) => {
             const displayUrl = item.videoUrl || item.imageUrl || item.image;
             const isVideo = item.isVideo || !!item.videoUrl;
             
             return (
               <div
-                key={item.id}
+                key={item.id || `gallery-item-${index}`}
                 className="cursor-pointer group"
                 onClick={() => handleSelectItem(item)}
                 style={{
