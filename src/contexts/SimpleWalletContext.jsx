@@ -1,8 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { EthereumProvider } from '@walletconnect/ethereum-provider';
+// PERFORMANCE: Lazy load WalletConnect only when needed (saves ~1MB from initial bundle)
+// import { EthereumProvider } from '@walletconnect/ethereum-provider';
 import { checkNFTHoldings } from '../services/nftVerificationService';
 import logger from '../utils/logger';
 import { API_URL } from '../utils/apiConfig';
+
+// PERFORMANCE: Dynamic import for WalletConnect - only loads when user clicks WalletConnect
+const getWalletConnectProvider = () => import('@walletconnect/ethereum-provider').then(m => m.EthereumProvider);
 
 const SimpleWalletContext = createContext();
 const WALLETCONNECT_PROJECT_ID = '8e0a0c75ac8c8f6d3ef36a26f2f8f64d';
@@ -132,6 +136,8 @@ export const SimpleWalletProvider = ({ children }) => {
           break;
         }
         case 'walletconnect': {
+          // PERFORMANCE: Dynamically import WalletConnect only when needed
+          const EthereumProvider = await getWalletConnectProvider();
           const wc = await EthereumProvider.init({
             projectId: WALLETCONNECT_PROJECT_ID, chains: [1], optionalChains: [137, 42161, 10, 8453, 56], showQrModal: true,
             metadata: { name: 'Seiso AI', description: 'AI Image Generation', url: window.location.origin, icons: [`${window.location.origin}/favicon.ico`] }

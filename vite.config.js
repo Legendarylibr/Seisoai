@@ -7,8 +7,8 @@ export default defineConfig({
   optimizeDeps: {
     include: [
       'ethers', 
-      'buffer',
-      '@walletconnect/ethereum-provider'
+      'buffer'
+      // PERFORMANCE: WalletConnect is lazy-loaded, don't pre-bundle
     ]
   },
   resolve: {
