@@ -117,7 +117,7 @@ const PAYMENT_CONFIG = {
     },
     '42161': { // Arbitrum
       'USDC': {
-        address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // Native USDC (not bridged)
+        address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // Native USDC
         decimals: 6,
         name: 'USD Coin',
         symbol: 'USDC',
@@ -137,7 +137,7 @@ const PAYMENT_CONFIG = {
     },
     '10': { // Optimism
       'USDC': {
-        address: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Native USDC (not bridged)
+        address: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Native USDC
         decimals: 6,
         name: 'USD Coin',
         symbol: 'USDC',

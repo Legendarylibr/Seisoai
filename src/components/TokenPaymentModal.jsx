@@ -352,34 +352,6 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
     }
   }, [selectedToken, address]);
 
-  // Listen for network/account changes from wallet
-  useEffect(() => {
-    if (!isOpen || walletType !== 'evm' || !window.ethereum) return;
-
-    const handleChainChanged = (chainId) => {
-      logger.debug('Network changed', { chainId });
-      // Refresh balances when network changes
-      checkUSDCBalanceAcrossNetworks();
-      setError(''); // Clear any network-related errors
-    };
-
-    const handleAccountsChanged = (accounts) => {
-      logger.debug('Accounts changed', { accounts });
-      if (accounts.length > 0) {
-        // Refresh balances for new account
-        checkUSDCBalanceAcrossNetworks();
-      }
-    };
-
-    window.ethereum.on('chainChanged', handleChainChanged);
-    window.ethereum.on('accountsChanged', handleAccountsChanged);
-
-    return () => {
-      window.ethereum.removeListener('chainChanged', handleChainChanged);
-      window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-    };
-  }, [isOpen, walletType]);
-
   const loadTokenBalance = async (token) => {
     try {
       if (walletType === 'evm' && window.ethereum) {
@@ -536,50 +508,21 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
 
   // Add network if it doesn't exist
   const addNetwork = async (chainId) => {
-    const networkConfigs = {
+      const networkConfigs = {
       1: {
         chainId: '0x1',
         chainName: 'Ethereum Mainnet',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [import.meta.env.VITE_ETH_RPC_URL].filter(Boolean),
+        rpcUrls: [import.meta.env.VITE_ETH_RPC_URL].filter(Boolean), // Filter out undefined values
         blockExplorerUrls: ['https://etherscan.io']
-      },
-      137: {
-        chainId: '0x89',
-        chainName: 'Polygon',
-        nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
-        rpcUrls: [import.meta.env.VITE_POLYGON_RPC_URL].filter(Boolean),
-        blockExplorerUrls: ['https://polygonscan.com']
-      },
-      42161: {
-        chainId: '0xa4b1',
-        chainName: 'Arbitrum One',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [import.meta.env.VITE_ARBITRUM_RPC_URL].filter(Boolean),
-        blockExplorerUrls: ['https://arbiscan.io']
-      },
-      10: {
-        chainId: '0xa',
-        chainName: 'Optimism',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [import.meta.env.VITE_OPTIMISM_RPC_URL].filter(Boolean),
-        blockExplorerUrls: ['https://optimistic.etherscan.io']
       },
       8453: {
         chainId: '0x2105',
         chainName: 'Base',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [import.meta.env.VITE_BASE_RPC_URL].filter(Boolean),
+        rpcUrls: [import.meta.env.VITE_BASE_RPC_URL].filter(Boolean), // Filter out undefined values
         blockExplorerUrls: ['https://basescan.org']
       }
-    };
-
-    const envVarMap = {
-      1: 'VITE_ETH_RPC_URL',
-      137: 'VITE_POLYGON_RPC_URL',
-      42161: 'VITE_ARBITRUM_RPC_URL',
-      10: 'VITE_OPTIMISM_RPC_URL',
-      8453: 'VITE_BASE_RPC_URL'
     };
     
     // Validate RPC URL is configured
@@ -588,7 +531,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
       throw new Error(`Network configuration not found for chain ID ${chainId}`);
     }
     if (config.rpcUrls.length === 0) {
-      const envVar = envVarMap[chainId] || 'RPC_URL';
+      const envVar = chainId === 1 ? 'VITE_ETH_RPC_URL' : 'VITE_BASE_RPC_URL';
       throw new Error(`${envVar} environment variable is required. Please configure it in your .env file.`);
     }
 
@@ -841,7 +784,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
               throw new Error(creditData.error || 'Failed to credit');
             }
           } catch (creditError) {
-            logger.error('Error crediting:', { error: creditError.message, txSignature });
+            logger.error('Error crediting:', { error: creditError.message, transactionSignature });
             setError(`Transaction confirmed but crediting failed: ${creditError.message}`);
           }
           
@@ -1004,7 +947,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
                 throw new Error(creditData.error || 'Failed to credit');
               }
             } catch (creditError) {
-              logger.error('Error crediting:', { error: creditError.message, txHash: tx.hash });
+              logger.error('Error crediting:', { error: creditError.message, transactionHash });
               setError(`Transaction confirmed but crediting failed: ${creditError.message}`);
             }
           } else {
@@ -1117,7 +1060,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
         setError('No USDC transfer detected to the payment wallet. Please send the transaction first.');
       }
     } catch (error) {
-      logger.error('Error checking payment:', { error: error.message, walletAddress: address, amount });
+      logger.error('Error checking payment:', { error: error.message, walletAddress, amount });
       setCheckingPayment(false);
       setError('Error checking payment: ' + error.message);
     }
