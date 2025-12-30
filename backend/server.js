@@ -9859,6 +9859,55 @@ app.post('/api/admin/fix-oversized-user', async (req, res) => {
 });
 
 /**
+ * Add credits to a user account (admin only)
+ */
+app.post('/api/admin/add-credits', async (req, res) => {
+  try {
+    const { email, walletAddress, credits, adminSecret } = req.body;
+    
+    if (adminSecret !== process.env.SESSION_SECRET) {
+      return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+    
+    if (!email && !walletAddress) {
+      return res.status(400).json({ success: false, error: 'Email or wallet address required' });
+    }
+    
+    if (!credits || typeof credits !== 'number' || credits <= 0) {
+      return res.status(400).json({ success: false, error: 'Valid positive credits amount required' });
+    }
+    
+    const query = email ? { email: email.toLowerCase() } : { walletAddress: walletAddress.toLowerCase() };
+    
+    const result = await User.findOneAndUpdate(
+      query,
+      { $inc: { credits: credits, totalCreditsEarned: credits } },
+      { new: true, select: 'email walletAddress credits totalCreditsEarned' }
+    );
+    
+    if (!result) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    logger.info('Credits added by admin', { email, walletAddress, creditsAdded: credits, newTotal: result.credits });
+    
+    res.json({
+      success: true,
+      message: `Added ${credits} credits`,
+      user: {
+        email: result.email,
+        walletAddress: result.walletAddress,
+        credits: result.credits,
+        totalCreditsEarned: result.totalCreditsEarned
+      }
+    });
+  } catch (error) {
+    logger.error('Error adding credits:', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * Update a generation (e.g., when video completes)
  */
 app.put('/api/generations/update/:generationId', async (req, res) => {
