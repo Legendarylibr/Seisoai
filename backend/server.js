@@ -4409,11 +4409,11 @@ if (missingRecommended.length > 0) {
 
 // MongoDB connection - OPTIMIZATION: Enhanced pooling for better performance
 const mongoOptions = {
-  maxPoolSize: 10,        // Maximum connections in pool
-  minPoolSize: 2,         // OPTIMIZATION: Keep minimum connections warm
+  maxPoolSize: 5,         // Maximum connections in pool (reduced for hosting limits)
+  minPoolSize: 1,         // Keep 1 connection warm
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
-  maxIdleTimeMS: 30000,   // OPTIMIZATION: Close idle connections after 30s
+  maxIdleTimeMS: 10000,   // OPTIMIZATION: Close idle connections after 10s (faster cleanup)
 };
 
 // Add SSL for production
@@ -10341,14 +10341,32 @@ const startServer = async (port = process.env.PORT || 3001) => {
       // Start the cleanup schedule after server is listening
       scheduleCleanup();
       
-      // Graceful shutdown handler
-      process.on('SIGTERM', () => {
-        logger.info('SIGTERM received, shutting down gracefully');
-        server.close(() => {
+      // Graceful shutdown handler - properly close all connections
+      const gracefulShutdown = async (signal) => {
+        logger.info(`${signal} received, shutting down gracefully`);
+        server.close(async () => {
+          try {
+            // Close MongoDB connection to free up connection pool
+            if (mongoose.connection.readyState === 1) {
+              await mongoose.connection.close();
+              logger.info('MongoDB connection closed');
+            }
+          } catch (err) {
+            logger.error('Error closing MongoDB connection', { error: err.message });
+          }
           logger.info('Process terminated');
           process.exit(0);
         });
-      });
+        
+        // Force exit after 10 seconds if graceful shutdown fails
+        setTimeout(() => {
+          logger.error('Forced shutdown after timeout');
+          process.exit(1);
+        }, 10000);
+      };
+      
+      process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+      process.on('SIGINT', () => gracefulShutdown('SIGINT'));
       
       resolve(server);
     });
