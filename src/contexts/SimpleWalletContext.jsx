@@ -273,6 +273,39 @@ export const SimpleWalletProvider = ({ children }) => {
     return () => { clearInterval(interval); document.removeEventListener('visibilitychange', handleVisibility); };
   }, [isConnected, address, fetchCredits]);
 
+  // Listen for account changes in the wallet
+  useEffect(() => {
+    const eth = safeGetEthereum();
+    if (!eth || !isConnected || walletType !== 'evm') return;
+
+    const handleAccountsChanged = (accounts) => {
+      if (accounts.length === 0) {
+        // User disconnected their wallet
+        disconnectWallet();
+      } else if (accounts[0].toLowerCase() !== address?.toLowerCase()) {
+        // User switched accounts - update the address
+        const newAddress = accounts[0];
+        logger.debug('Account changed', { from: address, to: newAddress });
+        setAddress(newAddress);
+        fetchCredits(newAddress, 0, true);
+        checkNFTStatus(newAddress).catch(() => {});
+      }
+    };
+
+    const handleChainChanged = () => {
+      // Chain changed - refresh balances
+      logger.debug('Chain changed, refreshing...');
+    };
+
+    eth.on('accountsChanged', handleAccountsChanged);
+    eth.on('chainChanged', handleChainChanged);
+
+    return () => {
+      eth.removeListener('accountsChanged', handleAccountsChanged);
+      eth.removeListener('chainChanged', handleChainChanged);
+    };
+  }, [isConnected, address, walletType, disconnectWallet, fetchCredits, checkNFTStatus]);
+
   const refreshCredits = useCallback(async () => { if (address) await fetchCredits(address, 0, true); }, [address, fetchCredits]);
   const setCreditsManually = useCallback((n) => setCredits(Math.max(0, Math.floor(Number(n) || 0))), []);
 

@@ -23,7 +23,8 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
     fetchCredits,
     setCreditsManually,
     walletType,
-    isNFTHolder
+    isNFTHolder,
+    connectedWalletId
   } = useSimpleWallet();
 
   const [selectedToken, setSelectedToken] = useState(null);
@@ -867,25 +868,103 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
       } else {
         
         try {
-          // Get current network info
-          const networkInfo = await getCurrentNetwork();
-          const chainId = networkInfo?.chainId;
-          const network = networkInfo?.network;
+          // Get the correct provider based on which wallet was connected
+          let provider = window.ethereum;
           
-          if (!chainId || !network) {
-            throw new Error('Unable to detect current network. Please switch to a supported network.');
+          // For Phantom EVM, ALWAYS use window.phantom.ethereum directly
+          // This is critical because window.ethereum might point to MetaMask or another wallet
+          if (connectedWalletId === 'phantom-evm' || connectedWalletId === 'phantom') {
+            if (window.phantom?.ethereum) {
+              provider = window.phantom.ethereum;
+              logger.debug('Using Phantom EVM provider directly');
+              
+              // Request accounts to ensure Phantom is unlocked and has the right account
+              try {
+                const accounts = await provider.request({ method: 'eth_requestAccounts' });
+                if (accounts[0]?.toLowerCase() !== address.toLowerCase()) {
+                  logger.warn('Phantom account mismatch', { expected: address, got: accounts[0] });
+                  setError(`⚠️ Phantom is connected with a different account.\n\nExpected: ${address.slice(0,10)}...\nPhantom has: ${accounts[0]?.slice(0,10)}...\n\nPlease switch accounts in Phantom and try again.`);
+                  return;
+                }
+              } catch (e) {
+                logger.error('Failed to get Phantom accounts', { error: e.message });
+                throw new Error('Failed to connect to Phantom. Please unlock your wallet and try again.');
+              }
+            } else {
+              throw new Error('Phantom wallet not found. Please make sure Phantom is installed and unlocked.');
+            }
+          } else {
+            // Helper to find provider matching connected wallet
+            const findConnectedProvider = () => {
+              const eth = window.ethereum;
+              if (!eth) return null;
+              
+              // Check for specific wallet based on connectedWalletId
+              switch (connectedWalletId) {
+                case 'rabby':
+                  if (window.rabby) return window.rabby;
+                  if (eth.isRabby) return eth;
+                  if (eth.providers?.length) {
+                    const rabby = eth.providers.find(p => p.isRabby);
+                    if (rabby) return rabby;
+                  }
+                  break;
+                case 'metamask':
+                  if (eth.providers?.length) {
+                    const mm = eth.providers.find(p => p.isMetaMask && !p.isRabby && !p.isCoinbaseWallet);
+                    if (mm) return mm;
+                  }
+                  if (eth.isMetaMask && !eth.isRabby) return eth;
+                  break;
+                case 'coinbase':
+                  if (window.coinbaseWalletExtension) return window.coinbaseWalletExtension;
+                  if (eth.isCoinbaseWallet) return eth;
+                  if (eth.providers?.length) {
+                    const cb = eth.providers.find(p => p.isCoinbaseWallet);
+                    if (cb) return cb;
+                  }
+                  break;
+                case 'trust':
+                  if (window.trustwallet) return window.trustwallet;
+                  if (eth.isTrust) return eth;
+                  break;
+                case 'okx':
+                  if (window.okxwallet) return window.okxwallet;
+                  if (eth.isOkxWallet) return eth;
+                  break;
+                case 'bitget':
+                  if (window.bitkeep?.ethereum) return window.bitkeep.ethereum;
+                  if (window.bitget?.ethereum) return window.bitget.ethereum;
+                  break;
+              }
+              return eth;
+            };
+            
+            provider = findConnectedProvider() || window.ethereum;
           }
           
-          // Get the current provider
-          let provider = window.ethereum;
-          if (window.ethereum.providers?.length > 0) {
-            // Multiple wallets, find the one that's connected
-            provider = window.ethereum.providers.find(p => p.isMetaMask || p.isRabby || p.isCoinbaseWallet) || window.ethereum;
+          // Get current network info from the CORRECT provider (not window.ethereum)
+          const providerChainId = await provider.request({ method: 'eth_chainId' });
+          const chainId = parseInt(providerChainId, 16);
+          const network = CHAIN_IDS[chainId];
+          
+          logger.debug('Network detection', { providerChainId, chainId, network: network?.name, connectedWalletId });
+          
+          if (!chainId || !network) {
+            throw new Error(`Unsupported network (Chain ID: ${chainId}). Please switch to Base, Ethereum, Polygon, Arbitrum, or Optimism.`);
           }
           
           const ethersProvider = new ethers.BrowserProvider(provider);
           const signer = await ethersProvider.getSigner();
           
+          // IMPORTANT: Get the actual signer address (in case user switched accounts)
+          const signerAddress = await signer.getAddress();
+          if (signerAddress.toLowerCase() !== address.toLowerCase()) {
+            logger.warn('Wallet address mismatch detected', { context: address, signer: signerAddress });
+            // Use the actual signer address for the transaction
+            setError(`⚠️ Wallet account changed! Please reconnect your wallet or refresh the page.\n\nExpected: ${address.slice(0,8)}...\nCurrent: ${signerAddress.slice(0,8)}...`);
+            return;
+          }
           
           // USDC contract addresses for different networks (MUST match backend TOKEN_ADDRESSES)
           const USDC_CONTRACTS = {
@@ -911,14 +990,37 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
           
           const usdcContract = new ethers.Contract(usdcAddress, usdcABI, signer);
           
-          // Check USDC balance
-          const balance = await usdcContract.balanceOf(address);
-          const decimals = await usdcContract.decimals();
-          const balanceFormatted = ethers.formatUnits(balance, decimals);
+          // Check USDC balance - use signerAddress to be 100% sure we're checking the right wallet
+          const balanceCheckAddress = signerAddress || address;
+          logger.debug('Checking USDC balance', { address: balanceCheckAddress, usdcContract: usdcAddress, chainId, network: network?.name });
           
+          let balance, decimals, balanceFormatted, balanceFloat;
+          try {
+            balance = await usdcContract.balanceOf(balanceCheckAddress);
+            decimals = await usdcContract.decimals();
+            balanceFormatted = ethers.formatUnits(balance, decimals);
+            balanceFloat = parseFloat(balanceFormatted);
+          } catch (balanceError) {
+            logger.error('Failed to check USDC balance', { error: balanceError.message, chainId, usdcAddress });
+            
+            // Check if the wallet is on the wrong network
+            if (balanceError.message.includes('BAD_DATA') || balanceError.message.includes('0x')) {
+              throw new Error(`Cannot read USDC balance on ${network?.name || 'this network'}.\n\nThis usually means:\n1. Phantom is on a different network than expected\n2. The USDC contract doesn't exist on this network\n\nPlease open Phantom and switch to Base network, then try again.`);
+            }
+            throw balanceError;
+          }
           
-          if (parseFloat(balanceFormatted) < parseFloat(amount)) {
-            throw new Error(`Insufficient USDC balance. You have ${balanceFormatted} USDC but need ${amount} USDC.`);
+          const amountFloat = parseFloat(amount);
+          
+          logger.debug('USDC balance check', { 
+            rawBalance: balance.toString(), 
+            formatted: balanceFormatted, 
+            requesting: amount,
+            sufficient: balanceFloat >= amountFloat
+          });
+          
+          if (balanceFloat < amountFloat) {
+            throw new Error(`Insufficient USDC balance.\n\nYour balance: ${balanceFloat.toFixed(6)} USDC\nRequested: ${amountFloat.toFixed(2)} USDC\n\nPlease add more USDC or reduce the amount.`);
           }
           
           // Convert amount to USDC units (6 decimals)
@@ -1014,8 +1116,11 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
           
           if (usdcError.code === 4001 || usdcError.message.includes('User rejected') || usdcError.message.includes('user rejected')) {
             setError('Transaction cancelled by user.');
-          } else if (usdcError.message.includes('insufficient') || usdcError.message.includes('balance')) {
-            setError(`Insufficient USDC balance: ${usdcError.message}`);
+          } else if (usdcError.message.includes('insufficient') || usdcError.message.includes('exceeds balance') || usdcError.message.includes('transfer amount exceeds')) {
+            // User-friendly message for insufficient balance
+            setError(`❌ Insufficient USDC balance on this network.\n\nPlease add USDC to your wallet or switch to a network where you have USDC.`);
+          } else if (usdcError.message.includes('balance')) {
+            setError(`❌ Insufficient USDC balance. Please add more USDC to your wallet.`);
           } else {
             setError(`USDC transaction failed: ${usdcError.message}`);
           }

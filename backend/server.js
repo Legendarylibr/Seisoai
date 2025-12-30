@@ -6136,13 +6136,12 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
  */
 async function verifySolanaPayment(txHash, walletAddress, tokenSymbol, amount) {
   try {
-    // Get Solana RPC endpoint
-    const rpcUrls = [
-      process.env.SOLANA_RPC_URL,
-      'https://api.mainnet-beta.solana.com',
-      'https://solana-mainnet.g.alchemy.com/v2/demo',
-      'https://rpc.ankr.com/solana'
-    ].filter(Boolean);
+    // Get Solana RPC endpoint from Alchemy
+    const alchemyKey = process.env.ALCHEMY_API_KEY;
+    if (!alchemyKey) {
+      throw new Error('ALCHEMY_API_KEY environment variable is not set');
+    }
+    const rpcUrls = [`https://solana-mainnet.g.alchemy.com/v2/${alchemyKey}`];
 
     let connection = null;
     let lastError = null;
@@ -7761,26 +7760,23 @@ function getProvider(chain = 'ethereum') {
     return providerCache.get(chain);
   }
 
-  // Use RPC endpoints from environment (required, no hardcoded fallbacks)
-  const rpcUrls = {
-    ethereum: process.env.ETH_RPC_URL,
-    polygon: process.env.POLYGON_RPC_URL,
-    arbitrum: process.env.ARBITRUM_RPC_URL,
-    optimism: process.env.OPTIMISM_RPC_URL,
-    base: process.env.BASE_RPC_URL
+  const alchemyKey = process.env.ALCHEMY_API_KEY;
+  if (!alchemyKey) {
+    throw new Error('ALCHEMY_API_KEY environment variable is not set');
+  }
+  
+  // Use Alchemy RPC endpoints
+  const alchemyEndpoints = {
+    ethereum: `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    polygon: `https://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    arbitrum: `https://arb-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    optimism: `https://opt-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    base: `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
   };
   
-  const envVarNames = {
-    ethereum: 'ETH_RPC_URL',
-    polygon: 'POLYGON_RPC_URL',
-    arbitrum: 'ARBITRUM_RPC_URL',
-    optimism: 'OPTIMISM_RPC_URL',
-    base: 'BASE_RPC_URL'
-  };
-  
-  const rpcUrl = rpcUrls[chain];
+  const rpcUrl = alchemyEndpoints[chain];
   if (!rpcUrl) {
-    throw new Error(`RPC URL not configured for chain: ${chain}. Please set ${envVarNames[chain] || chain.toUpperCase() + '_RPC_URL'} environment variable.`);
+    throw new Error(`Unsupported chain: ${chain}`);
   }
   
   const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
@@ -7877,14 +7873,12 @@ async function checkForSolanaUSDC(paymentAddress, expectedAmount = null) {
   try {
     logger.debug('Starting Solana USDC transfer check', { paymentAddress, expectedAmount });
     
-    // Use optimized RPC endpoints for better reliability with public endpoints
-    const rpcUrls = [
-      process.env.SOLANA_RPC_URL,
-      'https://api.mainnet-beta.solana.com',
-      'https://solana-mainnet.g.alchemy.com/v2/demo',
-      'https://rpc.ankr.com/solana',
-      'https://solana-api.projectserum.com'
-    ].filter(Boolean);
+    // Use Alchemy for Solana RPC
+    const alchemyKey = process.env.ALCHEMY_API_KEY;
+    if (!alchemyKey) {
+      throw new Error('ALCHEMY_API_KEY environment variable is not set');
+    }
+    const rpcUrls = [`https://solana-mainnet.g.alchemy.com/v2/${alchemyKey}`];
     
     let connection;
     let lastError;
@@ -9120,27 +9114,24 @@ const blockchainRpcLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// EVM RPC endpoints by chain ID (backend uses process.env, not VITE_)
+// EVM RPC endpoints by chain ID using Alchemy
 const getEvmRpcUrl = (chainId) => {
-  const rpcUrls = {
-    1: process.env.ETH_RPC_URL,
-    137: process.env.POLYGON_RPC_URL,
-    42161: process.env.ARBITRUM_RPC_URL,
-    10: process.env.OPTIMISM_RPC_URL,
-    8453: process.env.BASE_RPC_URL
+  const alchemyKey = process.env.ALCHEMY_API_KEY;
+  if (!alchemyKey) {
+    throw new Error('ALCHEMY_API_KEY environment variable is not set');
+  }
+  
+  const alchemyEndpoints = {
+    1: `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    137: `https://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    42161: `https://arb-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    10: `https://opt-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    8453: `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
   };
   
-  const chainNames = {
-    1: 'ETH_RPC_URL',
-    137: 'POLYGON_RPC_URL',
-    42161: 'ARBITRUM_RPC_URL',
-    10: 'OPTIMISM_RPC_URL',
-    8453: 'BASE_RPC_URL'
-  };
-  
-  const rpcUrl = rpcUrls[chainId];
+  const rpcUrl = alchemyEndpoints[chainId];
   if (!rpcUrl) {
-    throw new Error(`RPC URL not configured for chainId ${chainId}. Please set ${chainNames[chainId] || 'RPC_URL'} environment variable.`);
+    throw new Error(`Unsupported chainId: ${chainId}`);
   }
   return rpcUrl;
 };
@@ -9174,44 +9165,37 @@ app.post('/api/solana/rpc', blockchainRpcLimiter, async (req, res) => {
       return res.status(403).json({ success: false, error: `RPC method '${method}' is not allowed` });
     }
     
-    // Try RPC endpoints in order
-    const rpcUrls = [
-      process.env.SOLANA_RPC_URL,
-      'https://api.mainnet-beta.solana.com',
-      'https://rpc.ankr.com/solana',
-      'https://solana-mainnet.g.alchemy.com/v2/demo'
-    ].filter(url => url && url.trim());
-    
-    let lastError = null;
-    
-    for (const rpcUrl of rpcUrls) {
-      try {
-        const response = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method,
-            params: params || []
-          })
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          return res.json({ success: true, result: data });
-        }
-        
-        lastError = new Error(`RPC returned ${response.status}`);
-      } catch (err) {
-        lastError = err;
-        logger.debug('Solana RPC failed, trying next', { rpcUrl: rpcUrl.substring(0, 50), error: err.message });
-        continue;
-      }
+    // Use Alchemy for Solana RPC
+    const alchemyKey = process.env.ALCHEMY_API_KEY;
+    if (!alchemyKey) {
+      return res.status(503).json({ success: false, error: 'ALCHEMY_API_KEY environment variable is not set' });
     }
     
-    logger.error('All Solana RPC endpoints failed', { method, lastError: lastError?.message });
-    return res.status(502).json({ success: false, error: 'All Solana RPC endpoints failed' });
+    const rpcUrl = `https://solana-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+    
+    try {
+      const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method,
+          params: params || []
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return res.json({ success: true, result: data });
+      }
+      
+      logger.error('Solana RPC failed', { method, status: response.status });
+      return res.status(502).json({ success: false, error: `Solana RPC returned ${response.status}` });
+    } catch (err) {
+      logger.error('Solana RPC error', { method, error: err.message });
+      return res.status(502).json({ success: false, error: 'Solana RPC request failed' });
+    }
     
   } catch (error) {
     logger.error('Solana RPC proxy error', { error: error.message });

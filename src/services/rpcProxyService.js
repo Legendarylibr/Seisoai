@@ -12,24 +12,40 @@ import { API_URL } from '../utils/apiConfig.js';
  * @returns {Promise<any>} The RPC result
  */
 export async function solanaRpc(method, params = []) {
-  const response = await fetch(`${API_URL}/api/solana/rpc`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method, params })
-  });
-  
-  const data = await response.json();
-  
-  if (!data.success) {
-    throw new Error(data.error || 'Solana RPC call failed');
+  try {
+    const response = await fetch(`${API_URL}/api/solana/rpc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method, params })
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Solana RPC call failed');
+    }
+    
+    // Backend returns: { success: true, result: { jsonrpc: "2.0", result: {...}, id: 1 } }
+    // Extract the actual RPC result
+    const rpcResponse = data.result;
+    
+    if (rpcResponse?.error) {
+      throw new Error(rpcResponse.error.message || 'Solana RPC error');
+    }
+    
+    return rpcResponse?.result;
+  } catch (error) {
+    // Re-throw with more context
+    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+      throw new Error(`Backend proxy unavailable. Make sure backend is running on ${API_URL || 'http://localhost:3001'}`);
+    }
+    throw error;
   }
-  
-  // Return the actual RPC result
-  if (data.result?.error) {
-    throw new Error(data.result.error.message || 'Solana RPC error');
-  }
-  
-  return data.result?.result;
 }
 
 /**
@@ -46,18 +62,25 @@ export async function evmRpc(chainId, method, params = []) {
     body: JSON.stringify({ chainId, method, params })
   });
   
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+  
   const data = await response.json();
   
   if (!data.success) {
     throw new Error(data.error || 'EVM RPC call failed');
   }
   
-  // Return the actual RPC result
-  if (data.result?.error) {
-    throw new Error(data.result.error.message || 'EVM RPC error');
+  // Backend returns: { success: true, result: { jsonrpc: "2.0", result: {...}, id: 1 } }
+  // Extract the actual RPC result
+  const rpcResponse = data.result;
+  
+  if (rpcResponse?.error) {
+    throw new Error(rpcResponse.error.message || 'EVM RPC error');
   }
   
-  return data.result?.result;
+  return rpcResponse?.result;
 }
 
 /**
@@ -66,7 +89,12 @@ export async function evmRpc(chainId, method, params = []) {
  */
 export async function getLatestBlockhash() {
   const result = await solanaRpc('getLatestBlockhash', [{ commitment: 'confirmed' }]);
-  return result?.value || result;
+  // Result structure: { context: {...}, value: { blockhash: "...", lastValidBlockHeight: ... } }
+  if (result?.value) {
+    return result.value;
+  }
+  // Fallback if structure is different
+  return result;
 }
 
 /**
