@@ -13,6 +13,7 @@ import {
   verifyPayment,
   getPaymentWallet
 } from '../services/paymentService';
+import { getLatestBlockhash as proxyGetBlockhash, getSignatureStatus as proxyGetSignatureStatus, getUsdcBalance as proxyGetUsdcBalance } from '../services/rpcProxyService';
 import { X, CreditCard, Coins, RefreshCw, ChevronDown, ChevronUp, Wallet, Copy, Check, ExternalLink } from 'lucide-react';
 
 const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess = null }) => {
@@ -103,28 +104,43 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
       let lastError = null;
       const failedRpcs = [];
       
-      // Try each RPC endpoint until one works with better error handling
-      for (const url of rpcUrls) {
-        try {
-          logger.debug('Trying Solana RPC', { url });
-          const testConnection = new Connection(url, {
-            commitment: 'confirmed',
-            disableRetryOnRateLimit: false
-          });
-          // Test the connection with timeout using getLatestBlockhash (more reliable than getHealth)
-          await Promise.race([
-            testConnection.getLatestBlockhash(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 8000))
-          ]);
-          connection = testConnection;
-          rpcUrl = url;
-          logger.debug('Connected to Solana RPC');
-          break;
-        } catch (error) {
-          logger.warn('Failed to connect to RPC', { error: error.message });
-          failedRpcs.push(url);
-          lastError = error;
-          continue;
+      // Try backend proxy first - this avoids CORS issues in production
+      try {
+        await proxyGetBlockhash();
+        // Proxy works - create a connection object for local operations
+        // The actual RPC calls will use the proxy
+        connection = new Connection(rpcUrls[0] || 'https://api.mainnet-beta.solana.com', {
+          commitment: 'confirmed',
+          disableRetryOnRateLimit: false
+        });
+        rpcUrl = 'proxy';
+        logger.debug('Using backend proxy for Solana RPC');
+      } catch (proxyError) {
+        logger.warn('Backend proxy failed, trying direct RPC connections', { error: proxyError.message });
+        
+        // Fall back to direct RPC connections
+        for (const url of rpcUrls) {
+          try {
+            logger.debug('Trying Solana RPC', { url });
+            const testConnection = new Connection(url, {
+              commitment: 'confirmed',
+              disableRetryOnRateLimit: false
+            });
+            // Test the connection with timeout using getLatestBlockhash (more reliable than getHealth)
+            await Promise.race([
+              testConnection.getLatestBlockhash(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 8000))
+            ]);
+            connection = testConnection;
+            rpcUrl = url;
+            logger.debug('Connected to Solana RPC');
+            break;
+          } catch (error) {
+            logger.warn('Failed to connect to RPC', { error: error.message });
+            failedRpcs.push(url);
+            lastError = error;
+            continue;
+          }
         }
       }
       
@@ -205,9 +221,19 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
       );
       transaction.add(transferInstruction);
       
-      // Get recent blockhash and set transaction parameters
-      logger.debug('Getting recent blockhash');
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      // Get recent blockhash via backend proxy (avoids CORS issues)
+      logger.debug('Getting recent blockhash via proxy');
+      let blockhash, lastValidBlockHeight;
+      try {
+        const blockHashResult = await proxyGetBlockhash();
+        blockhash = blockHashResult.blockhash;
+        lastValidBlockHeight = blockHashResult.lastValidBlockHeight;
+      } catch (proxyError) {
+        logger.warn('Proxy blockhash failed, trying direct connection', { error: proxyError.message });
+        const result = await connection.getLatestBlockhash('confirmed');
+        blockhash = result.blockhash;
+        lastValidBlockHeight = result.lastValidBlockHeight;
+      }
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = userPublicKey;
       
@@ -395,16 +421,26 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
       
       for (const network of networks) {
         try {
-          // Create provider for this network
-          const provider = new ethers.JsonRpcProvider(getRPCUrl(network.chainId));
-          const contract = new ethers.Contract(network.usdcAddress, usdcABI, provider);
+          let formattedBalance;
           
-          const [balance, decimals] = await Promise.all([
-            contract.balanceOf(address),
-            contract.decimals()
-          ]);
+          // Try backend proxy first (avoids CORS issues in production)
+          try {
+            const proxyBalance = await proxyGetUsdcBalance(network.chainId, address, network.usdcAddress);
+            formattedBalance = parseFloat(proxyBalance);
+          } catch (proxyError) {
+            // Fall back to direct RPC call
+            logger.debug('Proxy balance check failed, trying direct', { network: network.name, error: proxyError.message });
+            const provider = new ethers.JsonRpcProvider(getRPCUrl(network.chainId));
+            const contract = new ethers.Contract(network.usdcAddress, usdcABI, provider);
+            
+            const [balance, decimals] = await Promise.all([
+              contract.balanceOf(address),
+              contract.decimals()
+            ]);
+            
+            formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
+          }
           
-          const formattedBalance = parseFloat(ethers.formatUnits(balance, decimals));
           balances[network.chainId] = {
             balance: formattedBalance,
             network: network.name,
@@ -667,19 +703,29 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
           let connection = null;
           let lastError = null;
           
-          for (const url of rpcUrls) {
-            try {
-              const testConnection = new Connection(url, { commitment: 'confirmed' });
-              await Promise.race([
-                testConnection.getLatestBlockhash(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
-              ]);
-              connection = testConnection;
-              logger.debug('Using RPC for confirmation');
-              break;
-            } catch (error) {
-              lastError = error;
-              continue;
+          // Try proxy first - this avoids CORS issues in production
+          try {
+            await proxyGetBlockhash();
+            // Proxy works - use any connection for local operations, proxy for RPC
+            connection = new Connection(rpcUrls[0] || 'https://api.mainnet-beta.solana.com', { commitment: 'confirmed' });
+            logger.debug('Using backend proxy for Solana RPC');
+          } catch (proxyError) {
+            logger.debug('Proxy failed, trying direct connections', { error: proxyError.message });
+            // Fall back to direct connections
+            for (const url of rpcUrls) {
+              try {
+                const testConnection = new Connection(url, { commitment: 'confirmed' });
+                await Promise.race([
+                  testConnection.getLatestBlockhash(),
+                  new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
+                ]);
+                connection = testConnection;
+                logger.debug('Using direct RPC for confirmation');
+                break;
+              } catch (error) {
+                lastError = error;
+                continue;
+              }
             }
           }
           
@@ -723,9 +769,18 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
             await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
             attempts++;
             
-            const status = await connection.getSignatureStatus(txSignature);
-            if (status.value?.confirmationStatus === 'confirmed' || status.value?.confirmationStatus === 'finalized') {
-              if (status.value.err) {
+            // Try proxy first for signature status
+            let statusValue;
+            try {
+              statusValue = await proxyGetSignatureStatus(txSignature);
+            } catch (proxyErr) {
+              logger.debug('Proxy signature check failed, using direct', { error: proxyErr.message });
+              const status = await connection.getSignatureStatus(txSignature);
+              statusValue = status.value;
+            }
+            
+            if (statusValue?.confirmationStatus === 'confirmed' || statusValue?.confirmationStatus === 'finalized') {
+              if (statusValue.err) {
                 throw new Error('Transaction failed on blockchain');
               }
               confirmed = true;

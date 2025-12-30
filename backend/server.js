@@ -9098,6 +9098,187 @@ app.post('/api/subscription/verify', async (req, res) => {
 });
 
 /**
+ * Blockchain RPC Proxy - proxies RPC calls through the backend to avoid CORS issues
+ * This allows the frontend to make blockchain RPC calls via the backend
+ */
+const blockchainRpcLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 120, // 120 requests per minute per IP
+  message: { success: false, error: 'Too many RPC requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// EVM RPC endpoints by chain ID (backend uses process.env, not VITE_)
+const getEvmRpcUrl = (chainId) => {
+  const rpcUrls = {
+    1: process.env.ETH_RPC_URL || process.env.VITE_ETH_RPC_URL || 'https://eth.llamarpc.com',
+    137: process.env.POLYGON_RPC_URL || process.env.VITE_POLYGON_RPC_URL || 'https://polygon.llamarpc.com',
+    42161: process.env.ARBITRUM_RPC_URL || process.env.VITE_ARBITRUM_RPC_URL || 'https://arbitrum.llamarpc.com',
+    10: process.env.OPTIMISM_RPC_URL || process.env.VITE_OPTIMISM_RPC_URL || 'https://optimism.llamarpc.com',
+    8453: process.env.BASE_RPC_URL || process.env.VITE_BASE_RPC_URL || 'https://base.llamarpc.com'
+  };
+  return rpcUrls[chainId] || rpcUrls[1];
+};
+
+// Solana RPC Proxy
+app.post('/api/solana/rpc', blockchainRpcLimiter, async (req, res) => {
+  try {
+    const { method, params } = req.body;
+    
+    if (!method) {
+      return res.status(400).json({ success: false, error: 'Missing RPC method' });
+    }
+    
+    // Whitelist of allowed RPC methods for security
+    const allowedMethods = [
+      'getLatestBlockhash',
+      'getBalance',
+      'getTokenAccountBalance',
+      'getAccountInfo',
+      'getSignatureStatuses',
+      'getTransaction',
+      'sendTransaction',
+      'simulateTransaction',
+      'getRecentBlockhash',
+      'getFeeForMessage',
+      'getMinimumBalanceForRentExemption'
+    ];
+    
+    if (!allowedMethods.includes(method)) {
+      logger.warn('Blocked disallowed Solana RPC method', { method });
+      return res.status(403).json({ success: false, error: `RPC method '${method}' is not allowed` });
+    }
+    
+    // Try RPC endpoints in order
+    const rpcUrls = [
+      process.env.SOLANA_RPC_URL,
+      'https://api.mainnet-beta.solana.com',
+      'https://rpc.ankr.com/solana',
+      'https://solana-mainnet.g.alchemy.com/v2/demo'
+    ].filter(url => url && url.trim());
+    
+    let lastError = null;
+    
+    for (const rpcUrl of rpcUrls) {
+      try {
+        const response = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method,
+            params: params || []
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          return res.json({ success: true, result: data });
+        }
+        
+        lastError = new Error(`RPC returned ${response.status}`);
+      } catch (err) {
+        lastError = err;
+        logger.debug('Solana RPC failed, trying next', { rpcUrl: rpcUrl.substring(0, 50), error: err.message });
+        continue;
+      }
+    }
+    
+    logger.error('All Solana RPC endpoints failed', { method, lastError: lastError?.message });
+    return res.status(502).json({ success: false, error: 'All Solana RPC endpoints failed' });
+    
+  } catch (error) {
+    logger.error('Solana RPC proxy error', { error: error.message });
+    return res.status(500).json({ success: false, error: 'RPC proxy error' });
+  }
+});
+
+// EVM RPC Proxy
+app.post('/api/evm/rpc', blockchainRpcLimiter, async (req, res) => {
+  try {
+    const { chainId, method, params } = req.body;
+    
+    if (!method) {
+      return res.status(400).json({ success: false, error: 'Missing RPC method' });
+    }
+    
+    if (!chainId) {
+      return res.status(400).json({ success: false, error: 'Missing chainId' });
+    }
+    
+    // Whitelist of allowed RPC methods for security
+    const allowedMethods = [
+      'eth_call',
+      'eth_getBalance',
+      'eth_chainId',
+      'eth_blockNumber',
+      'eth_getTransactionReceipt',
+      'eth_getTransactionByHash',
+      'eth_gasPrice',
+      'eth_estimateGas',
+      'eth_getCode',
+      'eth_getLogs'
+    ];
+    
+    if (!allowedMethods.includes(method)) {
+      logger.warn('Blocked disallowed EVM RPC method', { method, chainId });
+      return res.status(403).json({ success: false, error: `RPC method '${method}' is not allowed` });
+    }
+    
+    const rpcUrl = getEvmRpcUrl(chainId);
+    
+    try {
+      const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method,
+          params: params || []
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return res.json({ success: true, result: data });
+      }
+      
+      logger.error('EVM RPC failed', { chainId, method, status: response.status });
+      return res.status(502).json({ success: false, error: `RPC returned ${response.status}` });
+      
+    } catch (err) {
+      logger.error('EVM RPC error', { chainId, method, error: err.message });
+      return res.status(502).json({ success: false, error: 'RPC request failed' });
+    }
+    
+  } catch (error) {
+    logger.error('EVM RPC proxy error', { error: error.message });
+    return res.status(500).json({ success: false, error: 'RPC proxy error' });
+  }
+});
+
+// Get RPC URL endpoint - returns the appropriate RPC URL for client-side use
+app.get('/api/rpc/config', blockchainRpcLimiter, async (req, res) => {
+  try {
+    // Return info about available RPC proxies
+    res.json({
+      success: true,
+      solanaProxy: '/api/solana/rpc',
+      evmProxy: '/api/evm/rpc',
+      supportedChains: {
+        solana: ['mainnet'],
+        evm: [1, 137, 42161, 10, 8453]
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to get RPC config' });
+  }
+});
+
+/**
  * Instant payment detection - checks for payments immediately after wallet connection
  * Note: Rate limiting applied via instantCheckLimiter above
  */
