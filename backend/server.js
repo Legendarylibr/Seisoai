@@ -4434,9 +4434,13 @@ if (missingRecommended.length > 0) {
 const mongoOptions = {
   maxPoolSize: 5,         // Maximum connections in pool (reduced for hosting limits)
   minPoolSize: 1,         // Keep 1 connection warm
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-  maxIdleTimeMS: 10000,   // OPTIMIZATION: Close idle connections after 10s (faster cleanup)
+  serverSelectionTimeoutMS: 10000,  // Increased for better reliability
+  socketTimeoutMS: 30000,  // Reduced to fail faster
+  maxIdleTimeMS: 30000,   // Keep connections longer to avoid reconnection overhead
+  connectTimeoutMS: 10000, // Connection timeout
+  heartbeatFrequencyMS: 10000, // Check connection health every 10s
+  retryWrites: true,      // Auto-retry failed writes
+  retryReads: true,       // Auto-retry failed reads
 };
 
 // Add SSL for production
@@ -4547,10 +4551,22 @@ mongoose.connection.on('connected', async () => {
 });
 
 mongoose.connection.on('error', (err) => {
+  // Provide helpful error messages based on error type
+  let hint = 'Check MONGODB_URI environment variable and MongoDB accessibility';
+  if (err.message && err.message.includes('IP')) {
+    hint = 'Your IP address may not be whitelisted in MongoDB Atlas. Go to Network Access → Add IP Address.';
+  } else if (err.message && err.message.includes('querySrv')) {
+    hint = 'DNS SRV lookup failed. Check your internet connection or try a direct connection string.';
+  } else if (err.message && err.message.includes('timed out')) {
+    hint = 'Connection timed out. Your IP may not be whitelisted in MongoDB Atlas, or there are network issues.';
+  } else if (err.message && err.message.includes('authentication')) {
+    hint = 'Authentication failed. Check your MongoDB username and password in MONGODB_URI.';
+  }
+  
   logger.error('MongoDB connection error', { 
     error: err.message,
     code: err.code,
-    note: 'Check MONGODB_URI environment variable and MongoDB accessibility'
+    hint
   });
   if (process.env.NODE_ENV === 'production') {
     logger.error('❌ CRITICAL: MongoDB connection failed in production. Signup will not work.');
@@ -6759,8 +6775,8 @@ app.post('/api/auth/signup', authRateLimiter, async (req, res) => {
       });
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    // Check if user already exists (with timeout)
+    const existingUser = await User.findOne({ email: email.toLowerCase() }).maxTimeMS(10000);
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -6888,10 +6904,18 @@ app.post('/api/auth/signup', authRateLimiter, async (req, res) => {
       }
     }
     
-    // Check for common issues
-    if (error.message && error.message.includes('buffering timed out')) {
+    // Handle MongoDB timeout/connection errors
+    if (error.name === 'MongoNetworkTimeoutError' || 
+        error.name === 'MongooseError' ||
+        error.message?.includes('timed out') ||
+        error.message?.includes('buffering timed out')) {
       logger.error('MongoDB connection issue - MONGODB_URI may not be set or MongoDB is not accessible');
+      return res.status(503).json({
+        success: false,
+        error: 'Database temporarily unavailable. Please try again in a moment.'
+      });
     }
+    
     if (error.message && error.message.includes('JWT_SECRET')) {
       logger.error('JWT_SECRET is missing or invalid');
     }
@@ -6917,12 +6941,22 @@ app.post('/api/auth/signin', authRateLimiter, async (req, res) => {
       });
     }
 
-    // Find user and include password for comparison
-    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    // Find user with timeout to prevent hanging on MongoDB issues
+    const user = await User.findOne({ email: email.toLowerCase() })
+      .select('+password')
+      .maxTimeMS(10000); // 10 second timeout
     if (!user) {
       return res.status(401).json({
         success: false,
         error: 'Invalid email or password'
+      });
+    }
+
+    // Check if user has a password set (wallet-only users may not have one)
+    if (!user.password) {
+      return res.status(401).json({
+        success: false,
+        error: 'This account was created with a wallet. Please connect your wallet to sign in, or reset your password.'
       });
     }
 
@@ -6985,13 +7019,20 @@ app.post('/api/auth/signin', authRateLimiter, async (req, res) => {
       hasStack: !!error.stack
     });
     
+    // Handle MongoDB timeout/connection errors
+    if (error.name === 'MongoNetworkTimeoutError' || 
+        error.name === 'MongooseError' ||
+        error.message?.includes('timed out') ||
+        error.message?.includes('buffering timed out')) {
+      return res.status(503).json({
+        success: false,
+        error: 'Database temporarily unavailable. Please try again in a moment.'
+      });
+    }
+    
     // Handle specific known errors
     if (error.message && error.message.includes('data and hash arguments required')) {
-      // This is an ethers.js error that shouldn't happen in signin
-      // Likely from a concurrent request or unrelated code path
-      logger.warn('Unexpected ethers.js error in signin - likely from unrelated code path', {
-        error: error.message
-      });
+      // This is a bcrypt error when password hash is missing
       return res.status(500).json({
         success: false,
         error: 'Sign in failed. Please try again.'
