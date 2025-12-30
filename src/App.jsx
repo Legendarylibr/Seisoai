@@ -12,7 +12,7 @@ import PromptOptimizer from './components/PromptOptimizer';
 import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import GenerateButton from './components/GenerateButton';
-import { Grid, Sparkles, ChevronDown } from 'lucide-react';
+import { Grid, Sparkles, ChevronDown, Film, Music } from 'lucide-react';
 import logger from './utils/logger.js';
 import { API_URL } from './utils/apiConfig.js';
 
@@ -21,12 +21,16 @@ const TokenPaymentModal = lazy(() => import('./components/TokenPaymentModal'));
 const StripePaymentModal = lazy(() => import('./components/StripePaymentModal'));
 const PaymentSuccessModal = lazy(() => import('./components/PaymentSuccessModal'));
 const ImageGallery = lazy(() => import('./components/ImageGallery'));
+const VideoGenerator = lazy(() => import('./components/VideoGenerator'));
+const MusicGenerator = lazy(() => import('./components/MusicGenerator'));
 
 function App() {
   const [activeTab, setActiveTab] = useState('generate');
 
   const tabs = [
     { id: 'generate', name: 'Generate', icon: Sparkles },
+    { id: 'video', name: 'Video', icon: Film },
+    { id: 'music', name: 'Music', icon: Music },
     { id: 'gallery', name: 'Gallery', icon: Grid }
   ];
 
@@ -193,6 +197,8 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
     <div className="h-full">
       <AuthGuard requireCredits={false}>
         {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
+        {activeTab === 'video' && <VideoTab />}
+        {activeTab === 'music' && <MusicTab />}
         {activeTab === 'gallery' && <GalleryTab />}
       </AuthGuard>
     </div>
@@ -356,7 +362,19 @@ const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripe
   );
 });
 
-// PERFORMANCE: Memoized gallery tab with lazy loading
+// PERFORMANCE: Memoized tabs with lazy loading
+const VideoTab = memo(() => (
+  <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /></div>}>
+    <div className="h-full overflow-auto"><VideoGenerator /></div>
+  </Suspense>
+));
+
+const MusicTab = memo(() => (
+  <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /></div>}>
+    <div className="h-full overflow-auto"><MusicGenerator /></div>
+  </Suspense>
+));
+
 const GalleryTab = memo(() => (
   <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /></div>}>
     <div className="h-full overflow-auto"><ImageGallery /></div>
