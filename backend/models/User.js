@@ -151,4 +151,3 @@ export function buildUserUpdateQuery(user) {
 const User = mongoose.model('User', userSchema);
 
 export default User;
-export { buildUserUpdateQuery };
