@@ -11,12 +11,18 @@ export default defineConfig({
     ],
     exclude: [
       '@walletconnect/ethereum-provider'
-    ]
+    ],
+    esbuildOptions: {
+      // Define Buffer globally for esbuild optimization
+      define: {
+        global: 'globalThis',
+      },
+    }
   },
   resolve: {
     alias: {
       // Add Buffer polyfill for Solana
-      'buffer': 'buffer'
+      buffer: 'buffer/'
     }
   },
   define: {

@@ -1475,10 +1475,31 @@ if (!fs.existsSync(distPath)) {
   logger.warn(`⚠️  Dist directory not found at ${distPath}. Frontend may not be built.`);
 } else {
   logger.info(`✅ Serving static files from ${distPath}`);
+  
+  // Custom cache control: Cache JS/CSS assets with hashes for 1 year, but never cache HTML
   app.use(express.static(distPath, {
-    maxAge: '1d', // Cache static assets for 1 day
     etag: true,
-    lastModified: true
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+      // Get the file extension
+      const ext = path.extname(filePath).toLowerCase();
+      
+      // HTML files should NEVER be cached - they contain references to hashed assets
+      if (ext === '.html') {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+      // Hashed assets (JS, CSS in /assets/ folder) can be cached for 1 year
+      // These files have content hashes in their names, so new content = new filename
+      else if (filePath.includes('/assets/') && (ext === '.js' || ext === '.css')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+      // Other static files (images, fonts) - cache for 1 day
+      else {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      }
+    }
   }));
 }
 
@@ -10238,6 +10259,13 @@ app.use('/api/*', (req, res) => {
 // This MUST be last so static files are served first
 app.get('*', (req, res) => {
   const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
+  
+  // CRITICAL: Never cache index.html - it contains references to hashed assets
+  // If cached, users will try to load old JS files that no longer exist
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  
   res.sendFile(indexPath);
 });
 

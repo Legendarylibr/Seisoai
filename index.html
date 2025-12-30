@@ -341,6 +341,50 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- CRITICAL: Buffer polyfill must run BEFORE any modules load (including Solana) -->
+    <script>
+      // Synchronously set up Buffer for Solana before any ES modules execute
+      (function() {
+        'use strict';
+        // Simple Buffer polyfill for browser - will be replaced by full polyfill in main.jsx
+        // This ensures window.Buffer exists before any lazy-loaded Solana code runs
+        if (typeof window.Buffer === 'undefined') {
+          // Create a minimal Buffer shim that works for Solana's basic needs
+          // The full polyfill from 'buffer' package will override this
+          window.Buffer = window.Buffer || {
+            from: function(data, encoding) {
+              if (typeof data === 'string') {
+                if (encoding === 'base64') {
+                  return Uint8Array.from(atob(data), c => c.charCodeAt(0));
+                }
+                return new TextEncoder().encode(data);
+              }
+              return new Uint8Array(data);
+            },
+            alloc: function(size) {
+              return new Uint8Array(size);
+            },
+            isBuffer: function(obj) {
+              return obj instanceof Uint8Array;
+            },
+            concat: function(list, length) {
+              if (length === undefined) {
+                length = list.reduce((acc, buf) => acc + buf.length, 0);
+              }
+              const result = new Uint8Array(length);
+              let offset = 0;
+              for (const buf of list) {
+                result.set(buf, offset);
+                offset += buf.length;
+              }
+              return result;
+            }
+          };
+          window.global = window;
+          console.log('🔧 Buffer shim initialized for Solana');
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
