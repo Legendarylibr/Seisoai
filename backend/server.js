@@ -1481,11 +1481,13 @@ if (!fs.existsSync(distPath)) {
     etag: true,
     lastModified: true,
     setHeaders: (res, filePath) => {
-      // Get the file extension
+      // Get the file extension and filename
       const ext = path.extname(filePath).toLowerCase();
+      const filename = path.basename(filePath).toLowerCase();
       
       // HTML files should NEVER be cached - they contain references to hashed assets
-      if (ext === '.html') {
+      // Check both extension and filename (for index.html served at /)
+      if (ext === '.html' || filename === 'index.html') {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
