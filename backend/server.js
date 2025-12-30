@@ -4276,13 +4276,17 @@ app.post('/api/wan-animate/complete', authenticateToken, async (req, res) => {
     const previousCredits = user.credits || 0;
     
     // If no additional credits needed (short video), just add to gallery without credit deduction
+    // Use $slice to prevent unbounded array growth (MongoDB 16MB document limit)
+    const MAX_HISTORY_ITEMS = 200;
+    const MAX_GALLERY_ITEMS = 100;
+    
     if (creditsToDeduct <= 0) {
       updateResult = await User.findOneAndUpdate(
         updateQuery,
         {
           $push: {
-            generationHistory: generation,
-            gallery: galleryItem
+            generationHistory: { $each: [generation], $slice: -MAX_HISTORY_ITEMS },
+            gallery: { $each: [galleryItem], $slice: -MAX_GALLERY_ITEMS }
           }
         },
         { new: true }
@@ -4313,8 +4317,8 @@ app.post('/api/wan-animate/complete', authenticateToken, async (req, res) => {
             totalCreditsSpent: creditsToDeduct
           },
           $push: {
-            generationHistory: generation,
-            gallery: galleryItem
+            generationHistory: { $each: [generation], $slice: -MAX_HISTORY_ITEMS },
+            gallery: { $each: [galleryItem], $slice: -MAX_GALLERY_ITEMS }
           }
         },
         { new: true }
@@ -4430,17 +4434,23 @@ if (missingRecommended.length > 0) {
   });
 }
 
-// MongoDB connection - OPTIMIZATION: Enhanced pooling for better performance
+// MongoDB global settings for shared pool behavior
+mongoose.set('bufferCommands', true);  // Buffer commands when disconnected (graceful handling)
+mongoose.set('autoIndex', process.env.NODE_ENV !== 'production');  // Only auto-index in dev
+
+// MongoDB connection - OPTIMIZATION: Shared pool with optimized settings
 const mongoOptions = {
-  maxPoolSize: 5,         // Maximum connections in pool (reduced for hosting limits)
-  minPoolSize: 1,         // Keep 1 connection warm
-  serverSelectionTimeoutMS: 10000,  // Increased for better reliability
-  socketTimeoutMS: 30000,  // Reduced to fail faster
-  maxIdleTimeMS: 30000,   // Keep connections longer to avoid reconnection overhead
-  connectTimeoutMS: 10000, // Connection timeout
+  maxPoolSize: 10,        // Maximum connections in shared pool
+  minPoolSize: 2,         // Keep 2 connections warm for immediate availability
+  serverSelectionTimeoutMS: 10000,  // Timeout for server selection
+  socketTimeoutMS: 45000,  // Socket timeout (allows for longer queries)
+  maxIdleTimeMS: 60000,   // Keep idle connections for 60s before closing
+  connectTimeoutMS: 10000, // Initial connection timeout
   heartbeatFrequencyMS: 10000, // Check connection health every 10s
   retryWrites: true,      // Auto-retry failed writes
   retryReads: true,       // Auto-retry failed reads
+  waitQueueTimeoutMS: 10000, // Fail fast if pool exhausted (prevents queue overload)
+  compressors: ['zlib'],  // Compress data for network efficiency
 };
 
 // Add SSL for production
@@ -4546,7 +4556,12 @@ async function createIndexes() {
 
 // Create indexes after connection
 mongoose.connection.on('connected', async () => {
-  logger.info('MongoDB connected successfully');
+  logger.info('MongoDB connected successfully', {
+    poolSize: mongoOptions.maxPoolSize,
+    minPool: mongoOptions.minPoolSize,
+    host: mongoose.connection.host,
+    name: mongoose.connection.name
+  });
   await createIndexes();
 });
 
@@ -4576,8 +4591,108 @@ mongoose.connection.on('error', (err) => {
 });
 
 mongoose.connection.on('disconnected', () => {
-  logger.warn('MongoDB disconnected');
+  logger.warn('MongoDB disconnected - will auto-reconnect');
 });
+
+// MongoDB reconnection with exponential backoff
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const BASE_RECONNECT_DELAY = 1000; // 1 second
+
+mongoose.connection.on('disconnected', () => {
+  if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && process.env.MONGODB_URI) {
+    const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000); // Max 30s
+    reconnectAttempts++;
+    logger.info(`MongoDB reconnection attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+    setTimeout(() => {
+      mongoose.connect(process.env.MONGODB_URI, mongoOptions).catch((err) => {
+        logger.error('MongoDB reconnection failed', { attempt: reconnectAttempts, error: err.message });
+      });
+    }, delay);
+  } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    logger.error('MongoDB max reconnection attempts reached - manual intervention required');
+  }
+});
+
+mongoose.connection.on('connected', () => {
+  if (reconnectAttempts > 0) {
+    logger.info(`MongoDB reconnected after ${reconnectAttempts} attempts`);
+    reconnectAttempts = 0; // Reset counter on successful connection
+  }
+});
+
+// Circuit breaker for DB operations - prevents cascade failures
+const dbCircuitBreaker = {
+  failures: 0,
+  lastFailure: null,
+  isOpen: false,
+  threshold: 5,        // Open circuit after 5 failures
+  resetTimeout: 30000, // Try again after 30 seconds
+  
+  recordFailure() {
+    this.failures++;
+    this.lastFailure = Date.now();
+    if (this.failures >= this.threshold) {
+      this.isOpen = true;
+      logger.warn('DB circuit breaker OPEN - too many failures, pausing DB operations');
+      setTimeout(() => {
+        this.isOpen = false;
+        this.failures = 0;
+        logger.info('DB circuit breaker CLOSED - resuming DB operations');
+      }, this.resetTimeout);
+    }
+  },
+  
+  recordSuccess() {
+    this.failures = 0;
+  },
+  
+  canProceed() {
+    return !this.isOpen && mongoose.connection.readyState === 1;
+  }
+};
+
+// Export for use in routes
+global.dbCircuitBreaker = dbCircuitBreaker;
+
+/**
+ * Safe DB operation wrapper with timeout and circuit breaker
+ * @param {Function} operation - Async function that performs DB operation
+ * @param {Object} options - { timeout: ms, fallback: value if fails }
+ * @returns {Promise} - Result of operation or fallback
+ */
+async function safeDbOperation(operation, options = {}) {
+  const { timeout = 10000, fallback = null, operationName = 'DB operation' } = options;
+  
+  // Check circuit breaker
+  if (!dbCircuitBreaker.canProceed()) {
+    logger.warn(`${operationName} skipped - circuit breaker open or DB disconnected`);
+    return fallback;
+  }
+  
+  try {
+    // Race between operation and timeout
+    const result = await Promise.race([
+      operation(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('DB operation timeout')), timeout)
+      )
+    ]);
+    
+    dbCircuitBreaker.recordSuccess();
+    return result;
+  } catch (error) {
+    dbCircuitBreaker.recordFailure();
+    logger.error(`${operationName} failed`, { 
+      error: error.message,
+      circuitFailures: dbCircuitBreaker.failures 
+    });
+    return fallback;
+  }
+}
+
+// Make safeDbOperation available globally
+global.safeDbOperation = safeDbOperation;
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
@@ -5294,6 +5409,7 @@ const addCreditsToUser = async (user, {
   }
   
   // Atomic update: increment credits and add payment history in one operation
+  // Use $slice to prevent unbounded growth (keeps last 500 payments)
   const updatedUser = await User.findOneAndUpdate(
     updateQuery,
     {
@@ -5302,7 +5418,7 @@ const addCreditsToUser = async (user, {
         totalCreditsEarned: credits
       },
       $push: {
-        paymentHistory: paymentEntry
+        paymentHistory: { $each: [paymentEntry], $slice: -500 }
       }
     },
     { new: true }
@@ -6451,7 +6567,7 @@ app.get('/api/health', (req, res) => {
     
     // Minimal health response - don't expose sensitive configuration details
     const health = {
-      status: hasAllCritical && dbState === 1 ? 'healthy' : 'degraded',
+      status: hasAllCritical && dbState === 1 && !dbCircuitBreaker.isOpen ? 'healthy' : 'degraded',
       timestamp: new Date().toISOString(),
       // Only expose basic status, not detailed configuration
       database: dbStatus === 'connected' ? 'connected' : 'disconnected',
@@ -6466,8 +6582,14 @@ app.get('/api/health', (req, res) => {
         timestamp: health.timestamp
       });
     } else {
-      // Development can have slightly more info, but still sanitized
-      res.status(200).json(health);
+      // Development can have slightly more info for debugging
+      res.status(200).json({
+        ...health,
+        dbPool: {
+          circuitBreaker: dbCircuitBreaker.isOpen ? 'open' : 'closed',
+          failures: dbCircuitBreaker.failures
+        }
+      });
     }
   } catch (error) {
     // Even if there's an error, try to return something
@@ -9859,6 +9981,112 @@ app.post('/api/admin/fix-oversized-user', async (req, res) => {
 });
 
 /**
+ * Fix ALL oversized documents in the database
+ * Trims arrays to safe limits instead of clearing entirely
+ */
+app.post('/api/admin/fix-all-oversized', async (req, res) => {
+  try {
+    const { adminSecret } = req.body;
+    
+    if (adminSecret !== process.env.SESSION_SECRET) {
+      return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+    
+    const LIMITS = {
+      generationHistory: 200,
+      gallery: 100,
+      paymentHistory: 500
+    };
+    
+    // Find users with large arrays using aggregation
+    const oversizedUsers = await User.aggregate([
+      {
+        $project: {
+          email: 1,
+          walletAddress: 1,
+          userId: 1,
+          historySize: { $size: { $ifNull: ['$generationHistory', []] } },
+          gallerySize: { $size: { $ifNull: ['$gallery', []] } },
+          paymentSize: { $size: { $ifNull: ['$paymentHistory', []] } }
+        }
+      },
+      {
+        $match: {
+          $or: [
+            { historySize: { $gt: LIMITS.generationHistory } },
+            { gallerySize: { $gt: LIMITS.gallery } },
+            { paymentSize: { $gt: LIMITS.paymentHistory } }
+          ]
+        }
+      }
+    ]);
+    
+    if (oversizedUsers.length === 0) {
+      return res.json({ 
+        success: true, 
+        message: 'No oversized documents found',
+        checked: true,
+        fixed: 0
+      });
+    }
+    
+    // Fix each oversized user
+    const results = [];
+    for (const user of oversizedUsers) {
+      try {
+        // Use slice in update to trim arrays
+        const updateOps = {};
+        
+        if (user.historySize > LIMITS.generationHistory) {
+          updateOps.generationHistory = { $slice: ['$generationHistory', -LIMITS.generationHistory] };
+        }
+        if (user.gallerySize > LIMITS.gallery) {
+          updateOps.gallery = { $slice: ['$gallery', -LIMITS.gallery] };
+        }
+        if (user.paymentSize > LIMITS.paymentHistory) {
+          updateOps.paymentHistory = { $slice: ['$paymentHistory', -LIMITS.paymentHistory] };
+        }
+        
+        // Use aggregation pipeline update for $slice
+        await User.updateOne(
+          { _id: user._id },
+          [{ $set: updateOps }]
+        );
+        
+        results.push({
+          id: user._id,
+          email: user.email,
+          wallet: user.walletAddress,
+          before: { history: user.historySize, gallery: user.gallerySize, payments: user.paymentSize },
+          status: 'fixed'
+        });
+        
+        logger.info('Fixed oversized document', { 
+          userId: user.userId, 
+          historySize: user.historySize, 
+          gallerySize: user.gallerySize 
+        });
+      } catch (err) {
+        results.push({
+          id: user._id,
+          error: err.message,
+          status: 'failed'
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Fixed ${results.filter(r => r.status === 'fixed').length} oversized documents`,
+      results
+    });
+  } catch (error) {
+    logger.error('Error fixing all oversized documents:', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * Add credits to a user account (admin only)
  */
 app.post('/api/admin/add-credits', async (req, res) => {
@@ -9995,7 +10223,7 @@ app.put('/api/generations/update/:generationId', async (req, res) => {
       if (!inGallery) {
         await User.updateOne(
           updateQuery,
-          { $push: { gallery: galleryItem } }
+          { $push: { gallery: { $each: [galleryItem], $slice: -100 } } }  // Limit to 100 items
         );
       } else {
         // Update existing gallery item

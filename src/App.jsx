@@ -28,7 +28,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('generate');
 
   const tabs = [
-    { id: 'generate', name: 'Generate', icon: Sparkles },
+    { id: 'generate', name: 'Image', icon: Sparkles },
     { id: 'video', name: 'Video', icon: Film },
     { id: 'music', name: 'Music', icon: Music },
     { id: 'gallery', name: 'Gallery', icon: Grid }
