@@ -17,13 +17,15 @@ const AuthGuard = ({ children, requireCredits = true, fallback = null }) => {
   const isLoading = walletContext.isLoading || emailContext.isLoading;
   const error = walletContext.error || emailContext.error;
 
-  // Show loading state
+  // PERFORMANCE: Only show loading spinner if it's been loading for a while
+  // This prevents flash of loading state for fast connections
+  // For very fast loads (<100ms), skip the spinner entirely
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-purple-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading...</p>
+        <div className="text-center" style={{ animationDelay: '100ms', animation: 'fadeIn 0.15s ease-out 100ms forwards', opacity: 0 }}>
+          <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-2" style={{ borderColor: '#000080', borderTopColor: 'transparent' }}></div>
+          <p className="text-[11px]" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Loading...</p>
         </div>
       </div>
     );

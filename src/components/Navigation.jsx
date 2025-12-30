@@ -107,16 +107,16 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
     }}>
       {/* Title bar */}
       <div 
-        className="flex items-center gap-2 px-2 py-1"
+        className="flex items-center gap-1 lg:gap-2 px-1 lg:px-2 py-0.5 lg:py-1"
         style={TITLEBAR.active}
       >
-        <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-8 h-8 rounded-sm object-cover" />
-        <span className="text-[11px] font-bold">Seiso AI - Image • Video • Music Generation</span>
+        <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-6 h-6 lg:w-8 lg:h-8 rounded-sm object-cover" />
+        <span className="text-[10px] lg:text-[11px] font-bold">Seiso AI - Image • Video • Music</span>
         <div className="flex-1" />
       </div>
       
       {/* Menu bar */}
-      <div className="px-2 py-1" style={{ borderBottom: `1px solid ${WIN95.bgDark}` }}>
+      <div className="px-1 lg:px-2 py-0.5 lg:py-1" style={{ borderBottom: `1px solid ${WIN95.bgDark}` }}>
         <div className="container mx-auto">
           <div className="flex items-center justify-between">
             {/* Desktop Navigation - only show when authenticated */}

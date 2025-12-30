@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+/* PERFORMANCE: VT323 font removed - not used in Win95 theme (uses Tahoma/system fonts) */
 
 @tailwind base;
 @tailwind components;
@@ -49,6 +49,7 @@
   @media (min-width: 1024px) {
     body {
       height: 100vh;
+      max-height: 100vh;
       overflow: hidden;
     }
   }
@@ -63,6 +64,7 @@
     #root {
       overflow: hidden;
       max-height: 100vh;
+      height: 100vh;
     }
   }
 
@@ -314,8 +316,9 @@
   }
 
   /* ===== ANIMATIONS ===== */
+  /* PERFORMANCE: Reduced from 0.3s to 0.15s for snappier initial load */
   .fade-in {
-    animation: fadeIn 0.3s ease-out forwards;
+    animation: fadeIn 0.15s ease-out forwards;
     opacity: 0;
   }
 
@@ -323,10 +326,11 @@
     to { opacity: 1; }
   }
 
+  /* PERFORMANCE: Reduced animation durations for snappier feel */
   .slide-up {
-    animation: slideUp 0.3s ease-out forwards;
+    animation: slideUp 0.15s ease-out forwards;
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(6px);
   }
 
   @keyframes slideUp {
@@ -334,29 +338,29 @@
   }
 
   .scale-in {
-    animation: scaleIn 0.3s ease-out forwards;
+    animation: scaleIn 0.15s ease-out forwards;
   }
 
   @keyframes scaleIn {
-    from { opacity: 0; transform: scale(0.95); }
+    from { opacity: 0; transform: scale(0.97); }
     to { opacity: 1; transform: scale(1); }
   }
 
   .animate-slide-down {
-    animation: slideDown 0.2s ease-out forwards;
+    animation: slideDown 0.12s ease-out forwards;
   }
 
   @keyframes slideDown {
-    from { opacity: 0; transform: translateY(-8px); }
+    from { opacity: 0; transform: translateY(-4px); }
     to { opacity: 1; transform: translateY(0); }
   }
 
   .animate-slide-up {
-    animation: animateSlideUp 0.2s ease-out forwards;
+    animation: animateSlideUp 0.12s ease-out forwards;
   }
 
   @keyframes animateSlideUp {
-    from { opacity: 0; transform: translateY(8px); }
+    from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
   }
 
@@ -394,6 +398,13 @@
 
 @media (min-width: 1024px) {
   .container { max-width: 1600px; }
+  
+  /* Ensure all main content fits within viewport */
+  main {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
 }
 
 /* ===== WINDOWS 95 SCROLLBAR ===== */

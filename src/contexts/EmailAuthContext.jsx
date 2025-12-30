@@ -11,6 +11,13 @@ const EmailAuthContext = createContext();
 // PERFORMANCE: Increased polling interval from 30s to 60s - credits don't change that often
 const REFRESH_INTERVAL = 60000;
 
+// PERFORMANCE: Check if we have a token synchronously to avoid blocking UI
+const hasStoredToken = () => {
+  try {
+    return !!localStorage.getItem('authToken') && localStorage.getItem('authType') === 'email';
+  } catch { return false; }
+};
+
 export const EmailAuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [email, setEmail] = useState(null);
@@ -18,7 +25,9 @@ export const EmailAuthProvider = ({ children }) => {
   const [credits, setCredits] = useState(0);
   const [totalCreditsEarned, setTotalCreditsEarned] = useState(0);
   const [totalCreditsSpent, setTotalCreditsSpent] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  // PERFORMANCE: Only show loading if there's actually a token to verify
+  // This makes first-time visitors (no token) see UI immediately
+  const [isLoading, setIsLoading] = useState(hasStoredToken());
   const [error, setError] = useState(null);
   
   // PERFORMANCE: Track last fetch time to prevent rapid refetches

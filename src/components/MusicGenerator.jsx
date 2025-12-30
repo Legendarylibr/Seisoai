@@ -146,41 +146,31 @@ const Win95Panel = memo(function Win95Panel({ children, className = '', sunken =
   );
 });
 
-// Windows 95 style group box
+// Windows 95 style group box - clean version with title above content
 const Win95GroupBox = memo(function Win95GroupBox({ title, children, className = '' }) {
   return (
-    <div className={`relative ${className}`} style={{ padding: '10px 6px 6px 6px' }}>
+    <div className={`flex flex-col ${className}`}>
+      {/* Title - clearly above the box */}
       <div 
-        className="absolute inset-0"
-        style={{
-          border: `1px solid ${WIN95.bgDark}`,
-          borderTopColor: WIN95.border.light,
-          borderLeftColor: WIN95.border.light,
-          margin: '6px 0 0 0'
-        }}
-      />
-      <div 
-        className="absolute inset-0"
-        style={{
-          border: `1px solid ${WIN95.border.light}`,
-          borderTopColor: WIN95.bgDark,
-          borderLeftColor: WIN95.bgDark,
-          margin: '7px 1px 1px 1px'
-        }}
-      />
-      <span 
-        className="absolute text-[11px] font-bold px-1"
+        className="text-[10px] lg:text-[9px] font-bold px-1 pb-0.5"
         style={{ 
-          top: 0, 
-          left: 8, 
-          background: WIN95.bg,
           color: WIN95.text,
           fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
         }}
       >
         {title}
-      </span>
-      <div className="relative">{children}</div>
+      </div>
+      {/* Content box with border */}
+      <div 
+        className="relative flex-1"
+        style={{
+          background: WIN95.bg,
+          boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`,
+          padding: '4px'
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 });
@@ -189,7 +179,7 @@ const Win95GroupBox = memo(function Win95GroupBox({ title, children, className =
 const WaveformDisplay = memo(function WaveformDisplay({ isPlaying, isGenerating }) {
   return (
     <div 
-      className="w-full h-24 flex items-center justify-center gap-0.5 overflow-hidden"
+      className="w-full h-16 lg:h-20 flex items-center justify-center gap-0.5 overflow-hidden"
       style={{ background: '#000080' }}
     >
       {Array.from({ length: 48 }).map((_, i) => {
@@ -339,13 +329,13 @@ const CollapsibleMusicHowToUse = memo(function CollapsibleMusicHowToUse() {
     <div style={{ background: WIN95.bg, borderBottom: `1px solid ${WIN95.bgDark}` }}>
       <button 
         onClick={() => setIsExpanded(!isExpanded)} 
-        className="w-full flex items-center justify-between px-2 py-1.5"
+        className="w-full flex items-center justify-between px-1 lg:px-2 py-0.5 lg:py-1"
         style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
       >
-        <div className="flex items-center gap-2">
-          <Music className="w-4 h-4" style={{ color: WIN95.text }} />
-          <span className="text-[11px] font-bold" style={{ color: WIN95.text }}>Music Generation Guide</span>
-          <span className="text-[8px] px-1.5 py-0.5 rounded" style={{ background: '#008080', color: '#fff' }}>CassetteAI</span>
+        <div className="flex items-center gap-1 lg:gap-2">
+          <Music className="w-3 h-3 lg:w-4 lg:h-4" style={{ color: WIN95.text }} />
+          <span className="text-[9px] lg:text-[10px] font-bold" style={{ color: WIN95.text }}>Guide</span>
+          <span className="text-[7px] lg:text-[8px] px-1 py-0.5 rounded" style={{ background: '#008080', color: '#fff' }}>Cassette</span>
         </div>
         <ChevronDown 
           className="w-3 h-3 transition-transform" 
@@ -515,9 +505,9 @@ const MusicGenerator = memo(function MusicGenerator({ onShowTokenPayment, onShow
       <CollapsibleMusicHowToUse />
       
       {/* Main content */}
-      <div className="flex-1 min-h-0 p-1.5 lg:p-2 flex flex-col lg:flex-row gap-1.5 lg:gap-2 overflow-auto lg:overflow-hidden">
+      <div className="flex-1 min-h-0 p-1 lg:p-1.5 flex flex-col lg:flex-row gap-1 lg:gap-1.5 overflow-auto lg:overflow-hidden">
         {/* Left panel - Controls */}
-        <div className="flex-1 flex flex-col gap-1 lg:gap-1.5 min-h-0 overflow-auto lg:overflow-hidden">
+        <div className="lg:w-[45%] flex flex-col gap-0.5 lg:gap-1 min-h-0 overflow-auto lg:overflow-hidden">
           {/* Genre Selection */}
           <Win95GroupBox title="Genre" className="flex-shrink-0">
             <Win95GenreDropdown
@@ -527,7 +517,7 @@ const MusicGenerator = memo(function MusicGenerator({ onShowTokenPayment, onShow
           </Win95GroupBox>
           
           {/* Track Description */}
-          <Win95GroupBox title="Track Description" className="flex-shrink-0">
+          <Win95GroupBox title="Description" className="flex-shrink-0">
             <Win95Panel sunken className="p-0">
               <textarea
                 value={prompt}
@@ -535,13 +525,14 @@ const MusicGenerator = memo(function MusicGenerator({ onShowTokenPayment, onShow
                   setPrompt(e.target.value);
                   setSelectedGenre(null);
                 }}
-                placeholder="Describe track: genre, instruments, mood, key, BPM"
-                className="w-full p-1.5 resize-none text-[11px] focus:outline-none"
-                rows={2}
+                placeholder="Genre, instruments, mood, key, BPM..."
+                className="w-full p-1 resize-none text-[10px] focus:outline-none"
+                rows={1}
                 style={{ 
                   background: 'transparent',
                   color: WIN95.text,
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+                  minHeight: '22px'
                 }}
               />
             </Win95Panel>
@@ -549,130 +540,94 @@ const MusicGenerator = memo(function MusicGenerator({ onShowTokenPayment, onShow
           
           {/* Duration Control */}
           <Win95GroupBox title="Duration" className="flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1">
+            <div className="flex items-center gap-1">
+              <div className="flex gap-0.5 flex-wrap">
                 {DURATION_PRESETS.map((preset) => (
                   <Win95Button
                     key={preset.value}
                     onClick={() => setDuration(preset.value)}
                     active={duration === preset.value}
+                    className="text-[9px] px-1.5"
                   >
                     {preset.label}
                   </Win95Button>
                 ))}
               </div>
-              <Win95Panel sunken className="flex-1 px-2 py-1">
-                <input
-                  type="range"
-                  min={10}
-                  max={180}
-                  value={duration}
-                  onChange={(e) => setDuration(parseInt(e.target.value))}
-                  className="w-full"
-                  style={{ accentColor: WIN95.highlight }}
-                />
-              </Win95Panel>
-              <span className="text-[11px] font-mono w-10" style={{ color: WIN95.text }}>{duration}s</span>
+              <span className="text-[10px] font-mono" style={{ color: WIN95.text }}>{duration}s</span>
             </div>
           </Win95GroupBox>
           
           {/* Generate Section */}
           <Win95GroupBox title="Generate" className="flex-shrink-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-1">
               <button
                 onClick={handleGenerate}
                 disabled={!canGenerate}
-                className="flex-1 py-2 text-[11px] font-bold"
+                className="w-full py-2 text-[11px] font-bold"
                 style={{
-                  background: WIN95.buttonFace,
-                  color: !canGenerate ? WIN95.textDisabled : WIN95.text,
-                  boxShadow: !canGenerate
-                    ? `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.bgDark}`
-                    : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
+                  background: '#2d8a2d',
+                  color: '#ffffff',
+                  border: 'none',
+                  boxShadow: `inset 1px 1px 0 #4db84d, inset -1px -1px 0 #1a5c1a, inset 2px 2px 0 #3da83d, inset -2px -2px 0 #206b20`,
                   cursor: !canGenerate ? 'default' : 'pointer',
+                  opacity: !canGenerate ? 0.7 : 1,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
                 {isGenerating ? '⏳ Generating...' : '▶ Generate'}
               </button>
-              <div className="text-[10px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                <div>Cost: {calculateMusicCredits(duration)} credit{calculateMusicCredits(duration) !== 1 ? 's' : ''}</div>
-                <div style={{ color: WIN95.textDisabled }}>${calculateMusicCost(duration)}</div>
+              <div className="text-[9px] text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                {calculateMusicCredits(duration)} credits per generation
               </div>
             </div>
             {!canGenerate && !isGenerating && prompt.trim().length === 0 && (
-              <div className="mt-1 text-[10px]" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                ↑ Select a genre or describe your track
+              <div className="mt-1 text-[8px] text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                ↑ Select genre or describe track
               </div>
             )}
           </Win95GroupBox>
         </div>
         
         {/* Right panel - Output */}
-        <div className="flex-1 flex flex-col gap-1 lg:gap-1.5 min-h-0">
+        <div className="flex-1 flex flex-col gap-0.5 lg:gap-1 min-h-0">
           {/* Waveform Display */}
-          <Win95GroupBox title="Waveform" className="flex-shrink-0">
-            <Win95Panel sunken className="overflow-hidden">
+          <Win95GroupBox title="Waveform" className="flex-1 flex flex-col min-h-0">
+            <Win95Panel sunken className="overflow-hidden flex-1" style={{ minHeight: '60px' }}>
               <AnimatedWaveform isPlaying={isPlaying} isGenerating={isGenerating} />
             </Win95Panel>
           </Win95GroupBox>
           
-          {/* Status Display */}
-          <Win95GroupBox title="Status" className="flex-shrink-0">
-            <Win95Panel sunken className="p-2">
-              <div className="text-[11px] font-mono" style={{ color: WIN95.text, fontFamily: 'Fixedsys, "Courier New", monospace' }}>
+          {/* Status + Transport combined */}
+          <Win95GroupBox title="Controls" className="flex-shrink-0">
+            <div className="flex items-center gap-2">
+              {/* Status */}
+              <div className="flex-1 text-[9px] font-mono px-1" style={{ color: WIN95.text, fontFamily: 'Fixedsys, "Courier New", monospace' }}>
                 {isGenerating && progress ? (
                   <span style={{ color: '#808000' }}>{progress}</span>
                 ) : error ? (
-                  <span style={{ color: '#800000' }}>Error: {error}</span>
+                  <span style={{ color: '#800000' }}>Error</span>
                 ) : generatedAudioUrl ? (
-                  <span style={{ color: '#008000' }}>✓ Track ready - {duration}s</span>
+                  <span style={{ color: '#008000' }}>✓ {duration}s</span>
                 ) : (
                   <span style={{ color: WIN95.textDisabled }}>Ready</span>
                 )}
               </div>
-            </Win95Panel>
-          </Win95GroupBox>
-          
-          {/* Transport Controls */}
-          <Win95GroupBox title="Transport" className="flex-shrink-0">
-            <div className="flex items-center justify-center gap-1">
-              <TransportButton
-                icon={Play}
-                label="Play"
-                onClick={togglePlayPause}
-                active={isPlaying}
-                color="green"
-              />
-              <TransportButton
-                icon={Pause}
-                label="Pause"
-                onClick={togglePlayPause}
-                active={false}
-              />
-              <TransportButton
-                icon={Square}
-                label="Stop"
-                onClick={handleStop}
-                active={false}
-                color="red"
-              />
-              <div className="w-px h-10 mx-2" style={{ background: WIN95.bgDark }} />
-              <TransportButton
-                icon={Download}
-                label="Export"
-                onClick={handleDownload}
-                active={false}
-              />
-              <Win95Button
-                onClick={() => {
-                  setGeneratedAudioUrl(null);
-                  setIsPlaying(false);
-                  setError(null);
-                }}
-              >
-                New
-              </Win95Button>
+              
+              {/* Transport buttons - compact */}
+              <div className="flex items-center gap-0.5">
+                <Win95Button onClick={togglePlayPause} active={isPlaying} className="px-2">
+                  {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                </Win95Button>
+                <Win95Button onClick={handleStop} className="px-2">
+                  <Square className="w-3 h-3" />
+                </Win95Button>
+                <Win95Button onClick={handleDownload} className="px-2">
+                  <Download className="w-3 h-3" />
+                </Win95Button>
+                <Win95Button onClick={() => { setGeneratedAudioUrl(null); setIsPlaying(false); setError(null); }} className="text-[9px]">
+                  New
+                </Win95Button>
+              </div>
             </div>
             
             {/* Hidden audio element */}
@@ -688,26 +643,20 @@ const MusicGenerator = memo(function MusicGenerator({ onShowTokenPayment, onShow
             )}
           </Win95GroupBox>
           
-          {/* Error display */}
+          {/* Error display - compact */}
           {error && (
-            <Win95GroupBox title="Error" className="flex-shrink-0">
-              <Win95Panel sunken className="p-2 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" style={{ color: '#800000' }} />
-                <div className="text-[10px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                  {error}
-                </div>
-              </Win95Panel>
-              <Win95Button onClick={() => setError(null)} className="mt-2">
-                Dismiss
-              </Win95Button>
-            </Win95GroupBox>
+            <div className="flex items-center gap-1 px-1 py-0.5" style={{ background: '#ffe0e0' }}>
+              <AlertCircle className="w-3 h-3 flex-shrink-0" style={{ color: '#800000' }} />
+              <div className="text-[8px] flex-1" style={{ color: '#800000' }}>{error}</div>
+              <Win95Button onClick={() => setError(null)} className="text-[8px] px-1">✕</Win95Button>
+            </div>
           )}
         </div>
       </div>
       
       {/* Status bar */}
       <div 
-        className="flex items-center px-2 py-0.5 text-[10px]"
+        className="flex items-center px-1 lg:px-2 py-0.5 text-[9px] flex-shrink-0"
         style={{ 
           background: WIN95.bg,
           borderTop: `1px solid ${WIN95.border.light}`,
@@ -715,13 +664,13 @@ const MusicGenerator = memo(function MusicGenerator({ onShowTokenPayment, onShow
           fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
         }}
       >
-        <Win95Panel sunken className="flex-1 px-2 py-0.5">
-          {isGenerating ? 'Processing...' : generatedAudioUrl ? 'Track ready' : 'Ready'}
+        <Win95Panel sunken className="flex-1 px-1 lg:px-2 py-0.5">
+          {isGenerating ? 'Processing...' : generatedAudioUrl ? 'Ready' : 'Ready'}
         </Win95Panel>
-        <Win95Panel sunken className="px-2 py-0.5 ml-1">
+        <Win95Panel sunken className="px-1 lg:px-2 py-0.5 ml-1">
           {duration}s
         </Win95Panel>
-        <Win95Panel sunken className="px-2 py-0.5 ml-1">
+        <Win95Panel sunken className="px-1 lg:px-2 py-0.5 ml-1 hidden lg:block">
           {selectedGenre || 'No genre'}
         </Win95Panel>
       </div>

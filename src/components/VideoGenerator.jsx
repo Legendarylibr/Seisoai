@@ -144,41 +144,31 @@ const Win95Panel = memo(function Win95Panel({ children, className = '', sunken =
   );
 });
 
-// Windows 95 style group box
+// Windows 95 style group box - clean version with title above content
 const Win95GroupBox = memo(function Win95GroupBox({ title, children, className = '' }) {
   return (
-    <div className={`relative ${className}`} style={{ padding: '10px 6px 6px 6px' }}>
+    <div className={`flex flex-col ${className}`}>
+      {/* Title - clearly above the box */}
       <div 
-        className="absolute inset-0"
-        style={{
-          border: `1px solid ${WIN95.bgDark}`,
-          borderTopColor: WIN95.border.light,
-          borderLeftColor: WIN95.border.light,
-          margin: '6px 0 0 0'
-        }}
-      />
-      <div 
-        className="absolute inset-0"
-        style={{
-          border: `1px solid ${WIN95.border.light}`,
-          borderTopColor: WIN95.bgDark,
-          borderLeftColor: WIN95.bgDark,
-          margin: '7px 1px 1px 1px'
-        }}
-      />
-      <span 
-        className="absolute text-[11px] font-bold px-1"
+        className="text-[10px] lg:text-[9px] font-bold px-1 pb-0.5"
         style={{ 
-          top: 0, 
-          left: 8, 
-          background: WIN95.bg,
           color: WIN95.text,
           fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
         }}
       >
         {title}
-      </span>
-      <div className="relative">{children}</div>
+      </div>
+      {/* Content box with border */}
+      <div 
+        className="relative flex-1"
+        style={{
+          background: WIN95.bg,
+          boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`,
+          padding: '4px'
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 });
@@ -213,9 +203,9 @@ const FrameUpload = memo(({ label, frameUrl, onUpload, onRemove, icon }) => {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-1 mb-1">
-        <span className="text-[10px]">{icon}</span>
-        <span className="text-[10px] font-bold" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{label}</span>
+      <div className="flex items-center gap-0.5 mb-0.5">
+        <span className="text-[9px]">{icon}</span>
+        <span className="text-[9px] font-bold" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{label}</span>
       </div>
       
       {!frameUrl ? (
@@ -225,18 +215,17 @@ const FrameUpload = memo(({ label, frameUrl, onUpload, onRemove, icon }) => {
           style={{
             background: WIN95.inputBg,
             boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`,
-            minHeight: '80px'
+            minHeight: '50px'
           }}
         >
-          <Upload className="w-5 h-5 mb-1" style={{ color: WIN95.textDisabled }} />
-          <span className="text-[10px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Click to upload</span>
-          <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>Max 8MB</span>
+          <Upload className="w-4 h-4" style={{ color: WIN95.textDisabled }} />
+          <span className="text-[8px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Upload</span>
         </div>
       ) : (
         <div 
           className="flex-1 relative overflow-hidden group"
           style={{ 
-            minHeight: '80px',
+            minHeight: '50px',
             boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
           }}
         >
@@ -246,12 +235,12 @@ const FrameUpload = memo(({ label, frameUrl, onUpload, onRemove, icon }) => {
             className="w-full h-full object-cover cursor-pointer"
             onClick={() => setPreviewImage(frameUrl)}
           />
-          <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Win95Button onClick={handleClick}>
-              <Upload className="w-3 h-3" />
+          <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Win95Button onClick={handleClick} className="px-1 py-0.5">
+              <Upload className="w-2.5 h-2.5" />
             </Win95Button>
-            <Win95Button onClick={onRemove}>
-              <X className="w-3 h-3" />
+            <Win95Button onClick={onRemove} className="px-1 py-0.5">
+              <X className="w-2.5 h-2.5" />
             </Win95Button>
           </div>
         </div>
@@ -300,13 +289,13 @@ const CollapsibleVideoHowToUse = memo(function CollapsibleVideoHowToUse() {
     <div style={{ background: WIN95.bg, borderBottom: `1px solid ${WIN95.bgDark}` }}>
       <button 
         onClick={() => setIsExpanded(!isExpanded)} 
-        className="w-full flex items-center justify-between px-2 py-1.5"
+        className="w-full flex items-center justify-between px-1 lg:px-2 py-0.5 lg:py-1"
         style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
       >
-        <div className="flex items-center gap-2">
-          <Film className="w-4 h-4" style={{ color: WIN95.text }} />
-          <span className="text-[11px] font-bold" style={{ color: WIN95.text }}>Video Generation Guide</span>
-          <span className="text-[8px] px-1.5 py-0.5" style={{ background: '#800080', color: '#fff' }}>Veo 3.1 AI</span>
+        <div className="flex items-center gap-1 lg:gap-2">
+          <Film className="w-3 h-3 lg:w-4 lg:h-4" style={{ color: WIN95.text }} />
+          <span className="text-[9px] lg:text-[10px] font-bold" style={{ color: WIN95.text }}>Guide</span>
+          <span className="text-[7px] lg:text-[8px] px-1 py-0.5" style={{ background: '#800080', color: '#fff' }}>Veo 3.1</span>
         </div>
         <ChevronDown 
           className="w-3 h-3 transition-transform" 
@@ -528,16 +517,16 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
       <CollapsibleVideoHowToUse />
       
       {/* Main content */}
-      <div className="flex-1 min-h-0 p-1.5 lg:p-2 flex flex-col lg:flex-row gap-1.5 lg:gap-2 overflow-auto lg:overflow-hidden">
+      <div className="flex-1 min-h-0 p-1 lg:p-1.5 flex flex-col lg:flex-row gap-1 lg:gap-1.5 overflow-auto lg:overflow-hidden">
         {/* Left panel - Controls */}
-        <div className="flex-1 flex flex-col gap-1 lg:gap-1.5 min-h-0 overflow-auto lg:overflow-hidden">
-          {/* Generation Mode & Quality */}
-          <Win95GroupBox title="Generation Mode" className="flex-shrink-0">
-            <div className={`grid ${generationMode === 'text-to-video' ? 'grid-cols-1' : 'grid-cols-2'} gap-2`}>
+        <div className="lg:w-[45%] flex flex-col gap-0.5 lg:gap-1 min-h-0 overflow-auto lg:overflow-hidden">
+          {/* Generation Mode & Quality - combined row */}
+          <Win95GroupBox title="Mode & Quality" className="flex-shrink-0">
+            <div className="flex gap-2 items-start">
               {/* Mode Selector */}
-              <div>
-                <label className="text-[9px] font-bold flex items-center gap-1 mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                  <Layers className="w-3 h-3" /> Mode
+              <div className="flex-1">
+                <label className="text-[8px] font-bold flex items-center gap-1 mb-0.5" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                  <Layers className="w-2.5 h-2.5" /> Mode
                 </label>
                 <Win95Panel sunken className="px-1 py-0.5">
                   <select 
@@ -545,12 +534,11 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
                     onChange={(e) => {
                       const newMode = e.target.value;
                       setGenerationMode(newMode);
-                      // Force quality to 'quality' for text-to-video (fast not supported)
                       if (newMode === 'text-to-video') {
                         setQuality('quality');
                       }
                     }}
-                    className="w-full text-[10px] bg-transparent focus:outline-none"
+                    className="w-full text-[9px] bg-transparent focus:outline-none"
                     style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
                   >
                     {GENERATION_MODES.map(mode => (
@@ -558,17 +546,13 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
                     ))}
                   </select>
                 </Win95Panel>
-                <div className="text-[8px] mt-0.5" style={{ color: WIN95.textDisabled }}>
-                  {currentMode.description}
-                  {generationMode === 'text-to-video' && ' (Quality tier only)'}
-                </div>
               </div>
               
-              {/* Quality Selector - hidden for text-to-video mode */}
+              {/* Quality Selector */}
               {generationMode !== 'text-to-video' && (
-                <div>
-                  <label className="text-[9px] font-bold flex items-center gap-1 mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                    <Zap className="w-3 h-3" /> Quality
+                <div className="flex-1">
+                  <label className="text-[8px] font-bold flex items-center gap-1 mb-0.5" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                    <Zap className="w-2.5 h-2.5" /> Quality
                   </label>
                   <div className="flex gap-0.5">
                     {QUALITY_OPTIONS.map((opt) => (
@@ -576,14 +560,11 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
                         key={opt.value}
                         onClick={() => setQuality(opt.value)}
                         active={quality === opt.value}
-                        className="flex-1"
+                        className="flex-1 text-[9px]"
                       >
                         {opt.label}
                       </Win95Button>
                     ))}
-                  </div>
-                  <div className="text-[8px] mt-0.5" style={{ color: WIN95.textDisabled }}>
-                    {QUALITY_OPTIONS.find(q => q.value === quality)?.description}
                   </div>
                 </div>
               )}
@@ -592,11 +573,11 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
 
           {/* Frame Uploads - conditional based on mode */}
           {(currentMode.requiresFirstFrame || currentMode.requiresLastFrame) && (
-            <Win95GroupBox title={currentMode.requiresLastFrame ? "Animation Frames" : "Reference Image"} className="flex-shrink-0">
-              <div className={`grid ${currentMode.requiresLastFrame ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+            <Win95GroupBox title={currentMode.requiresLastFrame ? "Frames" : "Reference"} className="flex-shrink-0">
+              <div className={`grid ${currentMode.requiresLastFrame ? 'grid-cols-2' : 'grid-cols-1'} gap-1`}>
                 {currentMode.requiresFirstFrame && (
                   <FrameUpload 
-                    label={currentMode.requiresLastFrame ? "First Frame (Start)" : "Source Image"}
+                    label={currentMode.requiresLastFrame ? "Start" : "Source"}
                     icon={currentMode.requiresLastFrame ? "🎬" : "🖼️"}
                     frameUrl={firstFrameUrl}
                     onUpload={setFirstFrameUrl}
@@ -605,7 +586,7 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
                 )}
                 {currentMode.requiresLastFrame && (
                   <FrameUpload 
-                    label="Last Frame (End)"
+                    label="End"
                     icon="🏁"
                     frameUrl={lastFrameUrl}
                     onUpload={setLastFrameUrl}
@@ -617,38 +598,39 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
           )}
 
           {/* Motion Description */}
-          <Win95GroupBox title="Motion Description" className="flex-shrink-0">
+          <Win95GroupBox title="Motion Prompt" className="flex-shrink-0">
             <Win95Panel sunken className="p-0">
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Describe animation: action, camera, mood..."
-                className="w-full p-1.5 resize-none text-[11px] focus:outline-none"
-                rows={2}
+                className="w-full p-1 resize-none text-[10px] focus:outline-none"
+                rows={1}
                 style={{ 
                   background: 'transparent',
                   color: WIN95.text,
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+                  minHeight: '22px'
                 }}
               />
             </Win95Panel>
           </Win95GroupBox>
 
-          {/* Video Settings */}
-          <Win95GroupBox title="Video Settings" className="flex-shrink-0">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          {/* Video Settings - compact grid */}
+          <Win95GroupBox title="Settings" className="flex-shrink-0">
+            <div className="grid grid-cols-4 gap-1">
               {/* Duration */}
               <div>
-                <label className="text-[9px] font-bold flex items-center gap-1 mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                  <Clock className="w-3 h-3" /> Duration
+                <label className="text-[7px] lg:text-[8px] font-bold flex items-center gap-0.5 mb-0.5" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                  <Clock className="w-2.5 h-2.5" /> Dur
                 </label>
-                <div className="flex gap-0.5">
+                <div className="flex flex-col gap-0.5">
                   {DURATION_OPTIONS.map((opt) => (
                     <Win95Button
                       key={opt.value}
                       onClick={() => setDuration(opt.value)}
                       active={duration === opt.value}
-                      className="flex-1"
+                      className="text-[8px] py-0.5"
                     >
                       {opt.label}
                     </Win95Button>
@@ -658,14 +640,14 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
               
               {/* Resolution */}
               <div>
-                <label className="text-[9px] font-bold flex items-center gap-1 mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                  <Monitor className="w-3 h-3" /> Resolution
+                <label className="text-[7px] lg:text-[8px] font-bold flex items-center gap-0.5 mb-0.5" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                  <Monitor className="w-2.5 h-2.5" /> Res
                 </label>
-                <Win95Panel sunken className="px-1 py-0.5">
+                <Win95Panel sunken className="px-0.5 py-0.5">
                   <select 
                     value={resolution}
                     onChange={(e) => setResolution(e.target.value)}
-                    className="w-full text-[10px] bg-transparent focus:outline-none"
+                    className="w-full text-[8px] bg-transparent focus:outline-none"
                     style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
                   >
                     {RESOLUTION_OPTIONS.map(opt => (
@@ -677,14 +659,14 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
               
               {/* Aspect Ratio */}
               <div>
-                <label className="text-[9px] font-bold mb-1 block" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                  Aspect Ratio
+                <label className="text-[7px] lg:text-[8px] font-bold mb-0.5 block" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                  Ratio
                 </label>
-                <Win95Panel sunken className="px-1 py-0.5">
+                <Win95Panel sunken className="px-0.5 py-0.5">
                   <select 
                     value={aspectRatio}
                     onChange={(e) => setAspectRatio(e.target.value)}
-                    className="w-full text-[10px] bg-transparent focus:outline-none"
+                    className="w-full text-[8px] bg-transparent focus:outline-none"
                     style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
                   >
                     {ASPECT_RATIO_OPTIONS.map(opt => (
@@ -696,15 +678,15 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
               
               {/* Audio Toggle */}
               <div>
-                <label className="text-[9px] font-bold flex items-center gap-1 mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                  {generateAudio ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />} Audio
+                <label className="text-[7px] lg:text-[8px] font-bold flex items-center gap-0.5 mb-0.5" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                  {generateAudio ? <Volume2 className="w-2.5 h-2.5" /> : <VolumeX className="w-2.5 h-2.5" />} Audio
                 </label>
                 <Win95Button
                   onClick={() => setGenerateAudio(!generateAudio)}
                   active={generateAudio}
-                  className="w-full"
+                  className="w-full text-[8px]"
                 >
-                  {generateAudio ? '🔊 On' : '🔇 Off'}
+                  {generateAudio ? '🔊' : '🔇'}
                 </Win95Button>
               </div>
             </div>
@@ -712,57 +694,62 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
 
           {/* Generate Section */}
           <Win95GroupBox title="Generate" className="flex-shrink-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-1">
               <button
                 onClick={handleGenerate}
                 disabled={!canGenerate}
-                className="flex-1 py-2 text-[11px] font-bold"
+                className="w-full py-2 text-[11px] font-bold"
                 style={{
-                  background: WIN95.buttonFace,
-                  color: !canGenerate ? WIN95.textDisabled : WIN95.text,
-                  boxShadow: !canGenerate
-                    ? `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.bgDark}`
-                    : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
+                  background: '#2d8a2d',
+                  color: '#ffffff',
+                  border: 'none',
+                  boxShadow: `inset 1px 1px 0 #4db84d, inset -1px -1px 0 #1a5c1a, inset 2px 2px 0 #3da83d, inset -2px -2px 0 #206b20`,
                   cursor: !canGenerate ? 'default' : 'pointer',
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                  border: 'none'
+                  opacity: !canGenerate ? 0.7 : 1,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
-                {isGenerating ? '⏳ Generating...' : '▶ Generate Video'}
+                {isGenerating ? '⏳ Generating...' : '▶ Generate'}
               </button>
-              <div className="text-[10px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                <div>Cost: {calculateVideoCredits(duration, generateAudio, quality)} credits</div>
-                <div style={{ color: WIN95.textDisabled }}>${calculateVideoCost(duration, generateAudio, quality)}</div>
+              <div className="text-[9px] text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                {calculateVideoCredits(duration, generateAudio, quality)} credits per generation
               </div>
             </div>
             {!canGenerate && !isGenerating && (
-              <div className="mt-1 text-[10px]" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                {currentMode.requiresFirstFrame && !firstFrameUrl && '⬆️ Upload first frame  '}
-                {currentMode.requiresLastFrame && !lastFrameUrl && '⬆️ Upload last frame  '}
-                {prompt.trim().length === 0 && '✏️ Add a prompt'}
+              <div className="mt-1 text-[8px] text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                {currentMode.requiresFirstFrame && !firstFrameUrl && '⬆️ First  '}
+                {currentMode.requiresLastFrame && !lastFrameUrl && '⬆️ Last  '}
+                {prompt.trim().length === 0 && '✏️ Prompt'}
               </div>
             )}
           </Win95GroupBox>
         </div>
         
         {/* Right panel - Output */}
-        <div className="flex-1 flex flex-col gap-1 lg:gap-1.5 min-h-0">
+        <div className="flex-1 flex flex-col min-h-0">
           {/* Video Output */}
-          <Win95GroupBox title="Video Output" className="flex-1 flex flex-col min-h-0">
-            <Win95Panel sunken className="flex-1 flex items-center justify-center overflow-hidden min-h-0" style={{ minHeight: '150px' }}>
+          <Win95GroupBox title="Output" className="flex-1 flex flex-col min-h-0">
+            <div 
+              className="flex-1 flex items-center justify-center overflow-hidden min-h-0 relative"
+              style={{ 
+                background: WIN95.bg, 
+                minHeight: '100px',
+                boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+              }}
+            >
               {isGenerating && progress ? (
                 <div className="text-center p-4">
                   <div className="w-10 h-10 mx-auto mb-2 flex items-center justify-center">
                     <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: WIN95.highlight, borderTopColor: 'transparent' }} />
                   </div>
-                  <p className="text-[11px] font-bold" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{progress}</p>
-                  <p className="text-[9px] mt-1" style={{ color: WIN95.textDisabled }}>Video generation takes 1-3 minutes</p>
+                  <p className="text-[11px] font-bold text-center" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{progress}</p>
+                  <p className="text-[9px] mt-1 text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Video generation takes 1-3 minutes</p>
                 </div>
               ) : error ? (
                 <div className="text-center p-4 max-w-sm">
                   <AlertCircle className="w-10 h-10 mx-auto mb-2" style={{ color: '#800000' }} />
-                  <p className="text-[11px] font-bold mb-1" style={{ color: '#800000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Generation Failed</p>
-                  <p className="text-[10px]" style={{ color: WIN95.text }}>{error}</p>
+                  <p className="text-[11px] font-bold mb-1 text-center" style={{ color: '#800000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Generation Failed</p>
+                  <p className="text-[10px] text-center" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{error}</p>
                   <Win95Button onClick={() => setError(null)} className="mt-2">
                     Dismiss
                   </Win95Button>
@@ -771,7 +758,7 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
                 <div className="w-full h-full flex flex-col">
                   {/* Loading indicator while video buffers */}
                   {!videoReady && (
-                    <div className="absolute inset-0 flex items-center justify-center z-10" style={{ background: WIN95.inputBg }}>
+                    <div className="absolute inset-0 flex items-center justify-center z-10" style={{ background: WIN95.bg }}>
                       <div className="text-center">
                         <div className="w-6 h-6 mx-auto mb-2 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: WIN95.highlight, borderTopColor: 'transparent' }} />
                         <p className="text-[10px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Loading video...</p>
@@ -789,7 +776,7 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
                     preload="auto"
                     crossOrigin="anonymous"
                     className="flex-1 w-full object-contain"
-                    style={{ maxHeight: 'calc(100% - 40px)', opacity: videoReady ? 1 : 0 }}
+                    style={{ maxHeight: 'calc(100% - 40px)', opacity: videoReady ? 1 : 0, background: WIN95.bg }}
                     onLoadedData={() => setVideoReady(true)}
                     onCanPlay={() => setVideoReady(true)}
                     onLoadedMetadata={() => {
@@ -817,35 +804,18 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
               ) : (
                 <div className="text-center p-4">
                   <Film className="w-12 h-12 mx-auto mb-2" style={{ color: WIN95.textDisabled }} />
-                  <p className="text-[11px] font-bold" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Your video will appear here</p>
-                  <p className="text-[9px] mt-1" style={{ color: WIN95.textDisabled }}>Upload frames and describe the motion</p>
+                  <p className="text-[11px] font-bold text-center" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Your video will appear here</p>
+                  <p className="text-[9px] mt-1 text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Upload frames and describe the motion</p>
                 </div>
               )}
-            </Win95Panel>
-          </Win95GroupBox>
-
-          {/* Status Display */}
-          <Win95GroupBox title="Status" className="flex-shrink-0">
-            <Win95Panel sunken className="p-2">
-              <div className="text-[11px] font-mono" style={{ color: WIN95.text, fontFamily: 'Fixedsys, "Courier New", monospace' }}>
-                {isGenerating && progress ? (
-                  <span style={{ color: '#808000' }}>{progress}</span>
-                ) : error ? (
-                  <span style={{ color: '#800000' }}>Error: {error}</span>
-                ) : generatedVideoUrl ? (
-                  <span style={{ color: '#008000' }}>✓ Video ready - {duration}</span>
-                ) : (
-                  <span style={{ color: WIN95.textDisabled }}>Ready</span>
-                )}
-              </div>
-            </Win95Panel>
+            </div>
           </Win95GroupBox>
         </div>
       </div>
       
       {/* Status bar */}
       <div 
-        className="flex items-center px-2 py-0.5 text-[10px]"
+        className="flex items-center px-1 lg:px-2 py-0.5 text-[9px] flex-shrink-0"
         style={{ 
           background: WIN95.bg,
           borderTop: `1px solid ${WIN95.border.light}`,
@@ -853,17 +823,16 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
           fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
         }}
       >
-        <Win95Panel sunken className="flex-1 px-2 py-0.5">
-          {isGenerating ? 'Processing...' : generatedVideoUrl ? 'Video ready' : 'Ready'}
-        </Win95Panel>
-        <Win95Panel sunken className="px-2 py-0.5 ml-1">
-          {currentMode.icon} {currentMode.label}
-        </Win95Panel>
-        <Win95Panel sunken className="px-2 py-0.5 ml-1">
-          {quality === 'fast' ? '⚡' : '✨'} {duration} | {resolution}
-        </Win95Panel>
-        <Win95Panel sunken className="px-2 py-0.5 ml-1">
-          {generateAudio ? '🔊' : '🔇'}
+        <Win95Panel sunken className="flex-1 px-1 lg:px-2 py-0.5">
+          {isGenerating && progress ? (
+            <span style={{ color: '#808000' }}>{progress}</span>
+          ) : error ? (
+            <span style={{ color: '#800000' }}>Error</span>
+          ) : generatedVideoUrl ? (
+            <span style={{ color: '#008000' }}>✓ Ready</span>
+          ) : (
+            'Ready'
+          )}
         </Win95Panel>
       </div>
     </div>

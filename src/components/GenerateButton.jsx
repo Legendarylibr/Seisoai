@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, memo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
@@ -165,53 +165,66 @@ const GenerateButton = memo(({ customPrompt = '', onShowTokenPayment }) => {
   useEffect(() => () => timeoutRef.current && clearTimeout(timeoutRef.current), []);
 
   const isDisabled = isGenerating || walletLoading || (!isConnected && !isEmailAuth);
-  const buttonText = isGenerating 
-    ? (multiImageModel === 'qwen-image-layered' ? 'Extracting Layers...' : 'Generating...')
-    : walletLoading ? 'Loading...'
-    : (!isConnected && !isEmailAuth) ? 'Sign In to Generate'
-    : (multiImageModel === 'qwen-image-layered' ? 'Extract Layers' : 'Generate Image');
+  const creditsNeeded = multiImageModel === 'nano-banana-pro' ? 2 : 1;
+  const isLayerExtract = multiImageModel === 'qwen-image-layered';
+  
+  // Determine button text
+  const getButtonText = () => {
+    if (isGenerating) return isLayerExtract ? '⏳ Extracting...' : '⏳ Generating...';
+    if (walletLoading) return '⏳ Loading...';
+    if (!isConnected && !isEmailAuth) return '🔗 Sign In';
+    if (isLayerExtract) return '▶ Generate';
+    return '▶ Generate';
+  };
 
   return (
-    <>
-      <div className="w-full flex justify-center">
+    <div className="w-full space-y-1">
+      {/* Generate Section - matching Music/Video style */}
+      <div className="flex flex-col gap-1">
         <button
           onClick={handleGenerate}
           disabled={isDisabled}
           aria-label={isGenerating ? 'Generating...' : 'Generate AI image'}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 text-[11px] font-bold transition-none"
+          className="w-full py-2 text-[11px] font-bold transition-none"
           style={{
-            background: WIN95.buttonFace,
-            color: isDisabled ? WIN95.textDisabled : WIN95.text,
+            background: isDisabled ? WIN95.buttonFace : '#2d8a2d',
+            color: isDisabled ? WIN95.textDisabled : '#ffffff',
             border: 'none',
             boxShadow: isDisabled
               ? `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.bgDark}`
-              : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
+              : `inset 1px 1px 0 #4db84d, inset -1px -1px 0 #1a5c1a, inset 2px 2px 0 #3da83d, inset -2px -2px 0 #206b20`,
             cursor: isDisabled ? 'default' : 'pointer',
             fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
           }}
         >
-          <span>{isGenerating || walletLoading ? '⏳' : (!isConnected && !isEmailAuth) ? '🔗' : '▶'}</span>
-          <span>{buttonText}</span>
+          {getButtonText()}
         </button>
+        <div className="text-[9px] text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+          {creditsNeeded} {creditsNeeded === 1 ? 'credit' : 'credits'} per generation
+        </div>
       </div>
 
+      {/* Progress Section */}
       {(isGenerating || isLoading) && (
         <div 
-          className="w-full mt-2 p-2"
+          className="p-1.5"
           style={{
             background: WIN95.bg,
-            boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
+            boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`
           }}
         >
-          <div className="flex justify-between items-center text-[10px] mb-1" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-            <div className="flex items-center gap-2">
+          {/* Status */}
+          <div className="flex justify-between items-center text-[9px] mb-1" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+            <div className="flex items-center gap-1">
               <div 
                 className="w-2 h-2 rounded-full animate-pulse" 
                 style={{ background: '#008000' }} 
               />
               <span style={{ color: WIN95.text }}>{currentStep}</span>
             </div>
-            <span className="font-mono" style={{ color: WIN95.textDisabled }}>{timeRemaining > 0 ? `${timeRemaining}s` : '...'}</span>
+            <span className="font-mono" style={{ color: WIN95.textDisabled }}>
+              {timeRemaining > 0 ? `${timeRemaining}s` : '...'}
+            </span>
           </div>
           
           {/* Progress bar - Win95 style */}
@@ -232,7 +245,7 @@ const GenerateButton = memo(({ customPrompt = '', onShowTokenPayment }) => {
           </div>
           
           {/* Steps */}
-          <div className="flex justify-between px-1 mt-2">
+          <div className="flex justify-between px-1 mt-1">
             {['Init', 'Process', 'Generate', 'Enhance', 'Finish'].map((step, i) => {
               const stepProgress = (i + 1) * 20;
               const isCompleted = progress >= stepProgress;
@@ -247,7 +260,7 @@ const GenerateButton = memo(({ customPrompt = '', onShowTokenPayment }) => {
                     }} 
                   />
                   <span 
-                    className="text-[8px]" 
+                    className="text-[7px]" 
                     style={{ 
                       color: isCompleted ? WIN95.text : WIN95.textDisabled,
                       fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
@@ -259,16 +272,9 @@ const GenerateButton = memo(({ customPrompt = '', onShowTokenPayment }) => {
               );
             })}
           </div>
-          
-          <div 
-            className="text-[9px] text-center mt-1"
-            style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
-          >
-            {generationMode === 'flux-multi' ? '◆ Creating multiple images...' : '◆ Creating your image...'}
-          </div>
         </div>
       )}
-    </>
+    </div>
   );
 });
 

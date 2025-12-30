@@ -270,7 +270,7 @@ const ImageGallery = () => {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center p-4">
             <div className="w-8 h-8 mx-auto mb-2 border-2 rounded-full animate-spin" style={{ borderColor: WIN95.bgDark, borderTopColor: WIN95.highlight }} />
-            <span className="text-[11px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Loading Gallery...</span>
+            <p className="text-[11px] font-bold text-center" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Loading Gallery...</p>
           </div>
         </div>
       </div>
@@ -302,10 +302,10 @@ const ImageGallery = () => {
             }}
           >
             <ImageIcon className="w-12 h-12 mx-auto mb-3" style={{ color: WIN95.textDisabled }} />
-            <h3 className="text-[12px] font-bold mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+            <p className="text-[12px] font-bold mb-1 text-center" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
               No Images Yet
-            </h3>
-            <p className="text-[10px] mb-3" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+            </p>
+            <p className="text-[10px] mb-3 text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
               Start generating images to see them here
             </p>
             <Win95Button onClick={() => window.location.href = '#generate'}>
@@ -476,7 +476,7 @@ const ImageGallery = () => {
       {/* Item Modal */}
       {selectedItem && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.5)' }}
         >
           <div 

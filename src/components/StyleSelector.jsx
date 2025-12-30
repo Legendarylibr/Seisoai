@@ -1,17 +1,31 @@
-import React, { useState, memo, useMemo } from 'react';
+import React, { useState, memo, useMemo, useRef, useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { VISUAL_STYLES } from '../utils/styles';
-import { Search, ChevronDown, ChevronUp, Palette } from 'lucide-react';
-import { BTN, TEXT, hoverHandlers } from '../utils/buttonStyles';
+import { Search, ChevronDown, ChevronUp, Palette, X } from 'lucide-react';
+import { WIN95 } from '../utils/buttonStyles';
 
 // PERFORMANCE: Pre-compute categories once
 const CATEGORIES = ['All', ...new Set(VISUAL_STYLES.map(s => s.category))];
 
-const StyleSelector = memo(({ openUpward = false }) => {
+const StyleSelector = memo(() => {
   const { selectedStyle, selectStyle } = useImageGenerator();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [showStyleOptions, setShowStyleOptions] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowStyleOptions(false);
+      }
+    };
+    if (showStyleOptions) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showStyleOptions]);
 
   // PERFORMANCE: Memoize filtered styles
   const filteredStyles = useMemo(() => VISUAL_STYLES.filter(style => {
@@ -21,85 +35,103 @@ const StyleSelector = memo(({ openUpward = false }) => {
     return matchesCategory && matchesSearch;
   }), [selectedCategory, searchTerm]);
 
+  const win95Btn = {
+    background: WIN95.buttonFace,
+    border: 'none',
+    boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
+    color: WIN95.text,
+    fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+  };
+
+  const win95BtnActive = {
+    background: WIN95.bgDark,
+    border: 'none',
+    boxShadow: `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`,
+    color: WIN95.text,
+    fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+  };
+
   return (
-    <div className={`w-full space-y-2 relative rounded-lg p-2.5 ${openUpward ? 'lg:overflow-visible overflow-hidden' : 'overflow-hidden'}`} style={{ 
-      background: 'linear-gradient(135deg, #ffffee 0%, #ffffdd 50%, #ffffc8 100%)',
-      border: '2px outset #ffffcc',
-      boxShadow: 'inset 2px 2px 0 rgba(255,255,255,0.9), inset -2px -2px 0 rgba(0,0,0,0.15)'
-    }}>
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-2 relative z-10">
-        <div className="p-1.5 rounded" style={BTN.small}>
-          <Palette className="w-4 h-4" style={{color:'#000'}} />
-        </div>
-        <div>
-          <h3 className="text-xs font-bold" style={{...TEXT.primary, fontFamily:"'IBM Plex Mono', monospace"}}>Style (Optional)</h3>
-          <p className="text-[10px]" style={{...TEXT.secondary, fontFamily:"'IBM Plex Mono', monospace"}}>
-            {selectedStyle ? `✓ ${selectedStyle.name} applied` : 'Works with all models'}
-          </p>
-        </div>
-      </div>
-
-      {/* Selected Style Display */}
-      {selectedStyle && (
-        <div className="p-2 rounded mb-2" style={BTN.base}>
-          <div className="flex items-center gap-2">
-            <div className="text-lg">{selectedStyle.emoji}</div>
-            <div className="flex-1">
-              <h4 className="font-semibold text-xs" style={TEXT.primary}>{selectedStyle.name}</h4>
-              <p className="text-xs" style={TEXT.secondary}>{selectedStyle.description}</p>
-            </div>
-            <button onClick={() => selectStyle(null)} className="p-1 rounded" style={BTN.small} title="Clear">✕</button>
-          </div>
-        </div>
-      )}
-
-      {/* Toggle Button */}
+    <div 
+      ref={dropdownRef}
+      className="w-full relative" 
+      style={{ 
+        background: WIN95.bg,
+        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+      }}
+    >
+      {/* Toggle Button - Shows current selection */}
       <button
         onClick={() => setShowStyleOptions(!showStyleOptions)}
-        className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded"
-        style={selectedStyle ? BTN.active : BTN.base}
-        {...(selectedStyle ? {} : hoverHandlers)}
+        className="w-full flex items-center justify-between gap-2 py-2 px-3 text-[11px]"
+        style={showStyleOptions ? win95BtnActive : win95Btn}
       >
-        <Palette className="w-4 h-4" style={{color:'#000'}} />
-        <span className="text-xs font-medium">{selectedStyle ? 'Change Style' : 'Select Style (Optional)'}</span>
-        {showStyleOptions ? <ChevronUp className="w-4 h-4" style={{color:'#000'}} /> : <ChevronDown className="w-4 h-4" style={{color:'#000'}} />}
+        <div className="flex items-center gap-2 min-w-0">
+          <Palette className="w-4 h-4 flex-shrink-0" style={{ color: selectedStyle ? '#008080' : WIN95.text }} />
+          {selectedStyle ? (
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-base">{selectedStyle.emoji}</span>
+              <span className="font-bold truncate">{selectedStyle.name}</span>
+              <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: '#e0e0e0', color: '#444' }}>
+                {selectedStyle.category}
+              </span>
+            </div>
+          ) : (
+            <span className="font-medium">Select Style (Optional)</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {selectedStyle && (
+            <button
+              onClick={(e) => { e.stopPropagation(); selectStyle(null); }}
+              className="p-0.5 hover:bg-gray-300 rounded"
+              title="Clear style"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+          {showStyleOptions ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </div>
       </button>
 
-      {/* Style Options - Opens upward on desktop when openUpward is true */}
+      {/* Dropdown - Opens DOWNWARD on desktop */}
       {showStyleOptions && (
         <div 
-          className={`space-y-2 ${openUpward ? 'lg:absolute lg:bottom-full lg:left-0 lg:right-0 lg:mb-1 lg:z-50' : ''}`}
-          style={openUpward ? {
-            background: 'linear-gradient(135deg, #ffffee 0%, #ffffdd 50%, #ffffc8 100%)',
-            border: '2px outset #ffffcc',
-            borderRadius: '8px',
-            padding: '8px',
-            boxShadow: '0 -4px 20px rgba(0,0,0,0.15)'
-          } : {}}
+          className="absolute left-0 right-0 top-full mt-1 z-50 space-y-2 p-2"
+          style={{
+            background: WIN95.bg,
+            boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 0 4px 12px rgba(0,0,0,0.25)`,
+            border: `1px solid ${WIN95.border.darker}`
+          }}
         >
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{color:'#000'}} />
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5" style={{ color: WIN95.textDisabled }} />
             <input
               type="text"
               placeholder="Search styles..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 rounded text-xs"
-              style={{background:'#fff', border:'2px inset #c0c0c0', color:'#000'}}
+              className="w-full pl-7 pr-2 py-1.5 text-[11px]"
+              style={{
+                background: WIN95.inputBg,
+                boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`,
+                border: 'none',
+                color: WIN95.text,
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+              }}
+              autoFocus
             />
           </div>
 
           {/* Categories */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1">
             {CATEGORIES.map(category => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className="px-2 py-1 rounded text-xs font-medium"
-                style={selectedCategory === category ? BTN.active : BTN.base}
-                {...(selectedCategory === category ? {} : hoverHandlers)}
+                className="px-2 py-1 text-[10px] font-medium"
+                style={selectedCategory === category ? win95BtnActive : win95Btn}
               >
                 {category}
               </button>
@@ -107,23 +139,26 @@ const StyleSelector = memo(({ openUpward = false }) => {
           </div>
 
           {/* Styles Grid */}
-          <div className={`overflow-y-auto ${openUpward ? 'max-h-48 lg:max-h-64' : 'max-h-60'}`}>
-            <div className="grid grid-cols-3 gap-2">
+          <div className="overflow-y-auto max-h-64">
+            <div className="grid grid-cols-3 lg:grid-cols-4 gap-1.5">
               {filteredStyles.map(style => (
                 <button
                   key={style.id}
                   onClick={() => { selectStyle(style); setShowStyleOptions(false); }}
-                  className="relative p-2 rounded group"
-                  style={selectedStyle?.id === style.id ? BTN.active : {...BTN.base, background:'linear-gradient(to bottom, #fff, #f5f5f5)'}}
-                  {...(selectedStyle?.id === style.id ? {} : hoverHandlers)}
+                  className="relative p-2 group"
+                  style={selectedStyle?.id === style.id ? {
+                    ...win95BtnActive,
+                    background: '#d0e8d0',
+                    boxShadow: `inset 2px 2px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}, 0 0 0 2px #008080`
+                  } : win95Btn}
                 >
                   <div className="text-center">
-                    <div className="text-base mb-1 group-hover:scale-110 transition-transform">{style.emoji}</div>
-                    <h3 className="font-bold text-xs mb-0.5" style={TEXT.primary}>{style.name}</h3>
-                    <div className="text-xs" style={TEXT.secondary}>{style.category}</div>
+                    <div className="text-lg mb-1 group-hover:scale-110 transition-transform">{style.emoji}</div>
+                    <div className="text-[10px] font-bold leading-tight" style={{ color: WIN95.text }}>{style.name}</div>
+                    <div className="text-[8px] leading-tight mt-0.5" style={{ color: WIN95.textDisabled }}>{style.category}</div>
                   </div>
                   {selectedStyle?.id === style.id && (
-                    <div className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full" style={{background:'linear-gradient(135deg,#00d4ff,#00b8e6)'}} />
+                    <div className="absolute top-1 right-1 text-[10px]">✓</div>
                   )}
                 </button>
               ))}
@@ -131,9 +166,9 @@ const StyleSelector = memo(({ openUpward = false }) => {
 
             {filteredStyles.length === 0 && (
               <div className="text-center py-6">
-                <div className="text-xl mb-2">🔍</div>
-                <h3 className="text-xs font-semibold mb-1" style={TEXT.primary}>No styles found</h3>
-                <p className="text-xs" style={TEXT.secondary}>Try adjusting your search</p>
+                <div className="text-2xl mb-2">🔍</div>
+                <div className="text-[11px] font-semibold" style={{ color: WIN95.text }}>No styles found</div>
+                <div className="text-[10px]" style={{ color: WIN95.textDisabled }}>Try adjusting your search</div>
               </div>
             )}
           </div>

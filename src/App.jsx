@@ -12,107 +12,21 @@ import PromptOptimizer from './components/PromptOptimizer';
 import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import GenerateButton from './components/GenerateButton';
-import { Grid, Sparkles, Film, Music, Wand2, Layers, Pencil } from 'lucide-react';
+import { Grid, Sparkles, ChevronDown } from 'lucide-react';
 import logger from './utils/logger.js';
 import { API_URL } from './utils/apiConfig.js';
-import { WIN95, BTN, PANEL, TITLEBAR, TEXT, INPUT } from './utils/buttonStyles.js';
 
 // PERFORMANCE: Lazy load heavy modals and gallery - not needed on initial render
 const TokenPaymentModal = lazy(() => import('./components/TokenPaymentModal'));
 const StripePaymentModal = lazy(() => import('./components/StripePaymentModal'));
 const PaymentSuccessModal = lazy(() => import('./components/PaymentSuccessModal'));
 const ImageGallery = lazy(() => import('./components/ImageGallery'));
-const VideoGenerator = lazy(() => import('./components/VideoGenerator'));
-const MusicGenerator = lazy(() => import('./components/MusicGenerator'));
-
-// Windows 95 style button component
-const Win95Button = memo(function Win95Button({ children, onClick, disabled, active, className = '', style = {} }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`px-3 py-1.5 text-[11px] font-bold transition-none select-none ${className}`}
-      style={{
-        background: active ? WIN95.bgDark : WIN95.buttonFace,
-        color: disabled ? WIN95.textDisabled : (active ? WIN95.highlightText : WIN95.text),
-        border: 'none',
-        boxShadow: active 
-          ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
-          : disabled
-            ? `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.bgDark}`
-            : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
-        cursor: disabled ? 'default' : 'pointer',
-        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-        ...style
-      }}
-    >
-      {children}
-    </button>
-  );
-});
-
-// Windows 95 style panel (sunken)
-const Win95Panel = memo(function Win95Panel({ children, className = '', sunken = true, style = {} }) {
-  return (
-    <div
-      className={className}
-      style={{
-        background: sunken ? WIN95.inputBg : WIN95.bg,
-        boxShadow: sunken
-          ? `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`
-          : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
-        ...style
-      }}
-    >
-      {children}
-    </div>
-  );
-});
-
-// Windows 95 style group box
-const Win95GroupBox = memo(function Win95GroupBox({ title, children, className = '', titleColor = WIN95.text }) {
-  return (
-    <div className={`relative ${className}`} style={{ padding: '12px 6px 6px 6px' }}>
-      <div 
-        className="absolute inset-0"
-        style={{
-          border: `1px solid ${WIN95.bgDark}`,
-          borderTopColor: WIN95.border.light,
-          borderLeftColor: WIN95.border.light,
-          margin: '7px 0 0 0'
-        }}
-      />
-      <div 
-        className="absolute inset-0"
-        style={{
-          border: `1px solid ${WIN95.border.light}`,
-          borderTopColor: WIN95.bgDark,
-          borderLeftColor: WIN95.bgDark,
-          margin: '8px 1px 1px 1px'
-        }}
-      />
-      <span 
-        className="absolute text-[11px] font-bold px-1"
-        style={{ 
-          top: 0, 
-          left: 8, 
-          background: WIN95.bg,
-          color: titleColor,
-          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-        }}
-      >
-        {title}
-      </span>
-      <div className="relative">{children}</div>
-    </div>
-  );
-});
 
 function App() {
-  const [activeTab, setActiveTab] = useState('create');
+  const [activeTab, setActiveTab] = useState('generate');
 
   const tabs = [
-    { id: 'create', name: 'Create', icon: Sparkles },
+    { id: 'generate', name: 'Generate', icon: Sparkles },
     { id: 'gallery', name: 'Gallery', icon: Grid }
   ];
 
@@ -222,7 +136,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
   }, []);
 
   return (
-    <div className="min-h-screen lg:h-screen flex flex-col" style={{ background: WIN95.bg, position: 'relative', zIndex: 0 }}>
+    <div className="min-h-screen lg:h-screen animated-bg flex flex-col p-2 lg:p-0" style={{ position: 'relative', zIndex: 0 }}>
       <Navigation 
         activeTab={currentTab} 
         setActiveTab={(tab) => {
@@ -234,7 +148,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }) {
         onShowStripePayment={handleShowStripePayment}
       />
       
-      <main className="flex-1 px-1 py-1 lg:px-2 lg:py-1 overflow-auto lg:overflow-hidden">
+      <main className="flex-1 px-2 py-1 lg:px-4 lg:py-0 lg:mt-6 overflow-auto lg:overflow-hidden">
         <div className="fade-in h-full">
           <AppContent 
             activeTab={currentTab} 
@@ -278,82 +192,62 @@ function AppContent({ activeTab, onShowTokenPayment, onShowStripePayment }) {
   return (
     <div className="h-full">
       <AuthGuard requireCredits={false}>
-        {activeTab === 'create' && <CreateTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
+        {activeTab === 'generate' && <GenerateTab onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />}
         {activeTab === 'gallery' && <GalleryTab />}
       </AuthGuard>
     </div>
   );
 }
 
-// Creation mode definitions
-const CREATE_MODES = [
-  { id: 'generate', name: 'Generate', icon: Wand2, color: '#008080', description: 'Text to Image' },
-  { id: 'edit', name: 'Edit', icon: Pencil, color: '#808000', description: 'Modify images' },
-  { id: 'extract', name: 'Extract', icon: Layers, color: '#800080', description: 'Layer separation' },
-  { id: 'video', name: 'Video', icon: Film, color: '#000080', description: 'Frame animation' },
-  { id: 'music', name: 'Music', icon: Music, color: '#008000', description: 'AI music' }
-];
+// PERFORMANCE: Memoized collapsible component
+const CollapsibleHowToUse = memo(function CollapsibleHowToUse() {
+  const [isExpanded, setIsExpanded] = useState(false);
 
-// Mode selector component
-const ModeSelector = memo(function ModeSelector({ activeMode, setActiveMode }) {
   return (
-    <div className="flex flex-wrap gap-1 p-1" style={{ background: WIN95.bg }}>
-      {CREATE_MODES.map((mode) => {
-        const Icon = mode.icon;
-        const isActive = activeMode === mode.id;
-        return (
-          <button
-            key={mode.id}
-            onClick={() => setActiveMode(mode.id)}
-            className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold transition-none"
-            style={{
-              background: isActive ? mode.color : WIN95.buttonFace,
-              color: isActive ? '#ffffff' : WIN95.text,
-              boxShadow: isActive 
-                ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
-                : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
-              fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-              cursor: 'pointer'
-            }}
-          >
-            <Icon className="w-3.5 h-3.5" />
-            <span>{mode.name}</span>
-          </button>
-        );
-      })}
+    <div className="rounded-none p-1" style={{ background: 'linear-gradient(135deg, #f8fafc, #e2e8f0)', border: '1px solid #cbd5e1', borderTop: 'none' }}>
+      <button onClick={() => setIsExpanded(!isExpanded)} className="w-full flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <Sparkles className="w-3 h-3" style={{ color: '#000' }} />
+          <span className="text-[10px] font-bold" style={{ color: '#000' }}>How to Use</span>
+        </div>
+        <ChevronDown className="w-3 h-3" style={{ color: '#000', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+      </button>
+      {isExpanded && (
+        <div className="mt-1 space-y-1 text-[9px] leading-relaxed" style={{ color: '#1a1a1a' }}>
+          {[
+            { num: '1', label: 'Text to Image:', desc: 'Type a description, choose a style, and click Generate.' },
+            { num: '2', label: 'Reference Edit:', desc: 'Upload 1 image, describe changes, and click Generate.' },
+            { num: '3', label: 'Image Blend:', desc: 'Upload 2+ images with FLUX or Nano Banana Pro.' },
+            { num: '4', label: 'Layer Extract:', desc: 'Upload image, select Qwen, click "Extract Layers".' }
+          ].map((item) => (
+            <div key={item.num} className="flex items-start gap-1">
+              <span className="flex-shrink-0 w-3.5 h-3.5 flex items-center justify-center rounded text-[8px] font-bold" style={{ 
+                background: '#e2e8f0',
+                border: '1px solid #cbd5e1',
+                color: '#000'
+              }}>{item.num}</span>
+              <span><strong>{item.label}</strong> {item.desc}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 });
 
-// Unified Create Tab with mode selection
-const CreateTab = memo(function CreateTab({ onShowTokenPayment, onShowStripePayment }) {
-  const [activeMode, setActiveMode] = useState('generate');
+const GenerateTab = memo(function GenerateTab({ onShowTokenPayment, onShowStripePayment }) {
+  const [customPrompt, setCustomPrompt] = useState('');
   const emailContext = useEmailAuth();
-  const isEmailAuth = emailContext.isAuthenticated;
+  const { controlNetImage, multiImageModel } = useImageGenerator();
   
-  const currentMode = CREATE_MODES.find(m => m.id === activeMode);
+  const hasReferenceImages = !!controlNetImage;
+  const isQwenSelected = multiImageModel === 'qwen-image-layered';
+  const isEmailAuth = emailContext.isAuthenticated;
 
   return (
-    <div className="fade-in h-full flex flex-col" style={{ background: WIN95.bg }}>
-      {/* Title bar */}
-      <div 
-        className="flex items-center gap-2 px-2 py-1"
-        style={{ 
-          background: `linear-gradient(90deg, ${currentMode?.color || '#000080'}, #1084d0)`,
-          color: '#ffffff',
-          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-        }}
-      >
-        {currentMode && <currentMode.icon className="w-4 h-4" />}
-        <span className="text-[11px] font-bold">Seiso Studio v1.0 - {currentMode?.name || 'Create'}</span>
-        <span className="text-[9px] ml-auto opacity-80">{currentMode?.description}</span>
-      </div>
-
-      {/* Mode Selection Toolbar */}
-      <ModeSelector activeMode={activeMode} setActiveMode={setActiveMode} />
-      
+    <div className="fade-in h-full flex flex-col">
       {/* User Info - Email or Wallet */}
-      <div className="flex-shrink-0 px-2 py-1" style={{ background: WIN95.bg, borderBottom: `1px solid ${WIN95.bgDark}` }}>
+      <div className="flex-shrink-0 glass-card rounded-t p-0.5">
         {isEmailAuth ? (
           <EmailUserInfo onShowStripePayment={onShowStripePayment} />
         ) : (
@@ -361,154 +255,102 @@ const CreateTab = memo(function CreateTab({ onShowTokenPayment, onShowStripePaym
         )}
       </div>
 
-      {/* Content based on mode */}
-      <div className="flex-1 min-h-0 overflow-auto lg:overflow-hidden">
-        <Suspense fallback={
-          <div className="flex items-center justify-center h-full" style={{ background: WIN95.bg }}>
-            <div className="text-[11px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Loading...</div>
-          </div>
-        }>
-          {(activeMode === 'generate' || activeMode === 'edit' || activeMode === 'extract') && (
-            <ImageModeContent 
-              mode={activeMode} 
-              onShowTokenPayment={onShowTokenPayment} 
-              onShowStripePayment={onShowStripePayment} 
-            />
-          )}
-          {activeMode === 'video' && (
-            <VideoGenerator onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />
-          )}
-          {activeMode === 'music' && (
-            <MusicGenerator onShowTokenPayment={onShowTokenPayment} onShowStripePayment={onShowStripePayment} />
-          )}
-        </Suspense>
-      </div>
-      
-      {/* Status bar */}
-      <div 
-        className="flex items-center px-2 py-0.5 text-[10px]"
-        style={{ 
-          background: WIN95.bg,
-          borderTop: `1px solid ${WIN95.border.light}`,
-          color: WIN95.text,
-          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-        }}
-      >
-        <Win95Panel sunken className="flex-1 px-2 py-0.5">
-          Ready
-        </Win95Panel>
-        <Win95Panel sunken className="px-2 py-0.5 ml-1">
-          Mode: {currentMode?.name}
-        </Win95Panel>
-      </div>
-    </div>
-  );
-});
+      {/* Main Content - Constrained height with bottom space on desktop, scrollable on mobile */}
+      <div className="flex-1 min-h-0 flex flex-col pb-4 lg:pb-3">
+        {/* Main Generation Area - Two Columns on desktop (60/40 split), stacked on mobile */}
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-0" style={{ maxHeight: 'none' }}>
+          {/* Left Column: Input Section */}
+          <div className="flex flex-col">
+            {/* Content area */}
+            <div className="lg:overflow-x-visible">
+            {/* How to Use - Collapsible and Compact */}
+            <CollapsibleHowToUse />
+            
+            {/* When reference image exists, show it first */}
+            {hasReferenceImages && (
+              <div key="reference-image-section-active" className="note-amber rounded-none p-1" style={{ borderTop: 'none' }}>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-bold" style={{ color: '#92400e' }}>🖼️ Reference</span>
+                </div>
+                <div className="h-[55px] overflow-hidden rounded mt-0.5" style={{ background: 'rgba(255,255,255,0.5)', border: '1px dashed rgba(217,119,6,0.3)' }}>
+                  <ReferenceImageInput />
+                </div>
+              </div>
+            )}
 
-// Image mode content (Generate, Edit, Extract)
-const ImageModeContent = memo(function ImageModeContent({ mode, onShowTokenPayment }) {
-  const [customPrompt, setCustomPrompt] = useState('');
-  const { controlNetImage, multiImageModel, setMultiImageModel } = useImageGenerator();
-  
-  // Set mode-appropriate model on mode change
-  useEffect(() => {
-    if (mode === 'extract') {
-      setMultiImageModel('qwen-image-layered');
-    } else if (mode === 'edit' && !controlNetImage) {
-      // For edit mode, user needs to upload a reference image
-    } else if (mode === 'generate') {
-      // Clear reference if in pure generate mode
-      if (multiImageModel === 'qwen-image-layered') {
-        setMultiImageModel('flux-schnell');
-      }
-    }
-  }, [mode, setMultiImageModel, controlNetImage, multiImageModel]);
+            {/* Prompt Input */}
+            {!isQwenSelected && (
+              <div key={hasReferenceImages ? 'prompt-below-image' : 'prompt-primary'} className="note-teal rounded-none p-1" style={{ borderTop: 'none' }}>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-bold" style={{ color: '#00695c' }}>{hasReferenceImages ? '✏️ Changes' : '✨ Prompt'}</span>
+                </div>
+                <textarea
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder={hasReferenceImages ? "Describe changes..." : "Describe your image..."}
+                  className="w-full p-1 rounded resize-none text-[10px] win95-input mt-0.5"
+                  rows={3}
+                />
+              </div>
+            )}
 
-  const hasReferenceImages = !!controlNetImage;
-  const isQwenSelected = multiImageModel === 'qwen-image-layered';
-  const showPrompt = mode !== 'extract';
-  const showReference = mode === 'edit' || mode === 'extract' || hasReferenceImages;
-  const showStyle = mode !== 'extract';
+            {/* Reference Image Input - Only shown when NO reference image */}
+            {!hasReferenceImages && (
+              <div key="reference-image-section-empty" className="note-amber rounded-none p-1" style={{ borderTop: 'none' }}>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-bold" style={{ color: '#92400e' }}>🖼️ Reference (optional)</span>
+                </div>
+                <div className="h-[50px] overflow-hidden rounded mt-0.5" style={{ background: 'rgba(255,255,255,0.5)', border: '1px dashed rgba(217,119,6,0.3)' }}>
+                  <ReferenceImageInput />
+                </div>
+              </div>
+            )}
 
-  return (
-    <div className="h-full p-1.5 lg:p-2 flex flex-col lg:flex-row gap-1.5 lg:gap-2 overflow-auto lg:overflow-hidden">
-      {/* Left Column: Input Section */}
-      <div className="flex-1 flex flex-col gap-1 lg:gap-1.5 min-h-0 overflow-auto lg:overflow-hidden">
-        {/* Mode-specific instructions */}
-        <Win95GroupBox title={`📋 ${mode === 'generate' ? 'Text to Image' : mode === 'edit' ? 'Edit Image' : 'Extract Layers'}`} titleColor={mode === 'generate' ? '#008080' : mode === 'edit' ? '#808000' : '#800080'}>
-          <div className="text-[9px] lg:text-[10px] p-1" style={{ background: WIN95.bgLight, color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-            {mode === 'generate' && '✨ Describe your image. Add style, lighting, mood.'}
-            {mode === 'edit' && '✏️ Upload reference, describe changes.'}
-            {mode === 'extract' && '📊 Upload image to extract layers.'}
-          </div>
-        </Win95GroupBox>
+            {/* Model Selection */}
+            {(!hasReferenceImages && !isQwenSelected) || hasReferenceImages ? (
+              <div className="glass-card rounded-none p-1" style={{ borderTop: 'none' }}>
+                <MultiImageModelSelector customPrompt={customPrompt} />
+              </div>
+            ) : null}
 
-        {/* Reference Image - shown for edit/extract modes or when exists */}
-        {showReference && (
-          <Win95GroupBox title={mode === 'extract' ? '📤 Upload Image' : '🖼️ Reference Image'} titleColor="#808000">
-            <div className="h-[60px] lg:h-[70px] overflow-hidden">
-              <ReferenceImageInput />
+            {/* AI Prompt Reasoning Toggle */}
+            <div className="glass-card rounded-none p-1" style={{ borderTop: 'none' }}>
+              <PromptOptimizer />
             </div>
-          </Win95GroupBox>
-        )}
 
-        {/* Prompt Input - not for extract mode */}
-        {showPrompt && (
-          <Win95GroupBox title={mode === 'edit' ? '✏️ Describe Changes' : '✨ Prompt'} titleColor="#008080">
-            <Win95Panel sunken className="p-0">
-              <textarea
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder={mode === 'edit' ? "Describe changes..." : "Describe your image..."}
-                className="w-full p-1.5 resize-none text-[11px] focus:outline-none"
-                rows={2}
-                style={{ 
-                  background: 'transparent',
-                  color: WIN95.text,
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                }}
+            {/* Style Selection */}
+            {!isQwenSelected && (
+              <div className="note-slate rounded-none p-1 relative lg:overflow-visible" style={{ borderTop: 'none' }}>
+                <StyleSelector openUpward={true} />
+              </div>
+            )}
+            
+            {/* Generate Button - Moved up, between style and bottom */}
+            <div className="flex-shrink-0 rounded-none lg:rounded-b p-1 mt-1 lg:mt-0" style={{ 
+              background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%)',
+              border: '2px solid #10b981',
+              borderTop: 'none'
+            }}>
+              <GenerateButton 
+                customPrompt={customPrompt}
+                onShowTokenPayment={onShowTokenPayment}
               />
-            </Win95Panel>
-          </Win95GroupBox>
-        )}
-
-        {/* Model Selection - not for extract mode */}
-        {mode !== 'extract' && (
-          <Win95GroupBox title="🔧 Model" titleColor="#000080">
-            <MultiImageModelSelector customPrompt={customPrompt} />
-          </Win95GroupBox>
-        )}
-
-        {/* AI Prompt Reasoning Toggle - not for extract mode */}
-        {mode !== 'extract' && (
-          <Win95GroupBox title="🧠 AI Reasoning" titleColor="#800080">
-            <PromptOptimizer />
-          </Win95GroupBox>
-        )}
-
-        {/* Style Selection - not for extract mode */}
-        {showStyle && (
-          <Win95GroupBox title="🎨 Style" titleColor="#008000">
-            <StyleSelector openUpward={true} />
-          </Win95GroupBox>
-        )}
-        
-        {/* Generate Button */}
-        <Win95GroupBox title="▶ Generate" titleColor="#008000">
-          <GenerateButton 
-            customPrompt={customPrompt}
-            onShowTokenPayment={onShowTokenPayment}
-          />
-        </Win95GroupBox>
-      </div>
-
-      {/* Right Column: Output Section */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <Win95GroupBox title="🎨 Output" titleColor="#000080" className="flex-1 flex flex-col min-h-0">
-          <div className="flex-1 overflow-hidden min-h-0" style={{ minHeight: '150px', background: WIN95.bg }}>
-            <ImageOutput />
+            </div>
+            </div>
           </div>
-        </Win95GroupBox>
+
+          {/* Right Column: Output Section - Aligned with generate button */}
+          <div className="flex flex-col mt-2 lg:mt-0">
+            <div className="note-blue rounded-none p-1 flex flex-col flex-1" style={{ borderLeft: 'none' }}>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <span className="text-[10px] font-bold" style={{ color: '#1e40af' }}>🎨 Output</span>
+              </div>
+              <div className="flex flex-col overflow-hidden mt-0.5 flex-1" style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '2px', minHeight: '180px' }}>
+                <ImageOutput />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -516,14 +358,9 @@ const ImageModeContent = memo(function ImageModeContent({ mode, onShowTokenPayme
 
 // PERFORMANCE: Memoized gallery tab with lazy loading
 const GalleryTab = memo(() => (
-  <Suspense fallback={
-    <div className="flex items-center justify-center h-full" style={{ background: WIN95.bg }}>
-      <div className="text-[11px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Loading...</div>
-    </div>
-  }>
-    <div className="h-full overflow-auto" style={{ background: WIN95.bg }}><ImageGallery /></div>
+  <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /></div>}>
+    <div className="h-full overflow-auto"><ImageGallery /></div>
   </Suspense>
 ));
-
 
 export default App;
