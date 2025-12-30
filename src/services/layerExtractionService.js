@@ -141,7 +141,7 @@ export const extractLayers = async (imageUrl, options = {}) => {
       creditsDeducted: data.creditsDeducted
     };
   } catch (error) {
-    logger.error('Layer extraction error', { error: error.message, stack: error.stack });
+    logger.error('Layer extraction error', { error: error.message });
     throw error;
   }
 };

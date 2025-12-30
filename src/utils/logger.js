@@ -29,7 +29,8 @@ class Logger {
       'rpcUrl', 'rpc_url', 'endpoint', 'url', 'rpc',
       'paymentAddress', 'paymentWallet', 'payment_address', 'solanaPaymentAddress',
       'linkedWalletAddress', 'addresses', 'publicKey', 'pubkey',
-      'clientSecret', 'paymentIntentId', 'sessionId'
+      'clientSecret', 'paymentIntentId', 'sessionId',
+      'stack', 'stackTrace', 'trace'  // Prevent exposing internal file paths
     ];
     
     const sanitized = { ...data };
@@ -121,6 +122,10 @@ class Logger {
       // Dynamically get API URL to avoid circular dependencies
       const { getApiUrl } = await import('./apiConfig.js');
       const apiUrl = getApiUrl();
+      
+      // SECURITY: Sanitize data before sending to backend to prevent info leaks
+      const sanitizedData = this.sanitizeData(data);
+      
       await fetch(`${apiUrl}/api/logs`, {
         method: 'POST',
         headers: {
@@ -129,15 +134,17 @@ class Logger {
         body: JSON.stringify({
           level,
           message,
-          data,
+          data: sanitizedData,
           timestamp: new Date().toISOString(),
-          userAgent: navigator.userAgent,
-          url: window.location.href
+          // Only send minimal browser info, not full userAgent which can fingerprint
+          browser: navigator.userAgent.split(' ').pop() || 'unknown',
+          // Only send path, not full URL which may contain sensitive query params
+          path: window.location.pathname
         })
       });
-    } catch (error) {
-      // Fallback to console if logging service fails
-      console.error('Failed to send log to service:', error);
+    } catch {
+      // Silently fail - don't log errors about logging to avoid recursion
+      // and don't expose error details to console in production
     }
   }
 }
