@@ -6942,8 +6942,9 @@ app.post('/api/auth/signin', authRateLimiter, async (req, res) => {
     }
 
     // Find user with timeout to prevent hanging on MongoDB issues
+    // IMPORTANT: Exclude generations array to prevent loading huge documents (16MB+ limit)
     const user = await User.findOne({ email: email.toLowerCase() })
-      .select('+password')
+      .select('+password -generations -galleryImages')
       .maxTimeMS(10000); // 10 second timeout
     if (!user) {
       return res.status(401).json({
@@ -9745,9 +9746,16 @@ app.post('/api/generations/add', authenticateFlexible, async (req, res) => {
     };
     
     // Build update object - only add generation to history (credits already deducted)
+    // IMPORTANT: Use $slice to limit array size and prevent documents exceeding 16MB limit
+    const MAX_GENERATION_HISTORY = 100; // Keep only last 100 generations
+    const MAX_GALLERY_SIZE = 50; // Keep only last 50 gallery items
+    
     const updateObj = {
       $push: {
-        generationHistory: generation
+        generationHistory: {
+          $each: [generation],
+          $slice: -MAX_GENERATION_HISTORY // Keep only the last N items
+        }
       }
     };
     
@@ -9762,7 +9770,10 @@ app.post('/api/generations/add', authenticateFlexible, async (req, res) => {
         creditsUsed: creditsUsedForHistory,
         timestamp: new Date()
       };
-      updateObj.$push.gallery = galleryItem;
+      updateObj.$push.gallery = {
+        $each: [galleryItem],
+        $slice: -MAX_GALLERY_SIZE // Keep only the last N items
+      };
     }
     
     const updateResult = await User.findOneAndUpdate(
@@ -9794,6 +9805,56 @@ app.post('/api/generations/add', authenticateFlexible, async (req, res) => {
   } catch (error) {
     logger.error('Error adding generation:', { error: error.message, stack: error.stack });
     res.status(500).json({ success: false, error: getSafeErrorMessage(error, 'Failed to add generation') });
+  }
+});
+
+/**
+ * Fix oversized user document by truncating generation history
+ * This is needed when a user's document exceeds MongoDB's 16MB limit
+ * Uses updateOne which doesn't need to read the document first
+ */
+app.post('/api/admin/fix-oversized-user', async (req, res) => {
+  try {
+    const { email, walletAddress, adminSecret } = req.body;
+    
+    // Simple admin protection - require a secret
+    if (adminSecret !== process.env.SESSION_SECRET) {
+      return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+    
+    if (!email && !walletAddress) {
+      return res.status(400).json({ success: false, error: 'Email or wallet address required' });
+    }
+    
+    const query = email ? { email: email.toLowerCase() } : { walletAddress: walletAddress.toLowerCase() };
+    
+    // Use updateOne to truncate arrays without reading the document
+    // This works even on oversized documents
+    const result = await User.updateOne(
+      query,
+      {
+        $set: {
+          generationHistory: [], // Clear all history
+          gallery: [] // Clear gallery
+        }
+      }
+    );
+    
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    logger.info('Fixed oversized user document', { email, walletAddress, modified: result.modifiedCount });
+    
+    res.json({
+      success: true,
+      message: 'User document fixed. Generation history cleared.',
+      matched: result.matchedCount,
+      modified: result.modifiedCount
+    });
+  } catch (error) {
+    logger.error('Error fixing oversized user:', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
