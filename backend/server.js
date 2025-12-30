@@ -3041,14 +3041,20 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
 
     const submitData = await submitResponse.json();
     
-    // Log submit response for debugging
-    logger.debug('Video submit response', { 
+    // Log FULL submit response for debugging
+    logger.info('Video submit response FULL', { 
       submitDataKeys: Object.keys(submitData),
-      submitData: JSON.stringify(submitData).substring(0, 200)
+      submitData: JSON.stringify(submitData).substring(0, 500),
+      hasStatusUrl: !!submitData.status_url,
+      hasResponseUrl: !!submitData.response_url
     });
     
     // Handle different possible response structures for request_id
     const requestId = submitData.request_id || submitData.requestId || submitData.id;
+    
+    // fal.ai may provide status_url and response_url directly
+    const providedStatusUrl = submitData.status_url;
+    const providedResponseUrl = submitData.response_url;
     
     if (!requestId) {
       logger.error('No request_id in submit response', { submitData });
@@ -3058,7 +3064,7 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
       });
     }
 
-    logger.info('Video generation submitted', { requestId, endpoint });
+    logger.info('Video generation submitted', { requestId, endpoint, hasProvidedStatusUrl: !!providedStatusUrl });
 
     // Check if the submit response already contains the video (synchronous completion)
     // Handle multiple possible response structures from fal.ai
@@ -3103,16 +3109,14 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
     }
 
     // Poll for completion (video generation can take 1-3 minutes)
-    // Build status and result endpoints using the same endpoint structure as submit
-    let statusEndpoint, resultEndpoint;
-    if (generation_mode === 'text-to-video') {
-      statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1/requests/${requestId}/status`;
-      resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1/requests/${requestId}`;
-    } else {
-      // For image-to-video and first-last-frame, always use /fast/ path to match submit endpoint
-      statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/${modeConfig.endpoint}/requests/${requestId}/status`;
-      resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/${modeConfig.endpoint}/requests/${requestId}`;
-    }
+    // Use provided URLs from fal.ai if available, otherwise construct from model path
+    const modelPath = generation_mode === 'text-to-video' 
+      ? 'fal-ai/veo3.1'
+      : `fal-ai/veo3.1/fast/${modeConfig.endpoint}`;
+    
+    // Prefer URLs provided by fal.ai in submit response
+    const statusEndpoint = providedStatusUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}/status`;
+    const resultEndpoint = providedResponseUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}`;
     
     logger.debug('Polling endpoints', { statusEndpoint, resultEndpoint });
     
