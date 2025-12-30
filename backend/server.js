@@ -3001,15 +3001,15 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
 
     // Build endpoint URL based on mode and quality
     // For text-to-video, use base model endpoint: fal-ai/veo3.1
-    // For other modes, use: fal-ai/veo3.1/fast/{mode} or fal-ai/veo3.1/{mode}
+    // For image-to-video and first-last-frame, ALWAYS use /fast/ path (fal.ai only has fast variants)
     let endpoint;
     if (generation_mode === 'text-to-video') {
       // Text-to-video uses base model endpoint (no /fast or /text-to-video suffix)
       endpoint = 'https://queue.fal.run/fal-ai/veo3.1';
     } else {
-      // For image-to-video and first-last-frame, use quality path
-      const qualityPath = quality === 'quality' ? '' : '/fast';
-      endpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}`;
+      // For image-to-video and first-last-frame, always use /fast/ path
+      // fal.ai Veo 3.1 only provides fast variants for these modes
+      endpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/${modeConfig.endpoint}`;
     }
     
     const submitResponse = await fetch(endpoint, {
@@ -3109,10 +3109,9 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
       statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1/requests/${requestId}/status`;
       resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1/requests/${requestId}`;
     } else {
-      // For image-to-video and first-last-frame, match the submit endpoint exactly
-      const qualityPath = quality === 'quality' ? '' : '/fast';
-      statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}/status`;
-      resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1${qualityPath}/${modeConfig.endpoint}/requests/${requestId}`;
+      // For image-to-video and first-last-frame, always use /fast/ path to match submit endpoint
+      statusEndpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/${modeConfig.endpoint}/requests/${requestId}/status`;
+      resultEndpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/${modeConfig.endpoint}/requests/${requestId}`;
     }
     
     logger.debug('Polling endpoints', { statusEndpoint, resultEndpoint });
