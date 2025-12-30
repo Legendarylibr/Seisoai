@@ -3155,13 +3155,19 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
       }
       
       const statusData = await statusResponse.json();
+      
+      // Normalize status to uppercase for comparison
+      const normalizedStatus = (statusData.status || '').toUpperCase();
+      
       logger.info('Video polling status', { 
         requestId, 
-        status: statusData.status, 
+        status: statusData.status,
+        normalizedStatus,
         pollCount, 
         elapsed: Math.round((Date.now() - startTime) / 1000) + 's',
-        hasVideo: !!(statusData.video || statusData.data?.video || statusData.response?.video),
-        responseKeys: Object.keys(statusData)
+        hasVideo: !!(statusData.video || statusData.data?.video || statusData.response?.video || statusData.result?.video),
+        responseKeys: Object.keys(statusData),
+        fullResponse: JSON.stringify(statusData).substring(0, 500)
       });
       
       // Check if status response already contains the video (some modes return it directly)
@@ -3179,6 +3185,12 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
       } else if (statusData.response?.video?.url) {
         statusVideoUrl = statusData.response.video.url;
         statusVideoMeta = statusData.response.video;
+      } else if (statusData.result?.video?.url) {
+        statusVideoUrl = statusData.result.video.url;
+        statusVideoMeta = statusData.result.video;
+      } else if (statusData.payload?.video?.url) {
+        statusVideoUrl = statusData.payload.video.url;
+        statusVideoMeta = statusData.payload.video;
       }
       
       if (statusVideoUrl) {
@@ -3197,9 +3209,14 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
         });
       }
       
-      if (statusData.status === 'COMPLETED') {
+      // Check for completed status (case-insensitive) or OK/DONE variants
+      if (normalizedStatus === 'COMPLETED' || normalizedStatus === 'OK' || normalizedStatus === 'DONE' || normalizedStatus === 'SUCCESS') {
+        // Use response_url if provided by fal.ai, otherwise use our constructed result endpoint
+        const fetchUrl = statusData.response_url || resultEndpoint;
+        logger.info('Fetching video result', { requestId, fetchUrl, hasResponseUrl: !!statusData.response_url });
+        
         // Fetch the result
-        const resultResponse = await fetch(resultEndpoint, {
+        const resultResponse = await fetch(fetchUrl, {
           headers: {
             'Authorization': `Key ${FAL_API_KEY}`
           }
@@ -3270,12 +3287,25 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
           videoUrl = resultData.response.video.url;
           videoMeta = resultData.response.video;
         }
+        // Nested in result
+        else if (resultData.result?.video?.url) {
+          videoUrl = resultData.result.video.url;
+          videoMeta = resultData.result.video;
+        }
+        // Nested in payload
+        else if (resultData.payload?.video?.url) {
+          videoUrl = resultData.payload.video.url;
+          videoMeta = resultData.payload.video;
+        }
         // Video as string
         else if (resultData.data?.video && typeof resultData.data.video === 'string') {
           videoUrl = resultData.data.video;
         }
         else if (resultData.video && typeof resultData.video === 'string') {
           videoUrl = resultData.video;
+        }
+        else if (resultData.result?.video && typeof resultData.result.video === 'string') {
+          videoUrl = resultData.result.video;
         }
         // Direct URL fields
         else if (resultData.url) {
@@ -3292,6 +3322,9 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
         }
         else if (resultData.output?.url) {
           videoUrl = resultData.output.url;
+        }
+        else if (resultData.result?.url) {
+          videoUrl = resultData.result.url;
         }
         
         if (videoUrl) {
@@ -3337,9 +3370,9 @@ app.post('/api/generate/video', freeImageRateLimiter, requireCreditsForVideo(), 
             error: 'No video URL in response. Response structure: ' + JSON.stringify(Object.keys(resultData)) 
           });
         }
-      } else if (statusData.status === 'FAILED') {
+      } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
         logger.error('Video generation failed', { requestId, statusData });
-        return res.status(500).json({ success: false, error: 'Video generation failed' });
+        return res.status(500).json({ success: false, error: statusData.error || statusData.message || 'Video generation failed' });
       }
       
       // Still in progress, continue polling
