@@ -9123,13 +9123,26 @@ const blockchainRpcLimiter = rateLimit({
 // EVM RPC endpoints by chain ID (backend uses process.env, not VITE_)
 const getEvmRpcUrl = (chainId) => {
   const rpcUrls = {
-    1: process.env.ETH_RPC_URL || process.env.VITE_ETH_RPC_URL || 'https://eth.llamarpc.com',
-    137: process.env.POLYGON_RPC_URL || process.env.VITE_POLYGON_RPC_URL || 'https://polygon.llamarpc.com',
-    42161: process.env.ARBITRUM_RPC_URL || process.env.VITE_ARBITRUM_RPC_URL || 'https://arbitrum.llamarpc.com',
-    10: process.env.OPTIMISM_RPC_URL || process.env.VITE_OPTIMISM_RPC_URL || 'https://optimism.llamarpc.com',
-    8453: process.env.BASE_RPC_URL || process.env.VITE_BASE_RPC_URL || 'https://base.llamarpc.com'
+    1: process.env.ETH_RPC_URL,
+    137: process.env.POLYGON_RPC_URL,
+    42161: process.env.ARBITRUM_RPC_URL,
+    10: process.env.OPTIMISM_RPC_URL,
+    8453: process.env.BASE_RPC_URL
   };
-  return rpcUrls[chainId] || rpcUrls[1];
+  
+  const chainNames = {
+    1: 'ETH_RPC_URL',
+    137: 'POLYGON_RPC_URL',
+    42161: 'ARBITRUM_RPC_URL',
+    10: 'OPTIMISM_RPC_URL',
+    8453: 'BASE_RPC_URL'
+  };
+  
+  const rpcUrl = rpcUrls[chainId];
+  if (!rpcUrl) {
+    throw new Error(`RPC URL not configured for chainId ${chainId}. Please set ${chainNames[chainId] || 'RPC_URL'} environment variable.`);
+  }
+  return rpcUrl;
 };
 
 // Solana RPC Proxy
@@ -9238,7 +9251,13 @@ app.post('/api/evm/rpc', blockchainRpcLimiter, async (req, res) => {
       return res.status(403).json({ success: false, error: `RPC method '${method}' is not allowed` });
     }
     
-    const rpcUrl = getEvmRpcUrl(chainId);
+    let rpcUrl;
+    try {
+      rpcUrl = getEvmRpcUrl(chainId);
+    } catch (err) {
+      logger.error('EVM RPC URL not configured', { chainId, error: err.message });
+      return res.status(503).json({ success: false, error: err.message });
+    }
     
     try {
       const response = await fetch(rpcUrl, {
