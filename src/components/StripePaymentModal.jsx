@@ -335,7 +335,7 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
   // Check if user is authenticated (either email or wallet)
   if (!isEmailAuth && !walletContext.isConnected) {
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
         <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-md p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Authentication Required</h2>
           <p className="text-gray-400 mb-4">Please sign in with email or connect your wallet to purchase credits.</p>
@@ -351,7 +351,7 @@ const StripePaymentModal = ({ isOpen, onClose }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
       <div 
         className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded"
         style={{

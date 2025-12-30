@@ -347,8 +347,8 @@ const ImageGallery = () => {
       </div>
 
       {/* Gallery Grid */}
-      <div className="flex-1 overflow-auto p-2">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+      <div className="flex-1 overflow-auto lg:overflow-auto p-1.5 lg:p-2 min-h-0">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-1.5 lg:gap-2">
           {filteredHistory.filter(item => {
             // Only show items with valid URLs
             const displayUrl = item.videoUrl || item.imageUrl || item.image;

@@ -1281,7 +1281,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
 
   return (
     <div 
-      className="fixed inset-0 bg-black/80 flex items-center justify-center z-[999999] p-4"
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4"
       onClick={(e) => {
         // Close on backdrop click
         if (e.target === e.currentTarget) {

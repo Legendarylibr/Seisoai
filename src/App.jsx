@@ -72,7 +72,7 @@ const Win95Panel = memo(function Win95Panel({ children, className = '', sunken =
 // Windows 95 style group box
 const Win95GroupBox = memo(function Win95GroupBox({ title, children, className = '', titleColor = WIN95.text }) {
   return (
-    <div className={`relative ${className}`} style={{ padding: '14px 8px 8px 8px' }}>
+    <div className={`relative ${className}`} style={{ padding: '12px 6px 6px 6px' }}>
       <div 
         className="absolute inset-0"
         style={{
@@ -362,7 +362,7 @@ const CreateTab = memo(function CreateTab({ onShowTokenPayment, onShowStripePaym
       </div>
 
       {/* Content based on mode */}
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-auto lg:overflow-hidden">
         <Suspense fallback={
           <div className="flex items-center justify-center h-full" style={{ background: WIN95.bg }}>
             <div className="text-[11px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Loading...</div>
@@ -431,22 +431,22 @@ const ImageModeContent = memo(function ImageModeContent({ mode, onShowTokenPayme
   const showStyle = mode !== 'extract';
 
   return (
-    <div className="h-full p-2 flex flex-col lg:flex-row gap-2">
+    <div className="h-full p-1.5 lg:p-2 flex flex-col lg:flex-row gap-1.5 lg:gap-2 overflow-auto lg:overflow-hidden">
       {/* Left Column: Input Section */}
-      <div className="flex-1 flex flex-col gap-2">
+      <div className="flex-1 flex flex-col gap-1 lg:gap-1.5 min-h-0 overflow-auto lg:overflow-hidden">
         {/* Mode-specific instructions */}
         <Win95GroupBox title={`📋 ${mode === 'generate' ? 'Text to Image' : mode === 'edit' ? 'Edit Image' : 'Extract Layers'}`} titleColor={mode === 'generate' ? '#008080' : mode === 'edit' ? '#808000' : '#800080'}>
-          <div className="text-[10px] p-1" style={{ background: WIN95.bgLight, color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-            {mode === 'generate' && '✨ Describe your image in detail. Add style, lighting, mood, and composition for best results.'}
-            {mode === 'edit' && '✏️ Upload a reference image, then describe the changes you want to make.'}
-            {mode === 'extract' && '📊 Upload an image to extract layers. AI will separate foreground, background, and objects.'}
+          <div className="text-[9px] lg:text-[10px] p-1" style={{ background: WIN95.bgLight, color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+            {mode === 'generate' && '✨ Describe your image. Add style, lighting, mood.'}
+            {mode === 'edit' && '✏️ Upload reference, describe changes.'}
+            {mode === 'extract' && '📊 Upload image to extract layers.'}
           </div>
         </Win95GroupBox>
 
         {/* Reference Image - shown for edit/extract modes or when exists */}
         {showReference && (
           <Win95GroupBox title={mode === 'extract' ? '📤 Upload Image' : '🖼️ Reference Image'} titleColor="#808000">
-            <div className="h-[80px] overflow-hidden">
+            <div className="h-[60px] lg:h-[70px] overflow-hidden">
               <ReferenceImageInput />
             </div>
           </Win95GroupBox>
@@ -459,9 +459,9 @@ const ImageModeContent = memo(function ImageModeContent({ mode, onShowTokenPayme
               <textarea
                 value={customPrompt}
                 onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder={mode === 'edit' ? "Describe the changes you want to make..." : "Describe your image in detail..."}
-                className="w-full p-2 resize-none text-[11px] focus:outline-none"
-                rows={3}
+                placeholder={mode === 'edit' ? "Describe changes..." : "Describe your image..."}
+                className="w-full p-1.5 resize-none text-[11px] focus:outline-none"
+                rows={2}
                 style={{ 
                   background: 'transparent',
                   color: WIN95.text,
@@ -503,9 +503,9 @@ const ImageModeContent = memo(function ImageModeContent({ mode, onShowTokenPayme
       </div>
 
       {/* Right Column: Output Section */}
-      <div className="flex-1 flex flex-col">
-        <Win95GroupBox title="🎨 Output" titleColor="#000080" className="flex-1 flex flex-col">
-          <div className="flex-1 overflow-hidden" style={{ minHeight: '200px', background: WIN95.bg }}>
+      <div className="flex-1 flex flex-col min-h-0">
+        <Win95GroupBox title="🎨 Output" titleColor="#000080" className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-hidden min-h-0" style={{ minHeight: '150px', background: WIN95.bg }}>
             <ImageOutput />
           </div>
         </Win95GroupBox>

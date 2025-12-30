@@ -147,7 +147,7 @@ const Win95Panel = memo(function Win95Panel({ children, className = '', sunken =
 // Windows 95 style group box
 const Win95GroupBox = memo(function Win95GroupBox({ title, children, className = '' }) {
   return (
-    <div className={`relative ${className}`} style={{ padding: '12px 8px 8px 8px' }}>
+    <div className={`relative ${className}`} style={{ padding: '10px 6px 6px 6px' }}>
       <div 
         className="absolute inset-0"
         style={{
@@ -268,7 +268,7 @@ const FrameUpload = memo(({ label, frameUrl, onUpload, onRemove, icon }) => {
       {/* Enlarged preview modal */}
       {previewImage && (
         <div 
-          className="fixed inset-0 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 flex items-center justify-center z-[9999] p-4"
           style={{ background: 'rgba(0,0,0,0.8)' }}
           onClick={() => setPreviewImage(null)}
         >
@@ -528,9 +528,9 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
       <CollapsibleVideoHowToUse />
       
       {/* Main content */}
-      <div className="flex-1 min-h-0 p-2 flex flex-col lg:flex-row gap-2">
+      <div className="flex-1 min-h-0 p-1.5 lg:p-2 flex flex-col lg:flex-row gap-1.5 lg:gap-2 overflow-auto lg:overflow-hidden">
         {/* Left panel - Controls */}
-        <div className="flex-1 flex flex-col gap-2">
+        <div className="flex-1 flex flex-col gap-1 lg:gap-1.5 min-h-0 overflow-auto lg:overflow-hidden">
           {/* Generation Mode & Quality */}
           <Win95GroupBox title="Generation Mode" className="flex-shrink-0">
             <div className={`grid ${generationMode === 'text-to-video' ? 'grid-cols-1' : 'grid-cols-2'} gap-2`}>
@@ -617,18 +617,18 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
           )}
 
           {/* Motion Description */}
-          <Win95GroupBox title="Motion Description" className="flex-1 flex flex-col">
-            <Win95Panel sunken className="flex-1 p-0">
+          <Win95GroupBox title="Motion Description" className="flex-shrink-0">
+            <Win95Panel sunken className="p-0">
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe how the scene should animate between frames. Include action, camera movement, and mood..."
-                className="w-full h-full p-2 resize-none text-[11px] focus:outline-none"
+                placeholder="Describe animation: action, camera, mood..."
+                className="w-full p-1.5 resize-none text-[11px] focus:outline-none"
+                rows={2}
                 style={{ 
                   background: 'transparent',
                   color: WIN95.text,
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                  minHeight: '60px'
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               />
             </Win95Panel>
@@ -746,10 +746,10 @@ const VideoGenerator = memo(function VideoGenerator({ onShowTokenPayment, onShow
         </div>
         
         {/* Right panel - Output */}
-        <div className="flex-1 flex flex-col gap-2">
+        <div className="flex-1 flex flex-col gap-1 lg:gap-1.5 min-h-0">
           {/* Video Output */}
-          <Win95GroupBox title="Video Output" className="flex-1 flex flex-col">
-            <Win95Panel sunken className="flex-1 flex items-center justify-center overflow-hidden" style={{ minHeight: '200px' }}>
+          <Win95GroupBox title="Video Output" className="flex-1 flex flex-col min-h-0">
+            <Win95Panel sunken className="flex-1 flex items-center justify-center overflow-hidden min-h-0" style={{ minHeight: '150px' }}>
               {isGenerating && progress ? (
                 <div className="text-center p-4">
                   <div className="w-10 h-10 mx-auto mb-2 flex items-center justify-center">

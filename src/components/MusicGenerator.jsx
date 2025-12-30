@@ -149,7 +149,7 @@ const Win95Panel = memo(function Win95Panel({ children, className = '', sunken =
 // Windows 95 style group box
 const Win95GroupBox = memo(function Win95GroupBox({ title, children, className = '' }) {
   return (
-    <div className={`relative ${className}`} style={{ padding: '12px 8px 8px 8px' }}>
+    <div className={`relative ${className}`} style={{ padding: '10px 6px 6px 6px' }}>
       <div 
         className="absolute inset-0"
         style={{
@@ -515,9 +515,9 @@ const MusicGenerator = memo(function MusicGenerator({ onShowTokenPayment, onShow
       <CollapsibleMusicHowToUse />
       
       {/* Main content */}
-      <div className="flex-1 min-h-0 p-2 flex flex-col lg:flex-row gap-2">
+      <div className="flex-1 min-h-0 p-1.5 lg:p-2 flex flex-col lg:flex-row gap-1.5 lg:gap-2 overflow-auto lg:overflow-hidden">
         {/* Left panel - Controls */}
-        <div className="flex-1 flex flex-col gap-2">
+        <div className="flex-1 flex flex-col gap-1 lg:gap-1.5 min-h-0 overflow-auto lg:overflow-hidden">
           {/* Genre Selection */}
           <Win95GroupBox title="Genre" className="flex-shrink-0">
             <Win95GenreDropdown
@@ -527,21 +527,21 @@ const MusicGenerator = memo(function MusicGenerator({ onShowTokenPayment, onShow
           </Win95GroupBox>
           
           {/* Track Description */}
-          <Win95GroupBox title="Track Description" className="flex-1 flex flex-col">
-            <Win95Panel sunken className="flex-1 p-0">
+          <Win95GroupBox title="Track Description" className="flex-shrink-0">
+            <Win95Panel sunken className="p-0">
               <textarea
                 value={prompt}
                 onChange={(e) => {
                   setPrompt(e.target.value);
                   setSelectedGenre(null);
                 }}
-                placeholder="Describe your track... Include genre, instruments, mood, key, and BPM"
-                className="w-full h-full p-2 resize-none text-[11px] focus:outline-none"
+                placeholder="Describe track: genre, instruments, mood, key, BPM"
+                className="w-full p-1.5 resize-none text-[11px] focus:outline-none"
+                rows={2}
                 style={{ 
                   background: 'transparent',
                   color: WIN95.text,
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                  minHeight: '80px'
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               />
             </Win95Panel>
@@ -609,7 +609,7 @@ const MusicGenerator = memo(function MusicGenerator({ onShowTokenPayment, onShow
         </div>
         
         {/* Right panel - Output */}
-        <div className="flex-1 flex flex-col gap-2">
+        <div className="flex-1 flex flex-col gap-1 lg:gap-1.5 min-h-0">
           {/* Waveform Display */}
           <Win95GroupBox title="Waveform" className="flex-shrink-0">
             <Win95Panel sunken className="overflow-hidden">

@@ -10,10 +10,10 @@ const AuthPrompt = () => {
   // Show auth mode selection if not selected
   if (!authMode) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-120px)] px-4 py-6" style={{ position: 'relative', zIndex: 10 }}>
+      <div className="flex items-center justify-center h-full lg:max-h-[calc(100vh-80px)] px-4 py-4 lg:py-2 overflow-auto lg:overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
         <div className="text-center max-w-5xl mx-auto slide-up">
           {/* Hero Section with Neon Effect */}
-          <div className="mb-8 relative">
+          <div className="mb-4 lg:mb-2 relative">
             {/* Decorative corners */}
             <div className="absolute -top-2 -left-2 w-6 h-6 opacity-50" style={{
               background: 'linear-gradient(90deg, #00b8a9 33%, transparent 33%), linear-gradient(180deg, #00b8a9 33%, transparent 33%)',
@@ -41,8 +41,8 @@ const AuthPrompt = () => {
           </div>
 
           {/* Sign In Section */}
-          <div className="mb-5">
-            <h2 className="text-lg font-bold mb-3 inline-flex items-center gap-2" style={{ 
+          <div className="mb-3 lg:mb-2">
+            <h2 className="text-lg font-bold mb-2 inline-flex items-center gap-2" style={{ 
               color: '#ffffff', 
               textShadow: '0 0 8px rgba(245, 158, 11, 0.5), 2px 2px 0 rgba(0, 0, 0, 0.8)',
               fontFamily: "'VT323', monospace",
@@ -53,7 +53,7 @@ const AuthPrompt = () => {
           </div>
 
           {/* Auth Mode Selection */}
-          <div className="grid md:grid-cols-2 gap-3 max-w-3xl mx-auto mb-6">
+          <div className="grid md:grid-cols-2 gap-2 max-w-3xl mx-auto mb-4 lg:mb-2">
             <button
               onClick={() => setAuthMode('email')}
               className="w-full rounded-lg p-4 group transition-all duration-300"
@@ -168,9 +168,9 @@ const AuthPrompt = () => {
           </div>
 
           {/* Main Content Grid */}
-          <div className="grid md:grid-cols-3 gap-3">
+          <div className="grid md:grid-cols-3 gap-2">
             {/* Features */}
-            <div className="rounded-lg p-3 text-left" style={{ 
+            <div className="rounded-lg p-2 text-left" style={{ 
               background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
               border: '2px outset #e8e8e8',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
@@ -192,7 +192,7 @@ const AuthPrompt = () => {
             </div>
 
             {/* Free Benefits */}
-            <div className="rounded-lg p-3 text-left" style={{ 
+            <div className="rounded-lg p-2 text-left" style={{ 
               background: 'linear-gradient(to bottom, #ecfdf5, #d1fae5, #a7f3d0)',
               border: '2px outset #a7f3d0',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.1)'
@@ -211,7 +211,7 @@ const AuthPrompt = () => {
             </div>
 
             {/* Quick Instructions */}
-            <div className="rounded-lg p-3 text-left" style={{ 
+            <div className="rounded-lg p-2 text-left" style={{ 
               background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
               border: '2px outset #e8e8e8',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
@@ -251,7 +251,7 @@ const AuthPrompt = () => {
   // Show email sign-in
   if (authMode === 'email') {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] px-4" style={{ position: 'relative', zIndex: 10 }}>
+      <div className="flex items-center justify-center h-full lg:max-h-[calc(100vh-80px)] px-4 overflow-auto lg:overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
         <div className="w-full max-w-md md:max-w-xl mx-auto">
           <button
             onClick={() => setAuthMode(null)}
@@ -319,7 +319,7 @@ function WalletPrompt({ onBack }) {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-[60vh] px-4" style={{ position: 'relative', zIndex: 10 }}>
+    <div className="flex items-center justify-center h-full lg:max-h-[calc(100vh-80px)] px-4 overflow-auto lg:overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
       <div className="w-full max-w-md md:max-w-xl mx-auto">
         {onBack && (
           <button

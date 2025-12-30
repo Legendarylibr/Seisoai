@@ -49,7 +49,7 @@ const PaymentSuccessModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
       <div className="glass-card rounded-2xl p-8 max-w-md w-full relative animate-slide-up">
         {/* Close Button */}
         <button

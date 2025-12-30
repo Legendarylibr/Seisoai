@@ -101,7 +101,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
   }, [isEmailAuth, onShowStripePayment, onShowTokenPayment]);
 
   return (
-    <header className="sticky top-0 z-[999997]" style={{ 
+    <header className="sticky top-0 z-40" style={{ 
       background: WIN95.bg,
       boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 0 2px 0 ${WIN95.bgDark}`
     }}>
@@ -269,7 +269,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                 </div>
                 
                 {/* Buy Credits Button */}
-                <Win95NavButton onClick={handleBuyCredits} style={{ zIndex: 999998 }}>
+                <Win95NavButton onClick={handleBuyCredits}>
                   {isEmailAuth ? <CreditCard className="w-3 h-3" /> : <Coins className="w-3 h-3" />}
                   <span>Buy Credits</span>
                 </Win95NavButton>
@@ -310,7 +310,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                     <button 
                       onClick={handleBuyCredits} 
                       className="ml-1 px-1.5 py-0.5"
-                      style={{ ...BTN.base, zIndex: 999998 }}
+                      style={BTN.base}
                     >
                       {isEmailAuth ? <CreditCard className="w-3 h-3" style={{ color: WIN95.text }} /> : <Coins className="w-3 h-3" style={{ color: WIN95.text }} />}
                     </button>

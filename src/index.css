@@ -49,17 +49,20 @@
   @media (min-width: 1024px) {
     body {
       height: 100vh;
-      overflow-y: hidden;
+      overflow: hidden;
     }
   }
   
   #root {
     height: 100%;
+    display: flex;
+    flex-direction: column;
   }
   
   @media (min-width: 1024px) {
     #root {
       overflow: hidden;
+      max-height: 100vh;
     }
   }
 
