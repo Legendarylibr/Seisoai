@@ -38,6 +38,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
   const [paymentStatus, setPaymentStatus] = useState(''); // 'pending', 'detected', 'confirmed'
   const [networksWithUSDC, setNetworksWithUSDC] = useState([]);
   const [currentNetworkBalance, setCurrentNetworkBalance] = useState(0);
+  const [hasAttemptedAutoSwitch, setHasAttemptedAutoSwitch] = useState(false);
 
   // Network detection and chain ID mapping
   const CHAIN_IDS = {
@@ -51,12 +52,24 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
   // Get current network info
   const getCurrentNetwork = async () => {
     try {
-      if (walletType === 'evm' && window.ethereum) {
-        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (walletType === 'evm') {
+        // Use the correct provider - Phantom EVM uses window.phantom.ethereum
+        let provider = window.ethereum;
+        if (connectedWalletId === 'phantom-evm' || connectedWalletId === 'phantom') {
+          if (window.phantom?.ethereum) {
+            provider = window.phantom.ethereum;
+          }
+        }
+        
+        if (!provider) {
+          return null;
+        }
+        
+        const chainId = await provider.request({ method: 'eth_chainId' });
         const chainIdNumber = parseInt(chainId, 16);
         const network = CHAIN_IDS[chainIdNumber];
         
-        logger.debug('Current network detected', { network: network?.name, chainId: chainIdNumber });
+        logger.debug('Current network detected', { network: network?.name, chainId: chainIdNumber, walletId: connectedWalletId });
         return { chainId: chainIdNumber, network };
       }
       return null;
@@ -287,6 +300,7 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
       setPaymentStatus('');
       setCheckingPayment(false);
       setIsProcessing(false);
+      setHasAttemptedAutoSwitch(false); // Reset auto-switch flag
       
       // Set prefilled amount if provided, otherwise reset
       if (prefilledAmount) {
@@ -414,14 +428,46 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
       setCurrentNetworkBalance(currentNetworkBalance);
       setNetworksWithUSDC(networksWithUSDC);
 
-      // If user has USDC on other networks but not current one, show prompt
-      if (networksWithUSDC.length > 0 && currentNetworkBalance === 0) {
-        const currentNetwork = networks.find(n => n.chainId === currentChainId);
+      // If user has USDC on other networks but not current one, AUTO-SWITCH to best network
+      // Only attempt auto-switch once to prevent infinite loops
+      if (networksWithUSDC.length > 0 && currentNetworkBalance === 0 && !hasAttemptedAutoSwitch) {
         const otherNetworks = networksWithUSDC.filter(n => n.chainId !== currentChainId);
         
         if (otherNetworks.length > 0) {
+          // Mark that we've attempted auto-switch
+          setHasAttemptedAutoSwitch(true);
+          
+          // Find the network with the highest USDC balance
+          const bestNetwork = otherNetworks.reduce((best, current) => 
+            current.balance > best.balance ? current : best
+          );
+          
+          logger.info('Auto-switching to network with USDC', { 
+            from: currentChainId, 
+            to: bestNetwork.chainId, 
+            networkName: bestNetwork.name,
+            balance: bestNetwork.balance 
+          });
+          
+          // Show a brief message and auto-switch
+          setError(`🔄 Switching to ${bestNetwork.name} where you have ${bestNetwork.balance.toFixed(2)} USDC...`);
+          
+          // Auto-switch to the best network
+          try {
+            await switchToNetwork(bestNetwork.chainId);
+            setError(''); // Clear the message after successful switch
+          } catch (switchError) {
+            logger.warn('Auto-switch failed, user can manually switch', { error: switchError.message });
+            const networkList = otherNetworks.map(n => `${n.name} (${n.balance.toFixed(2)} USDC)`).join(', ');
+            setError(`💡 You have USDC on: ${networkList}\n\nClick a network button below to switch.`);
+          }
+        }
+      } else if (networksWithUSDC.length > 0 && currentNetworkBalance === 0 && hasAttemptedAutoSwitch) {
+        // Already tried auto-switch, just show the message
+        const otherNetworks = networksWithUSDC.filter(n => n.chainId !== currentChainId);
+        if (otherNetworks.length > 0) {
           const networkList = otherNetworks.map(n => `${n.name} (${n.balance.toFixed(2)} USDC)`).join(', ');
-          setError(`💡 You have USDC on other networks: ${networkList}\n\nSwitch to one of these networks to use your USDC balance, or send USDC to ${currentNetwork?.name || 'current network'}.`);
+          setError(`💡 You have USDC on: ${networkList}\n\nClick a network button below to switch.`);
         }
       }
     } catch (error) {
@@ -457,18 +503,31 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
   // Switch to a specific network
   const switchToNetwork = async (chainId) => {
     try {
-      if (!window.ethereum) {
+      // Use the correct provider - Phantom EVM uses window.phantom.ethereum
+      let provider = window.ethereum;
+      if (connectedWalletId === 'phantom-evm' || connectedWalletId === 'phantom') {
+        if (window.phantom?.ethereum) {
+          provider = window.phantom.ethereum;
+          logger.debug('Using Phantom EVM provider for network switch');
+        }
+      }
+      
+      if (!provider) {
         throw new Error('Ethereum wallet not found');
       }
 
       const hexChainId = '0x' + chainId.toString(16);
       
+      logger.info('Requesting network switch', { chainId, hexChainId, walletId: connectedWalletId });
+      
       // Try to switch network
-      await window.ethereum.request({
+      await provider.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: hexChainId }],
       });
 
+      logger.info('Network switch successful', { chainId });
+      
       // Refresh balances after switching
       setTimeout(() => {
         checkUSDCBalanceAcrossNetworks();
@@ -483,8 +542,12 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
           logger.error('Failed to add network', { error: addError.message });
           setError(`Failed to add network. Please add it manually in your wallet.`);
         }
+      } else if (switchError.code === 4001) {
+        // User rejected the switch
+        logger.warn('User rejected network switch');
+        setError(`Network switch cancelled. Please switch to a network with USDC to continue.`);
       } else {
-        logger.error('Failed to switch network', { error: switchError.message });
+        logger.error('Failed to switch network', { error: switchError.message, code: switchError.code });
         setError(`Failed to switch network: ${switchError.message}`);
       }
     }
@@ -492,34 +555,58 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
 
   // Add network if it doesn't exist
   const addNetwork = async (chainId) => {
-      const networkConfigs = {
+    const networkConfigs = {
       1: {
         chainId: '0x1',
         chainName: 'Ethereum Mainnet',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [import.meta.env.VITE_ETH_RPC_URL].filter(Boolean), // Filter out undefined values
+        rpcUrls: ['https://eth.llamarpc.com'],
         blockExplorerUrls: ['https://etherscan.io']
+      },
+      137: {
+        chainId: '0x89',
+        chainName: 'Polygon',
+        nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+        rpcUrls: ['https://polygon.llamarpc.com'],
+        blockExplorerUrls: ['https://polygonscan.com']
+      },
+      42161: {
+        chainId: '0xa4b1',
+        chainName: 'Arbitrum One',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://arbitrum.llamarpc.com'],
+        blockExplorerUrls: ['https://arbiscan.io']
+      },
+      10: {
+        chainId: '0xa',
+        chainName: 'Optimism',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://optimism.llamarpc.com'],
+        blockExplorerUrls: ['https://optimistic.etherscan.io']
       },
       8453: {
         chainId: '0x2105',
         chainName: 'Base',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [import.meta.env.VITE_BASE_RPC_URL].filter(Boolean), // Filter out undefined values
+        rpcUrls: ['https://base.llamarpc.com'],
         blockExplorerUrls: ['https://basescan.org']
       }
     };
     
-    // Validate RPC URL is configured
     const config = networkConfigs[chainId];
     if (!config) {
       throw new Error(`Network configuration not found for chain ID ${chainId}`);
     }
-    if (config.rpcUrls.length === 0) {
-      const envVar = chainId === 1 ? 'VITE_ETH_RPC_URL' : 'VITE_BASE_RPC_URL';
-      throw new Error(`${envVar} environment variable is required. Please configure it in your .env file.`);
+
+    // Use the correct provider - Phantom EVM uses window.phantom.ethereum
+    let provider = window.ethereum;
+    if (connectedWalletId === 'phantom-evm' || connectedWalletId === 'phantom') {
+      if (window.phantom?.ethereum) {
+        provider = window.phantom.ethereum;
+      }
     }
 
-    await window.ethereum.request({
+    await provider.request({
       method: 'wallet_addEthereumChain',
       params: [config],
     });
@@ -628,6 +715,26 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
           }
         } catch (e) {
           throw new Error('Wallet connection lost. Please reconnect your wallet.');
+        }
+        
+        // IMPORTANT: Check if user has USDC on current network BEFORE attempting transaction
+        // This prevents confusing errors when user has USDC on different network
+        const amountNeeded = parseFloat(amount);
+        if (currentNetworkBalance < amountNeeded && networksWithUSDC.length > 0) {
+          // User has USDC on other networks but not enough on current network
+          const currentNetworkInfo = await getCurrentNetwork();
+          const currentChainName = currentNetworkInfo?.network?.name || 'current network';
+          const otherNetworksWithBalance = networksWithUSDC.filter(n => n.balance >= amountNeeded);
+          
+          if (otherNetworksWithBalance.length > 0) {
+            const networkSuggestions = otherNetworksWithBalance
+              .map(n => `${n.name} (${n.balance.toFixed(2)} USDC)`)
+              .join(', ');
+            
+            setError(`⚠️ You have ${currentNetworkBalance.toFixed(2)} USDC on ${currentChainName}, but need ${amountNeeded.toFixed(2)} USDC.\n\n✨ Switch to a network with enough USDC:\n${networkSuggestions}\n\nUse the network buttons above to switch.`);
+            setIsProcessing(false);
+            return;
+          }
         }
       }
       
@@ -894,37 +1001,49 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
           
           const usdcContract = new ethers.Contract(usdcAddress, usdcABI, signer);
           
-          // Check USDC balance - use signerAddress to be 100% sure we're checking the right wallet
+          // Check USDC balance - use backend proxy first for reliability, fallback to direct RPC
           const balanceCheckAddress = signerAddress || address;
           logger.debug('Checking USDC balance', { address: balanceCheckAddress, usdcContract: usdcAddress, chainId, network: network?.name });
           
-          let balance, decimals, balanceFormatted, balanceFloat;
+          let balanceFloat;
           try {
-            balance = await usdcContract.balanceOf(balanceCheckAddress);
-            decimals = await usdcContract.decimals();
-            balanceFormatted = ethers.formatUnits(balance, decimals);
-            balanceFloat = parseFloat(balanceFormatted);
-          } catch (balanceError) {
-            logger.error('Failed to check USDC balance', { error: balanceError.message, chainId, usdcAddress });
+            // Try backend proxy first (more reliable in production)
+            const proxyBalance = await proxyGetUsdcBalance(chainId, balanceCheckAddress, usdcAddress);
+            balanceFloat = parseFloat(proxyBalance);
+            logger.debug('USDC balance from proxy', { balance: balanceFloat, chainId, network: network?.name });
+          } catch (proxyError) {
+            logger.warn('Proxy balance check failed, trying direct RPC', { error: proxyError.message });
             
-            // Check if the wallet is on the wrong network
-            if (balanceError.message.includes('BAD_DATA') || balanceError.message.includes('0x')) {
-              throw new Error(`Cannot read USDC balance on ${network?.name || 'this network'}.\n\nThis usually means:\n1. Phantom is on a different network than expected\n2. The USDC contract doesn't exist on this network\n\nPlease open Phantom and switch to Base network, then try again.`);
+            // Fall back to direct contract call via wallet
+            try {
+              const balance = await usdcContract.balanceOf(balanceCheckAddress);
+              const decimals = await usdcContract.decimals();
+              const balanceFormatted = ethers.formatUnits(balance, decimals);
+              balanceFloat = parseFloat(balanceFormatted);
+              logger.debug('USDC balance from direct RPC', { balance: balanceFloat, chainId, network: network?.name });
+            } catch (balanceError) {
+              logger.error('Failed to check USDC balance', { error: balanceError.message, chainId, usdcAddress });
+              
+              // Check if the wallet is on the wrong network
+              if (balanceError.message.includes('BAD_DATA') || balanceError.message.includes('0x')) {
+                throw new Error(`Cannot read USDC balance on ${network?.name || 'this network'}.\n\nThis usually means:\n1. Your wallet is on a different network than expected\n2. The USDC contract doesn't exist on this network\n\nPlease switch your wallet to ${network?.name || 'a supported network'}, then try again.`);
+              }
+              throw balanceError;
             }
-            throw balanceError;
           }
           
           const amountFloat = parseFloat(amount);
           
-          logger.debug('USDC balance check', { 
-            rawBalance: balance.toString(), 
-            formatted: balanceFormatted, 
-            requesting: amount,
-            sufficient: balanceFloat >= amountFloat
+          logger.debug('USDC balance check complete', { 
+            balance: balanceFloat, 
+            requesting: amountFloat,
+            sufficient: balanceFloat >= amountFloat,
+            chainId,
+            network: network?.name
           });
           
           if (balanceFloat < amountFloat) {
-            throw new Error(`Insufficient USDC balance.\n\nYour balance: ${balanceFloat.toFixed(6)} USDC\nRequested: ${amountFloat.toFixed(2)} USDC\n\nPlease add more USDC or reduce the amount.`);
+            throw new Error(`Insufficient USDC balance on ${network?.name || 'this network'}.\n\nYour balance: ${balanceFloat.toFixed(6)} USDC\nRequested: ${amountFloat.toFixed(2)} USDC\n\nPlease add more USDC or switch to a network where you have sufficient USDC.`);
           }
           
           // Convert amount to USDC units (6 decimals)
@@ -1355,8 +1474,8 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
             </div>
           )}
 
-          {/* Network Switching Options - Compact */}
-          {networksWithUSDC.length > 0 && currentNetworkBalance === 0 && (
+          {/* Network Switching Options - Show when current network doesn't have enough USDC */}
+          {networksWithUSDC.length > 0 && ((parseFloat(amount) || 0) > currentNetworkBalance || currentNetworkBalance === 0) && (
             <div 
               className="p-2.5 rounded"
               style={{
@@ -1367,7 +1486,9 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
             >
               <div className="flex items-center gap-1.5 mb-2">
                 <span className="text-xs">💡</span>
-                <h3 className="font-semibold text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Switch Network</h3>
+                <h3 className="font-semibold text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                  {currentNetworkBalance === 0 ? 'Switch to a network with USDC' : 'You have USDC on these networks'}
+                </h3>
               </div>
               <div className="space-y-1.5">
                 {networksWithUSDC.map((network) => (
