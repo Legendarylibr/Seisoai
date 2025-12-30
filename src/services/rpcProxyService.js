@@ -108,6 +108,27 @@ export async function getSignatureStatus(signature) {
 }
 
 /**
+ * Get Solana account info via proxy
+ * @param {string} address - The account public key as base58 string
+ * @param {object} config - Optional config (encoding, commitment)
+ * @returns {Promise<any>} Account info or null if not found
+ */
+export async function getAccountInfo(address, config = { encoding: 'base64', commitment: 'confirmed' }) {
+  const result = await solanaRpc('getAccountInfo', [address, config]);
+  return result?.value;
+}
+
+/**
+ * Get token account balance via proxy
+ * @param {string} tokenAccountAddress - The token account public key as base58 string
+ * @returns {Promise<any>} Token balance info
+ */
+export async function getTokenAccountBalance(tokenAccountAddress) {
+  const result = await solanaRpc('getTokenAccountBalance', [tokenAccountAddress, { commitment: 'confirmed' }]);
+  return result?.value;
+}
+
+/**
  * Check USDC balance on an EVM chain via proxy
  * @param {number} chainId - The chain ID
  * @param {string} walletAddress - The wallet address
@@ -135,6 +156,8 @@ export default {
   evmRpc,
   getLatestBlockhash,
   getSignatureStatus,
+  getAccountInfo,
+  getTokenAccountBalance,
   getUsdcBalance
 };
 

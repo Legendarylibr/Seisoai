@@ -5676,6 +5676,58 @@ const checkNFTHoldingsForWallet = async (walletAddress, collections = QUALIFYING
   return result;
 };
 
+// Alchemy API base URLs by chain
+const ALCHEMY_API_BASES = {
+  '1': 'https://eth-mainnet.g.alchemy.com',
+  '8453': 'https://base-mainnet.g.alchemy.com',
+  '137': 'https://polygon-mainnet.g.alchemy.com',
+  '42161': 'https://arb-mainnet.g.alchemy.com',
+  '10': 'https://opt-mainnet.g.alchemy.com'
+};
+
+// Build RPC endpoints from ALCHEMY_API_KEY (preferred) or individual env vars as fallback
+const buildRpcEndpoints = () => {
+  const alchemyKey = process.env.ALCHEMY_API_KEY;
+  const endpoints = {};
+  
+  const chainConfigs = {
+    '1': { envVar: 'ETH_RPC_URL', alchemyBase: ALCHEMY_API_BASES['1'] },
+    '8453': { envVar: 'BASE_RPC_URL', alchemyBase: ALCHEMY_API_BASES['8453'] },
+    '137': { envVar: 'POLYGON_RPC_URL', alchemyBase: ALCHEMY_API_BASES['137'] },
+    '42161': { envVar: 'ARBITRUM_RPC_URL', alchemyBase: ALCHEMY_API_BASES['42161'] },
+    '10': { envVar: 'OPTIMISM_RPC_URL', alchemyBase: ALCHEMY_API_BASES['10'] }
+  };
+  
+  for (const [chainId, config] of Object.entries(chainConfigs)) {
+    // First try individual env var, then fall back to ALCHEMY_API_KEY
+    const individualUrl = process.env[config.envVar];
+    if (individualUrl) {
+      endpoints[chainId] = individualUrl;
+    } else if (alchemyKey) {
+      endpoints[chainId] = `${config.alchemyBase}/v2/${alchemyKey}`;
+    } else {
+      endpoints[chainId] = null;
+    }
+  }
+  
+  return endpoints;
+};
+
+const RPC_ENDPOINTS = buildRpcEndpoints();
+
+// Validate RPC endpoints are configured
+const missingRpcEndpoints = Object.entries(RPC_ENDPOINTS)
+  .filter(([chainId, url]) => !url)
+  .map(([chainId]) => chainId);
+
+if (missingRpcEndpoints.length > 0) {
+  logger.warn('Missing RPC endpoints for chains:', missingRpcEndpoints);
+  logger.warn('Set ALCHEMY_API_KEY or individual RPC URLs (ETH_RPC_URL, POLYGON_RPC_URL, etc.)');
+  if (process.env.NODE_ENV === 'production') {
+    logger.error('RPC endpoints are required in production. Set ALCHEMY_API_KEY environment variable.');
+  }
+}
+
 // Alchemy API Key (extract from RPC URL or use dedicated env var)
 const getAlchemyApiKey = (chainId) => {
   const apiKey = process.env.ALCHEMY_API_KEY;
@@ -5685,36 +5737,6 @@ const getAlchemyApiKey = (chainId) => {
   const rpcUrl = RPC_ENDPOINTS[chainId] || '';
   const match = rpcUrl.match(/\/v2\/([^\/\?]+)/);
   return match ? match[1] : null;
-};
-
-// RPC endpoints - REQUIRED environment variables (no hardcoded fallbacks)
-const RPC_ENDPOINTS = {
-  '1': process.env.ETH_RPC_URL,
-  '8453': process.env.BASE_RPC_URL,
-  '137': process.env.POLYGON_RPC_URL,
-  '42161': process.env.ARBITRUM_RPC_URL,
-  '10': process.env.OPTIMISM_RPC_URL
-};
-
-// Validate RPC endpoints are configured
-const missingRpcEndpoints = Object.entries(RPC_ENDPOINTS)
-  .filter(([chainId, url]) => !url)
-  .map(([chainId]) => chainId);
-
-if (missingRpcEndpoints.length > 0) {
-  logger.warn('Missing RPC endpoints for chains:', missingRpcEndpoints);
-  if (process.env.NODE_ENV === 'production') {
-    logger.error('RPC endpoints are required in production. Missing:', missingRpcEndpoints);
-  }
-}
-
-// Alchemy API base URLs by chain
-const ALCHEMY_API_BASES = {
-  '1': 'https://eth-mainnet.g.alchemy.com',
-  '8453': 'https://base-mainnet.g.alchemy.com',
-  '137': 'https://polygon-mainnet.g.alchemy.com',
-  '42161': 'https://arb-mainnet.g.alchemy.com',
-  '10': 'https://opt-mainnet.g.alchemy.com'
 };
 
 // ERC-20 ABI
@@ -6041,9 +6063,12 @@ async function getOrCreateUser(walletAddress, email = null) {
  */
 async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chainId) {
   try {
-    const rpcUrl = RPC_ENDPOINTS[chainId];
+    // Ensure chainId is a string for object key lookups
+    const chainIdStr = String(chainId);
+    
+    const rpcUrl = RPC_ENDPOINTS[chainIdStr];
     if (!rpcUrl) {
-      throw new Error(`Unsupported chain: ${chainId}`);
+      throw new Error(`Unsupported chain: ${chainIdStr}. Available chains: ${Object.keys(RPC_ENDPOINTS).join(', ')}`);
     }
 
     const provider = new ethers.JsonRpcProvider(rpcUrl);
@@ -6058,16 +6083,16 @@ async function verifyEVMPayment(txHash, walletAddress, tokenSymbol, amount, chai
       throw new Error('Transaction failed');
     }
 
-    const tokenConfig = TOKEN_CONFIGS[chainId]?.[tokenSymbol];
+    const tokenConfig = TOKEN_CONFIGS[chainIdStr]?.[tokenSymbol];
     if (!tokenConfig) {
-      throw new Error(`Token ${tokenSymbol} not supported on chain ${chainId}`);
+      throw new Error(`Token ${tokenSymbol} not supported on chain ${chainIdStr}`);
     }
 
-    const paymentWallet = PAYMENT_WALLETS[chainId];
-    logger.debug('Payment wallet for chain', { chainId, paymentWallet });
+    const paymentWallet = PAYMENT_WALLETS[chainIdStr];
+    logger.debug('Payment wallet for chain', { chainId: chainIdStr, paymentWallet });
     
     if (!paymentWallet) {
-      throw new Error(`Payment wallet not configured for chain ${chainId}`);
+      throw new Error(`Payment wallet not configured for chain ${chainIdStr}`);
     }
 
     logger.debug('Transaction verification', { 

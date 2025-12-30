@@ -13,7 +13,7 @@ import {
   verifyPayment,
   getPaymentWallet
 } from '../services/paymentService';
-import { getLatestBlockhash as proxyGetBlockhash, getSignatureStatus as proxyGetSignatureStatus, getUsdcBalance as proxyGetUsdcBalance } from '../services/rpcProxyService';
+import { getLatestBlockhash as proxyGetBlockhash, getSignatureStatus as proxyGetSignatureStatus, getUsdcBalance as proxyGetUsdcBalance, getAccountInfo as proxyGetAccountInfo } from '../services/rpcProxyService';
 import { X, CreditCard, Coins, RefreshCw, ChevronDown, ChevronUp, Wallet, Copy, Check, ExternalLink } from 'lucide-react';
 
 const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess = null }) => {
@@ -77,81 +77,27 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
       const { 
         createTransferInstruction, 
         getAssociatedTokenAddress, 
-        getAccount,
         createAssociatedTokenAccountInstruction,
         getAssociatedTokenAddressSync,
         TOKEN_PROGRAM_ID,
         ASSOCIATED_TOKEN_PROGRAM_ID
       } = await import('@solana/spl-token');
 
-      // Connect to Solana mainnet using configured RPC with better fallbacks
-      // Ensure we always have fallback RPCs even if env var is missing
-      const envRpcUrl = import.meta.env.VITE_SOLANA_RPC_URL;
-      const rpcUrls = [
-        ...(envRpcUrl && envRpcUrl.trim() ? [envRpcUrl.trim()] : []),
-        'https://api.mainnet-beta.solana.com',
-        'https://solana-api.projectserum.com',
-        'https://rpc.ankr.com/solana',
-        'https://solana-mainnet.g.alchemy.com/v2/demo',
-        'https://mainnet.helius-rpc.com'
-      ].filter(url => url && typeof url === 'string' && url.length > 0);
-      
-      if (rpcUrls.length === 0) {
-        throw new Error('No Solana RPC endpoints available. Please configure VITE_SOLANA_RPC_URL in your environment.');
-      }
-      
-      let connection = null;
-      let rpcUrl = rpcUrls[0];
-      let lastError = null;
-      const failedRpcs = [];
-      
-      // Try backend proxy first - this avoids CORS issues in production
+      // Test backend proxy connection first - all RPC calls go through proxy to avoid CORS/403 issues
+      logger.debug('Testing backend Solana RPC proxy...');
       try {
         await proxyGetBlockhash();
-        // Proxy works - create a connection object for local operations
-        // The actual RPC calls will use the proxy
-        connection = new Connection(rpcUrls[0] || 'https://api.mainnet-beta.solana.com', {
-          commitment: 'confirmed',
-          disableRetryOnRateLimit: false
-        });
-        rpcUrl = 'proxy';
-        logger.debug('Using backend proxy for Solana RPC');
+        logger.debug('Backend proxy working - using proxy for all Solana RPC calls');
       } catch (proxyError) {
-        logger.warn('Backend proxy failed, trying direct RPC connections', { error: proxyError.message });
-        
-        // Fall back to direct RPC connections
-        for (const url of rpcUrls) {
-          try {
-            logger.debug('Trying Solana RPC', { url });
-            const testConnection = new Connection(url, {
-              commitment: 'confirmed',
-              disableRetryOnRateLimit: false
-            });
-            // Test the connection with timeout using getLatestBlockhash (more reliable than getHealth)
-            await Promise.race([
-              testConnection.getLatestBlockhash(),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 8000))
-            ]);
-            connection = testConnection;
-            rpcUrl = url;
-            logger.debug('Connected to Solana RPC');
-            break;
-          } catch (error) {
-            logger.warn('Failed to connect to RPC', { error: error.message });
-            failedRpcs.push(url);
-            lastError = error;
-            continue;
-          }
-        }
+        logger.error('Backend Solana RPC proxy failed', { error: proxyError.message });
+        throw new Error(`Solana RPC proxy unavailable: ${proxyError.message}. Please ensure the backend server is running.`);
       }
       
-      if (!connection) {
-        const errorMsg = `All ${rpcUrls.length} Solana RPC endpoints failed:\n` +
-          `- Tried: ${failedRpcs.join(', ')}\n` +
-          `- Last error: ${lastError?.message || 'Unknown error'}\n\n` +
-          `Please check your internet connection or configure VITE_SOLANA_RPC_URL with a valid RPC endpoint.`;
-        throw new Error(errorMsg);
-      }
+      // Create a dummy connection object for local transaction building operations only
+      // All actual RPC calls (getAccountInfo, getLatestBlockhash, etc.) go through the proxy
+      const connection = new Connection('https://api.mainnet-beta.solana.com', {
+        commitment: 'confirmed'
+      });
       
       // USDC mint address on Solana
       const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
@@ -166,25 +112,34 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
       // Get payment wallet's USDC token account address
       const paymentTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, paymentPublicKey);
       
-      logger.debug('Checking token accounts');
+      logger.debug('Checking token accounts via proxy');
       
-      // Check if user has USDC token account
+      // Check if user has USDC token account - use proxy to avoid CORS/403 issues
       let userTokenAccountExists = false;
       try {
-        await getAccount(connection, userTokenAccount);
-        userTokenAccountExists = true;
-        logger.debug('User has USDC token account');
+        const userAccountInfo = await proxyGetAccountInfo(userTokenAccount.toBase58());
+        if (userAccountInfo) {
+          userTokenAccountExists = true;
+          logger.debug('User has USDC token account');
+        } else {
+          throw new Error('Account not found');
+        }
       } catch (error) {
         logger.error('User USDC token account not found', { error: error.message });
         throw new Error('USDC token account not found. Please add USDC to your wallet first.');
       }
       
-      // Check if payment token account exists, create instruction if needed
+      // Check if payment token account exists, create instruction if needed - use proxy
       let paymentTokenAccountExists = false;
       try {
-        await getAccount(connection, paymentTokenAccount);
-        paymentTokenAccountExists = true;
-        logger.debug('Payment token account exists');
+        const paymentAccountInfo = await proxyGetAccountInfo(paymentTokenAccount.toBase58());
+        if (paymentAccountInfo) {
+          paymentTokenAccountExists = true;
+          logger.debug('Payment token account exists');
+        } else {
+          logger.debug('Payment token account does not exist, will create it');
+          paymentTokenAccountExists = false;
+        }
       } catch (error) {
         logger.debug('Payment token account does not exist, will create it');
         paymentTokenAccountExists = false;
@@ -224,17 +179,9 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
       
       // Get recent blockhash via backend proxy (avoids CORS issues)
       logger.debug('Getting recent blockhash via proxy');
-      let blockhash, lastValidBlockHeight;
-      try {
-        const blockHashResult = await proxyGetBlockhash();
-        blockhash = blockHashResult.blockhash;
-        lastValidBlockHeight = blockHashResult.lastValidBlockHeight;
-      } catch (proxyError) {
-        logger.warn('Proxy blockhash failed, trying direct connection', { error: proxyError.message });
-        const result = await connection.getLatestBlockhash('confirmed');
-        blockhash = result.blockhash;
-        lastValidBlockHeight = result.lastValidBlockHeight;
-      }
+      const blockHashResult = await proxyGetBlockhash();
+      const blockhash = blockHashResult.blockhash;
+      const lastValidBlockHeight = blockHashResult.lastValidBlockHeight;
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = userPublicKey;
       
@@ -688,50 +635,14 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
         logger.debug('Processing Solana USDC payment');
         
         try {
-          const { Connection } = await import('@solana/web3.js');
-          
-          // Use same RPC fallback logic as buildSolanaUSDCTransaction
-          const envRpcUrl = import.meta.env.VITE_SOLANA_RPC_URL;
-          const rpcUrls = [
-            ...(envRpcUrl && envRpcUrl.trim() ? [envRpcUrl.trim()] : []),
-            'https://api.mainnet-beta.solana.com',
-            'https://solana-api.projectserum.com',
-            'https://rpc.ankr.com/solana',
-            'https://solana-mainnet.g.alchemy.com/v2/demo',
-            'https://mainnet.helius-rpc.com'
-          ].filter(url => url && typeof url === 'string' && url.length > 0);
-          
-          let connection = null;
-          let lastError = null;
-          
-          // Try proxy first - this avoids CORS issues in production
+          // Test backend proxy connection - all RPC calls go through proxy to avoid CORS/403 issues
+          logger.debug('Testing backend Solana RPC proxy for payment...');
           try {
             await proxyGetBlockhash();
-            // Proxy works - use any connection for local operations, proxy for RPC
-            connection = new Connection(rpcUrls[0] || 'https://api.mainnet-beta.solana.com', { commitment: 'confirmed' });
-            logger.debug('Using backend proxy for Solana RPC');
+            logger.debug('Backend proxy working - using proxy for Solana RPC calls');
           } catch (proxyError) {
-            logger.debug('Proxy failed, trying direct connections', { error: proxyError.message });
-            // Fall back to direct connections
-            for (const url of rpcUrls) {
-              try {
-                const testConnection = new Connection(url, { commitment: 'confirmed' });
-                await Promise.race([
-                  testConnection.getLatestBlockhash(),
-                  new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
-                ]);
-                connection = testConnection;
-                logger.debug('Using direct RPC for confirmation');
-                break;
-              } catch (error) {
-                lastError = error;
-                continue;
-              }
-            }
-          }
-          
-          if (!connection) {
-            throw new Error(`Failed to connect to any Solana RPC endpoint. Last error: ${lastError?.message}`);
+            logger.error('Backend Solana RPC proxy failed', { error: proxyError.message });
+            throw new Error(`Solana RPC proxy unavailable: ${proxyError.message}. Please ensure the backend server is running.`);
           }
           
           // Build and send Solana USDC transaction
@@ -770,15 +681,8 @@ const TokenPaymentModal = ({ isOpen, onClose, prefilledAmount = null, onSuccess 
             await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
             attempts++;
             
-            // Try proxy first for signature status
-            let statusValue;
-            try {
-              statusValue = await proxyGetSignatureStatus(txSignature);
-            } catch (proxyErr) {
-              logger.debug('Proxy signature check failed, using direct', { error: proxyErr.message });
-              const status = await connection.getSignatureStatus(txSignature);
-              statusValue = status.value;
-            }
+            // Get signature status via proxy
+            const statusValue = await proxyGetSignatureStatus(txSignature);
             
             if (statusValue?.confirmationStatus === 'confirmed' || statusValue?.confirmationStatus === 'finalized') {
               if (statusValue.err) {
