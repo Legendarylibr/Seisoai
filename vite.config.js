@@ -6,15 +6,15 @@ export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
     include: [
-      'ethers', 
       'buffer'
-      // PERFORMANCE: WalletConnect is lazy-loaded, don't pre-bundle
+      // PERFORMANCE: ethers and WalletConnect are lazy-loaded, don't pre-bundle
+    ],
+    exclude: [
+      '@walletconnect/ethereum-provider'
     ]
   },
   resolve: {
     alias: {
-      // Ensure ethers resolves correctly
-      'ethers': 'ethers',
       // Add Buffer polyfill for Solana
       'buffer': 'buffer'
     }
@@ -30,10 +30,28 @@ export default defineConfig({
     sourcemap: process.env.NODE_ENV === 'development',
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          ethers: ['ethers'],
-          ui: ['lucide-react']
+        // PERFORMANCE: Better chunking strategy
+        manualChunks: (id) => {
+          // React core - loaded immediately
+          if (id.includes('react-dom') || id.includes('react/')) {
+            return 'vendor';
+          }
+          // UI icons - loaded immediately but separate chunk
+          if (id.includes('lucide-react')) {
+            return 'ui';
+          }
+          // WalletConnect - lazy loaded when user clicks wallet connect
+          if (id.includes('@walletconnect') || id.includes('w3m-modal') || id.includes('@web3modal')) {
+            return 'walletconnect';
+          }
+          // Ethers - lazy loaded with payment modal
+          if (id.includes('ethers')) {
+            return 'ethers';
+          }
+          // Solana - lazy loaded with payment modal
+          if (id.includes('@solana')) {
+            return 'solana';
+          }
         }
       }
     },
