@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
-import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
-import { Download, Trash2, Eye, Calendar, Palette, Sparkles, X, Video, Play, Image as ImageIcon, Grid } from 'lucide-react';
-import { getGallery } from '../services/galleryService';
+import { Download, Trash2, Eye, Calendar, Sparkles, X, Video, Play, Image as ImageIcon, Grid } from 'lucide-react';
 import logger from '../utils/logger.js';
 import { WIN95 } from '../utils/buttonStyles';
 import { stripImageMetadata } from '../utils/imageOptimizer.js';
@@ -32,12 +29,9 @@ const Win95Button = ({ children, onClick, disabled, className = '', style = {} }
 
 const ImageGallery = () => {
   const { generationHistory, clearAll } = useImageGenerator();
-  const walletContext = useSimpleWallet();
-  const emailContext = useEmailAuth();
   const [selectedItem, setSelectedItem] = useState(null);
   const [galleryItems, setGalleryItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   // PERFORMANCE: Handle item selection with preloading
   const handleSelectItem = (item) => {
@@ -51,112 +45,26 @@ const ImageGallery = () => {
     setSelectedItem(item);
   };
 
-  // Fetch gallery from database
+  // Session-only gallery - only show current session generations (no backend fetch)
+  // This prevents database overload and keeps gallery fast
   useEffect(() => {
-    const fetchGallery = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const isEmailAuth = emailContext.isAuthenticated;
-        const userIdentifier = isEmailAuth 
-          ? emailContext.userId 
-          : walletContext.address;
+    // Map current session's generation history to gallery items
+    const sessionItems = generationHistory.map(item => ({
+      id: item.id,
+      image: item.image,
+      imageUrl: item.image,
+      videoUrl: item.videoUrl || null,
+      prompt: item.prompt,
+      style: item.style,
+      timestamp: item.timestamp,
+      isVideo: !!item.videoUrl
+    }));
 
-        // Always show generation history items even if no user identifier
-        const memoryItems = generationHistory.map(item => ({
-          id: item.id,
-          image: item.image,
-          imageUrl: item.image,
-          videoUrl: null,
-          prompt: item.prompt,
-          style: item.style,
-          timestamp: item.timestamp,
-          isVideo: false
-        }));
-
-        if (!userIdentifier) {
-          // No user identifier, just show memory items
-          logger.debug('No user identifier, showing memory items only', { 
-            memoryItemsCount: memoryItems.length 
-          });
-          setGalleryItems(memoryItems.sort((a, b) => 
-            new Date(b.timestamp) - new Date(a.timestamp)
-          ));
-          setLoading(false);
-          return;
-        }
-
-        const isWalletAddress = userIdentifier?.startsWith('0x') || 
-                               (userIdentifier && userIdentifier.length > 20 && !userIdentifier.startsWith('email_'));
-        
-        const normalizedIdentifier = isWalletAddress && userIdentifier?.startsWith('0x')
-          ? userIdentifier.toLowerCase() 
-          : userIdentifier;
-
-        try {
-          const response = await getGallery(normalizedIdentifier);
-          
-          if (response && response.success && Array.isArray(response.gallery)) {
-            const dbItems = response.gallery.map(item => ({
-              id: item.id,
-              image: item.imageUrl || item.videoUrl,
-              imageUrl: item.imageUrl,
-              videoUrl: item.videoUrl,
-              prompt: item.prompt,
-              style: { name: item.style || 'Unknown' },
-              timestamp: item.timestamp,
-              isVideo: !!item.videoUrl
-            }));
-            
-            const allItems = [...dbItems, ...memoryItems];
-            const uniqueItems = Array.from(
-              new Map(allItems.map(item => [item.id, item])).values()
-            );
-            
-            setGalleryItems(uniqueItems.sort((a, b) => 
-              new Date(b.timestamp) - new Date(a.timestamp)
-            ));
-            logger.debug('Gallery items loaded', { 
-              dbItems: dbItems.length, 
-              memoryItems: memoryItems.length, 
-              total: uniqueItems.length 
-            });
-          } else {
-            // API returned but format unexpected, use memory items
-            logger.warn('Gallery API response format unexpected', { response });
-            setGalleryItems(memoryItems.sort((a, b) => 
-              new Date(b.timestamp) - new Date(a.timestamp)
-            ));
-          }
-        } catch (apiErr) {
-          // API call failed, but still show memory items
-          logger.error('Failed to fetch gallery from API', { error: apiErr.message });
-          setError(apiErr.message);
-          setGalleryItems(memoryItems.sort((a, b) => 
-            new Date(b.timestamp) - new Date(a.timestamp)
-          ));
-        }
-      } catch (err) {
-        logger.error('Failed to fetch gallery', { error: err.message });
-        setError(err.message);
-        // Fallback to generation history
-        setGalleryItems(generationHistory.map(item => ({
-          id: item.id,
-          image: item.image,
-          imageUrl: item.image,
-          videoUrl: null,
-          prompt: item.prompt,
-          style: item.style,
-          timestamp: item.timestamp,
-          isVideo: false
-        })));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchGallery();
-  }, [walletContext.address, emailContext.isAuthenticated, emailContext.userId, generationHistory]);
+    setGalleryItems(sessionItems.sort((a, b) => 
+      new Date(b.timestamp) - new Date(a.timestamp)
+    ));
+    setLoading(false);
+  }, [generationHistory]);
 
   const filteredHistory = galleryItems;
 
