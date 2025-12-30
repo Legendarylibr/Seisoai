@@ -7764,12 +7764,23 @@ function getProvider(chain = 'ethereum') {
   // Use RPC endpoints from environment (required, no hardcoded fallbacks)
   const rpcUrls = {
     ethereum: process.env.ETH_RPC_URL,
+    polygon: process.env.POLYGON_RPC_URL,
+    arbitrum: process.env.ARBITRUM_RPC_URL,
+    optimism: process.env.OPTIMISM_RPC_URL,
     base: process.env.BASE_RPC_URL
   };
   
-  const rpcUrl = rpcUrls[chain] || rpcUrls.ethereum;
+  const envVarNames = {
+    ethereum: 'ETH_RPC_URL',
+    polygon: 'POLYGON_RPC_URL',
+    arbitrum: 'ARBITRUM_RPC_URL',
+    optimism: 'OPTIMISM_RPC_URL',
+    base: 'BASE_RPC_URL'
+  };
+  
+  const rpcUrl = rpcUrls[chain];
   if (!rpcUrl) {
-    throw new Error(`RPC URL not configured for chain: ${chain}. Please set ${chain === 'base' ? 'BASE_RPC_URL' : 'ETH_RPC_URL'} environment variable.`);
+    throw new Error(`RPC URL not configured for chain: ${chain}. Please set ${envVarNames[chain] || chain.toUpperCase() + '_RPC_URL'} environment variable.`);
   }
   
   const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
