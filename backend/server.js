@@ -10087,6 +10087,39 @@ app.post('/api/admin/fix-all-oversized', async (req, res) => {
 });
 
 /**
+ * Clear ALL generation history and gallery data from ALL users
+ */
+app.post('/api/admin/clear-all-generations', async (req, res) => {
+  try {
+    const { adminSecret } = req.body;
+    
+    if (adminSecret !== process.env.SESSION_SECRET) {
+      return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+    
+    const result = await User.updateMany(
+      {},
+      { $set: { generationHistory: [], gallery: [] } }
+    );
+    
+    logger.info('Cleared all generation data', { 
+      matched: result.matchedCount, 
+      modified: result.modifiedCount 
+    });
+    
+    res.json({
+      success: true,
+      message: 'All generation history and gallery data cleared',
+      usersMatched: result.matchedCount,
+      usersModified: result.modifiedCount
+    });
+  } catch (error) {
+    logger.error('Error clearing all generations:', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * Add credits to a user account (admin only)
  */
 app.post('/api/admin/add-credits', async (req, res) => {
