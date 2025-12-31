@@ -7122,6 +7122,7 @@ app.post('/api/auth/signup', authRateLimiter, async (req, res) => {
         email: user.email,
         credits: user.credits,
         totalCreditsEarned: user.totalCreditsEarned,
+        totalCreditsSpent: user.totalCreditsSpent || 0,
         walletAddress: user.walletAddress || null,
         isNFTHolder: user.nftCollections && user.nftCollections.length > 0
       }
@@ -7260,6 +7261,7 @@ app.post('/api/auth/signin', authRateLimiter, async (req, res) => {
         email: user.email,
         credits: user.credits,
         totalCreditsEarned: user.totalCreditsEarned,
+        totalCreditsSpent: user.totalCreditsSpent || 0,
         walletAddress: user.walletAddress || null,
         isNFTHolder: user.nftCollections && user.nftCollections.length > 0
       }
@@ -7321,6 +7323,7 @@ app.get('/api/auth/verify', authenticateToken, async (req, res) => {
         email: user.email,
         credits: user.credits,
         totalCreditsEarned: user.totalCreditsEarned,
+        totalCreditsSpent: user.totalCreditsSpent || 0,
         walletAddress: user.walletAddress || null,
         isNFTHolder
       }

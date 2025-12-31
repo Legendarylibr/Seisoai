@@ -97,8 +97,16 @@ export const EmailAuthProvider = ({ children }) => {
       
       if (token && authType === 'email') {
         const verified = await verifyToken();
-        if (verified) {
-          await fetchUserData(true);
+        if (verified && verified.user) {
+          // PERFORMANCE: Use data from verify response instead of making a second fetchUserData call
+          const user = verified.user;
+          setCredits(Math.max(0, Math.floor(Number(user.credits) || 0)));
+          setTotalCreditsEarned(Math.max(0, Math.floor(Number(user.totalCreditsEarned) || 0)));
+          setTotalCreditsSpent(Math.max(0, Math.floor(Number(user.totalCreditsSpent) || 0)));
+          if (user.email) setEmail(user.email);
+          if (user.userId) setUserId(user.userId);
+          setIsAuthenticated(true);
+          setIsLoading(false);
         } else {
           setIsLoading(false);
         }
@@ -107,7 +115,7 @@ export const EmailAuthProvider = ({ children }) => {
       }
     };
     checkAuth();
-  }, [fetchUserData]);
+  }, []);
 
   // PERFORMANCE: Smarter periodic refresh - only when visible and at longer intervals
   useEffect(() => {
@@ -141,8 +149,11 @@ export const EmailAuthProvider = ({ children }) => {
       if (result.success) {
         setEmail(userEmail);
         setUserId(result.user.userId);
+        setCredits(Math.max(0, Math.floor(Number(result.user.credits) || 0)));
+        setTotalCreditsEarned(Math.max(0, Math.floor(Number(result.user.totalCreditsEarned) || 0)));
+        setTotalCreditsSpent(Math.max(0, Math.floor(Number(result.user.totalCreditsSpent) || 0)));
         setIsAuthenticated(true);
-        await fetchUserData(true);
+        // PERFORMANCE: Don't call fetchUserData - signUp already returns all user data
       }
       return result;
     } catch (err) {
@@ -151,7 +162,7 @@ export const EmailAuthProvider = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [fetchUserData]);
+  }, []);
 
   const handleSignIn = useCallback(async (userEmail, password) => {
     try {
@@ -161,11 +172,12 @@ export const EmailAuthProvider = ({ children }) => {
       if (result.success) {
         setEmail(userEmail);
         setUserId(result.user.userId);
-        setCredits(Number(result.user.credits) || 0);
-        setTotalCreditsEarned(Number(result.user.totalCreditsEarned) || 0);
-        setTotalCreditsSpent(Number(result.user.totalCreditsSpent) || 0);
+        setCredits(Math.max(0, Math.floor(Number(result.user.credits) || 0)));
+        setTotalCreditsEarned(Math.max(0, Math.floor(Number(result.user.totalCreditsEarned) || 0)));
+        setTotalCreditsSpent(Math.max(0, Math.floor(Number(result.user.totalCreditsSpent) || 0)));
         setIsAuthenticated(true);
-        await fetchUserData(true);
+        // PERFORMANCE: Don't call fetchUserData - signIn already returns all user data
+        // This eliminates a redundant /api/auth/me call after login
       }
       return result;
     } catch (err) {
@@ -174,7 +186,7 @@ export const EmailAuthProvider = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [fetchUserData]);
+  }, []);
 
   const handleSignOut = useCallback(async () => {
     // SECURITY: Call async signOut to revoke tokens on server
