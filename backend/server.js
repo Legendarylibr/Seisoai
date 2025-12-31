@@ -4444,8 +4444,8 @@ mongoose.set('autoIndex', process.env.NODE_ENV !== 'production');  // Only auto-
 
 // MongoDB connection - OPTIMIZATION: Shared pool with optimized settings
 const mongoOptions = {
-  maxPoolSize: 10,        // Maximum connections in shared pool
-  minPoolSize: 2,         // Keep 2 connections warm for immediate availability
+  maxPoolSize: 100,       // Maximum connections in shared pool
+  minPoolSize: 5,         // Keep 5 connections warm for immediate availability
   serverSelectionTimeoutMS: 30000,  // Timeout for server selection (increased for network stability)
   socketTimeoutMS: 60000,  // Socket timeout (allows for longer queries)
   maxIdleTimeMS: 60000,   // Keep idle connections for 60s before closing
