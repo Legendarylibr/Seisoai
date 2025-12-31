@@ -132,10 +132,18 @@ export function createAuthRoutes(deps) {
       const user = await User.findOne({ email: email.toLowerCase() })
         .select('+password -generationHistory -gallery -paymentHistory');
 
-      if (!user || !user.password) {
+      if (!user) {
         return res.status(401).json({
           success: false,
           error: 'Invalid email or password'
+        });
+      }
+
+      // Check if user has a password set (wallet-only users may not have one)
+      if (!user.password) {
+        return res.status(401).json({
+          success: false,
+          error: 'This account was created with a wallet. Please connect your wallet to sign in, or reset your password.'
         });
       }
 
