@@ -4,6 +4,7 @@
  */
 import dotenv from 'dotenv';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,7 +39,9 @@ export const config = {
   
   // Security
   JWT_SECRET: process.env.JWT_SECRET,
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
+  // Derive JWT_REFRESH_SECRET from JWT_SECRET if not provided (same as server.js)
+  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 
+    (process.env.JWT_SECRET ? crypto.createHash('sha256').update(process.env.JWT_SECRET + '_refresh_token_salt').digest('hex') : undefined),
   SESSION_SECRET: process.env.SESSION_SECRET,
   
   // APIs
