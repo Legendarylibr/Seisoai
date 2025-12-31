@@ -1,0 +1,155 @@
+/**
+ * Rate limiting middleware
+ * Configures various rate limiters for different endpoints
+ */
+import rateLimit from 'express-rate-limit';
+import { RATE_LIMITS } from '../config/constants.js';
+import { generateBrowserFingerprint } from '../abusePrevention.js';
+
+/**
+ * Create the general API rate limiter
+ */
+export const createGeneralLimiter = () => rateLimit({
+  windowMs: RATE_LIMITS.GENERAL.windowMs,
+  max: process.env.NODE_ENV === 'production' ? RATE_LIMITS.GENERAL.max : 1000,
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === '/api/health'
+});
+
+/**
+ * Create authentication rate limiter (prevent brute force)
+ */
+export const createAuthLimiter = () => rateLimit({
+  windowMs: RATE_LIMITS.AUTH.windowMs,
+  max: RATE_LIMITS.AUTH.max,
+  message: {
+    error: 'Too many authentication attempts. Please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false
+});
+
+/**
+ * Create payment rate limiter
+ */
+export const createPaymentLimiter = () => rateLimit({
+  windowMs: RATE_LIMITS.PAYMENT.windowMs,
+  max: RATE_LIMITS.PAYMENT.max,
+  message: {
+    error: 'Too many payment requests, please try again later.',
+    retryAfter: '5 minutes'
+  }
+});
+
+/**
+ * Create instant check rate limiter (for polling)
+ */
+export const createInstantCheckLimiter = () => rateLimit({
+  windowMs: RATE_LIMITS.INSTANT_CHECK.windowMs,
+  max: RATE_LIMITS.INSTANT_CHECK.max,
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+    retryAfter: '1 minute'
+  }
+});
+
+/**
+ * Create video status check limiter
+ */
+export const createWanStatusLimiter = () => rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 60,
+  message: {
+    error: 'Too many status check requests. Please wait a moment.',
+    retryAfter: '1 minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+/**
+ * Create video submit limiter
+ */
+export const createWanSubmitLimiter = () => rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  message: {
+    error: 'Too many video generation requests. Please wait before submitting another.',
+    retryAfter: '5 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+/**
+ * Create video result limiter
+ */
+export const createWanResultLimiter = () => rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 30,
+  message: {
+    error: 'Too many result requests. Please wait a moment.',
+    retryAfter: '1 minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+/**
+ * Create blockchain RPC rate limiter
+ */
+export const createBlockchainRpcLimiter = () => rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 120,
+  message: {
+    error: 'Too many RPC requests. Please wait a moment.',
+    retryAfter: '1 minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+/**
+ * Create free image rate limiter with browser fingerprinting
+ */
+export const createFreeImageLimiter = () => rateLimit({
+  windowMs: RATE_LIMITS.FREE_IMAGE.windowMs,
+  max: RATE_LIMITS.FREE_IMAGE.max,
+  message: {
+    error: 'Too many free image requests. Please wait before trying again.',
+    retryAfter: '1 hour'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+  keyGenerator: (req) => {
+    const fingerprint = generateBrowserFingerprint(req);
+    return `${req.ip || 'unknown'}-${fingerprint}`;
+  },
+  skip: (req) => {
+    const body = req.body || {};
+    return !!(body.walletAddress || body.userId || body.email);
+  }
+});
+
+export default {
+  createGeneralLimiter,
+  createAuthLimiter,
+  createPaymentLimiter,
+  createInstantCheckLimiter,
+  createWanStatusLimiter,
+  createWanSubmitLimiter,
+  createWanResultLimiter,
+  createBlockchainRpcLimiter,
+  createFreeImageLimiter
+};
+
+
+
