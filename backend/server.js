@@ -851,13 +851,14 @@ const authenticateToken = async (req, res, next) => {
     
     // Find user by userId or email
     // User model is defined later in the file, but available at runtime
+    // PERFORMANCE: Add timeout to prevent hanging on slow MongoDB
     const User = mongoose.model('User');
     const user = await User.findOne({
       $or: [
         { userId: decoded.userId },
         { email: decoded.email }
       ]
-    }).select('-password'); // Don't return password
+    }).select('-password -generationHistory -gallery -paymentHistory').maxTimeMS(5000); // 5s timeout, exclude large arrays
 
     if (!user) {
       return res.status(401).json({
@@ -5108,11 +5109,12 @@ async function findUserByIdentifier(walletAddress = null, email = null, userId =
 
   // If only one identifier, use direct query (more efficient)
   // OPTIMIZATION: Use lean() for faster read-only queries (returns plain JS objects)
+  // PERFORMANCE: Add timeout and exclude large arrays to prevent slow queries
   if (query.$or.length === 1) {
-    return await User.findOne(query.$or[0]).lean();
+    return await User.findOne(query.$or[0]).select('-generationHistory -gallery -paymentHistory').lean().maxTimeMS(5000);
   }
 
-  return await User.findOne(query).lean();
+  return await User.findOne(query).select('-generationHistory -gallery -paymentHistory').lean().maxTimeMS(5000);
 }
 
 /**
@@ -7497,13 +7499,14 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     // Refresh user data from database to get latest credits
     // Use the authenticated user's identifier to find the latest data
+    // PERFORMANCE: Exclude large arrays and add timeout to prevent slow loads
     const User = mongoose.model('User');
     const user = await User.findOne({
       $or: [
         { userId: req.user.userId },
         { email: req.user.email }
       ]
-    }).select('-password');
+    }).select('-password -generationHistory -gallery -paymentHistory').maxTimeMS(5000);
     
     if (!user) {
       return res.status(404).json({
