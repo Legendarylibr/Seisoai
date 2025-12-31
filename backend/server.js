@@ -5400,6 +5400,28 @@ const addCreditsToUser = async (user, {
     paymentEntry.subscriptionId = subscriptionId;
   }
   
+  // Save to new Payment collection (primary storage)
+  try {
+    await Payment.create({
+      userId: user.userId,
+      paymentId: paymentIntentId || txHash || `payment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      txHash,
+      type: paymentIntentId ? 'stripe' : 'crypto',
+      tokenSymbol: tokenSymbol || 'USDC',
+      amount: parseFloat(amount),
+      credits,
+      chainId: chainId || 'unknown',
+      walletType: walletType || 'evm',
+      walletAddress: user.walletAddress,
+      stripePaymentId: paymentIntentId,
+      status: 'completed',
+      createdAt: timestamp
+    });
+  } catch (paymentError) {
+    // Log but don't fail - embedded array is backup
+    logger.warn('Failed to save to Payment collection', { error: paymentError.message, userId: user.userId });
+  }
+  
   // Use atomic operation to update credits and payment history
   // This works with both wallet and email users via buildUserUpdateQuery
   const updateQuery = buildUserUpdateQuery(user);
@@ -5414,6 +5436,7 @@ const addCreditsToUser = async (user, {
   
   // Atomic update: increment credits and add payment history in one operation
   // Use $slice to prevent unbounded growth (keeps last 500 payments)
+  // NOTE: Embedded array kept for backwards compatibility during migration
   const updatedUser = await User.findOneAndUpdate(
     updateQuery,
     {
@@ -9871,8 +9894,47 @@ app.post('/api/generations/add', authenticateFlexible, async (req, res) => {
       timestamp: new Date()
     };
     
+    // Save to new Generation collection (primary storage)
+    try {
+      await Generation.create({
+        userId: user.userId,
+        generationId,
+        prompt: prompt || 'No prompt',
+        style: style || 'No Style',
+        imageUrl,
+        videoUrl,
+        requestId,
+        status: status || 'completed',
+        creditsUsed: creditsUsedForHistory,
+        createdAt: new Date()
+      });
+    } catch (genError) {
+      // Log but don't fail - embedded array is backup
+      logger.warn('Failed to save to Generation collection', { error: genError.message, generationId });
+    }
+    
+    // Add to gallery collection if completed
+    if (status !== 'queued' && status !== 'processing' && (videoUrl || imageUrl)) {
+      try {
+        await GalleryItem.create({
+          userId: user.userId,
+          itemId: generationId,
+          imageUrl: imageUrl || '',
+          videoUrl,
+          prompt: prompt || 'No prompt',
+          style: style || 'No Style',
+          creditsUsed: creditsUsedForHistory,
+          createdAt: new Date()
+        });
+      } catch (galleryError) {
+        // Log but don't fail - embedded array is backup
+        logger.warn('Failed to save to GalleryItem collection', { error: galleryError.message, generationId });
+      }
+    }
+    
     // Build update object - only add generation to history (credits already deducted)
     // IMPORTANT: Use $slice to limit array size and prevent documents exceeding 16MB limit
+    // NOTE: Embedded arrays kept for backwards compatibility during migration
     const MAX_GENERATION_HISTORY = 100; // Keep only last 100 generations
     const MAX_GALLERY_SIZE = 50; // Keep only last 50 gallery items
     
@@ -9885,7 +9947,7 @@ app.post('/api/generations/add', authenticateFlexible, async (req, res) => {
       }
     };
     
-    // Add to gallery if completed
+    // Add to gallery if completed (embedded array backup)
     if (status !== 'queued' && status !== 'processing' && (videoUrl || imageUrl)) {
       const galleryItem = {
         id: generationId,
@@ -10430,21 +10492,60 @@ app.get('/api/gallery/:identifier', async (req, res) => {
     
     // Filter gallery to last 30 days
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const recentGallery = (user.gallery || []).filter(item => 
-      item.timestamp && new Date(item.timestamp) >= thirtyDaysAgo
-    );
+    const skip = (parseInt(page) - 1) * parseInt(limit);
     
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + parseInt(limit);
+    // Try to fetch from new GalleryItem collection first
+    let galleryItems = [];
+    let totalCount = 0;
     
-    const gallery = recentGallery
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(startIndex, endIndex);
+    try {
+      // Query new collection
+      totalCount = await GalleryItem.countDocuments({
+        userId: user.userId,
+        createdAt: { $gte: thirtyDaysAgo }
+      });
+      
+      if (totalCount > 0) {
+        galleryItems = await GalleryItem.find({
+          userId: user.userId,
+          createdAt: { $gte: thirtyDaysAgo }
+        })
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(parseInt(limit))
+          .lean();
+        
+        // Transform to match expected format
+        galleryItems = galleryItems.map(item => ({
+          id: item.itemId,
+          imageUrl: item.imageUrl,
+          videoUrl: item.videoUrl,
+          prompt: item.prompt,
+          style: item.style,
+          creditsUsed: item.creditsUsed,
+          timestamp: item.createdAt
+        }));
+      }
+    } catch (collectionError) {
+      logger.warn('Failed to fetch from GalleryItem collection, falling back to embedded', { error: collectionError.message });
+    }
+    
+    // Fallback to embedded array if no items found in new collection
+    if (galleryItems.length === 0) {
+      const recentGallery = (user.gallery || []).filter(item => 
+        item.timestamp && new Date(item.timestamp) >= thirtyDaysAgo
+      );
+      
+      totalCount = recentGallery.length;
+      galleryItems = recentGallery
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(skip, skip + parseInt(limit));
+    }
     
     res.json({
       success: true,
-      gallery,
-      total: recentGallery.length,
+      gallery: galleryItems,
+      total: totalCount,
       page: parseInt(page),
       limit: parseInt(limit)
     });
@@ -10556,6 +10657,15 @@ app.delete('/api/gallery/:walletAddress/:generationId', authenticateToken, async
     }
     
     const user = await getOrCreateUser(normalizedAddress);
+    
+    // Delete from new GalleryItem collection
+    try {
+      await GalleryItem.deleteOne({ userId: user.userId, itemId: generationId });
+    } catch (deleteError) {
+      logger.warn('Failed to delete from GalleryItem collection', { error: deleteError.message, generationId });
+    }
+    
+    // Also delete from embedded array (for backwards compatibility)
     user.gallery = user.gallery.filter(item => item.id !== generationId);
     await user.save();
     
