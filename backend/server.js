@@ -4558,6 +4558,107 @@ async function createIndexes() {
   }
 }
 
+// One-time migration: Move embedded arrays to separate collections
+async function migrateEmbeddedArrays() {
+  try {
+    // Check if migration already ran (look for data in new collections)
+    const genCount = await Generation.countDocuments();
+    if (genCount > 0) {
+      logger.debug('Migration already completed, skipping');
+      return;
+    }
+    
+    // Find users with embedded data
+    const users = await User.find({
+      $or: [
+        { generationHistory: { $exists: true, $not: { $size: 0 } } },
+        { gallery: { $exists: true, $not: { $size: 0 } } },
+        { paymentHistory: { $exists: true, $not: { $size: 0 } } }
+      ]
+    }).select('userId generationHistory gallery paymentHistory').limit(100);
+    
+    if (users.length === 0) {
+      logger.debug('No users with embedded data to migrate');
+      return;
+    }
+    
+    logger.info(`Starting migration for ${users.length} users...`);
+    
+    for (const user of users) {
+      if (!user.userId) continue;
+      
+      // Migrate generations
+      if (user.generationHistory?.length > 0) {
+        const genOps = user.generationHistory.map((gen, idx) => ({
+          updateOne: {
+            filter: { generationId: gen.id || `gen_${user.userId}_${idx}` },
+            update: { $setOnInsert: {
+              userId: user.userId,
+              generationId: gen.id || `gen_${user.userId}_${idx}`,
+              prompt: gen.prompt || '',
+              style: gen.style,
+              imageUrl: gen.imageUrl,
+              videoUrl: gen.videoUrl,
+              status: gen.status || 'completed',
+              creditsUsed: gen.creditsUsed || 0,
+              createdAt: gen.timestamp || new Date()
+            }},
+            upsert: true
+          }
+        }));
+        await Generation.bulkWrite(genOps, { ordered: false }).catch(() => {});
+      }
+      
+      // Migrate gallery
+      if (user.gallery?.length > 0) {
+        const galleryOps = user.gallery.map((item, idx) => ({
+          updateOne: {
+            filter: { itemId: item.id || `gallery_${user.userId}_${idx}` },
+            update: { $setOnInsert: {
+              userId: user.userId,
+              itemId: item.id || `gallery_${user.userId}_${idx}`,
+              imageUrl: item.imageUrl || '',
+              videoUrl: item.videoUrl,
+              prompt: item.prompt,
+              style: item.style,
+              creditsUsed: item.creditsUsed || 0,
+              createdAt: item.timestamp || new Date()
+            }},
+            upsert: true
+          }
+        }));
+        await GalleryItem.bulkWrite(galleryOps, { ordered: false }).catch(() => {});
+      }
+      
+      // Migrate payments
+      if (user.paymentHistory?.length > 0) {
+        const paymentOps = user.paymentHistory.map((p, idx) => ({
+          updateOne: {
+            filter: { paymentId: p.txHash || `payment_${user.userId}_${idx}` },
+            update: { $setOnInsert: {
+              userId: user.userId,
+              paymentId: p.txHash || `payment_${user.userId}_${idx}`,
+              txHash: p.txHash,
+              type: 'crypto',
+              tokenSymbol: p.tokenSymbol,
+              amount: p.amount,
+              credits: p.credits || 0,
+              chainId: p.chainId,
+              createdAt: p.timestamp || new Date()
+            }},
+            upsert: true
+          }
+        }));
+        await Payment.bulkWrite(paymentOps, { ordered: false }).catch(() => {});
+      }
+    }
+    
+    logger.info('Migration completed successfully');
+  } catch (error) {
+    logger.warn('Migration skipped or failed (non-critical)', { error: error.message });
+  }
+}
+
 // Create indexes after connection
 mongoose.connection.on('connected', async () => {
   logger.info('MongoDB connected successfully', {
@@ -4567,6 +4668,9 @@ mongoose.connection.on('connected', async () => {
     name: mongoose.connection.name
   });
   await createIndexes();
+  
+  // Run one-time migration (safe to run multiple times)
+  await migrateEmbeddedArrays();
 });
 
 mongoose.connection.on('error', (err) => {
