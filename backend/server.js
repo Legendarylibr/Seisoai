@@ -7066,7 +7066,7 @@ app.post('/api/auth/signin', authRateLimiter, async (req, res) => {
     // Find user with timeout to prevent hanging on MongoDB issues
     // IMPORTANT: Exclude generations array to prevent loading huge documents (16MB+ limit)
     const user = await User.findOne({ email: email.toLowerCase() })
-      .select('+password -generations -galleryImages')
+      .select('+password -generationHistory -gallery -paymentHistory')
       .maxTimeMS(10000); // 10 second timeout
     if (!user) {
       return res.status(401).json({
