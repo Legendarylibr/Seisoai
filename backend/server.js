@@ -22,6 +22,9 @@ import {
   extractClientIP,
   createFreeImageRateLimiter
 } from './abusePrevention.js';
+import Generation from './models/Generation.js';
+import GalleryItem from './models/GalleryItem.js';
+import Payment from './models/Payment.js';
 
 // ES module setup
 const __filename = fileURLToPath(import.meta.url);
@@ -4442,15 +4445,16 @@ mongoose.set('autoIndex', process.env.NODE_ENV !== 'production');  // Only auto-
 const mongoOptions = {
   maxPoolSize: 10,        // Maximum connections in shared pool
   minPoolSize: 2,         // Keep 2 connections warm for immediate availability
-  serverSelectionTimeoutMS: 10000,  // Timeout for server selection
-  socketTimeoutMS: 45000,  // Socket timeout (allows for longer queries)
+  serverSelectionTimeoutMS: 30000,  // Timeout for server selection (increased for network stability)
+  socketTimeoutMS: 60000,  // Socket timeout (allows for longer queries)
   maxIdleTimeMS: 60000,   // Keep idle connections for 60s before closing
-  connectTimeoutMS: 10000, // Initial connection timeout
+  connectTimeoutMS: 30000, // Initial connection timeout (increased for slow networks)
   heartbeatFrequencyMS: 10000, // Check connection health every 10s
   retryWrites: true,      // Auto-retry failed writes
   retryReads: true,       // Auto-retry failed reads
-  waitQueueTimeoutMS: 10000, // Fail fast if pool exhausted (prevents queue overload)
+  waitQueueTimeoutMS: 15000, // Fail fast if pool exhausted (prevents queue overload)
   compressors: ['zlib'],  // Compress data for network efficiency
+  family: 4,              // Force IPv4 (avoids IPv6 connectivity issues)
 };
 
 // Add SSL for production
