@@ -293,6 +293,177 @@ export function createUserRoutes(deps: Dependencies = {}) {
     }
   });
 
+  /**
+   * Get user by wallet address (public endpoint)
+   * GET /api/users/:walletAddress
+   */
+  router.get('/:walletAddress', async (req: Request, res: Response) => {
+    try {
+      const { walletAddress } = req.params;
+      const { skipNFTs } = req.query;
+
+      // Normalize address
+      const isSolanaAddress = !walletAddress.startsWith('0x');
+      const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+
+      // Get or create user
+      const user = await getOrCreateUser(normalizedAddress);
+
+      // Update lastActive
+      const User = mongoose.model<IUser>('User');
+      await User.findOneAndUpdate(
+        { walletAddress: user.walletAddress },
+        { lastActive: new Date() }
+      );
+
+      // Check NFT holdings (unless skipped)
+      let isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      
+      // Set cache headers
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+
+      // SECURITY: Only return public data
+      res.json({
+        success: true,
+        credits: user.credits || 0,
+        totalCreditsEarned: user.totalCreditsEarned || 0,
+        totalCreditsSpent: user.totalCreditsSpent || 0,
+        walletAddress: user.walletAddress,
+        isNFTHolder,
+        pricing: {
+          costPerCredit: isNFTHolder ? 0.06 : 0.15,
+          creditsPerUSDC: isNFTHolder ? 16.67 : 6.67
+        }
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Get user by wallet error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get user'
+      });
+    }
+  });
+
+  /**
+   * Check NFT holder credits
+   * POST /api/nft/check-credits
+   */
+  router.post('/check-credits', async (req: Request, res: Response) => {
+    try {
+      const { walletAddress } = req.body as { walletAddress?: string };
+
+      if (!walletAddress) {
+        res.status(400).json({
+          success: false,
+          error: 'Wallet address required'
+        });
+        return;
+      }
+
+      const user = await getOrCreateUser(walletAddress);
+      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+
+      res.json({
+        success: true,
+        totalCredits: user.credits || 0,
+        totalCreditsEarned: user.totalCreditsEarned || 0,
+        totalCreditsSpent: user.totalCreditsSpent || 0,
+        isNFTHolder,
+        pricing: {
+          costPerCredit: isNFTHolder ? 0.06 : 0.15,
+          creditsPerUSDC: isNFTHolder ? 16.67 : 6.67
+        }
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Check credits error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to check credits'
+      });
+    }
+  });
+
+  /**
+   * Check NFT holdings for wallet
+   * POST /api/nft/check-holdings
+   */
+  router.post('/check-holdings', async (req: Request, res: Response) => {
+    try {
+      const { walletAddress } = req.body as { walletAddress?: string };
+
+      if (!walletAddress) {
+        res.status(400).json({
+          success: false,
+          error: 'Wallet address required'
+        });
+        return;
+      }
+
+      const isSolanaAddress = !walletAddress.startsWith('0x');
+      const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+
+      logger.info('Checking NFT holdings', { walletAddress: normalizedAddress });
+
+      // Get user's NFT collections from database
+      const user = await getOrCreateUser(normalizedAddress);
+      const ownedCollections = user.nftCollections || [];
+      const isHolder = ownedCollections.length > 0;
+
+      // Grant NFT holder credits if applicable
+      if (isHolder && ownedCollections.length > 0) {
+        const User = mongoose.model<IUser>('User');
+        const targetCredits = 5;
+        const currentCredits = user.credits || 0;
+        const nftGrantTxHash = `NFT_GRANT_${normalizedAddress}`;
+
+        // Check if already granted
+        const hasBeenGranted = user.paymentHistory?.some(
+          (p: { txHash?: string }) => p.txHash === nftGrantTxHash
+        );
+
+        if (currentCredits < targetCredits && !hasBeenGranted) {
+          const creditsToGrant = targetCredits - currentCredits;
+          await User.findOneAndUpdate(
+            { walletAddress: user.walletAddress },
+            {
+              $inc: { credits: creditsToGrant, totalCreditsEarned: creditsToGrant },
+              $push: {
+                paymentHistory: {
+                  txHash: nftGrantTxHash,
+                  tokenSymbol: 'NFT',
+                  amount: 0,
+                  credits: creditsToGrant,
+                  timestamp: new Date()
+                }
+              }
+            }
+          );
+          logger.info('NFT credits granted', { walletAddress: normalizedAddress, credits: creditsToGrant });
+        }
+      }
+
+      res.json({
+        success: true,
+        isHolder,
+        collections: ownedCollections,
+        pricing: {
+          costPerCredit: isHolder ? 0.06 : 0.15,
+          creditsPerUSDC: isHolder ? 16.67 : 6.67
+        }
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Check holdings error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to check NFT holdings'
+      });
+    }
+  });
+
   return router;
 }
 

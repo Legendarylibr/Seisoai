@@ -49,8 +49,15 @@ export function createApiRoutes(deps: Dependencies) {
   // NFT routes (reuse user routes)
   router.use('/nft', userRoutes);
   
+  // Users lookup (GET /api/users/:walletAddress)
+  router.use('/users', userRoutes);
+  
   // Generation
-  router.use('/generate', createGenerationRoutes(deps));
+  const generationRoutes = createGenerationRoutes(deps);
+  router.use('/generate', generationRoutes);
+  
+  // Generations history (POST /api/generations/add)
+  router.use('/generations', generationRoutes);
   
   // Extract layers
   router.use('/', createExtractRoutes(deps));
@@ -64,7 +71,15 @@ export function createApiRoutes(deps: Dependencies) {
   router.use('/payment', paymentRoutes);
   
   // Stripe
-  router.use('/stripe', createStripeRoutes(deps));
+  const stripeRoutes = createStripeRoutes(deps);
+  router.use('/stripe', stripeRoutes);
+  
+  // Subscription routes (alias for stripe subscription-verify)
+  router.post('/subscription/verify', (req, res, next) => {
+    // Forward to stripe subscription-verify
+    req.url = '/subscription-verify';
+    stripeRoutes(req, res, next);
+  });
   
   // RPC routes
   router.use('/', createRpcRoutes(deps));

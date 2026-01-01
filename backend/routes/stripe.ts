@@ -16,6 +16,11 @@ import type Stripe from 'stripe';
 // Types
 interface Dependencies {
   paymentLimiter?: RequestHandler;
+  authenticateToken?: RequestHandler;
+}
+
+interface AuthenticatedRequest extends Request {
+  user?: IUser;
 }
 
 interface SubscriptionPlans {
@@ -27,9 +32,10 @@ interface SubscriptionPlans {
 
 export function createStripeRoutes(deps: Dependencies = {}) {
   const router = Router();
-  const { paymentLimiter } = deps;
+  const { paymentLimiter, authenticateToken } = deps;
 
   const limiter = paymentLimiter || ((req: Request, res: Response, next: () => void) => next());
+  const authMiddleware = authenticateToken || ((req: Request, res: Response, next: () => void) => next());
 
   /**
    * Create payment intent
@@ -304,6 +310,471 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       }
     }
   );
+
+  /**
+   * Get user's active subscription
+   * GET /api/stripe/subscription
+   */
+  router.get('/subscription', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const stripe = getStripe();
+      if (!stripe) {
+        res.status(400).json({
+          success: false,
+          error: 'Stripe is not configured'
+        });
+        return;
+      }
+
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({ success: false, error: 'Not authenticated' });
+        return;
+      }
+
+      // Find subscription in payment history
+      let subscriptionId: string | null = null;
+      if (user.paymentHistory && user.paymentHistory.length > 0) {
+        const subscriptionPayment = user.paymentHistory
+          .filter((p: { subscriptionId?: string; timestamp?: Date }) => p.subscriptionId)
+          .sort((a: { timestamp?: Date }, b: { timestamp?: Date }) => 
+            new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
+          )[0];
+        
+        if (subscriptionPayment) {
+          subscriptionId = subscriptionPayment.subscriptionId;
+        }
+      }
+
+      if (!subscriptionId && user.email) {
+        try {
+          const customers = await stripe.customers.list({
+            email: user.email,
+            limit: 1
+          });
+
+          if (customers.data.length > 0) {
+            const subscriptions = await stripe.subscriptions.list({
+              customer: customers.data[0].id,
+              status: 'all',
+              limit: 1
+            });
+
+            if (subscriptions.data.length > 0) {
+              subscriptionId = subscriptions.data[0].id;
+            }
+          }
+        } catch (stripeError) {
+          logger.error('Error finding subscription by customer:', { error: (stripeError as Error).message });
+        }
+      }
+
+      if (!subscriptionId) {
+        res.json({
+          success: true,
+          hasSubscription: false,
+          subscription: null
+        });
+        return;
+      }
+
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      res.json({
+        success: true,
+        hasSubscription: true,
+        subscription: {
+          id: subscription.id,
+          status: subscription.status,
+          currentPeriodEnd: new Date((subscription.current_period_end as number) * 1000),
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          plan: subscription.metadata?.planType || 'unknown'
+        }
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Get subscription error:', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to get subscription' });
+    }
+  });
+
+  /**
+   * Cancel subscription
+   * POST /api/stripe/subscription/cancel
+   */
+  router.post('/subscription/cancel', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const stripe = getStripe();
+      if (!stripe) {
+        res.status(400).json({
+          success: false,
+          error: 'Stripe is not configured'
+        });
+        return;
+      }
+
+      const { subscriptionId } = req.body as { subscriptionId?: string };
+      const user = req.user;
+
+      if (!user) {
+        res.status(401).json({ success: false, error: 'Not authenticated' });
+        return;
+      }
+
+      if (!subscriptionId) {
+        res.status(400).json({
+          success: false,
+          error: 'Subscription ID is required'
+        });
+        return;
+      }
+
+      // Verify subscription belongs to user via Stripe customer
+      if (user.email) {
+        const customers = await stripe.customers.list({
+          email: user.email,
+          limit: 1
+        });
+
+        if (customers.data.length > 0) {
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          if (subscription.customer !== customers.data[0].id) {
+            res.status(403).json({
+              success: false,
+              error: 'Subscription does not belong to this user'
+            });
+            return;
+          }
+        }
+      }
+
+      // Cancel at period end (user keeps access until end of billing period)
+      const updatedSubscription = await stripe.subscriptions.update(subscriptionId, {
+        cancel_at_period_end: true
+      });
+
+      logger.info('Subscription cancelled', {
+        subscriptionId,
+        userId: user.userId
+      });
+
+      res.json({
+        success: true,
+        subscription: {
+          id: updatedSubscription.id,
+          status: updatedSubscription.status,
+          cancelAtPeriodEnd: updatedSubscription.cancel_at_period_end,
+          currentPeriodEnd: new Date((updatedSubscription.current_period_end as number) * 1000)
+        }
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Cancel subscription error:', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to cancel subscription' });
+    }
+  });
+
+  /**
+   * Create billing portal session
+   * POST /api/stripe/billing-portal
+   */
+  router.post('/billing-portal', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const stripe = getStripe();
+      if (!stripe) {
+        res.status(400).json({
+          success: false,
+          error: 'Stripe is not configured'
+        });
+        return;
+      }
+
+      const user = req.user;
+      if (!user || !user.email) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+      const customers = await stripe.customers.list({
+        email: user.email,
+        limit: 1
+      });
+
+      if (customers.data.length === 0) {
+        res.status(404).json({
+          success: false,
+          error: 'No Stripe customer found. Please subscribe first.'
+        });
+        return;
+      }
+
+      const session = await stripe.billingPortal.sessions.create({
+        customer: customers.data[0].id,
+        return_url: baseUrl
+      });
+
+      logger.info('Stripe billing portal session created', {
+        userId: user.userId,
+        email: user.email
+      });
+
+      res.json({
+        success: true,
+        url: session.url
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Billing portal error:', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to create billing portal session' });
+    }
+  });
+
+  /**
+   * Verify Stripe payment and award credits
+   * POST /api/stripe/verify-payment
+   */
+  router.post('/verify-payment', limiter, async (req: Request, res: Response) => {
+    try {
+      const stripe = getStripe();
+      if (!stripe) {
+        res.status(400).json({
+          success: false,
+          error: 'Stripe payment is not configured'
+        });
+        return;
+      }
+
+      const { paymentIntentId, walletAddress, userId, email } = req.body as {
+        paymentIntentId?: string;
+        walletAddress?: string;
+        userId?: string;
+        email?: string;
+      };
+
+      if (!paymentIntentId) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing required field: paymentIntentId'
+        });
+        return;
+      }
+
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+      if (paymentIntent.status !== 'succeeded') {
+        res.status(400).json({
+          success: false,
+          error: `Payment not completed. Status: ${paymentIntent.status}`
+        });
+        return;
+      }
+
+      // Find user from metadata or request body
+      let user: IUser | null = null;
+      const User = mongoose.model<IUser>('User');
+
+      if (paymentIntent.metadata.userId) {
+        user = await User.findOne({ userId: paymentIntent.metadata.userId });
+      } else if (paymentIntent.metadata.email) {
+        user = await User.findOne({ email: paymentIntent.metadata.email.toLowerCase() });
+      } else if (paymentIntent.metadata.walletAddress) {
+        user = await User.findOne({ walletAddress: paymentIntent.metadata.walletAddress.toLowerCase() });
+      }
+
+      if (!user) {
+        if (userId) {
+          user = await User.findOne({ userId });
+        } else if (email) {
+          user = await User.findOne({ email: email.toLowerCase() });
+        } else if (walletAddress) {
+          user = await User.findOne({ walletAddress: walletAddress.toLowerCase() });
+        }
+      }
+
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+        return;
+      }
+
+      // Check if already processed
+      const existingPayment = user.paymentHistory?.find(
+        (p: { stripePaymentId?: string }) => p.stripePaymentId === paymentIntentId
+      );
+      if (existingPayment) {
+        res.json({
+          success: true,
+          alreadyProcessed: true,
+          credits: user.credits || 0,
+          message: 'Payment already processed'
+        });
+        return;
+      }
+
+      // Calculate credits
+      const creditsFromMetadata = parseInt(paymentIntent.metadata.credits || '0', 10);
+      const credits = creditsFromMetadata || Math.floor((paymentIntent.amount / 100) * 6.67);
+
+      // Add credits
+      await User.findOneAndUpdate(
+        { userId: user.userId },
+        {
+          $inc: { credits, totalCreditsEarned: credits },
+          $push: {
+            paymentHistory: {
+              type: 'stripe',
+              amount: paymentIntent.amount / 100,
+              credits,
+              timestamp: new Date(),
+              stripePaymentId: paymentIntentId
+            }
+          }
+        }
+      );
+
+      logger.info('Stripe payment verified and credits added', {
+        userId: user.userId,
+        credits,
+        paymentIntentId
+      });
+
+      res.json({
+        success: true,
+        credits,
+        totalCredits: (user.credits || 0) + credits
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Verify payment error:', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to verify payment' });
+    }
+  });
+
+  /**
+   * Verify subscription checkout session
+   * POST /api/subscription/verify (mounted at /api/stripe but also needs /api route)
+   */
+  router.post('/subscription-verify', limiter, async (req: Request, res: Response) => {
+    try {
+      const stripe = getStripe();
+      if (!stripe) {
+        res.status(400).json({
+          success: false,
+          error: 'Stripe is not configured'
+        });
+        return;
+      }
+
+      const { sessionId, userId } = req.body as { sessionId?: string; userId?: string };
+      if (!sessionId) {
+        res.status(400).json({
+          success: false,
+          error: 'sessionId is required'
+        });
+        return;
+      }
+
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      if (!session) {
+        res.status(404).json({
+          success: false,
+          error: 'Checkout session not found'
+        });
+        return;
+      }
+
+      if (session.mode !== 'subscription') {
+        res.status(400).json({
+          success: false,
+          error: 'Only subscription checkouts can be verified'
+        });
+        return;
+      }
+
+      if (session.payment_status !== 'paid') {
+        res.status(400).json({
+          success: false,
+          error: 'Payment is not completed yet'
+        });
+        return;
+      }
+
+      const subscriptionId = session.subscription as string;
+      if (!subscriptionId) {
+        res.status(400).json({
+          success: false,
+          error: 'No subscription found for this checkout session'
+        });
+        return;
+      }
+
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const User = mongoose.model<IUser>('User');
+
+      // Find user
+      let user: IUser | null = null;
+      const metadata = session.metadata || {};
+      
+      if (metadata.userId) {
+        user = await User.findOne({ userId: metadata.userId });
+      } else if (metadata.email) {
+        user = await User.findOne({ email: (metadata.email as string).toLowerCase() });
+      } else if (userId) {
+        user = await User.findOne({ userId });
+      }
+
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+        return;
+      }
+
+      // Add subscription credits
+      const monthlyCredits = parseInt(subscription.metadata?.monthlyCredits || '100', 10);
+      
+      await User.findOneAndUpdate(
+        { userId: user.userId },
+        {
+          $inc: { credits: monthlyCredits, totalCreditsEarned: monthlyCredits },
+          $push: {
+            paymentHistory: {
+              type: 'subscription',
+              subscriptionId,
+              credits: monthlyCredits,
+              timestamp: new Date()
+            }
+          }
+        }
+      );
+
+      logger.info('Subscription verified', {
+        userId: user.userId,
+        subscriptionId,
+        credits: monthlyCredits
+      });
+
+      res.json({
+        success: true,
+        credits: monthlyCredits,
+        subscription: {
+          id: subscriptionId,
+          status: subscription.status
+        }
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Subscription verify error:', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to verify subscription' });
+    }
+  });
 
   return router;
 }

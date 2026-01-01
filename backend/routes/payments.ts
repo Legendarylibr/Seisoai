@@ -14,14 +14,25 @@ import type { LRUCache } from '../services/cache';
 // Types
 interface Dependencies {
   paymentLimiter?: RequestHandler;
+  authenticateFlexible?: RequestHandler;
   processedTransactions?: LRUCache<string, { timestamp: Date; walletAddress: string }>;
 }
 
+interface AuthenticatedRequest extends Request {
+  user?: IUser;
+  authType?: string;
+}
+
+// NFT holder rate for credits
+const NFT_HOLDER_CREDITS_PER_USDC = 16.67;
+const STANDARD_CREDITS_PER_USDC = 6.67;
+
 export function createPaymentRoutes(deps: Dependencies = {}) {
   const router = Router();
-  const { paymentLimiter, processedTransactions } = deps;
+  const { paymentLimiter, authenticateFlexible, processedTransactions } = deps;
 
   const limiter = paymentLimiter || ((req: Request, res: Response, next: () => void) => next());
+  const flexibleAuth = authenticateFlexible || ((req: Request, res: Response, next: () => void) => next());
 
   /**
    * Get payment address
@@ -167,6 +178,206 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
       res.status(500).json({
         success: false,
         error: err.message
+      });
+    }
+  });
+
+  /**
+   * Check for payment on blockchain
+   * POST /api/payment/check-payment
+   */
+  router.post('/check-payment', async (req: Request, res: Response) => {
+    try {
+      const { walletAddress, expectedAmount, token = 'USDC' } = req.body as {
+        walletAddress?: string;
+        expectedAmount?: number;
+        token?: string;
+      };
+
+      logger.info('Payment check started', { walletAddress, expectedAmount, token });
+
+      if (!walletAddress || !expectedAmount) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing required fields'
+        });
+        return;
+      }
+
+      // For now, return no payment found - full blockchain scanning would require
+      // RPC polling which is complex. The /verify endpoint handles direct verification.
+      res.json({
+        success: true,
+        paymentDetected: false,
+        message: 'Use /api/payments/verify with transaction hash for payment verification'
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Payment check error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to check payment'
+      });
+    }
+  });
+
+  /**
+   * Instant payment check for specific chain
+   * POST /api/payment/instant-check
+   */
+  router.post('/instant-check', limiter, async (req: Request, res: Response) => {
+    try {
+      const { walletAddress, chainId, expectedAmount } = req.body as {
+        walletAddress?: string;
+        chainId?: number;
+        expectedAmount?: number;
+      };
+
+      logger.debug('Starting instant payment check', { walletAddress, chainId, expectedAmount });
+
+      if (!walletAddress) {
+        res.status(400).json({
+          success: false,
+          error: 'Wallet address required'
+        });
+        return;
+      }
+
+      // Instant check returns quickly - for real blockchain scanning,
+      // the frontend should use the /verify endpoint with tx hash
+      res.json({
+        success: true,
+        paymentDetected: false,
+        message: 'Submit transaction hash to /api/payments/verify for instant credit'
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Instant check error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Check failed'
+      });
+    }
+  });
+
+  /**
+   * Credit user after blockchain payment
+   * POST /api/payments/credit
+   */
+  router.post('/credit', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { txHash, walletAddress, tokenSymbol, amount, chainId, walletType } = req.body as {
+        txHash?: string;
+        walletAddress?: string;
+        tokenSymbol?: string;
+        amount?: number;
+        chainId?: string | number;
+        walletType?: string;
+      };
+
+      logger.info('Payment credit started', {
+        txHash,
+        walletAddress,
+        tokenSymbol,
+        amount,
+        chainId,
+        walletType,
+        authType: req.authType || 'none',
+        authenticatedUser: req.user?.userId || req.user?.email || 'wallet-only'
+      });
+
+      if (!txHash || !walletAddress || !amount) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing required fields'
+        });
+        return;
+      }
+
+      // Validate txHash format
+      if (typeof txHash !== 'string' || txHash.length > 100 || !/^[a-zA-Z0-9]+$/.test(txHash)) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid transaction hash format'
+        });
+        return;
+      }
+
+      const User = mongoose.model<IUser>('User');
+      const normalizedAddress = walletAddress.toLowerCase();
+
+      // Get or create user
+      let user = await User.findOne({ walletAddress: normalizedAddress });
+      if (!user) {
+        user = new User({
+          walletAddress: normalizedAddress,
+          credits: 0,
+          totalCreditsEarned: 0,
+          totalCreditsSpent: 0
+        });
+        await user.save();
+      }
+
+      // Check if already processed
+      const alreadyProcessed = user.paymentHistory?.some(
+        (p: { txHash?: string }) => p.txHash === txHash
+      );
+      if (alreadyProcessed) {
+        logger.info('Payment already processed', { txHash, walletAddress });
+        res.json({
+          success: true,
+          credits: 0,
+          totalCredits: user.credits,
+          message: 'Payment already processed'
+        });
+        return;
+      }
+
+      // Check NFT holder status
+      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      const creditsPerUSDC = isNFTHolder ? NFT_HOLDER_CREDITS_PER_USDC : STANDARD_CREDITS_PER_USDC;
+      const credits = Math.floor(amount * creditsPerUSDC);
+
+      // Add credits
+      const updatedUser = await User.findOneAndUpdate(
+        { walletAddress: normalizedAddress },
+        {
+          $inc: { credits, totalCreditsEarned: credits },
+          $push: {
+            paymentHistory: {
+              txHash,
+              tokenSymbol: tokenSymbol || 'USDC',
+              amount,
+              credits,
+              chainId: String(chainId),
+              walletType,
+              timestamp: new Date()
+            }
+          }
+        },
+        { new: true }
+      );
+
+      logger.info('Payment credited', {
+        txHash,
+        walletAddress,
+        credits,
+        isNFTHolder,
+        totalCredits: updatedUser?.credits
+      });
+
+      res.json({
+        success: true,
+        credits,
+        totalCredits: updatedUser?.credits || 0,
+        isNFTHolder
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Payment credit error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to credit payment'
       });
     }
   });

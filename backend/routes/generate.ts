@@ -13,6 +13,7 @@ import type { IUser } from '../models/User';
 // Types
 interface Dependencies {
   freeImageRateLimiter?: RequestHandler;
+  authenticateFlexible?: RequestHandler;
   requireCreditsForModel: () => RequestHandler;
   requireCreditsForVideo: () => RequestHandler;
   requireCredits: (credits: number) => RequestHandler;
@@ -32,12 +33,14 @@ export function createGenerationRoutes(deps: Dependencies) {
   const router = Router();
   const { 
     freeImageRateLimiter,
+    authenticateFlexible,
     requireCreditsForModel,
     requireCreditsForVideo,
     requireCredits
   } = deps;
 
   const freeImageLimiter = freeImageRateLimiter || ((req: Request, res: Response, next: () => void) => next());
+  const flexibleAuth = authenticateFlexible || ((req: Request, res: Response, next: () => void) => next());
 
   /**
    * Generate image
@@ -439,6 +442,120 @@ export function createGenerationRoutes(deps: Dependencies) {
       res.status(500).json({
         success: false,
         error: err.message
+      });
+    }
+  });
+
+  /**
+   * Add generation to history
+   * POST /api/generations/add
+   */
+  router.post('/add', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      logger.debug('Generation add request received', {
+        authenticatedUserId: user.userId,
+        authenticatedEmail: user.email,
+        authenticatedWallet: user.walletAddress,
+        hasImageUrl: !!req.body?.imageUrl,
+        hasVideoUrl: !!req.body?.videoUrl
+      });
+
+      const { prompt, style, imageUrl, videoUrl, requestId, status, creditsUsed } = req.body as {
+        prompt?: string;
+        style?: string;
+        imageUrl?: string;
+        videoUrl?: string;
+        requestId?: string;
+        status?: string;
+        creditsUsed?: number;
+      };
+
+      if (!imageUrl && !videoUrl) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing required field: imageUrl or videoUrl is required'
+        });
+        return;
+      }
+
+      if (!user.walletAddress && !user.email) {
+        res.status(400).json({
+          success: false,
+          error: 'User account must have wallet address or email'
+        });
+        return;
+      }
+
+      // Credits are already deducted in generation endpoints
+      const creditsUsedForHistory = creditsUsed || 1;
+
+      const User = mongoose.model<IUser>('User');
+      const updateQuery = buildUserUpdateQuery(user);
+      
+      if (!updateQuery) {
+        res.status(400).json({
+          success: false,
+          error: 'User account must have wallet address, userId, or email'
+        });
+        return;
+      }
+
+      // Create generation record
+      const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const generation = {
+        id: generationId,
+        prompt: prompt || 'No prompt',
+        style: style || 'No Style',
+        ...(imageUrl && { imageUrl }),
+        ...(videoUrl && { videoUrl }),
+        ...(requestId && { requestId }),
+        ...(status && { status }),
+        creditsUsed: creditsUsedForHistory,
+        timestamp: new Date()
+      };
+
+      // Add to user's generation history
+      await User.findOneAndUpdate(
+        updateQuery,
+        {
+          $push: {
+            generationHistory: {
+              $each: [generation],
+              $slice: -100 // Keep last 100 generations
+            }
+          }
+        }
+      );
+
+      logger.info('Generation added to history', {
+        userId: user.userId,
+        generationId,
+        hasImage: !!imageUrl,
+        hasVideo: !!videoUrl
+      });
+
+      res.json({
+        success: true,
+        generationId,
+        credits: user.credits,
+        totalCreditsEarned: user.totalCreditsEarned,
+        totalCreditsSpent: user.totalCreditsSpent
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Add generation error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to add generation'
       });
     }
   });

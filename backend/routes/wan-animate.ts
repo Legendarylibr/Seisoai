@@ -37,6 +37,109 @@ export function createWanAnimateRoutes(deps: Dependencies) {
   const authMiddleware = authenticateToken || ((req: Request, res: Response, next: () => void) => next());
 
   /**
+   * Upload video (direct multipart form data)
+   * POST /api/wan-animate/upload-video-direct
+   */
+  router.post('/upload-video-direct', async (req: Request, res: Response) => {
+    try {
+      if (!FAL_API_KEY) {
+        res.status(500).json({ success: false, error: 'AI service not configured' });
+        return;
+      }
+
+      // Handle multipart/form-data
+      const formData = await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk: Buffer) => chunks.push(chunk));
+        req.on('end', () => {
+          const buffer = Buffer.concat(chunks);
+          const contentType = req.headers['content-type'] || '';
+          const boundary = contentType.split('boundary=')[1];
+          if (!boundary) {
+            return reject(new Error('No boundary in Content-Type'));
+          }
+
+          const parts = buffer.toString('binary').split(`--${boundary}`);
+          for (const part of parts) {
+            if (part.includes('Content-Disposition: form-data')) {
+              const headerEnd = part.indexOf('\r\n\r\n');
+              if (headerEnd === -1) continue;
+
+              const headers = part.substring(0, headerEnd);
+              const body = part.substring(headerEnd + 4);
+              const bodyEnd = body.indexOf(`\r\n--${boundary}`);
+              const fileData = bodyEnd === -1 ? body : body.substring(0, bodyEnd);
+
+              if (headers.includes('name="video"')) {
+                return resolve(Buffer.from(fileData, 'binary'));
+              }
+            }
+          }
+          reject(new Error('No video field found'));
+        });
+        req.on('error', reject);
+      });
+
+      // Upload to fal.ai
+      const mimeType = 'video/mp4';
+      const boundary = `----formdata-${Date.now()}`;
+      const CRLF = '\r\n';
+
+      let formDataBody = `--${boundary}${CRLF}`;
+      formDataBody += `Content-Disposition: form-data; name="file"; filename="video.mp4"${CRLF}`;
+      formDataBody += `Content-Type: ${mimeType}${CRLF}${CRLF}`;
+
+      const formDataBuffer = Buffer.concat([
+        Buffer.from(formDataBody, 'utf8'),
+        formData,
+        Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8')
+      ]);
+
+      const uploadResponse = await fetch('https://fal.ai/files', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        },
+        body: formDataBuffer
+      });
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        logger.error('Failed to upload video to fal.ai (direct)', {
+          status: uploadResponse.status,
+          error: errorText.substring(0, 200)
+        });
+        res.status(uploadResponse.status).json({
+          success: false,
+          error: `Failed to upload video: ${errorText.substring(0, 200)}`
+        });
+        return;
+      }
+
+      const uploadData = await uploadResponse.json() as { url?: string; file?: { url?: string } };
+      const videoUrl = uploadData.url || uploadData.file?.url;
+
+      if (!videoUrl) {
+        res.status(500).json({ success: false, error: 'No video URL in response' });
+        return;
+      }
+
+      res.json({
+        success: true,
+        videoUrl
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Direct video upload error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: err.message
+      });
+    }
+  });
+
+  /**
    * Upload video (data URI)
    * POST /api/wan-animate/upload-video
    */
