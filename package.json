@@ -6,14 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "start": "node start-app.js",
-    "start:backend": "cd backend && node server.js",
+    "start": "tsx start-app.ts",
+    "start:backend": "cd backend && tsx server.ts",
     "build:start": "npm run build && npm start",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "postinstall": "cd backend && npm install"
   },
   "dependencies": {
+    "tsx": "^4.7.1",
     "@fal-ai/client": "^1.6.2",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",

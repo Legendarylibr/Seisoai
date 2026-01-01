@@ -10,7 +10,7 @@ cmds = ['npm install', 'cd backend && npm install']
 cmds = ['npm run build']
 
 [start]
-cmd = 'node start-app.js'
+cmd = 'npx tsx start-app.ts'
 
 [variables]
 NODE_ENV = "production"
