@@ -60,6 +60,15 @@ const TermsOfService = memo(function TermsOfService() {
 
       <h3 className="font-bold">Disclaimer</h3>
       <p>Service provided "as is" without warranties. We're not liable for indirect damages or AI output quality.</p>
+
+      <h3 className="font-bold">Indemnification</h3>
+      <p>You agree to indemnify and hold harmless Seiso AI from any claims, damages, or expenses arising from your use of the service or violation of these terms.</p>
+
+      <h3 className="font-bold">IP & Generated Content</h3>
+      <p>AI outputs may unintentionally resemble existing works. You assume responsibility for checking generated content before commercial use. We make no guarantees regarding IP clearance.</p>
+
+      <h3 className="font-bold">Dispute Resolution</h3>
+      <p>Disputes shall be resolved through binding arbitration rather than court. You waive rights to participate in class actions. Small claims court remains available.</p>
     </div>
   );
 });
