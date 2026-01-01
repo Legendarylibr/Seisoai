@@ -503,7 +503,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
     } finally {
       setIsGenerating(false);
     }
-  }, [canGenerate, prompt, duration, emailContext, walletContext, isEmailAuth]);
+  }, [canGenerate, prompt, duration, emailContext, walletContext, isEmailAuth, optimizePrompt, selectedGenre]);
 
   const handleDownload = useCallback(async () => {
     if (!generatedAudioUrl) return;
