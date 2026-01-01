@@ -3583,7 +3583,7 @@ app.post('/api/generate/music', freeImageRateLimiter, requireCredits(1), async (
     });
 
     // Make request to fal.ai CassetteAI API using subscribe pattern
-    const endpoint = 'https://queue.fal.run/CassetteAI/music-generator';
+    const endpoint = 'https://queue.fal.run/cassetteai/music-generator';
     
     const submitResponse = await fetch(endpoint, {
       method: 'POST',
@@ -3622,8 +3622,8 @@ app.post('/api/generate/music', freeImageRateLimiter, requireCredits(1), async (
     logger.info('Music generation submitted', { requestId });
 
     // Poll for completion (music generation is fast: 30s in ~2s, 3min in ~10s)
-    const statusEndpoint = `https://queue.fal.run/CassetteAI/music-generator/requests/${requestId}/status`;
-    const resultEndpoint = `https://queue.fal.run/CassetteAI/music-generator/requests/${requestId}`;
+    const statusEndpoint = `https://queue.fal.run/cassetteai/music-generator/requests/${requestId}/status`;
+    const resultEndpoint = `https://queue.fal.run/cassetteai/music-generator/requests/${requestId}`;
     
     const maxWaitTime = 60 * 1000; // 1 minute max wait (should be much faster)
     const pollInterval = 1000; // Poll every 1 second
