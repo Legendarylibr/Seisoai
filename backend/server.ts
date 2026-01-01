@@ -2524,7 +2524,7 @@ app.post('/api/generate/image', freeImageRateLimiter, requireCreditsForModel(), 
       aspect_ratio,
       seed,
       model,
-      optimizePrompt = true // Enable prompt optimization by default
+      optimizePrompt = false // Prompt optimization off by default
     } = req.body;
 
     // Validate required inputs
@@ -3468,7 +3468,7 @@ function calculateMusicCredits(duration) {
  */
 app.post('/api/generate/music', freeImageRateLimiter, requireCredits(1), async (req, res) => {
   try {
-    const { prompt, duration = 30, optimizePrompt = true, selectedGenre = null } = req.body;
+    const { prompt, duration = 30, optimizePrompt = false, selectedGenre = null } = req.body;
 
     // Clamp duration between 10 and 180 seconds
     const clampedDuration = Math.max(10, Math.min(180, parseInt(duration) || 30));

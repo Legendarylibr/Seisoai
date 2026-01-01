@@ -31,7 +31,7 @@ export const generateMusic = async ({
   userId,
   walletAddress,
   email,
-  optimizePrompt = true,
+  optimizePrompt = false,
   selectedGenre = null
 }: MusicGenerationOptions): Promise<MusicGenerationResult> => {
   // Validate required inputs

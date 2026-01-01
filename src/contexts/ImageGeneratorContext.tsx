@@ -109,7 +109,7 @@ const initialState: ImageGeneratorState = {
   controlNetType: null,
   controlNetImage: null,
   controlNetImageDimensions: null,
-  optimizePrompt: true,
+  optimizePrompt: false,
   promptOptimizationResult: null
 };
 

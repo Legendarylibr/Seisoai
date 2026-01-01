@@ -49,7 +49,7 @@ const ImageOutput: React.FC = () => {
   const [showPromptModal, setShowPromptModal] = useState<boolean>(false);
   const [newPrompt, setNewPrompt] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const [optimizePromptEnabled, setOptimizePromptEnabled] = useState<boolean>(true);
+  const [optimizePromptEnabled, setOptimizePromptEnabled] = useState<boolean>(false);
 
   // Close modal helper
   const closeModal = () => {

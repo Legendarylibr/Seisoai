@@ -458,7 +458,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
   const [progress, setProgress] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
-  const [optimizePrompt, setOptimizePrompt] = useState<boolean>(true);
+  const [optimizePrompt, setOptimizePrompt] = useState<boolean>(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const canGenerate = isConnected && prompt.trim().length > 0 && !isGenerating;
