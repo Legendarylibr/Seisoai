@@ -379,8 +379,9 @@ export function createGenerationRoutes(deps: Dependencies) {
   });
 
   /**
-   * Generate video
+   * Generate video - Veo 3.1 (multiple modes supported)
    * POST /api/generate/video
+   * Modes: text-to-video, image-to-video, first-last-frame
    */
   router.post('/video', freeImageLimiter, requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -393,9 +394,76 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      const minimumCredits = 2;
-      
-      // Deduct minimum credits
+      const FAL_API_KEY = getFalApiKey();
+      if (!FAL_API_KEY) {
+        res.status(500).json({
+          success: false,
+          error: 'AI service not configured'
+        });
+        return;
+      }
+
+      // Extract video generation parameters
+      const {
+        prompt,
+        first_frame_url,
+        last_frame_url,
+        aspect_ratio = 'auto',
+        duration = '8s',
+        resolution = '720p',
+        generate_audio = true,
+        generation_mode = 'first-last-frame',
+        quality = 'fast'
+      } = req.body as {
+        prompt?: string;
+        first_frame_url?: string;
+        last_frame_url?: string;
+        aspect_ratio?: string;
+        duration?: string;
+        resolution?: string;
+        generate_audio?: boolean;
+        generation_mode?: string;
+        quality?: string;
+      };
+
+      // Generation mode configurations for Veo 3.1
+      const VIDEO_GENERATION_MODES: Record<string, { requiresFirstFrame: boolean; requiresLastFrame: boolean; endpoint: string }> = {
+        'text-to-video': {
+          requiresFirstFrame: false,
+          requiresLastFrame: false,
+          endpoint: ''
+        },
+        'image-to-video': {
+          requiresFirstFrame: true,
+          requiresLastFrame: false,
+          endpoint: 'image-to-video'
+        },
+        'first-last-frame': {
+          requiresFirstFrame: true,
+          requiresLastFrame: true,
+          endpoint: 'first-last-frame-to-video'
+        }
+      };
+
+      const modeConfig = VIDEO_GENERATION_MODES[generation_mode] || VIDEO_GENERATION_MODES['first-last-frame'];
+
+      // Calculate credits based on duration, audio, and quality
+      const calculateVideoCredits = (dur: string, hasAudio: boolean, qual: string): number => {
+        const durationSeconds = parseInt(dur.replace('s', '')) || 8;
+        let pricePerSecond: number;
+        if (qual === 'quality') {
+          pricePerSecond = hasAudio ? 0.825 : 0.55;
+        } else {
+          pricePerSecond = hasAudio ? 0.44 : 0.22;
+        }
+        const totalCost = durationSeconds * pricePerSecond;
+        // Convert dollars to credits (1 credit = $0.20)
+        return Math.max(2, Math.ceil(totalCost / 0.20));
+      };
+
+      const creditsToDeduct = calculateVideoCredits(duration, generate_audio, quality);
+
+      // Deduct credits atomically
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
       
@@ -410,43 +478,364 @@ export function createGenerationRoutes(deps: Dependencies) {
       const updateResult = await User.findOneAndUpdate(
         {
           ...updateQuery,
-          credits: { $gte: minimumCredits }
+          credits: { $gte: creditsToDeduct }
         },
         {
-          $inc: { credits: -minimumCredits, totalCreditsSpent: minimumCredits }
+          $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct }
         },
         { new: true }
       );
 
       if (!updateResult) {
+        const currentUser = await User.findOne(updateQuery);
+        const currentCredits = currentUser?.credits || 0;
         res.status(402).json({
           success: false,
-          error: 'Insufficient credits'
+          error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsToDeduct}.`
         });
         return;
       }
 
-      // Submit to FAL queue
-      const { prompt, image_url, model = 'fal-ai/kling-video/v1/standard/image-to-video', ...options } = req.body as {
-        prompt?: string;
-        image_url?: string;
-        model?: string;
-        [key: string]: unknown;
-      };
+      // Validate required inputs
+      if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+        res.status(400).json({ success: false, error: 'prompt is required and must be a non-empty string' });
+        return;
+      }
+
+      if (modeConfig.requiresFirstFrame && !first_frame_url) {
+        res.status(400).json({ success: false, error: 'first_frame_url is required for this mode' });
+        return;
+      }
+
+      if (modeConfig.requiresLastFrame && !last_frame_url) {
+        res.status(400).json({ success: false, error: 'last_frame_url is required for this mode' });
+        return;
+      }
+
+      // Validate aspect_ratio, duration, resolution, quality
+      const validAspectRatios = ['auto', '16:9', '9:16'];
+      if (!validAspectRatios.includes(aspect_ratio)) {
+        res.status(400).json({ success: false, error: 'aspect_ratio must be auto, 16:9, or 9:16' });
+        return;
+      }
+
+      const validDurations = ['4s', '6s', '8s'];
+      if (!validDurations.includes(duration)) {
+        res.status(400).json({ success: false, error: 'duration must be 4s, 6s, or 8s' });
+        return;
+      }
+
+      const validResolutions = ['720p', '1080p'];
+      if (!validResolutions.includes(resolution)) {
+        res.status(400).json({ success: false, error: 'resolution must be 720p or 1080p' });
+        return;
+      }
+
+      const validQualities = ['fast', 'quality'];
+      if (!validQualities.includes(quality)) {
+        res.status(400).json({ success: false, error: 'quality must be fast or quality' });
+        return;
+      }
+
+      // Build request body for Veo 3.1 API
+      const apiAspectRatio = aspect_ratio === 'auto' ? '16:9' : aspect_ratio;
       
-      const result = await submitToQueue<{ request_id?: string }>(model, {
-        prompt,
-        image_url,
-        ...options
+      const requestBody: Record<string, unknown> = {
+        prompt: prompt.trim(),
+        aspect_ratio: apiAspectRatio,
+        duration,
+        resolution,
+        generate_audio
+      };
+
+      // Add frame URLs based on mode
+      if (modeConfig.requiresFirstFrame && first_frame_url) {
+        if (generation_mode === 'image-to-video') {
+          requestBody.image_url = first_frame_url;
+        } else {
+          requestBody.first_frame_url = first_frame_url;
+        }
+      }
+      if (modeConfig.requiresLastFrame && last_frame_url) {
+        requestBody.last_frame_url = last_frame_url;
+      }
+
+      logger.info('Video generation request', {
+        model: 'veo3.1',
+        mode: generation_mode,
+        quality,
+        duration,
+        resolution,
+        userId: user.userId
       });
 
-      res.json({
-        success: true,
-        requestId: result.request_id,
-        status: 'queued',
-        remainingCredits: updateResult.credits,
-        creditsDeducted: minimumCredits
+      // Build endpoint URL based on mode and quality
+      let endpoint: string;
+      if (generation_mode === 'text-to-video') {
+        endpoint = 'https://queue.fal.run/fal-ai/veo3.1';
+      } else {
+        endpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/${modeConfig.endpoint}`;
+      }
+
+      // Submit to FAL queue
+      const submitResponse = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
       });
+
+      if (!submitResponse.ok) {
+        let errorMessage = `HTTP error! status: ${submitResponse.status}`;
+        try {
+          const errorData = await submitResponse.json() as { detail?: string | unknown[]; error?: string };
+          logger.error('Veo 3.1 API submit error', { errorData });
+          if (errorData.detail) {
+            errorMessage = Array.isArray(errorData.detail)
+              ? errorData.detail.map(err => typeof err === 'object' && err !== null ? (err as { msg?: string }).msg || JSON.stringify(err) : String(err)).join('; ')
+              : String(errorData.detail);
+          } else if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch {
+          logger.error('Failed to parse Veo 3.1 error response');
+        }
+        res.status(submitResponse.status).json({ success: false, error: errorMessage });
+        return;
+      }
+
+      const submitData = await submitResponse.json() as {
+        request_id?: string;
+        requestId?: string;
+        id?: string;
+        status_url?: string;
+        response_url?: string;
+        video?: { url?: string; content_type?: string; file_name?: string; file_size?: number } | string;
+        data?: { video?: { url?: string } | string };
+        output?: { video?: { url?: string }; url?: string };
+        url?: string;
+        video_url?: string;
+      };
+
+      const requestId = submitData.request_id || submitData.requestId || submitData.id;
+      const providedStatusUrl = submitData.status_url;
+      const providedResponseUrl = submitData.response_url;
+
+      if (!requestId) {
+        logger.error('No request_id in submit response', { submitData });
+        res.status(500).json({ success: false, error: 'Failed to submit video generation request.' });
+        return;
+      }
+
+      logger.info('Video generation submitted', { requestId, endpoint });
+
+      // Check if already completed synchronously
+      let syncVideoUrl: string | null = null;
+      let syncVideoMeta: { content_type?: string; file_name?: string; file_size?: number } | null = null;
+
+      if (submitData.video && typeof submitData.video === 'object' && submitData.video.url) {
+        syncVideoUrl = submitData.video.url;
+        syncVideoMeta = submitData.video;
+      } else if (submitData.video && typeof submitData.video === 'string') {
+        syncVideoUrl = submitData.video;
+      } else if (submitData.data?.video && typeof submitData.data.video === 'object' && submitData.data.video.url) {
+        syncVideoUrl = submitData.data.video.url;
+      } else if (submitData.data?.video && typeof submitData.data.video === 'string') {
+        syncVideoUrl = submitData.data.video;
+      } else if (submitData.output?.video && typeof submitData.output.video === 'object' && submitData.output.video.url) {
+        syncVideoUrl = submitData.output.video.url;
+      } else if (submitData.url) {
+        syncVideoUrl = submitData.url;
+      } else if (submitData.video_url) {
+        syncVideoUrl = submitData.video_url;
+      } else if (submitData.output?.url) {
+        syncVideoUrl = submitData.output.url;
+      }
+
+      if (syncVideoUrl) {
+        logger.info('Video completed synchronously', { requestId });
+        res.json({
+          success: true,
+          video: {
+            url: syncVideoUrl,
+            content_type: syncVideoMeta?.content_type || 'video/mp4',
+            file_name: syncVideoMeta?.file_name || `video-${requestId}.mp4`,
+            file_size: syncVideoMeta?.file_size
+          },
+          remainingCredits: updateResult.credits,
+          creditsDeducted: creditsToDeduct
+        });
+        return;
+      }
+
+      // Poll for completion
+      const modelPath = generation_mode === 'text-to-video' 
+        ? 'fal-ai/veo3.1'
+        : `fal-ai/veo3.1/fast/${modeConfig.endpoint}`;
+
+      const statusEndpoint = providedStatusUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}/status`;
+      const resultEndpoint = providedResponseUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}`;
+
+      const maxWaitTime = 5 * 60 * 1000; // 5 minutes
+      const pollInterval = 2000;
+      const startTime = Date.now();
+      let firstCheck = true;
+
+      while (Date.now() - startTime < maxWaitTime) {
+        if (!firstCheck) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+        firstCheck = false;
+
+        const statusResponse = await fetch(statusEndpoint, {
+          headers: { 'Authorization': `Key ${FAL_API_KEY}` }
+        });
+
+        if (!statusResponse.ok) {
+          logger.warn('Video status check failed', { status: statusResponse.status });
+          continue;
+        }
+
+        const statusData = await statusResponse.json() as {
+          status?: string;
+          video?: { url?: string; content_type?: string; file_name?: string; file_size?: number };
+          data?: { video?: { url?: string } };
+          output?: { video?: { url?: string } };
+          response?: { video?: { url?: string } };
+          result?: { video?: { url?: string } };
+          payload?: { video?: { url?: string } };
+          response_url?: string;
+        };
+
+        const normalizedStatus = (statusData.status || '').toUpperCase();
+
+        logger.debug('Video polling status', { requestId, status: normalizedStatus, elapsed: Math.round((Date.now() - startTime) / 1000) + 's' });
+
+        // Check if status response contains video
+        let statusVideoUrl: string | null = null;
+        let statusVideoMeta: { content_type?: string; file_name?: string; file_size?: number } | null = null;
+
+        if (statusData.video?.url) {
+          statusVideoUrl = statusData.video.url;
+          statusVideoMeta = statusData.video;
+        } else if (statusData.data?.video?.url) {
+          statusVideoUrl = statusData.data.video.url;
+        } else if (statusData.output?.video?.url) {
+          statusVideoUrl = statusData.output.video.url;
+        } else if (statusData.response?.video?.url) {
+          statusVideoUrl = statusData.response.video.url;
+        } else if (statusData.result?.video?.url) {
+          statusVideoUrl = statusData.result.video.url;
+        } else if (statusData.payload?.video?.url) {
+          statusVideoUrl = statusData.payload.video.url;
+        }
+
+        if (statusVideoUrl) {
+          logger.info('Video found in status response', { requestId });
+          res.json({
+            success: true,
+            video: {
+              url: statusVideoUrl,
+              content_type: statusVideoMeta?.content_type || 'video/mp4',
+              file_name: statusVideoMeta?.file_name || `video-${requestId}.mp4`,
+              file_size: statusVideoMeta?.file_size
+            },
+            remainingCredits: updateResult.credits,
+            creditsDeducted: creditsToDeduct
+          });
+          return;
+        }
+
+        // Check for completed status
+        if (normalizedStatus === 'COMPLETED' || normalizedStatus === 'OK' || normalizedStatus === 'DONE' || normalizedStatus === 'SUCCESS') {
+          const fetchUrl = statusData.response_url || resultEndpoint;
+          
+          const resultResponse = await fetch(fetchUrl, {
+            headers: { 'Authorization': `Key ${FAL_API_KEY}` }
+          });
+
+          if (!resultResponse.ok) {
+            logger.error('Failed to fetch video result', { status: resultResponse.status });
+            res.status(500).json({ success: false, error: 'Failed to fetch video result' });
+            return;
+          }
+
+          const resultData = await resultResponse.json() as {
+            video?: { url?: string; content_type?: string; file_name?: string; file_size?: number } | string;
+            data?: { video?: { url?: string } | string };
+            output?: { video?: { url?: string }; url?: string };
+            response?: { video?: { url?: string } };
+            result?: { video?: { url?: string } | string };
+            payload?: { video?: { url?: string } };
+            url?: string;
+            video_url?: string;
+          };
+
+          // Extract video URL from result
+          let videoUrl: string | null = null;
+          let videoMeta: { content_type?: string; file_name?: string; file_size?: number } | null = null;
+
+          if (resultData.video && typeof resultData.video === 'object' && resultData.video.url) {
+            videoUrl = resultData.video.url;
+            videoMeta = resultData.video;
+          } else if (resultData.data?.video && typeof resultData.data.video === 'object' && resultData.data.video.url) {
+            videoUrl = resultData.data.video.url;
+          } else if (resultData.output?.video && typeof resultData.output.video === 'object' && resultData.output.video.url) {
+            videoUrl = resultData.output.video.url;
+          } else if (resultData.response?.video?.url) {
+            videoUrl = resultData.response.video.url;
+          } else if (resultData.result?.video && typeof resultData.result.video === 'object' && resultData.result.video.url) {
+            videoUrl = resultData.result.video.url;
+          } else if (resultData.payload?.video?.url) {
+            videoUrl = resultData.payload.video.url;
+          } else if (resultData.data?.video && typeof resultData.data.video === 'string') {
+            videoUrl = resultData.data.video;
+          } else if (resultData.video && typeof resultData.video === 'string') {
+            videoUrl = resultData.video;
+          } else if (resultData.result?.video && typeof resultData.result.video === 'string') {
+            videoUrl = resultData.result.video;
+          } else if (resultData.url) {
+            videoUrl = resultData.url;
+          } else if (resultData.video_url) {
+            videoUrl = resultData.video_url;
+          } else if (resultData.output?.url) {
+            videoUrl = resultData.output.url;
+          }
+
+          if (videoUrl) {
+            logger.info('Video generation completed', { requestId });
+            res.json({
+              success: true,
+              video: {
+                url: videoUrl,
+                content_type: videoMeta?.content_type || 'video/mp4',
+                file_name: videoMeta?.file_name || `video-${requestId}.mp4`,
+                file_size: videoMeta?.file_size
+              },
+              remainingCredits: updateResult.credits,
+              creditsDeducted: creditsToDeduct
+            });
+            return;
+          }
+
+          logger.error('No video URL in result', { resultData: JSON.stringify(resultData).substring(0, 500) });
+          res.status(500).json({ success: false, error: 'Video generation completed but no video URL found' });
+          return;
+        }
+
+        // Check for failed status
+        if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          logger.error('Video generation failed', { requestId, status: normalizedStatus });
+          res.status(500).json({ success: false, error: 'Video generation failed' });
+          return;
+        }
+      }
+
+      // Timeout
+      logger.error('Video generation timeout', { requestId, elapsed: maxWaitTime / 1000 + 's' });
+      res.status(504).json({ success: false, error: 'Video generation timed out. Please try again.' });
     } catch (error) {
       const err = error as Error;
       logger.error('Video generation error:', { error: err.message });
@@ -553,24 +942,75 @@ export function createGenerationRoutes(deps: Dependencies) {
         duration: clampedDuration
       });
 
-      // Build response
-      const responseData: Record<string, unknown> = {
-        success: true,
-        requestId: result.request_id,
-        status: 'queued',
-        remainingCredits: updateResult.credits
-      };
-
-      // Add prompt optimization details if optimization was performed
-      if (promptOptimizationResult && !promptOptimizationResult.skipped) {
-        responseData.promptOptimization = {
-          originalPrompt: prompt.trim(),
-          optimizedPrompt: promptOptimizationResult.optimizedPrompt,
-          reasoning: promptOptimizationResult.reasoning
-        };
+      const requestId = result.request_id;
+      if (!requestId) {
+        res.status(500).json({ success: false, error: 'Failed to submit music generation request' });
+        return;
       }
 
-      res.json(responseData);
+      logger.info('Music generation submitted', { requestId });
+
+      // Poll for completion (music generation is fast: 30s in ~2s, 3min in ~10s)
+      const maxWaitTime = 60 * 1000; // 1 minute max wait (should be much faster)
+      const pollInterval = 1000; // Poll every 1 second
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        try {
+          const statusData = await checkQueueStatus<{ status?: string }>(requestId);
+
+          if (statusData.status === 'COMPLETED') {
+            // Fetch the result
+            const resultData = await getQueueResult<{ audio_file?: { url?: string; content_type?: string; file_name?: string; file_size?: number } }>(requestId);
+
+            if (resultData.audio_file && resultData.audio_file.url) {
+              logger.info('Music generation completed', {
+                requestId,
+                audioUrl: resultData.audio_file.url.substring(0, 50) + '...',
+                wasOptimized: promptOptimizationResult && !promptOptimizationResult.skipped
+              });
+
+              // Build response
+              const responseData: Record<string, unknown> = {
+                success: true,
+                audio_file: resultData.audio_file,
+                remainingCredits: updateResult.credits,
+                creditsDeducted: creditsRequired
+              };
+
+              // Add prompt optimization details if optimization was performed
+              if (promptOptimizationResult && !promptOptimizationResult.skipped) {
+                responseData.promptOptimization = {
+                  originalPrompt: prompt.trim(),
+                  optimizedPrompt: promptOptimizationResult.optimizedPrompt,
+                  reasoning: promptOptimizationResult.reasoning
+                };
+              }
+
+              res.json(responseData);
+              return;
+            } else {
+              res.status(500).json({ success: false, error: 'No audio in response' });
+              return;
+            }
+          } else if (statusData.status === 'FAILED') {
+            logger.error('Music generation failed', { requestId, statusData });
+            res.status(500).json({ success: false, error: 'Music generation failed' });
+            return;
+          }
+
+          // Still in progress, continue polling
+          logger.debug('Music generation in progress', { requestId, status: statusData.status });
+        } catch (pollError) {
+          const pollErr = pollError as Error;
+          logger.warn('Polling error, will retry', { error: pollErr.message });
+        }
+      }
+
+      // Timeout reached
+      res.status(504).json({ success: false, error: 'Music generation timed out. Please try again.' });
     } catch (error) {
       const err = error as Error;
       logger.error('Music generation error:', { error: err.message });
