@@ -23,6 +23,9 @@ const PaymentSuccessModal = lazy(() => import('./components/PaymentSuccessModal'
 const ImageGallery = lazy(() => import('./components/ImageGallery'));
 const VideoGenerator = lazy(() => import('./components/VideoGenerator'));
 const MusicGenerator = lazy(() => import('./components/MusicGenerator'));
+const TermsModal = lazy(() => import('./components/TermsModal'));
+import Footer from './components/Footer';
+import type { LegalPage } from './components/TermsModal';
 
 interface Tab {
   id: string;
@@ -102,6 +105,8 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
   const [currentTab, setCurrentTab] = useState(activeTab);
   const [subscriptionSuccess, setSubscriptionSuccess] = useState<SubscriptionSuccess | null>(null);
   const [userPrompt, setUserPrompt] = useState('');
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsPage, setTermsPage] = useState<LegalPage>('terms');
 
   // Handle subscription verification from Stripe checkout redirect
   useEffect(() => {
@@ -184,6 +189,11 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
 
   const handleShowStripePayment = useCallback((): void => {
     setShowStripePaymentModal(true);
+  }, []);
+
+  const handleOpenTerms = useCallback((page: LegalPage = 'terms'): void => {
+    setTermsPage(page);
+    setShowTermsModal(true);
   }, []);
 
   return (
@@ -288,6 +298,18 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           />
         </Suspense>
       )}
+
+      {showTermsModal && (
+        <Suspense fallback={null}>
+          <TermsModal
+            isOpen={showTermsModal}
+            onClose={() => setShowTermsModal(false)}
+            initialPage={termsPage}
+          />
+        </Suspense>
+      )}
+
+      <Footer onOpenTerms={handleOpenTerms} />
     </div>
   );
 }

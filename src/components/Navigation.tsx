@@ -166,7 +166,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
         className="flex items-center gap-1 lg:gap-2 px-1 lg:px-2 py-0.5 lg:py-1"
         style={TITLEBAR.active}
       >
-        <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-8 h-8 lg:w-10 lg:h-10 rounded-sm object-cover" style={{ imageRendering: 'auto' }} />
+        <img src="/1d1c7555360a737bb22bbdfc2784655f.png" alt="Seiso AI" className="w-8 h-8 lg:w-10 lg:h-10 rounded-sm object-cover flex-shrink-0" style={{ imageRendering: 'auto', minWidth: '32px', minHeight: '32px' }} />
         <span className="text-[10px] lg:text-[11px] font-bold tracking-wide">Seiso AI</span>
         <span className="hidden sm:inline text-[9px] lg:text-[10px] opacity-80 ml-1">— Image • Video • Music Generator</span>
         <div className="flex-1" />
