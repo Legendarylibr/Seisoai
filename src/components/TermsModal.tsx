@@ -95,7 +95,7 @@ const PrivacyPolicy = memo(function PrivacyPolicy() {
       </ul>
 
       <h3 className="font-bold">Data Sharing</h3>
-      <p>We share data with FAL.ai (generation), Stripe (payments), and law enforcement when legally required. We don't sell your data.</p>
+      <p>We share data with FAL.ai (generation) and Stripe (payments). We don't sell your data.</p>
 
       <h3 className="font-bold">Data Retention & Deletion</h3>
       <ul className="list-disc list-inside ml-2">
@@ -141,7 +141,7 @@ const ContentPolicy = memo(function ContentPolicy() {
           <li>CSAM or any content sexualizing minors</li>
           <li>Bestiality</li>
         </ul>
-        <p className="mt-2 font-bold" style={{ color: '#800000' }}>Zero tolerance. Permanent ban and law enforcement referral.</p>
+        <p className="mt-2 font-bold" style={{ color: '#800000' }}>Zero tolerance. Permanent ban.</p>
       </div>
 
       <h3 className="font-bold">Abuse Prevention</h3>
@@ -225,12 +225,12 @@ const TermsModal = memo(function TermsModal({ isOpen, onClose, initialPage = 'te
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
       style={{ background: 'rgba(0, 0, 0, 0.5)' }}
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-3xl max-h-[80vh] flex flex-col win95-window-open"
+        className="w-full max-w-3xl h-[90vh] sm:h-auto sm:max-h-[80vh] flex flex-col win95-window-open"
         style={{ ...PANEL.window, boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}, 4px 4px 0 rgba(0,0,0,0.4)` }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -239,15 +239,48 @@ const TermsModal = memo(function TermsModal({ isOpen, onClose, initialPage = 'te
           <span className="text-[11px] font-bold flex-1">Terms & Policies</span>
           <button
             onClick={onClose}
-            className="w-4 h-4 flex items-center justify-center text-[10px] font-bold"
+            className="w-5 h-5 sm:w-4 sm:h-4 flex items-center justify-center text-[12px] sm:text-[10px] font-bold"
             style={{ background: WIN95.buttonFace, boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`, color: WIN95.text }}
           >
             ×
           </button>
         </div>
 
+        {/* Mobile tabs */}
+        <div className="flex sm:hidden overflow-x-auto" style={{ background: WIN95.bg, borderBottom: `1px solid ${WIN95.bgDark}` }}>
+          <button
+            onClick={() => setActivePage('terms')}
+            className="flex-1 px-2 py-2 text-[10px] font-bold whitespace-nowrap"
+            style={{ background: activePage === 'terms' ? WIN95.inputBg : WIN95.bg, color: WIN95.text, borderBottom: activePage === 'terms' ? `2px solid ${WIN95.highlight}` : 'none' }}
+          >
+            Terms
+          </button>
+          <button
+            onClick={() => setActivePage('privacy')}
+            className="flex-1 px-2 py-2 text-[10px] font-bold whitespace-nowrap"
+            style={{ background: activePage === 'privacy' ? WIN95.inputBg : WIN95.bg, color: WIN95.text, borderBottom: activePage === 'privacy' ? `2px solid ${WIN95.highlight}` : 'none' }}
+          >
+            Privacy
+          </button>
+          <button
+            onClick={() => setActivePage('content')}
+            className="flex-1 px-2 py-2 text-[10px] font-bold whitespace-nowrap"
+            style={{ background: activePage === 'content' ? WIN95.inputBg : WIN95.bg, color: WIN95.text, borderBottom: activePage === 'content' ? `2px solid ${WIN95.highlight}` : 'none' }}
+          >
+            Content
+          </button>
+          <button
+            onClick={() => setActivePage('refunds')}
+            className="flex-1 px-2 py-2 text-[10px] font-bold whitespace-nowrap"
+            style={{ background: activePage === 'refunds' ? WIN95.inputBg : WIN95.bg, color: WIN95.text, borderBottom: activePage === 'refunds' ? `2px solid ${WIN95.highlight}` : 'none' }}
+          >
+            Refunds
+          </button>
+        </div>
+
         <div className="flex flex-1 overflow-hidden">
-          <div className="w-40 flex-shrink-0 overflow-y-auto" style={{ background: WIN95.bg, borderRight: `1px solid ${WIN95.bgDark}` }}>
+          {/* Desktop sidebar - hidden on mobile */}
+          <div className="hidden sm:block w-40 flex-shrink-0 overflow-y-auto" style={{ background: WIN95.bg, borderRight: `1px solid ${WIN95.bgDark}` }}>
             <div className="p-1">
               <NavItem icon={<FileText className="w-3 h-3" />} label="Terms" active={activePage === 'terms'} onClick={() => setActivePage('terms')} />
               <NavItem icon={<Shield className="w-3 h-3" />} label="Privacy" active={activePage === 'privacy'} onClick={() => setActivePage('privacy')} />
@@ -256,7 +289,7 @@ const TermsModal = memo(function TermsModal({ isOpen, onClose, initialPage = 'te
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4" style={{ background: WIN95.inputBg, boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}` }}>
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4" style={{ background: WIN95.inputBg, boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}` }}>
             {renderContent()}
           </div>
         </div>
