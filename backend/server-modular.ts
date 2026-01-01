@@ -188,7 +188,7 @@ Sitemap: https://seisoai.com/sitemap.xml`);
 });
 
 app.get('/favicon.ico', (req: Request, res: Response) => {
-  res.status(204).end();
+  res.redirect(301, '/1d1c7555360a737bb22bbdfc2784655f.png');
 });
 
 // API Routes
