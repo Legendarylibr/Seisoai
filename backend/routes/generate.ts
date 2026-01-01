@@ -566,6 +566,10 @@ export function createGenerationRoutes(deps: Dependencies) {
         quality,
         duration,
         resolution,
+        aspect_ratio: apiAspectRatio,
+        promptLength: prompt.length,
+        hasFirstFrame: !!first_frame_url,
+        hasLastFrame: !!last_frame_url,
         userId: user.userId
       });
 
@@ -619,17 +623,36 @@ export function createGenerationRoutes(deps: Dependencies) {
         video_url?: string;
       };
 
+      // Log FULL submit response for debugging
+      logger.info('Video submit response FULL', { 
+        submitDataKeys: Object.keys(submitData),
+        submitData: JSON.stringify(submitData).substring(0, 500),
+        hasStatusUrl: !!submitData.status_url,
+        hasResponseUrl: !!submitData.response_url
+      });
+
       const requestId = submitData.request_id || submitData.requestId || submitData.id;
       const providedStatusUrl = submitData.status_url;
       const providedResponseUrl = submitData.response_url;
 
       if (!requestId) {
-        logger.error('No request_id in submit response', { submitData });
+        logger.error('No request_id in submit response', { submitData: JSON.stringify(submitData).substring(0, 500) });
         res.status(500).json({ success: false, error: 'Failed to submit video generation request.' });
         return;
       }
 
-      logger.info('Video generation submitted', { requestId, endpoint });
+      logger.info('Video generation submitted', { requestId, endpoint, hasProvidedStatusUrl: !!providedStatusUrl });
+
+      // Determine model path for polling
+      const modelPath = generation_mode === 'text-to-video' 
+        ? 'fal-ai/veo3.1'
+        : `fal-ai/veo3.1/fast/${modeConfig.endpoint}`;
+
+      // Log polling endpoints for debugging
+      logger.debug('Polling endpoints will be', { 
+        statusEndpoint: providedStatusUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}/status`,
+        resultEndpoint: providedResponseUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}`
+      });
 
       // Check if already completed synchronously
       let syncVideoUrl: string | null = null;
@@ -671,10 +694,6 @@ export function createGenerationRoutes(deps: Dependencies) {
       }
 
       // Poll for completion
-      const modelPath = generation_mode === 'text-to-video' 
-        ? 'fal-ai/veo3.1'
-        : `fal-ai/veo3.1/fast/${modeConfig.endpoint}`;
-
       const statusEndpoint = providedStatusUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}/status`;
       const resultEndpoint = providedResponseUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}`;
 
@@ -694,7 +713,16 @@ export function createGenerationRoutes(deps: Dependencies) {
         });
 
         if (!statusResponse.ok) {
-          logger.warn('Video status check failed', { status: statusResponse.status });
+          let errorBody = '';
+          try {
+            errorBody = await statusResponse.text();
+          } catch { /* ignore */ }
+          logger.warn('Video status check failed', { 
+            status: statusResponse.status, 
+            statusText: statusResponse.statusText,
+            statusEndpoint,
+            errorBody: errorBody.substring(0, 300)
+          });
           continue;
         }
 
@@ -711,7 +739,16 @@ export function createGenerationRoutes(deps: Dependencies) {
 
         const normalizedStatus = (statusData.status || '').toUpperCase();
 
-        logger.debug('Video polling status', { requestId, status: normalizedStatus, elapsed: Math.round((Date.now() - startTime) / 1000) + 's' });
+        logger.info('Video polling status', { 
+          requestId, 
+          status: statusData.status,
+          normalizedStatus,
+          pollCount: Math.round((Date.now() - startTime) / pollInterval),
+          elapsed: Math.round((Date.now() - startTime) / 1000) + 's',
+          hasVideo: !!(statusData.video || statusData.data?.video || statusData.response?.video || statusData.result?.video),
+          responseKeys: Object.keys(statusData),
+          fullResponse: JSON.stringify(statusData).substring(0, 500)
+        });
 
         // Check if status response contains video
         let statusVideoUrl: string | null = null;
@@ -751,14 +788,26 @@ export function createGenerationRoutes(deps: Dependencies) {
         // Check for completed status
         if (normalizedStatus === 'COMPLETED' || normalizedStatus === 'OK' || normalizedStatus === 'DONE' || normalizedStatus === 'SUCCESS') {
           const fetchUrl = statusData.response_url || resultEndpoint;
+          logger.info('Fetching video result', { requestId, fetchUrl, hasResponseUrl: !!statusData.response_url });
           
           const resultResponse = await fetch(fetchUrl, {
             headers: { 'Authorization': `Key ${FAL_API_KEY}` }
           });
 
           if (!resultResponse.ok) {
-            logger.error('Failed to fetch video result', { status: resultResponse.status });
-            res.status(500).json({ success: false, error: 'Failed to fetch video result' });
+            let errorDetails = '';
+            try {
+              const errorBody = await resultResponse.text();
+              errorDetails = errorBody.substring(0, 500);
+            } catch { /* ignore */ }
+            logger.error('Failed to fetch video result', { 
+              requestId,
+              status: resultResponse.status, 
+              statusText: resultResponse.statusText,
+              fetchUrl,
+              errorDetails
+            });
+            res.status(500).json({ success: false, error: `Failed to fetch video result (${resultResponse.status})` });
             return;
           }
 
@@ -772,6 +821,15 @@ export function createGenerationRoutes(deps: Dependencies) {
             url?: string;
             video_url?: string;
           };
+
+          // Log full response for debugging
+          logger.info('Video result response FULL', { 
+            requestId,
+            fullResponse: JSON.stringify(resultData).substring(0, 1000),
+            hasVideo: !!resultData.video,
+            hasDataVideo: !!(resultData.data?.video),
+            responseKeys: Object.keys(resultData)
+          });
 
           // Extract video URL from result
           let videoUrl: string | null = null;
@@ -805,7 +863,7 @@ export function createGenerationRoutes(deps: Dependencies) {
           }
 
           if (videoUrl) {
-            logger.info('Video generation completed', { requestId });
+            logger.info('Video generation completed - RETURNING', { requestId, videoUrl: videoUrl.substring(0, 100) });
             res.json({
               success: true,
               video: {
@@ -820,7 +878,11 @@ export function createGenerationRoutes(deps: Dependencies) {
             return;
           }
 
-          logger.error('No video URL in result', { resultData: JSON.stringify(resultData).substring(0, 500) });
+          logger.error('No video URL in result - all extraction attempts failed', { 
+            requestId,
+            resultData: JSON.stringify(resultData).substring(0, 1000),
+            checkedPaths: ['video.url', 'data.video.url', 'output.video.url', 'response.video.url', 'result.video.url', 'payload.video.url', 'url', 'video_url', 'output.url']
+          });
           res.status(500).json({ success: false, error: 'Video generation completed but no video URL found' });
           return;
         }
@@ -1228,6 +1290,135 @@ export function createGenerationRoutes(deps: Dependencies) {
         success: false,
         error: 'Failed to add generation'
       });
+    }
+  });
+
+  /**
+   * Update a generation (e.g., when video completes)
+   * PUT /api/generations/update/:generationId
+   */
+  router.put('/update/:generationId', async (req: Request, res: Response) => {
+    try {
+      const { generationId } = req.params;
+      const { 
+        walletAddress, 
+        userId,
+        email,
+        videoUrl,
+        imageUrl,
+        status
+      } = req.body as {
+        walletAddress?: string;
+        userId?: string;
+        email?: string;
+        videoUrl?: string;
+        imageUrl?: string;
+        status?: string;
+      };
+
+      if (!generationId) {
+        res.status(400).json({
+          success: false,
+          error: 'generationId is required'
+        });
+        return;
+      }
+
+      // Find user
+      const User = mongoose.model<IUser>('User');
+      let user: IUser | null = null;
+      let updateQuery: Record<string, string> | null = null;
+      
+      if (walletAddress) {
+        const isSolanaAddress = !walletAddress.startsWith('0x');
+        const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+        updateQuery = { walletAddress: normalizedWalletAddress };
+        user = await User.findOne(updateQuery);
+      } else if (userId) {
+        updateQuery = { userId };
+        user = await User.findOne(updateQuery);
+      } else if (email) {
+        updateQuery = { email: email.toLowerCase() };
+        user = await User.findOne(updateQuery);
+      } else {
+        res.status(400).json({
+          success: false,
+          error: 'walletAddress, userId, or email is required'
+        });
+        return;
+      }
+
+      if (!user || !updateQuery) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+        return;
+      }
+
+      // Find the generation in history
+      const generation = user.generationHistory?.find(gen => gen.id === generationId);
+      if (!generation) {
+        res.status(404).json({
+          success: false,
+          error: 'Generation not found'
+        });
+        return;
+      }
+
+      // Build update object
+      const updateFields: Record<string, string> = {};
+      if (videoUrl) updateFields['generationHistory.$.videoUrl'] = videoUrl;
+      if (imageUrl) updateFields['generationHistory.$.imageUrl'] = imageUrl;
+      if (status) updateFields['generationHistory.$.status'] = status;
+
+      // Update generation in history
+      await User.updateOne(
+        { ...updateQuery, 'generationHistory.id': generationId },
+        { $set: updateFields }
+      );
+
+      // If completed and has videoUrl/imageUrl, add to gallery
+      if ((status === 'completed' || !status) && (videoUrl || imageUrl)) {
+        const galleryItem = {
+          id: generationId,
+          prompt: generation.prompt,
+          style: generation.style,
+          ...(imageUrl && { imageUrl }),
+          ...(videoUrl && { videoUrl }),
+          creditsUsed: generation.creditsUsed,
+          timestamp: generation.timestamp || new Date()
+        };
+
+        // Check if already in gallery
+        const inGallery = user.gallery?.some(item => item.id === generationId);
+        if (!inGallery) {
+          await User.updateOne(
+            updateQuery,
+            { $push: { gallery: { $each: [galleryItem], $slice: -100 } } }
+          );
+        } else {
+          // Update existing gallery item
+          const galleryUpdateFields: Record<string, string> = {};
+          if (videoUrl) galleryUpdateFields['gallery.$.videoUrl'] = videoUrl;
+          if (imageUrl) galleryUpdateFields['gallery.$.imageUrl'] = imageUrl;
+          await User.updateOne(
+            { ...updateQuery, 'gallery.id': generationId },
+            { $set: galleryUpdateFields }
+          );
+        }
+      }
+
+      logger.info('Generation updated', { generationId, status, hasVideoUrl: !!videoUrl, hasImageUrl: !!imageUrl });
+
+      res.json({
+        success: true,
+        message: 'Generation updated successfully'
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Error updating generation:', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to update generation' });
     }
   });
 

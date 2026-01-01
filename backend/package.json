@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Backend API for AI Image Generator with wallet-based user management",
-  "main": "server.ts",
+  "main": "server-modular.ts",
   "scripts": {
-    "start": "tsx server.ts",
-    "dev": "nodemon --exec tsx server.ts",
+    "start": "tsx server-modular.ts",
+    "dev": "nodemon --exec tsx server-modular.ts",
     "test": "jest"
   },
   "keywords": [

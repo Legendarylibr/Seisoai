@@ -31,8 +31,10 @@ export function createApiRoutes(deps: Dependencies) {
   const staticRouter = createStaticRoutes(deps);
   router.use('/', staticRouter);
   
-  // Utility routes (health, cors-info, logging)
-  router.use('/', createUtilityRoutes(deps));
+  // Utility routes (health, cors-info, logging, safety)
+  const utilityRoutes = createUtilityRoutes(deps);
+  router.use('/', utilityRoutes);
+  router.use('/safety', utilityRoutes);
   
   // Authentication
   router.use('/auth', createAuthRoutes(deps));

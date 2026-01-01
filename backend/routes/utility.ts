@@ -131,6 +131,35 @@ export function createUtilityRoutes(deps: Dependencies = {}) {
     res.json({ success: true });
   });
 
+  /**
+   * Log safety violations
+   * POST /api/safety/violation
+   */
+  router.post('/safety/violation', (req: Request, res: Response) => {
+    try {
+      const { walletAddress, violation, userAgent, url } = req.body as {
+        walletAddress?: string;
+        violation?: string;
+        userAgent?: string;
+        url?: string;
+      };
+      
+      logger.warn('Safety violation detected', {
+        walletAddress: walletAddress?.toLowerCase(),
+        violation,
+        userAgent,
+        url,
+        ip: req.ip
+      });
+      
+      res.json({ success: true, message: 'Violation logged' });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Error logging safety violation:', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to log safety violation' });
+    }
+  });
+
   return router;
 }
 

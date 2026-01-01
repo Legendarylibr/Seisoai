@@ -10,7 +10,7 @@ import logger from '../utils/logger';
 import { getStripe, calculateCredits } from '../services/stripe';
 import { findUserByIdentifier } from '../services/user';
 import config from '../config/env';
-import type { IUser } from '../models/User';
+import User, { type IUser } from '../models/User';
 import Payment from '../models/Payment';
 import type Stripe from 'stripe';
 
@@ -790,6 +790,168 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       const err = error as Error;
       logger.error('Subscription verify error:', { error: err.message });
       res.status(500).json({ success: false, error: 'Failed to verify subscription' });
+    }
+  });
+
+  /**
+   * Create Stripe Checkout Session for subscriptions
+   * POST /api/stripe/checkout-session
+   * Note: Also mounted at /create-checkout-session for backwards compatibility
+   */
+  router.post('/checkout-session', limiter, async (req: Request, res: Response) => {
+    try {
+      const stripe = getStripe();
+      if (!stripe) {
+        res.status(400).json({
+          success: false,
+          error: 'Stripe payment is not configured. Please use token payment instead.'
+        });
+        return;
+      }
+
+      const { 
+        lookup_key,
+        walletAddress, 
+        userId,
+        success_url,
+        cancel_url
+      } = req.body as {
+        lookup_key?: string;
+        walletAddress?: string;
+        userId?: string;
+        success_url?: string;
+        cancel_url?: string;
+      };
+
+      if (!lookup_key) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing required field: lookup_key'
+        });
+        return;
+      }
+
+      // Verify user exists - support both wallet and email auth
+      let user: IUser | null = null;
+      if (userId) {
+        user = await User.findOne({ userId });
+        if (!user) {
+          res.status(404).json({ success: false, error: 'User not found' });
+          return;
+        }
+      } else if (walletAddress) {
+        user = await findUserByIdentifier(walletAddress, null, null);
+        if (!user) {
+          // Create new user
+          const normalized = walletAddress.startsWith('0x') ? walletAddress.toLowerCase() : walletAddress;
+          user = new User({
+            walletAddress: normalized,
+            credits: 0,
+            totalCreditsEarned: 0,
+            totalCreditsSpent: 0
+          });
+          await user.save();
+        }
+      } else {
+        res.status(400).json({
+          success: false,
+          error: 'Either walletAddress or userId is required'
+        });
+        return;
+      }
+
+      // Get base URL from environment or request
+      const isValidHttpUrl = (candidate: string | undefined | null): boolean => {
+        if (!candidate || typeof candidate !== 'string') return false;
+        try {
+          const parsed = new URL(candidate);
+          return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+        } catch {
+          return false;
+        }
+      };
+
+      const fallbackFrontendUrl = 'https://seisoai.com';
+      const envFrontendUrl = config.FRONTEND_URL;
+      const requestOrigin = req.headers.origin as string | undefined;
+      const inferredHost = req.headers.host ? `https://${req.headers.host}` : null;
+      let baseUrl: string = fallbackFrontendUrl;
+
+      if (isValidHttpUrl(envFrontendUrl)) {
+        baseUrl = envFrontendUrl!;
+      } else if (isValidHttpUrl(requestOrigin)) {
+        baseUrl = requestOrigin!;
+      } else if (isValidHttpUrl(inferredHost)) {
+        baseUrl = inferredHost!;
+      }
+
+      // Look up the price by lookup_key if it's not already a price ID
+      let priceId = lookup_key;
+      
+      if (!lookup_key.startsWith('price_')) {
+        const prices = await stripe.prices.list({
+          lookup_keys: [lookup_key],
+          limit: 1,
+        });
+        
+        if (prices.data.length === 0) {
+          res.status(400).json({
+            success: false,
+            error: `Price with lookup_key "${lookup_key}" not found`
+          });
+          return;
+        }
+        
+        priceId = prices.data[0].id;
+      }
+
+      // Create checkout session
+      const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+        customer_email: user.email || undefined,
+        metadata: {
+          userId: user.userId || (user._id as mongoose.Types.ObjectId).toString(),
+          walletAddress: user.walletAddress ? user.walletAddress.toLowerCase() : '',
+          email: user.email || '',
+        },
+        subscription_data: {
+          metadata: {
+            userId: user.userId || (user._id as mongoose.Types.ObjectId).toString(),
+            walletAddress: user.walletAddress ? user.walletAddress.toLowerCase() : '',
+            email: user.email || '',
+          },
+        },
+        success_url: success_url || `${baseUrl}?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: cancel_url || `${baseUrl}?canceled=true`,
+      });
+
+      logger.info('Stripe checkout session created', {
+        userId: user.userId,
+        email: user.email || null,
+        walletAddress: user.walletAddress || null,
+        lookup_key,
+        sessionId: session.id
+      });
+
+      res.json({
+        success: true,
+        sessionId: session.id,
+        url: session.url
+      });
+
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Stripe checkout session creation error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to create checkout session'
+      });
     }
   });
 

@@ -194,6 +194,15 @@ app.get('/favicon.ico', (req: Request, res: Response) => {
 // API Routes
 app.use('/api', createApiRoutes(routeDeps));
 
+// Legacy checkout route at root level for backwards compatibility
+// Forward /create-checkout-session to /api/stripe/checkout-session
+import createStripeRoutes from './routes/stripe';
+const stripeRoutes = createStripeRoutes(routeDeps);
+app.post('/create-checkout-session', (req: Request, res: Response, next: NextFunction) => {
+  req.url = '/checkout-session';
+  stripeRoutes(req, res, next);
+});
+
 // Fallback for SPA routing (production only)
 if (config.isProduction) {
   app.get('*', (req: Request, res: Response) => {

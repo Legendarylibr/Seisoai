@@ -13,13 +13,19 @@ import type { IUser } from '../models/User';
 // Types
 interface Dependencies {
   authenticateFlexible?: RequestHandler;
+  authenticateToken?: RequestHandler;
+}
+
+interface AuthenticatedRequest extends Request {
+  user?: IUser;
 }
 
 export function createUserRoutes(deps: Dependencies = {}) {
   const router = Router();
-  const { authenticateFlexible } = deps;
+  const { authenticateFlexible, authenticateToken } = deps;
 
   const authMiddleware = authenticateFlexible || ((req: Request, res: Response, next: () => void) => next());
+  const strictAuth = authenticateToken || ((req: Request, res: Response, next: () => void) => next());
 
   /**
    * Get user info
@@ -461,6 +467,55 @@ export function createUserRoutes(deps: Dependencies = {}) {
         success: false,
         error: 'Failed to check NFT holdings'
       });
+    }
+  });
+
+  /**
+   * Update user settings
+   * PUT /api/users/:walletAddress/settings
+   * SECURITY: Requires authentication - user can only update their own settings
+   */
+  router.put('/:walletAddress/settings', strictAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { walletAddress } = req.params;
+      const { settings } = req.body as { settings?: Record<string, unknown> };
+      
+      // Normalize address for comparison
+      const isSolanaAddress = !walletAddress.startsWith('0x');
+      const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+      
+      // SECURITY: Verify user owns this wallet address
+      if (!req.user || req.user.walletAddress !== normalizedAddress) {
+        logger.warn('Unauthorized settings update attempt', {
+          requestedWallet: normalizedAddress,
+          authenticatedUser: req.user?.userId || req.user?.email
+        });
+        res.status(403).json({
+          success: false,
+          error: 'You can only update your own settings'
+        });
+        return;
+      }
+      
+      const user = await getOrCreateUser(normalizedAddress);
+      const User = mongoose.model<IUser>('User');
+      
+      await User.findOneAndUpdate(
+        { walletAddress: normalizedAddress },
+        { $set: { settings: { ...user.settings, ...settings } } }
+      );
+      
+      const updatedUser = await User.findOne({ walletAddress: normalizedAddress });
+      
+      res.json({
+        success: true,
+        settings: updatedUser?.settings,
+        message: 'Settings updated'
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Error updating settings:', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to update settings' });
     }
   });
 
