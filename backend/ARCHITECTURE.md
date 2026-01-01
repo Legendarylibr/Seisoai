@@ -1,8 +1,10 @@
 # Backend Architecture
 
-## Status: ✅ Complete
+## Status: ✅ Complete (Modular) | 🔄 TypeScript Migration In Progress
 
 The backend has been refactored from a monolithic 10,975-line server.js into a clean modular architecture with a 274-line entry point.
+
+**TypeScript Migration**: Most files have been converted to TypeScript. See [REWRITE_GUIDE.md](./REWRITE_GUIDE.md) for conversion status and [REWRITE_CHECKLIST.md](./REWRITE_CHECKLIST.md) for remaining work.
 
 ## Directory Structure
 
@@ -13,41 +15,41 @@ backend/
 ├── server-modular.js      # Modular version copy
 │
 ├── config/
-│   ├── index.js           # Config barrel export
-│   ├── constants.js       # Application constants
-│   ├── env.js             # Environment variables
-│   └── database.js        # MongoDB connection
+│   ├── index.ts           # Config barrel export ✅ TS
+│   ├── constants.ts       # Application constants ✅ TS
+│   ├── env.ts             # Environment variables ✅ TS
+│   └── database.ts        # MongoDB connection ✅ TS
 │
 ├── middleware/
-│   ├── index.js           # Middleware barrel export
-│   ├── auth.js            # JWT authentication
-│   ├── credits.js         # Credit checking
-│   ├── rateLimiter.js     # Rate limiting
-│   └── validation.js      # Input sanitization
+│   ├── index.ts           # Middleware barrel export ✅ TS
+│   ├── auth.ts            # JWT authentication ✅ TS
+│   ├── credits.ts         # Credit checking ✅ TS
+│   ├── rateLimiter.ts     # Rate limiting ✅ TS
+│   └── validation.ts      # Input sanitization ✅ TS
 │
 ├── services/
-│   ├── index.js           # Services barrel export
-│   ├── cache.js           # LRU and TTL caches
-│   ├── stripe.js          # Stripe integration
-│   ├── fal.js             # FAL.ai integration
-│   ├── user.js            # User management
-│   └── blockchain.js      # Blockchain interactions
+│   ├── index.ts           # Services barrel export ✅ TS
+│   ├── cache.ts           # LRU and TTL caches ✅ TS
+│   ├── stripe.ts          # Stripe integration ✅ TS
+│   ├── fal.ts             # FAL.ai integration ✅ TS
+│   ├── user.ts            # User management ✅ TS
+│   └── blockchain.ts      # Blockchain interactions ✅ TS
 │
 ├── routes/
-│   ├── index.js           # Route aggregation (14 route modules)
-│   ├── auth.js            # Authentication routes
-│   ├── user.js            # User management routes
-│   ├── generate.js        # Image/video/music generation
-│   ├── wan-animate.js     # WAN animate routes
-│   ├── gallery.js         # Gallery routes
-│   ├── payments.js        # Blockchain payment routes
-│   ├── stripe.js          # Stripe payment routes
-│   ├── admin.js           # Admin routes
-│   ├── rpc.js             # RPC proxy routes
-│   ├── extract.js         # Layer extraction routes
-│   ├── utility.js         # Health, CORS, logging
-│   ├── static.js          # Robots.txt, favicon, metrics
-│   └── health.js          # Health check
+│   ├── index.ts           # Route aggregation ✅ TS
+│   ├── auth.ts            # Authentication routes ✅ TS
+│   ├── user.ts            # User management routes ✅ TS
+│   ├── generate.js        # Image/video/music generation ⚠️ JS
+│   ├── wan-animate.js     # WAN animate routes ⚠️ JS
+│   ├── gallery.ts         # Gallery routes ✅ TS
+│   ├── payments.ts        # Blockchain payment routes ✅ TS
+│   ├── stripe.ts          # Stripe payment routes ✅ TS
+│   ├── admin.ts           # Admin routes ✅ TS
+│   ├── rpc.ts             # RPC proxy routes ✅ TS
+│   ├── extract.ts         # Layer extraction routes ✅ TS
+│   ├── utility.ts         # Health, CORS, logging ✅ TS
+│   ├── static.ts          # Robots.txt, favicon, metrics ✅ TS
+│   └── health.ts          # Health check ✅ TS
 │
 ├── models/                # Database models (unchanged)
 ├── utils/                 # Utilities (unchanged)
@@ -106,3 +108,15 @@ All routes verified working:
 - ✅ Admin functions
 - ✅ RPC proxy
 - ✅ Static files (robots.txt, metrics)
+
+## TypeScript Migration
+
+Most of the codebase has been migrated to TypeScript. For agents continuing the migration:
+
+- **Guide**: See [REWRITE_GUIDE.md](./REWRITE_GUIDE.md) for detailed conversion instructions
+- **Checklist**: See [REWRITE_CHECKLIST.md](./REWRITE_CHECKLIST.md) for remaining files
+- **Reference**: Use `routes/auth.ts` as the reference implementation
+
+**Remaining files to convert:**
+- `routes/generate.js` → `routes/generate.ts`
+- `routes/wan-animate.js` → `routes/wan-animate.ts`

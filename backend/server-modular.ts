@@ -2,7 +2,7 @@
  * AI Image Generator Backend - Modular Version
  * Main server entry point
  */
-import express from 'express';
+import express, { type Express, type Request, type Response, type NextFunction, type ErrorRequestHandler } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -16,7 +16,7 @@ import { connectDatabase } from './config/database.js';
 
 // Services
 import { initializeStripe } from './services/stripe.js';
-import { LRUCache, TTLCache } from './services/cache.js';
+import { TTLCache } from './services/cache.js';
 
 // Middleware
 import {
@@ -41,7 +41,7 @@ import {
 } from './middleware/credits.js';
 
 // Routes
-import { createApiRoutes } from './routes/index.js';
+import { createApiRoutes } from './routes/index';
 
 // Models - imported to register with mongoose
 import './models/User.js';
@@ -56,7 +56,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Initialize Express
-const app = express();
+const app: Express = express();
 
 // Trust proxy for accurate IP addresses
 app.set('trust proxy', 1);
@@ -139,7 +139,7 @@ if (config.isProduction) {
 }
 
 // Initialize caches
-const processedTransactions = new TTLCache(7 * 24 * 60 * 60 * 1000); // 7 days TTL
+const processedTransactions = new TTLCache<string, unknown>(7 * 24 * 60 * 60 * 1000); // 7 days TTL
 
 // Create rate limiters
 const authRateLimiter = createAuthLimiter();
@@ -180,14 +180,14 @@ const routeDeps = {
 };
 
 // Static routes at root level (robots.txt, favicon)
-app.get('/robots.txt', (req, res) => {
+app.get('/robots.txt', (req: Request, res: Response) => {
   res.type('text/plain');
   res.send(`User-agent: *
 Allow: /
 Sitemap: https://seisoai.com/sitemap.xml`);
 });
 
-app.get('/favicon.ico', (req, res) => {
+app.get('/favicon.ico', (req: Request, res: Response) => {
   res.status(204).end();
 });
 
@@ -196,13 +196,13 @@ app.use('/api', createApiRoutes(routeDeps));
 
 // Fallback for SPA routing (production only)
 if (config.isProduction) {
-  app.get('*', (req, res) => {
+  app.get('*', (req: Request, res: Response) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
 
 // Error handler
-app.use((err, req, res, next) => {
+const errorHandler: ErrorRequestHandler = (err: Error & { status?: number }, req: Request, res: Response, next: NextFunction) => {
   logger.error('Unhandled error:', {
     error: err.message,
     stack: config.isDevelopment ? err.stack : undefined,
@@ -213,10 +213,12 @@ app.use((err, req, res, next) => {
     success: false,
     error: config.isProduction ? 'Internal server error' : err.message
   });
-});
+};
+
+app.use(errorHandler);
 
 // Initialize and start server
-async function startServer() {
+async function startServer(): Promise<void> {
   try {
     // Connect to database
     await connectDatabase();
@@ -243,7 +245,8 @@ async function startServer() {
       logger.info('Server started successfully');
     });
   } catch (error) {
-    logger.error('Failed to start server:', { error: error.message });
+    const err = error as Error;
+    logger.error('Failed to start server:', { error: err.message });
     process.exit(1);
   }
 }
@@ -260,13 +263,13 @@ process.on('SIGINT', async () => {
 });
 
 // Handle uncaught errors
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', (error: Error) => {
   console.error('UNCAUGHT EXCEPTION:', error);
   logger.error('Uncaught exception:', { error: error.message, stack: error.stack });
   process.exit(1);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason: unknown) => {
   logger.error('Unhandled rejection:', { reason });
 });
 

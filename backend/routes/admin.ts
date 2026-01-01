@@ -1,0 +1,233 @@
+/**
+ * Admin routes
+ * Administrative functions for managing users and data
+ */
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import mongoose from 'mongoose';
+import logger from '../utils/logger';
+import type { IUser } from '../models/User';
+
+const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin-secret-key';
+
+// Types
+interface Dependencies {
+  [key: string]: unknown;
+}
+
+interface UserQuery {
+  walletAddress?: string;
+  email?: string;
+  userId?: string;
+}
+
+export function createAdminRoutes(deps: Dependencies = {}) {
+  const router = Router();
+
+  // Admin authentication middleware
+  const requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
+    const authHeader = req.headers.authorization;
+    const providedSecret = authHeader?.replace('Bearer ', '') || (req.body as { adminSecret?: string }).adminSecret;
+    
+    if (providedSecret !== ADMIN_SECRET) {
+      res.status(403).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+    next();
+  };
+
+  /**
+   * Add credits to user
+   * POST /api/admin/add-credits
+   */
+  router.post('/add-credits', requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { walletAddress, email, userId, credits } = req.body as {
+        walletAddress?: string;
+        email?: string;
+        userId?: string;
+        credits?: number;
+      };
+
+      if (!credits || typeof credits !== 'number' || credits <= 0) {
+        res.status(400).json({ success: false, error: 'Valid credits amount required' });
+        return;
+      }
+
+      const User = mongoose.model<IUser>('User');
+      const query: UserQuery = {};
+      
+      if (walletAddress) query.walletAddress = walletAddress.toLowerCase();
+      else if (email) query.email = email.toLowerCase();
+      else if (userId) query.userId = userId;
+      else {
+        res.status(400).json({ success: false, error: 'User identifier required' });
+        return;
+      }
+
+      const user = await User.findOneAndUpdate(
+        query,
+        { $inc: { credits, totalCreditsEarned: credits } },
+        { new: true }
+      );
+
+      if (!user) {
+        res.status(404).json({ success: false, error: 'User not found' });
+        return;
+      }
+
+      logger.info('Admin added credits', { query, credits, newBalance: user.credits });
+
+      res.json({
+        success: true,
+        credits: user.credits,
+        totalCreditsEarned: user.totalCreditsEarned
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Admin add credits error', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to add credits' });
+    }
+  });
+
+  /**
+   * Fix oversized user document
+   * POST /api/admin/fix-oversized-user
+   */
+  router.post('/fix-oversized-user', requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { walletAddress, email, userId } = req.body as {
+        walletAddress?: string;
+        email?: string;
+        userId?: string;
+      };
+
+      const User = mongoose.model<IUser>('User');
+      const query: UserQuery = {};
+      
+      if (walletAddress) query.walletAddress = walletAddress.toLowerCase();
+      else if (email) query.email = email.toLowerCase();
+      else if (userId) query.userId = userId;
+      else {
+        res.status(400).json({ success: false, error: 'User identifier required' });
+        return;
+      }
+
+      // Clear large arrays that cause document size issues
+      const result = await User.updateOne(query, {
+        $set: {
+          generationHistory: [],
+          gallery: []
+        }
+      });
+
+      if (result.matchedCount === 0) {
+        res.status(404).json({ success: false, error: 'User not found' });
+        return;
+      }
+
+      logger.info('Fixed oversized user', { query });
+
+      res.json({
+        success: true,
+        message: 'User document fixed'
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Fix oversized user error', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to fix user' });
+    }
+  });
+
+  /**
+   * Fix all oversized documents
+   * POST /api/admin/fix-all-oversized
+   */
+  router.post('/fix-all-oversized', requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const User = mongoose.model<IUser>('User');
+      
+      // Find users with large arrays - simplified approach
+      const users = await User.find({
+        $or: [
+          { 'generationHistory.100': { $exists: true } },
+          { 'gallery.100': { $exists: true } }
+        ]
+      }).select('_id');
+
+      let modifiedCount = 0;
+      for (const user of users) {
+        await User.updateOne(
+          { _id: user._id },
+          {
+            $set: {
+              generationHistory: [],
+              gallery: []
+            }
+          }
+        );
+        modifiedCount++;
+      }
+
+      logger.info('Fixed all oversized documents', { modifiedCount });
+
+      res.json({
+        success: true,
+        modifiedCount
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Fix all oversized error', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to fix documents' });
+    }
+  });
+
+  /**
+   * Clear all generations for a user
+   * POST /api/admin/clear-all-generations
+   */
+  router.post('/clear-all-generations', requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { walletAddress, email, userId } = req.body as {
+        walletAddress?: string;
+        email?: string;
+        userId?: string;
+      };
+
+      const User = mongoose.model<IUser>('User');
+      const query: UserQuery = {};
+      
+      if (walletAddress) query.walletAddress = walletAddress.toLowerCase();
+      else if (email) query.email = email.toLowerCase();
+      else if (userId) query.userId = userId;
+      else {
+        res.status(400).json({ success: false, error: 'User identifier required' });
+        return;
+      }
+
+      const result = await User.updateOne(query, {
+        $set: { generationHistory: [] }
+      });
+
+      if (result.matchedCount === 0) {
+        res.status(404).json({ success: false, error: 'User not found' });
+        return;
+      }
+
+      logger.info('Cleared generations for user', { query });
+
+      res.json({
+        success: true,
+        message: 'Generation history cleared'
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Clear generations error', { error: err.message });
+      res.status(500).json({ success: false, error: 'Failed to clear generations' });
+    }
+  });
+
+  return router;
+}
+
+export default createAdminRoutes;
+

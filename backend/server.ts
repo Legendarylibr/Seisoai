@@ -10814,7 +10814,7 @@ app.get('*', (req, res) => {
 });
 
 // Dynamic port handling with fallback
-const startServer = async (port = process.env.PORT || 3001) => {
+const startServer = async (port: string | number = process.env.PORT || 3001): Promise<any> => {
   logger.info('Starting server...', {
     port: process.env.PORT,
     nodeEnv: process.env.NODE_ENV,
@@ -10914,7 +10914,7 @@ const startServer = async (port = process.env.PORT || 3001) => {
       scheduleCleanup();
       
       // Graceful shutdown handler - properly close all connections
-      const gracefulShutdown = async (signal) => {
+      const gracefulShutdown = async (signal: string): Promise<void> => {
         logger.info(`${signal} received, shutting down gracefully`);
         server.close(async () => {
           try {
@@ -10943,7 +10943,7 @@ const startServer = async (port = process.env.PORT || 3001) => {
       resolve(server);
     });
 
-    server.on('error', (err) => {
+    server.on('error', (err: NodeJS.ErrnoException) => {
       logger.error('Server error:', err);
       if (err.code === 'EADDRINUSE') {
         logger.warn(`Port ${serverPort} is in use, trying port ${serverPort + 1}`);
@@ -10960,15 +10960,26 @@ const startServer = async (port = process.env.PORT || 3001) => {
 export { startServer };
 export default app;
 
+// Type declarations for Express Request extensions
+declare global {
+  namespace Express {
+    interface Request {
+      requestId?: string;
+      userId?: string;
+      user?: any;
+    }
+  }
+}
+
 // Start server if this file is run directly
 // Also start if called via serve-real-backend.js or any other entry point
 if (import.meta.url === `file://${process.argv[1]}` || 
-    (process.argv[1] && process.argv[1].includes('server.js')) ||
+    (process.argv[1] && (process.argv[1].includes('server.js') || process.argv[1].includes('server.ts'))) ||
     !process.env.RAILWAY_ENVIRONMENT) {
   // Only auto-start if not being imported (Railway uses serve-real-backend.js)
   // But allow manual start for testing
-  if (process.argv[1] && process.argv[1].includes('server.js')) {
-    startServer().catch(error => {
+  if (process.argv[1] && (process.argv[1].includes('server.js') || process.argv[1].includes('server.ts'))) {
+    startServer().catch((error: Error) => {
       logger.error('Failed to start server:', error);
       process.exit(1);
     });
