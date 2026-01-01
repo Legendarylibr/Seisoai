@@ -195,6 +195,8 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           setActiveTab(tab);
         }}
         tabs={tabs}
+        onShowTokenPayment={handleShowTokenPayment}
+        onShowStripePayment={handleShowStripePayment}
       />
       
       <div className="flex-1 overflow-auto p-2 lg:p-3">
