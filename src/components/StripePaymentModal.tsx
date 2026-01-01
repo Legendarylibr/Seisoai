@@ -192,7 +192,7 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
   const isNFTHolder = isEmailAuth 
     ? false 
     : (walletContext.isNFTHolder || false);
-  const fetchCredits = isEmailAuth ? emailContext.refreshCredits : walletContext.fetchCredits;
+  const fetchCredits = isEmailAuth ? emailContext.refreshCredits : walletContext.refreshCredits;
 
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [customAmount, setCustomAmount] = useState('');

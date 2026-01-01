@@ -305,6 +305,47 @@
     outline: 1px dotted var(--win95-text);
     outline-offset: -4px;
   }
+
+  .btn-secondary {
+    @apply relative font-bold transition-none;
+    @apply text-xs py-2 px-4;
+    font-family: Tahoma, 'MS Sans Serif', sans-serif;
+    background: var(--win95-button-face);
+    border: none;
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-light),
+      inset -1px -1px 0 var(--win95-border-darker),
+      inset 2px 2px 0 var(--win95-bg-light),
+      inset -2px -2px 0 var(--win95-bg-dark);
+    color: var(--win95-text);
+    text-shadow: none;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: #d4d4d4;
+  }
+
+  .btn-secondary:active:not(:disabled) {
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-border-darker),
+      inset -1px -1px 0 var(--win95-border-light);
+    transform: none;
+  }
+
+  .btn-secondary:disabled {
+    @apply cursor-not-allowed;
+    background: var(--win95-button-face);
+    color: var(--win95-text-disabled);
+    text-shadow: 1px 1px 0 var(--win95-border-light);
+    box-shadow: 
+      inset 1px 1px 0 var(--win95-bg-light),
+      inset -1px -1px 0 var(--win95-bg-dark);
+  }
+
+  .btn-secondary:focus-visible {
+    outline: 1px dotted var(--win95-text);
+    outline-offset: -4px;
+  }
   
   /* Win95 Default button style (thick black border) */
   .btn-default {
