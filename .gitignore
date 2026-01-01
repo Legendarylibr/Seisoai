@@ -121,3 +121,10 @@ backend/.env.*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Compiled backend JS (use .ts source)
+backend/*.js
+!backend/node_modules/**/*.js
+
+# Generated/temporary images
+public/**/[a-f0-9][a-f0-9][a-f0-9][a-f0-9]*.png
