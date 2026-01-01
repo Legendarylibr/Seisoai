@@ -22,6 +22,9 @@ interface PaymentHistoryItem {
   chainId?: string;
   walletType?: string;
   timestamp?: Date;
+  paymentIntentId?: string;
+  subscriptionId?: string;
+  type?: 'crypto' | 'stripe' | 'nft_bonus' | 'referral' | 'admin' | 'subscription';
 }
 
 interface GenerationHistoryItem {
@@ -131,7 +134,10 @@ const userSchema = new mongoose.Schema<IUser>({
     credits: Number,
     chainId: String,
     walletType: String,
-    timestamp: { type: Date, default: Date.now }
+    timestamp: { type: Date, default: Date.now },
+    paymentIntentId: String,
+    subscriptionId: String,
+    type: { type: String, enum: ['crypto', 'stripe', 'nft_bonus', 'referral', 'admin', 'subscription'] }
   }],
   generationHistory: [{
     id: String,

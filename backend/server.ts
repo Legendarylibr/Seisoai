@@ -5583,7 +5583,7 @@ const addCreditsToUser = async (user, {
       userId: user.userId,
       paymentId: paymentIntentId || txHash || `payment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       txHash,
-      type: paymentIntentId ? 'stripe' : 'crypto',
+      type: subscriptionId ? 'subscription' : (paymentIntentId ? 'stripe' : 'crypto'),
       tokenSymbol: tokenSymbol || 'USDC',
       amount: parseFloat(amount),
       credits,
@@ -5591,6 +5591,7 @@ const addCreditsToUser = async (user, {
       walletType: walletType || 'evm',
       walletAddress: user.walletAddress,
       stripePaymentId: paymentIntentId,
+      subscriptionId: subscriptionId || undefined,
       status: 'completed',
       createdAt: timestamp
     });
@@ -7640,7 +7641,7 @@ app.get('/api/stripe/subscription', authenticateToken, async (req, res) => {
 
     const user = req.user;
     
-    // Find subscription in payment history
+    // Find subscription in payment history (embedded array - legacy)
     let subscriptionId = null;
     if (user.paymentHistory && user.paymentHistory.length > 0) {
       // Find the most recent subscription
@@ -7653,23 +7654,41 @@ app.get('/api/stripe/subscription', authenticateToken, async (req, res) => {
       }
     }
 
-    if (!subscriptionId) {
-      // Try to find by customer email
+    // Also check the Payment collection (primary storage)
+    if (!subscriptionId && user.userId) {
       try {
-        const customers = await stripe.customers.list({
-          email: user.email,
-          limit: 1
-        });
+        const recentSubscriptionPayment = await Payment.findOne({
+          userId: user.userId,
+          subscriptionId: { $exists: true, $ne: null }
+        }).sort({ createdAt: -1 });
+        
+        if (recentSubscriptionPayment && recentSubscriptionPayment.subscriptionId) {
+          subscriptionId = recentSubscriptionPayment.subscriptionId;
+        }
+      } catch (paymentError) {
+        logger.warn('Error checking Payment collection for subscription:', paymentError);
+      }
+    }
 
-        if (customers.data.length > 0) {
-          const subscriptions = await stripe.subscriptions.list({
-            customer: customers.data[0].id,
-            status: 'all',
+    if (!subscriptionId) {
+      // Try to find by customer email via Stripe API
+      try {
+        if (user.email) {
+          const customers = await stripe.customers.list({
+            email: user.email,
             limit: 1
           });
 
-          if (subscriptions.data.length > 0) {
-            subscriptionId = subscriptions.data[0].id;
+          if (customers.data.length > 0) {
+            const subscriptions = await stripe.subscriptions.list({
+              customer: customers.data[0].id,
+              status: 'all',
+              limit: 1
+            });
+
+            if (subscriptions.data.length > 0) {
+              subscriptionId = subscriptions.data[0].id;
+            }
           }
         }
       } catch (stripeError) {

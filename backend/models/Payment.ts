@@ -25,6 +25,7 @@ export interface IPayment extends Document {
   walletAddress?: string;
   stripePaymentId?: string;
   stripeSessionId?: string;
+  subscriptionId?: string;
   status: 'pending' | 'completed' | 'failed' | 'refunded';
   metadata?: PaymentMetadata;
   createdAt: Date;
@@ -64,6 +65,11 @@ const paymentSchema = new mongoose.Schema<IPayment>({
   walletAddress: String,
   stripePaymentId: String,
   stripeSessionId: String,
+  subscriptionId: {
+    type: String,
+    index: true,
+    sparse: true
+  },
   status: {
     type: String,
     enum: ['pending', 'completed', 'failed', 'refunded'],

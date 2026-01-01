@@ -26,10 +26,10 @@ interface SubscriptionCheckoutProps {
   planName?: string;
   planPrice?: string;
   description?: string;
-  credits: number;
+  credits: string;
   highlight?: boolean;
   savePercentage?: number;
-  onSuccess?: (sessionId: string) => void;
+  onSuccess?: (sessionId: string, planName?: string, message?: string) => void;
   onError?: (error: string) => void;
   compact?: boolean;
   onClose?: () => void;

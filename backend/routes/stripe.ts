@@ -11,6 +11,7 @@ import { getStripe, calculateCredits } from '../services/stripe';
 import { findUserByIdentifier } from '../services/user';
 import config from '../config/env';
 import type { IUser } from '../models/User';
+import Payment from '../models/Payment';
 import type Stripe from 'stripe';
 
 // Types
@@ -332,7 +333,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      // Find subscription in payment history
+      // Find subscription in payment history (embedded array - legacy)
       let subscriptionId: string | null = null;
       if (user.paymentHistory && user.paymentHistory.length > 0) {
         const subscriptionPayment = user.paymentHistory
@@ -343,6 +344,22 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         
         if (subscriptionPayment) {
           subscriptionId = subscriptionPayment.subscriptionId;
+        }
+      }
+
+      // Also check the Payment collection (primary storage)
+      if (!subscriptionId && user.userId) {
+        try {
+          const recentSubscriptionPayment = await Payment.findOne({
+            userId: user.userId,
+            subscriptionId: { $exists: true, $ne: null }
+          }).sort({ createdAt: -1 });
+          
+          if (recentSubscriptionPayment && recentSubscriptionPayment.subscriptionId) {
+            subscriptionId = recentSubscriptionPayment.subscriptionId;
+          }
+        } catch (paymentError) {
+          logger.warn('Error checking Payment collection for subscription:', { error: (paymentError as Error).message });
         }
       }
 
