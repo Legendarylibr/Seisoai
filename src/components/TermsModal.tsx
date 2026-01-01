@@ -109,13 +109,13 @@ const PrivacyPolicy = memo(function PrivacyPolicy() {
       <p>To delete your data:</p>
       <ul className="list-disc list-inside ml-2">
         <li>Delete individual items from your gallery anytime</li>
-        <li>Request full account deletion via privacy@seiso.ai</li>
+        <li>Request full account deletion through our support</li>
         <li>Account deletion removes all stored content within 30 days</li>
         <li>Some data may be retained for legal compliance</li>
       </ul>
 
       <h3 className="font-bold">Your Rights</h3>
-      <p>You may request access, correction, or deletion of your data. Contact privacy@seiso.ai</p>
+      <p>You may request access, correction, or deletion of your data through our support.</p>
 
       <h3 className="font-bold">Security</h3>
       <p>HTTPS encryption, secure authentication, rate limiting, and regular audits.</p>
@@ -170,7 +170,7 @@ const ContentPolicy = memo(function ContentPolicy() {
       </table>
 
       <h3 className="font-bold">Reporting</h3>
-      <p>Report violations to safety@seiso.ai</p>
+      <p>Report violations through our support channels.</p>
     </div>
   );
 });
@@ -200,7 +200,7 @@ const RefundPolicy = memo(function RefundPolicy() {
       <p>Refunds issued in original cryptocurrency. Network fees non-refundable.</p>
 
       <h3 className="font-bold">Request Refund</h3>
-      <p>Email billing@seiso.ai with transaction ID and reason. Processed within 5-7 days.</p>
+      <p>Contact support with transaction ID and reason. Processed within 5-7 days.</p>
 
       <h3 className="font-bold">Termination</h3>
       <p>No refunds for accounts terminated due to policy violations.</p>
