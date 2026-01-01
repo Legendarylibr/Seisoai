@@ -99,6 +99,13 @@ export const generateMusic = async ({
 
     const data = await response.json();
     
+    logger.debug('Music API response', { 
+      success: data.success,
+      hasAudioFile: !!data.audio_file,
+      hasUrl: !!(data.audio_file?.url),
+      keys: Object.keys(data)
+    });
+    
     if (data.audio_file && data.audio_file.url) {
       logger.debug('Music generated successfully');
       
@@ -111,6 +118,7 @@ export const generateMusic = async ({
         creditsDeducted: data.creditsDeducted
       };
     } else {
+      logger.error('No audio in response', { data: JSON.stringify(data).substring(0, 500) });
       throw new Error('No audio generated');
     }
   } catch (error) {
