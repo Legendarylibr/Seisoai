@@ -861,7 +861,23 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      const creditsRequired = 1;
+      // Parse request body first to calculate credits based on duration
+      const { prompt, duration = 30, optimizePrompt = false, selectedGenre = null } = req.body as {
+        prompt?: string;
+        duration?: number;
+        optimizePrompt?: boolean;
+        selectedGenre?: string | null;
+      };
+      
+      // Clamp duration between 10 and 180 seconds
+      const clampedDuration = Math.max(10, Math.min(180, duration));
+
+      // Calculate credits based on duration: 1 credit per minute (rounded up), minimum 1
+      const calculateMusicCredits = (durationSecs: number): number => {
+        const minutes = durationSecs / 60;
+        return Math.max(1, Math.ceil(minutes));
+      };
+      const creditsRequired = calculateMusicCredits(clampedDuration);
       
       // Deduct credits
       const User = mongoose.model<IUser>('User');
@@ -887,24 +903,17 @@ export function createGenerationRoutes(deps: Dependencies) {
       );
 
       if (!updateResult) {
+        const currentUser = await User.findOne(updateQuery);
+        const currentCredits = currentUser?.credits || 0;
         res.status(402).json({
           success: false,
-          error: 'Insufficient credits'
+          error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsRequired}.`
         });
         return;
       }
 
       // Submit to FAL - CassetteAI Music Generator
       // Documentation: https://fal.ai/models/cassetteai/music-generator/api
-      const { prompt, duration = 30, optimizePrompt = false, selectedGenre = null } = req.body as {
-        prompt?: string;
-        duration?: number;
-        optimizePrompt?: boolean;
-        selectedGenre?: string | null;
-      };
-      
-      // Clamp duration between 10 and 180 seconds
-      const clampedDuration = Math.max(10, Math.min(180, duration));
 
       // Validate prompt
       if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
@@ -937,7 +946,8 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
       }
       
-      const result = await submitToQueue<{ request_id?: string }>('CassetteAI/music-generator', {
+      const musicModel = 'CassetteAI/music-generator';
+      const result = await submitToQueue<{ request_id?: string }>(musicModel, {
         prompt: finalPrompt,
         duration: clampedDuration
       });
@@ -952,24 +962,45 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Poll for completion (music generation is fast: 30s in ~2s, 3min in ~10s)
       const maxWaitTime = 60 * 1000; // 1 minute max wait (should be much faster)
-      const pollInterval = 1000; // Poll every 1 second
+      const pollInterval = 500; // Poll every 500ms for faster response
       const startTime = Date.now();
+      let pollCount = 0;
+      let consecutiveErrors = 0;
+      const maxConsecutiveErrors = 5;
 
       while (Date.now() - startTime < maxWaitTime) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        // First poll happens immediately, then wait between polls
+        if (pollCount > 0) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+        pollCount++;
 
         try {
-          const statusData = await checkQueueStatus<{ status?: string }>(requestId);
+          const statusData = await checkQueueStatus<{ status?: string; response?: { audio_file?: { url?: string } } }>(requestId, musicModel);
+          consecutiveErrors = 0; // Reset on successful poll
 
-          if (statusData.status === 'COMPLETED') {
+          // Normalize status to uppercase for comparison
+          const normalizedStatus = (statusData.status || '').toUpperCase();
+
+          logger.debug('Music polling status', { 
+            requestId, 
+            status: statusData.status,
+            normalizedStatus,
+            pollCount,
+            elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
+          });
+
+          if (normalizedStatus === 'COMPLETED') {
             // Fetch the result
-            const resultData = await getQueueResult<{ audio_file?: { url?: string; content_type?: string; file_name?: string; file_size?: number } }>(requestId);
+            const resultData = await getQueueResult<{ audio_file?: { url?: string; content_type?: string; file_name?: string; file_size?: number } }>(requestId, musicModel);
 
             if (resultData.audio_file && resultData.audio_file.url) {
               logger.info('Music generation completed', {
                 requestId,
                 audioUrl: resultData.audio_file.url.substring(0, 50) + '...',
-                wasOptimized: promptOptimizationResult && !promptOptimizationResult.skipped
+                wasOptimized: promptOptimizationResult && !promptOptimizationResult.skipped,
+                totalPolls: pollCount,
+                elapsedMs: Date.now() - startTime
               });
 
               // Build response
@@ -992,24 +1023,42 @@ export function createGenerationRoutes(deps: Dependencies) {
               res.json(responseData);
               return;
             } else {
+              logger.error('Music completed but no audio in response', { requestId, resultData: JSON.stringify(resultData).substring(0, 500) });
               res.status(500).json({ success: false, error: 'No audio in response' });
               return;
             }
-          } else if (statusData.status === 'FAILED') {
+          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
             logger.error('Music generation failed', { requestId, statusData });
             res.status(500).json({ success: false, error: 'Music generation failed' });
             return;
           }
 
-          // Still in progress, continue polling
-          logger.debug('Music generation in progress', { requestId, status: statusData.status });
+          // Still in progress (IN_QUEUE, IN_PROGRESS, etc.), continue polling
         } catch (pollError) {
+          consecutiveErrors++;
           const pollErr = pollError as Error;
-          logger.warn('Polling error, will retry', { error: pollErr.message });
+          logger.warn('Music polling error', { 
+            error: pollErr.message, 
+            requestId, 
+            pollCount,
+            consecutiveErrors
+          });
+
+          // If too many consecutive errors, abort
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            logger.error('Music generation aborted due to repeated polling errors', { 
+              requestId, 
+              consecutiveErrors,
+              lastError: pollErr.message 
+            });
+            res.status(500).json({ success: false, error: 'Music generation failed - polling errors' });
+            return;
+          }
         }
       }
 
       // Timeout reached
+      logger.warn('Music generation timed out', { requestId, pollCount, elapsedMs: Date.now() - startTime });
       res.status(504).json({ success: false, error: 'Music generation timed out. Please try again.' });
     } catch (error) {
       const err = error as Error;

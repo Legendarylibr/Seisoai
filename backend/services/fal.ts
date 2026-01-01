@@ -71,9 +71,14 @@ export async function submitToQueue<T = unknown>(model: string, input: Record<st
 
 /**
  * Check queue status
+ * @param requestId - The request ID returned from submitToQueue
+ * @param model - Optional model path (e.g., 'CassetteAI/music-generator'). If not provided, uses generic endpoint.
  */
-export async function checkQueueStatus<T = unknown>(requestId: string): Promise<T> {
-  const endpoint = `https://queue.fal.run/requests/${requestId}/status`;
+export async function checkQueueStatus<T = unknown>(requestId: string, model?: string): Promise<T> {
+  // Use model-specific endpoint if model is provided
+  const endpoint = model 
+    ? `https://queue.fal.run/${model}/requests/${requestId}/status`
+    : `https://queue.fal.run/requests/${requestId}/status`;
   
   const response = await fetch(endpoint, {
     headers: {
@@ -82,7 +87,11 @@ export async function checkQueueStatus<T = unknown>(requestId: string): Promise<
   });
 
   if (!response.ok) {
-    throw new Error(`Status check failed: ${response.status}`);
+    let errorBody = '';
+    try {
+      errorBody = await response.text();
+    } catch { /* ignore */ }
+    throw new Error(`Status check failed: ${response.status} ${response.statusText}${errorBody ? ` - ${errorBody.substring(0, 200)}` : ''}`);
   }
 
   return response.json() as Promise<T>;
@@ -90,9 +99,14 @@ export async function checkQueueStatus<T = unknown>(requestId: string): Promise<
 
 /**
  * Get queue result
+ * @param requestId - The request ID returned from submitToQueue
+ * @param model - Optional model path (e.g., 'CassetteAI/music-generator'). If not provided, uses generic endpoint.
  */
-export async function getQueueResult<T = unknown>(requestId: string): Promise<T> {
-  const endpoint = `https://queue.fal.run/requests/${requestId}`;
+export async function getQueueResult<T = unknown>(requestId: string, model?: string): Promise<T> {
+  // Use model-specific endpoint if model is provided
+  const endpoint = model
+    ? `https://queue.fal.run/${model}/requests/${requestId}`
+    : `https://queue.fal.run/requests/${requestId}`;
   
   const response = await fetch(endpoint, {
     headers: {
