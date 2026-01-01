@@ -2,7 +2,7 @@ import React, { useState, useCallback, memo, ReactNode } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateMusic, calculateMusicCredits, calculateMusicCost } from '../services/musicService';
-import { Music, Play, Pause, Download, AlertCircle, ChevronDown, Disc3, Square } from 'lucide-react';
+import { Music, Play, Pause, Download, AlertCircle, ChevronDown, Disc3, Square, Brain } from 'lucide-react';
 import logger from '../utils/logger';
 
 // Windows 95 style constants
@@ -458,6 +458,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
   const [progress, setProgress] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [optimizePrompt, setOptimizePrompt] = useState<boolean>(true);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const canGenerate = isConnected && prompt.trim().length > 0 && !isGenerating;
@@ -473,14 +474,16 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
 
     try {
       const estimatedTime = duration <= 30 ? '~2s' : duration <= 60 ? '~5s' : '~10s';
-      setProgress(`Generating... (${estimatedTime})`);
+      setProgress(optimizePrompt ? `Optimizing & generating... (${estimatedTime})` : `Generating... (${estimatedTime})`);
       
       const result = await generateMusic({
         prompt,
         duration,
         userId: emailContext.userId,
         walletAddress: walletContext.address,
-        email: emailContext.email
+        email: emailContext.email,
+        optimizePrompt,
+        selectedGenre
       });
 
       setGeneratedAudioUrl(result.audioUrl);
@@ -541,7 +544,8 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
   }, []);
 
   const handleStyleClick = useCallback((style: { label: string; prompt: string; category: string }) => {
-    setPrompt(style.prompt);
+    // Don't autofill the prompt - just set the genre for context
+    // User writes their own prompt which gets optimized for the music model
     setSelectedGenre(style.label);
   }, []);
 
@@ -569,9 +573,10 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
                 value={prompt}
                 onChange={(e) => {
                   setPrompt(e.target.value);
-                  setSelectedGenre(null);
                 }}
-                placeholder="Genre, instruments, mood, key, BPM..."
+                placeholder={selectedGenre 
+                  ? `Describe your ${selectedGenre} track... (instruments, mood, tempo)` 
+                  : "Describe your track... (genre, instruments, mood, key, BPM)"}
                 className="w-full p-1 resize-none text-[10px] focus:outline-none"
                 rows={4}
                 style={{ 
@@ -582,6 +587,31 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
                 }}
               />
             </Win95Panel>
+            {/* AI Enhance Toggle */}
+            <div className="flex justify-between items-center mt-1">
+              <span className="text-[9px]" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                {prompt.length} chars
+              </span>
+              <label 
+                onClick={() => setOptimizePrompt(!optimizePrompt)}
+                className="flex items-center gap-1.5 cursor-pointer select-none px-1 py-0.5 hover:bg-[#d0d0d0]"
+                style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
+              >
+                <div 
+                  className="w-3.5 h-3.5 flex items-center justify-center"
+                  style={{
+                    background: WIN95.inputBg,
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`
+                  }}
+                >
+                  {optimizePrompt && (
+                    <span className="text-[10px] font-bold" style={{ color: WIN95.text }}>✓</span>
+                  )}
+                </div>
+                <Brain className="w-3 h-3" style={{ color: optimizePrompt ? '#800080' : WIN95.textDisabled }} />
+                <span className="text-[10px]" style={{ color: WIN95.text }}>AI Enhance</span>
+              </label>
+            </div>
           </Win95GroupBox>
           
           {/* Duration Control */}

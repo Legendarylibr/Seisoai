@@ -6,9 +6,11 @@ import { API_URL } from '../utils/apiConfig';
 export interface MusicGenerationOptions {
   prompt: string;
   duration?: number;
-  userId?: string;
-  walletAddress?: string;
-  email?: string;
+  userId?: string | null;
+  walletAddress?: string | null;
+  email?: string | null;
+  optimizePrompt?: boolean;
+  selectedGenre?: string | null;
 }
 
 export interface MusicGenerationResult {
@@ -28,7 +30,9 @@ export const generateMusic = async ({
   duration = 30,
   userId,
   walletAddress,
-  email
+  email,
+  optimizePrompt = true,
+  selectedGenre = null
 }: MusicGenerationOptions): Promise<MusicGenerationResult> => {
   // Validate required inputs
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
@@ -45,7 +49,9 @@ export const generateMusic = async ({
   try {
     logger.debug('Music generation started', { 
       promptLength: prompt.length,
-      duration: clampedDuration
+      duration: clampedDuration,
+      optimizePrompt,
+      selectedGenre
     });
 
     const requestBody = {
@@ -53,7 +59,9 @@ export const generateMusic = async ({
       duration: clampedDuration,
       userId,
       walletAddress,
-      email
+      email,
+      optimizePrompt,
+      selectedGenre
     };
 
     // Call backend endpoint which checks credits before making external API call

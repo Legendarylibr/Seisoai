@@ -1635,6 +1635,129 @@ JSON only:
 }
 
 // ============================================================================
+// MUSIC PROMPT OPTIMIZATION SERVICE - Uses LLM to enhance music prompts
+// ============================================================================
+
+/**
+ * Music prompt optimization guidelines for CassetteAI
+ */
+const MUSIC_PROMPT_GUIDELINES = `You are an expert music producer helping optimize prompts for AI music generation.
+
+Your goal: Transform a user's simple music description into a detailed, well-structured prompt that will produce better music.
+
+Guidelines:
+1. Include specific musical elements:
+   - Genre/style (be specific: "lo-fi hip hop" not just "hip hop")
+   - Instruments (piano, drums, bass, synth pads, etc.)
+   - Mood/atmosphere (relaxing, energetic, melancholic, uplifting)
+   - Key signature if appropriate (C Major, A Minor, etc.)
+   - Tempo/BPM (slow: 60-90, medium: 100-120, fast: 130+)
+
+2. Keep the user's core intent - just add helpful details
+3. Be concise but specific - avoid overly verbose descriptions
+4. Use music production terminology naturally
+
+Examples:
+- "chill music" → "Relaxing lo-fi hip hop with mellow piano chords, soft drums, vinyl crackle, and warm bass. Tempo: 85 BPM, Key: C Major."
+- "rock song" → "Energetic rock anthem with crunchy electric guitars, driving drums, punchy bass, and an anthemic feel. Key: E Major, Tempo: 140 BPM."
+- "sad piano" → "Melancholic piano piece with gentle, emotional melodies, soft dynamics, and subtle reverb. Key: D Minor, Tempo: 70 BPM."
+
+JSON only:
+{"optimizedPrompt": "enhanced version of the prompt", "reasoning": "what you enhanced and why"}`;
+
+/**
+ * Optimize a prompt for music generation
+ * @param {string} originalPrompt - The user's original prompt
+ * @param {string|null} selectedGenre - The selected genre (if any) for context
+ * @returns {Promise<{optimizedPrompt: string, reasoning: string}>}
+ */
+async function optimizePromptForMusic(originalPrompt, selectedGenre = null) {
+  // Skip optimization for empty prompts
+  if (!originalPrompt || originalPrompt.trim() === '') {
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
+  }
+
+  // Check if FAL_API_KEY is available
+  if (!FAL_API_KEY) {
+    logger.warn('Music prompt optimization skipped: FAL_API_KEY not configured');
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'API key not configured' };
+  }
+
+  const genreContext = selectedGenre 
+    ? `The user has selected the genre "${selectedGenre}". Use this as context but still enhance based on their written prompt.`
+    : '';
+
+  try {
+    // Use AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const userPrompt = `User's music prompt: "${originalPrompt}"
+${genreContext}
+
+Enhance this prompt with specific musical details (instruments, mood, tempo, key) to help the AI create better music. Keep the same core concept, just add helpful specifics.`;
+
+    const response = await fetch('https://fal.run/fal-ai/any-llm', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3-haiku',
+        prompt: userPrompt,
+        system_prompt: MUSIC_PROMPT_GUIDELINES,
+        temperature: 0.6,
+        max_tokens: 250
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      logger.warn('Music prompt optimization LLM request failed', { status: response.status, error: errorText });
+      return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM request failed' };
+    }
+
+    const data = await response.json();
+    const output = data.output || data.text || data.response || '';
+
+    // Try to parse JSON response
+    try {
+      const jsonMatch = output.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          optimizedPrompt: parsed.optimizedPrompt || originalPrompt,
+          reasoning: parsed.reasoning || null,
+          skipped: false
+        };
+      }
+    } catch (parseError) {
+      if (output && output.length > 10) {
+        return {
+          optimizedPrompt: output.trim(),
+          reasoning: 'Enhanced by AI',
+          skipped: false
+        };
+      }
+    }
+
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'Failed to parse LLM response' };
+
+  } catch (error) {
+    logger.error('Music prompt optimization error', { error: error.message });
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: error.message };
+  }
+}
+
+// ============================================================================
+// END MUSIC PROMPT OPTIMIZATION SERVICE
+// ============================================================================
+
+// ============================================================================
 // END PROMPT OPTIMIZATION SERVICE
 // ============================================================================
 
@@ -3345,7 +3468,7 @@ function calculateMusicCredits(duration) {
  */
 app.post('/api/generate/music', freeImageRateLimiter, requireCredits(1), async (req, res) => {
   try {
-    const { prompt, duration = 30 } = req.body;
+    const { prompt, duration = 30, optimizePrompt = true, selectedGenre = null } = req.body;
 
     // Clamp duration between 10 and 180 seconds
     const clampedDuration = Math.max(10, Math.min(180, parseInt(duration) || 30));
@@ -3416,16 +3539,46 @@ app.post('/api/generate/music', freeImageRateLimiter, requireCredits(1), async (
       return res.status(400).json({ success: false, error: 'prompt is required and must be a non-empty string' });
     }
 
+    // Optimize prompt if enabled
+    let finalPrompt = prompt.trim();
+    let promptOptimizationResult = null;
+
+    if (optimizePrompt) {
+      try {
+        promptOptimizationResult = await optimizePromptForMusic(
+          prompt.trim(),
+          selectedGenre
+        );
+
+        if (promptOptimizationResult && !promptOptimizationResult.skipped && promptOptimizationResult.optimizedPrompt) {
+          finalPrompt = promptOptimizationResult.optimizedPrompt;
+          logger.debug('Music prompt optimized', { 
+            original: prompt.substring(0, 50),
+            optimized: finalPrompt.substring(0, 50),
+            selectedGenre
+          });
+        } else {
+          logger.debug('Music prompt optimization skipped or returned no result, using original prompt');
+        }
+      } catch (optError) {
+        logger.warn('Music prompt optimization failed, using original prompt', { 
+          error: optError.message 
+        });
+        promptOptimizationResult = null;
+      }
+    }
+
     // Build request body for CassetteAI API
     const requestBody = {
-      prompt: prompt.trim(),
+      prompt: finalPrompt,
       duration: clampedDuration
     };
 
     logger.info('Music generation request', {
       model: 'cassetteai/music-generator',
       duration: clampedDuration,
-      promptLength: prompt.length,
+      promptLength: finalPrompt.length,
+      wasOptimized: promptOptimizationResult && !promptOptimizationResult.skipped,
       userId: req.user?.userId
     });
 
@@ -3509,15 +3662,27 @@ app.post('/api/generate/music', freeImageRateLimiter, requireCredits(1), async (
         if (resultData.audio_file && resultData.audio_file.url) {
           logger.info('Music generation completed', { 
             requestId,
-            audioUrl: resultData.audio_file.url.substring(0, 50) + '...'
+            audioUrl: resultData.audio_file.url.substring(0, 50) + '...',
+            wasOptimized: promptOptimizationResult && !promptOptimizationResult.skipped
           });
           
-          return res.json({
+          const responseData = {
             success: true,
             audio_file: resultData.audio_file,
             remainingCredits: updateResult.credits,
             creditsDeducted: creditsToDeduct
-          });
+          };
+          
+          // Add prompt optimization details if optimization was performed
+          if (promptOptimizationResult && !promptOptimizationResult.skipped) {
+            responseData.promptOptimization = {
+              originalPrompt: prompt.trim(),
+              optimizedPrompt: promptOptimizationResult.optimizedPrompt,
+              reasoning: promptOptimizationResult.reasoning
+            };
+          }
+          
+          return res.json(responseData);
         } else {
           return res.status(500).json({ success: false, error: 'No audio in response' });
         }

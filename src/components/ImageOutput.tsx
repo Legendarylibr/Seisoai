@@ -5,7 +5,7 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
 import { extractLayers } from '../services/layerExtractionService';
 import { addGeneration } from '../services/galleryService';
-import { X, Sparkles, Layers, Image as ImageIcon, AlertTriangle } from 'lucide-react';
+import { X, Sparkles, Layers, Image as ImageIcon, AlertTriangle, Brain } from 'lucide-react';
 import { BTN, WIN95, hoverHandlers } from '../utils/buttonStyles';
 import logger from '../utils/logger';
 
@@ -49,6 +49,7 @@ const ImageOutput: React.FC = () => {
   const [showPromptModal, setShowPromptModal] = useState<boolean>(false);
   const [newPrompt, setNewPrompt] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [optimizePromptEnabled, setOptimizePromptEnabled] = useState<boolean>(true);
 
   // Close modal helper
   const closeModal = () => {
@@ -56,6 +57,7 @@ const ImageOutput: React.FC = () => {
     setNewPrompt('');
     setError(null);
     setSelectedModel(null);
+    setOptimizePromptEnabled(true); // Reset to default
   };
 
   // Strip metadata from image
@@ -200,7 +202,8 @@ const ImageOutput: React.FC = () => {
             walletAddress: isEmailAuth ? undefined : address,
             userId: isEmailAuth ? emailContext.userId : undefined,
             email: isEmailAuth ? emailContext.email : undefined,
-            isNFTHolder: isNFTHolder || false
+            isNFTHolder: isNFTHolder || false,
+            optimizePrompt: optimizePromptEnabled
           },
           refImage
         );
@@ -642,7 +645,29 @@ const ImageOutput: React.FC = () => {
                     }}
                     autoFocus
                   />
-                  <p className="text-[9px] mt-0.5" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Current output becomes reference image</p>
+                  <div className="flex justify-between items-center mt-1">
+                    <p className="text-[9px]" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Current output becomes reference image</p>
+                    {/* AI Enhance Toggle */}
+                    <label 
+                      onClick={() => setOptimizePromptEnabled(!optimizePromptEnabled)}
+                      className="flex items-center gap-1.5 cursor-pointer select-none px-1 py-0.5 hover:bg-[#d0d0d0]"
+                      style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
+                    >
+                      <div 
+                        className="w-3.5 h-3.5 flex items-center justify-center"
+                        style={{
+                          background: '#ffffff',
+                          boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040'
+                        }}
+                      >
+                        {optimizePromptEnabled && (
+                          <span className="text-[10px] font-bold" style={{ color: '#000' }}>✓</span>
+                        )}
+                      </div>
+                      <Brain className="w-3 h-3" style={{ color: optimizePromptEnabled ? '#800080' : '#808080' }} />
+                      <span className="text-[10px]" style={{ color: '#000' }}>AI Enhance</span>
+                    </label>
+                  </div>
                 </div>
               )}
 
