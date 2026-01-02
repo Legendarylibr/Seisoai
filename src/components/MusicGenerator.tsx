@@ -709,6 +709,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
             {/* Hidden audio element */}
             {generatedAudioUrl && (
               <audio 
+                key={generatedAudioUrl}
                 ref={audioRef}
                 src={generatedAudioUrl}
                 onEnded={() => setIsPlaying(false)}

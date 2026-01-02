@@ -697,8 +697,8 @@ export function createGenerationRoutes(deps: Dependencies) {
       const statusEndpoint = providedStatusUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}/status`;
       const resultEndpoint = providedResponseUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}`;
 
-      const maxWaitTime = 5 * 60 * 1000; // 5 minutes
-      const pollInterval = 2000;
+      const maxWaitTime = 10 * 60 * 1000; // 10 minutes (Veo 3.1 can take longer for quality/longer durations)
+      const pollInterval = 3000; // Poll every 3 seconds to reduce load
       const startTime = Date.now();
       let firstCheck = true;
 

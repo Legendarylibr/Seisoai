@@ -8,7 +8,7 @@ interface FooterProps {
 const Footer = memo(function Footer({ onOpenTerms }: FooterProps) {
   return (
     <div 
-      className="flex items-center justify-center gap-4 px-2 py-1 text-[10px]"
+      className="flex items-center justify-center gap-2 sm:gap-4 px-2 py-1 text-[9px] sm:text-[10px] flex-wrap"
       style={{
         background: WIN95.bg,
         borderTop: `1px solid ${WIN95.border.light}`,
@@ -42,7 +42,7 @@ const Footer = memo(function Footer({ onOpenTerms }: FooterProps) {
         onMouseEnter={(e) => e.currentTarget.style.color = WIN95.highlight}
         onMouseLeave={(e) => e.currentTarget.style.color = WIN95.textDisabled}
       >
-        Content Policy
+        Content
       </button>
       <span style={{ color: WIN95.bgDark }}>•</span>
       <button

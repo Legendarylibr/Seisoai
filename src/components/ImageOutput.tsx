@@ -532,12 +532,46 @@ const ImageOutput: React.FC = () => {
       {/* Image Display - fills all remaining space with fixed container */}
       <div className="flex-1 min-h-0 p-1 overflow-hidden" style={{ background: '#c0c0c0', maxHeight: 'calc(100% - 40px)' }}>
         <div 
-          className="w-full h-full overflow-hidden flex items-center justify-center"
+          className="w-full h-full overflow-hidden flex items-center justify-center relative"
           style={{ 
             background: '#ffffff',
             boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040'
           }}
         >
+          {/* Regeneration loading overlay */}
+          {isRegenerating && (
+            <div 
+              className="absolute inset-0 flex flex-col items-center justify-center z-10"
+              style={{ background: 'rgba(192, 192, 192, 0.9)' }}
+            >
+              <div className="relative mb-3">
+                <div 
+                  className="w-12 h-12 flex items-center justify-center"
+                  style={{
+                    background: WIN95.bg,
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
+                  }}
+                >
+                  <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#000080', borderTopColor: 'transparent' }} />
+                </div>
+              </div>
+              <p className="text-[11px] font-bold" style={{ color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Regenerating...</p>
+              <p className="text-[10px] mt-1" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Please wait</p>
+              {/* Progress dots */}
+              <div className="flex gap-1 mt-3">
+                {[0, 1, 2].map((i) => (
+                  <div 
+                    key={i}
+                    className="w-2 h-2 rounded-full animate-pulse"
+                    style={{ 
+                      background: '#000080',
+                      animationDelay: `${i * 0.2}s`
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
           {hasMultipleImages ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2 w-full h-full" style={{ maxHeight: '100%' }}>
               {imagesToDisplay.map((url, i) => (

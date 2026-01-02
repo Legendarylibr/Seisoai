@@ -419,9 +419,55 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<string | null>(null);
   const [videoReady, setVideoReady] = useState<boolean>(false);
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+
+  // Timer for elapsed time during generation
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    
+    if (isGenerating) {
+      startTimeRef.current = Date.now();
+      setElapsedTime(0);
+      
+      intervalId = setInterval(() => {
+        if (startTimeRef.current) {
+          setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
+        }
+      }, 1000);
+    } else {
+      startTimeRef.current = null;
+    }
+    
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isGenerating]);
+
+  // Get progress message based on elapsed time
+  const getProgressMessage = useCallback((elapsed: number): string => {
+    if (elapsed < 10) return 'Submitting to AI...';
+    if (elapsed < 30) return 'AI is processing your request...';
+    if (elapsed < 60) return 'Generating frames...';
+    if (elapsed < 120) return 'Rendering video...';
+    if (elapsed < 180) return 'Almost there, adding final touches...';
+    if (elapsed < 300) return 'Taking a bit longer than usual...';
+    return 'Still processing, please wait...';
+  }, []);
+
+  // Format elapsed time
+  const formatElapsedTime = useCallback((seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${secs}s`;
+  }, []);
 
   // Auto-play video when URL changes and video is ready
   useEffect(() => {
@@ -482,12 +528,9 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
     
     setIsGenerating(true);
     setError(null);
-    setProgress(currentMode.requiresFirstFrame ? 'Uploading frames...' : 'Preparing video generation...');
     setGeneratedVideoUrl(null);
 
     try {
-      setProgress('Generating video... This may take 1-3 minutes');
-      
       const result = await generateVideo({
         prompt,
         firstFrameUrl: currentMode.requiresFirstFrame ? firstFrameUrl : null,
@@ -504,7 +547,6 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
       });
 
       setGeneratedVideoUrl(result.videoUrl);
-      setProgress(null);
       
       // Refresh credits
       if (isEmailAuth && emailContext.refreshCredits) {
@@ -531,9 +573,9 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
         remainingCredits: result.remainingCredits 
       });
     } catch (err) {
-      setError(err.message);
-      setProgress(null);
-      logger.error('Video generation failed', { error: err.message });
+      const error = err as Error;
+      setError(error.message);
+      logger.error('Video generation failed', { error: error.message });
     } finally {
       setIsGenerating(false);
     }
@@ -854,32 +896,69 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
                 boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040'
               }}
             >
-              {isGenerating && progress ? (
+              {isGenerating ? (
                 <div className="text-center p-4">
                   <div 
-                    className="w-12 h-12 mb-3 mx-auto flex items-center justify-center"
+                    className="w-14 h-14 mb-3 mx-auto flex items-center justify-center"
                     style={{
                       background: WIN95.bg,
                       boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
                     }}
                   >
-                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#000080', borderTopColor: 'transparent' }} />
+                    <div className="w-10 h-10 border-3 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#000080', borderTopColor: 'transparent', borderWidth: '3px' }} />
                   </div>
-                  <p className="text-[11px] font-bold" style={{ color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{progress}</p>
-                  <p className="text-[10px] mt-1" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>This may take 1-3 minutes</p>
-                  {/* Progress dots */}
-                  <div className="flex gap-1 mt-3 justify-center">
-                    {[0, 1, 2].map((i) => (
-                      <div 
-                        key={i}
-                        className="w-2 h-2 rounded-full animate-pulse"
-                        style={{ 
-                          background: '#000080',
-                          animationDelay: `${i * 0.2}s`
-                        }}
-                      />
-                    ))}
+                  
+                  {/* Elapsed time display */}
+                  <div 
+                    className="inline-block px-3 py-1 mb-2"
+                    style={{
+                      background: '#000080',
+                      color: '#00ff00',
+                      fontFamily: 'Consolas, "Courier New", monospace',
+                      fontSize: '16px',
+                      fontWeight: 'bold',
+                      letterSpacing: '1px',
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
+                    }}
+                  >
+                    ⏱️ {formatElapsedTime(elapsedTime)}
                   </div>
+                  
+                  <p className="text-[11px] font-bold" style={{ color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                    {getProgressMessage(elapsedTime)}
+                  </p>
+                  
+                  {/* Estimated time based on settings */}
+                  <p className="text-[9px] mt-1 px-2" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                    {quality === 'quality' 
+                      ? `Quality mode: typically 3-6 minutes` 
+                      : `Fast mode: typically 1-3 minutes`}
+                  </p>
+                  
+                  {/* Progress bar */}
+                  <div 
+                    className="w-48 h-4 mx-auto mt-3 overflow-hidden"
+                    style={{
+                      background: WIN95.inputBg,
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                    }}
+                  >
+                    <div 
+                      className="h-full transition-all duration-1000"
+                      style={{
+                        width: `${Math.min(95, (elapsedTime / (quality === 'quality' ? 360 : 180)) * 100)}%`,
+                        background: 'repeating-linear-gradient(90deg, #000080, #000080 8px, #1084d0 8px, #1084d0 16px)',
+                        animation: 'none'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Tip based on elapsed time */}
+                  {elapsedTime > 120 && (
+                    <p className="text-[8px] mt-2 px-4 italic" style={{ color: '#606060', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                      💡 Tip: Fast mode with 720p generates quicker
+                    </p>
+                  )}
                 </div>
               ) : error && !generatedVideoUrl ? (
                 <div className="text-center p-4 max-w-sm">
@@ -916,6 +995,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
                     </div>
                   )}
                   <video 
+                    key={generatedVideoUrl}
                     ref={videoRef}
                     src={generatedVideoUrl}
                     controls
@@ -974,16 +1054,16 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
         }}
       >
         <div 
-          className="flex items-center gap-1.5 px-2 py-1 w-full"
+          className="flex items-center gap-1.5 px-2 py-1 flex-1"
           style={{ 
             background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
             color: '#ffffff'
           }}
         >
           <span className="text-[10px] font-bold">Status:</span>
-          <span className="text-[10px]">
-            {isGenerating && progress ? (
-              <span>⏳ {progress}</span>
+          <span className="text-[10px] flex-1">
+            {isGenerating ? (
+              <span>⏳ {getProgressMessage(elapsedTime)}</span>
             ) : error ? (
               <span>❌ Error</span>
             ) : generatedVideoUrl ? (
@@ -992,6 +1072,18 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
               'Ready to generate'
             )}
           </span>
+          {isGenerating && (
+            <span 
+              className="text-[10px] font-mono px-1.5 py-0.5"
+              style={{ 
+                background: 'rgba(0,0,0,0.3)',
+                color: '#00ff00',
+                fontFamily: 'Consolas, monospace'
+              }}
+            >
+              {formatElapsedTime(elapsedTime)}
+            </span>
+          )}
         </div>
       </div>
     </div>
