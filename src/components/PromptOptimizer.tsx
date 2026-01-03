@@ -31,6 +31,13 @@ const PromptOptimizer: React.FC<PromptOptimizerProps> = ({ onPromptChange }) => 
     return null;
   }
 
+  // Check if using FLUX 2 for enhanced optimization messaging
+  const isFlux2 = multiImageModel === 'flux-2';
+  const enhanceLabel = isFlux2 ? 'FLUX 2 Optimize' : 'AI Enhance';
+  const enhanceTooltip = isFlux2 
+    ? 'Optimize prompt for precise FLUX 2 editing with action verbs and specific instructions'
+    : 'Enhance your prompt with AI for better results';
+
   return (
     <div 
       className="relative"
@@ -52,7 +59,7 @@ const PromptOptimizer: React.FC<PromptOptimizerProps> = ({ onPromptChange }) => 
           className="text-[11px] font-bold" 
           style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
         >
-          Describe Your Image
+          {isFlux2 ? 'Edit Instructions' : 'Describe Your Image'}
         </span>
         <div className="flex-1" />
         <Sparkles className="w-3 h-3 opacity-70" />
@@ -64,7 +71,10 @@ const PromptOptimizer: React.FC<PromptOptimizerProps> = ({ onPromptChange }) => 
         <textarea
           value={prompt}
           onChange={handlePromptChange}
-          placeholder="A beautiful sunset over mountains, digital art style, vibrant colors..."
+          placeholder={isFlux2 
+            ? "Change the shirt to a blue flannel pattern, make the background a sunset beach..."
+            : "A beautiful sunset over mountains, digital art style, vibrant colors..."
+          }
           className="w-full h-24 p-2 resize-none text-[11px] focus:outline-none"
           style={{ 
             background: WIN95.inputBg,
@@ -94,6 +104,7 @@ const PromptOptimizer: React.FC<PromptOptimizerProps> = ({ onPromptChange }) => 
             onClick={() => setOptimizePrompt(!optimizePrompt)}
             className="flex items-center gap-1.5 cursor-pointer select-none px-1 py-0.5 hover:bg-[#d0d0d0]"
             style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
+            title={enhanceTooltip}
           >
             {/* Win95 Checkbox */}
             <div 
@@ -108,13 +119,13 @@ const PromptOptimizer: React.FC<PromptOptimizerProps> = ({ onPromptChange }) => 
               )}
             </div>
             <Brain className="w-3 h-3" style={{ 
-              color: optimizePrompt ? '#800080' : WIN95.textDisabled
+              color: optimizePrompt ? (isFlux2 ? '#0066cc' : '#800080') : WIN95.textDisabled
             }} />
             <span 
               className="text-[10px]" 
               style={{ color: WIN95.text }}
             >
-              AI Enhance
+              {enhanceLabel}
             </span>
           </label>
         </div>

@@ -246,6 +246,9 @@ export const generateImage = async (
     if (multiImageModel === 'nano-banana-pro') {
       // Nano Banana Pro works for prompt-only, single, and multiple images
       model = 'nano-banana-pro';
+    } else if (multiImageModel === 'flux-2') {
+      // FLUX 2 for text-to-image (enhanced realism) or image editing
+      model = 'flux-2';
     } else if (!hasRefImage && multiImageModel === 'flux') {
       // FLUX for text-to-image generation
       model = 'flux';
@@ -351,5 +354,159 @@ export const generateImage = async (
     logger.error('FAL.ai API Error', { error: err.message });
     throw new Error(`Failed to generate image: ${err.message}`);
   }
+};
+
+// Streaming event types
+export interface StreamingProgress {
+  message: string;
+  progress: number;
+  requestId?: string;
+  queuePosition?: number;
+  logs?: string[];
+}
+
+export interface StreamingResult {
+  success: boolean;
+  images: string[];
+  remainingCredits?: number;
+  creditsDeducted?: number;
+}
+
+export interface StreamingPromptOptimization {
+  originalPrompt: string;
+  optimizedPrompt: string;
+  reasoning: string | null;
+}
+
+export interface StreamingCallbacks {
+  onStatus?: (progress: StreamingProgress) => void;
+  onCredits?: (data: { creditsDeducted: number; remainingCredits: number }) => void;
+  onPromptOptimized?: (data: StreamingPromptOptimization) => void;
+  onComplete?: (result: StreamingResult) => void;
+  onError?: (error: string) => void;
+}
+
+/**
+ * Generate image with FLUX 2 using streaming (SSE) for real-time progress
+ */
+export const generateImageStreaming = async (
+  prompt: string,
+  imageUrls: string[],
+  advancedSettings: AdvancedSettings = {},
+  callbacks: StreamingCallbacks = {}
+): Promise<ImageGenerationResult> => {
+  const { walletAddress, userId, email, numImages = 1, optimizePrompt = false } = advancedSettings;
+  
+  if (!walletAddress && !userId && !email) {
+    throw new Error('User identification required');
+  }
+
+  return new Promise((resolve, reject) => {
+    const requestBody = {
+      prompt,
+      image_urls: imageUrls,
+      numImages,
+      walletAddress,
+      userId,
+      email,
+      optimizePrompt // Pass optimization flag to backend
+    };
+
+    // Use fetch with EventSource polyfill approach for POST SSE
+    fetch(`${API_URL}/api/generate/image-stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream'
+      },
+      body: JSON.stringify(requestBody)
+    }).then(async (response) => {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        reject(new Error(errorData.error || `HTTP error: ${response.status}`));
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        reject(new Error('No response body'));
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalResult: ImageGenerationResult | null = null;
+
+      const processLine = (line: string) => {
+        if (line.startsWith('event: ')) {
+          // Store event type for next data line
+          buffer = line.substring(7);
+        } else if (line.startsWith('data: ') && buffer) {
+          const eventType = buffer;
+          const data = line.substring(6);
+          buffer = '';
+          
+          try {
+            const parsed = JSON.parse(data);
+            
+            switch (eventType) {
+              case 'status':
+                callbacks.onStatus?.(parsed as StreamingProgress);
+                break;
+              case 'credits':
+                callbacks.onCredits?.(parsed);
+                break;
+              case 'promptOptimized':
+                callbacks.onPromptOptimized?.(parsed as StreamingPromptOptimization);
+                break;
+              case 'complete':
+                callbacks.onComplete?.(parsed as StreamingResult);
+                finalResult = {
+                  images: parsed.images || [],
+                  imageUrl: parsed.images?.[0] || '',
+                  remainingCredits: parsed.remainingCredits,
+                  creditsDeducted: parsed.creditsDeducted
+                };
+                break;
+              case 'error':
+                callbacks.onError?.(parsed.error);
+                reject(new Error(parsed.error));
+                break;
+            }
+          } catch (e) {
+            logger.error('Failed to parse SSE data', { data, error: (e as Error).message });
+          }
+        }
+      };
+
+      const readStream = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const text = decoder.decode(value, { stream: true });
+            const lines = text.split('\n');
+            
+            for (const line of lines) {
+              if (line.trim()) {
+                processLine(line);
+              }
+            }
+          }
+          
+          if (finalResult) {
+            resolve(finalResult);
+          } else {
+            reject(new Error('Stream ended without result'));
+          }
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      readStream();
+    }).catch(reject);
+  });
 };
 

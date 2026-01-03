@@ -640,6 +640,7 @@ const ImageOutput: React.FC = () => {
                 <div className="flex flex-wrap gap-1">
                   {[
                     { id: 'flux', name: 'FLUX', desc: '1 credit' },
+                    { id: 'flux-2', name: 'FLUX 2', desc: '1 credit' },
                     { id: 'nano-banana-pro', name: 'Nano Pro', desc: '2 credits' },
                     { id: 'qwen-image-layered', name: 'Qwen Layers', desc: '1 credit' }
                   ].map((model) => {

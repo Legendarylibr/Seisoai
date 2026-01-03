@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
-import { Sparkles, Zap, Layers, Cpu, type LucideIcon } from 'lucide-react';
+import { Sparkles, Zap, Layers, Cpu, Wand2, type LucideIcon } from 'lucide-react';
 import { WIN95, BTN } from '../utils/buttonStyles';
 import logger from '../utils/logger';
 
@@ -30,6 +30,14 @@ const MODEL_CONFIG: Record<string, ModelConfig> = {
     credits: 1,
     tagline: 'Fast',
     description: 'Multi-image blending'
+  },
+  'flux-2': {
+    id: 'flux-2',
+    name: 'FLUX 2',
+    icon: Wand2,
+    credits: 1,
+    tagline: 'Realism',
+    description: 'Enhanced realism & text'
   },
   'nano-banana-pro': {
     id: 'nano-banana-pro',
@@ -94,11 +102,11 @@ const MultiImageModelSelector: React.FC<MultiImageModelSelectorProps> = ({ custo
   // Get available models based on context
   const getAvailableModels = (): string[] => {
     if (!hasImages) {
-      // Text-to-image: FLUX and Banana only
-      return ['flux', 'nano-banana-pro'];
+      // Text-to-image: FLUX, FLUX 2, and Banana
+      return ['flux', 'flux-2', 'nano-banana-pro'];
     } else {
-      // With images: FLUX, Banana, and Qwen
-      return [fluxModelId, 'nano-banana-pro', 'qwen-image-layered'];
+      // With images: FLUX, FLUX 2 (edit), Banana, and Qwen
+      return [fluxModelId, 'flux-2', 'nano-banana-pro', 'qwen-image-layered'];
     }
   };
 

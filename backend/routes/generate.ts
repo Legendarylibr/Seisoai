@@ -162,6 +162,296 @@ Enhance this prompt with specific musical details (instruments, mood, tempo, key
 // END MUSIC PROMPT OPTIMIZATION SERVICE
 // ============================================================================
 
+// ============================================================================
+// FLUX 2 IMAGE EDITING PROMPT OPTIMIZATION SERVICE
+// ============================================================================
+
+/**
+ * FLUX 2 image editing prompt optimization guidelines
+ * Tailored for precise modifications using natural language descriptions
+ */
+const FLUX2_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompts for FLUX 2 image editing AI.
+
+FLUX 2 Edit specializes in:
+- Precise modifications using natural language descriptions
+- Color changes (supports hex color codes like #FF5733)
+- Object modifications, additions, and removals
+- Style transfers and artistic adjustments
+- Clothing, hair, and appearance changes
+- Background and environment modifications
+
+Optimal prompt structure for FLUX 2:
+1. Be DIRECT and SPECIFIC about what to change
+2. Use action verbs: "Change", "Make", "Transform", "Replace", "Add", "Remove"
+3. Specify colors with hex codes when possible (e.g., "Change shirt to navy blue #1E3A5F")
+4. Describe the desired end state clearly
+5. Keep focused on ONE main edit per prompt for best results
+6. Avoid vague terms - be precise about locations and attributes
+
+Good FLUX 2 prompts:
+- "Change the shirt to a red flannel pattern"
+- "Make the hair blonde with subtle highlights"
+- "Replace the background with a sunset beach scene"
+- "Add stylish sunglasses to the person"
+- "Transform the casual outfit into a formal black suit"
+- "Change eye color to emerald green #50C878"
+
+Bad prompts to avoid:
+- "Make it look better" (too vague)
+- "Change everything" (unfocused)
+- "Something different" (no direction)
+
+JSON response format:
+{"optimizedPrompt": "clear, action-oriented edit instruction", "reasoning": "brief explanation of improvements"}`;
+
+interface ImageEditOptimizationResult {
+  optimizedPrompt: string;
+  reasoning: string | null;
+  skipped: boolean;
+  error?: string;
+}
+
+/**
+ * Optimize a prompt for FLUX 2 image editing
+ */
+async function optimizePromptForFlux2Edit(
+  originalPrompt: string
+): Promise<ImageEditOptimizationResult> {
+  // Skip optimization for empty prompts
+  if (!originalPrompt || originalPrompt.trim() === '') {
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
+  }
+
+  const FAL_API_KEY = getFalApiKey();
+  
+  if (!FAL_API_KEY) {
+    logger.warn('FLUX 2 prompt optimization skipped: FAL_API_KEY not configured');
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'API key not configured' };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const userPrompt = `User's image edit request: "${originalPrompt}"
+
+Transform this into an optimal FLUX 2 edit prompt that is:
+1. Direct and action-oriented (starts with a verb)
+2. Specific about what to change
+3. Clear about the desired result
+4. Includes color codes if colors are mentioned
+
+Keep the user's intent, just make it clearer and more effective for the AI.`;
+
+    const response = await fetch('https://fal.run/fal-ai/any-llm', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3-haiku',
+        prompt: userPrompt,
+        system_prompt: FLUX2_EDIT_PROMPT_GUIDELINES,
+        temperature: 0.5,
+        max_tokens: 200
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      logger.warn('FLUX 2 prompt optimization LLM request failed', { status: response.status, error: errorText });
+      return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM request failed' };
+    }
+
+    const data = await response.json() as { output?: string; text?: string; response?: string };
+    const output = data.output || data.text || data.response || '';
+
+    // Try to parse JSON response
+    try {
+      const jsonMatch = output.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
+        if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+          logger.debug('FLUX 2 prompt optimized', { 
+            original: originalPrompt.substring(0, 50),
+            optimized: parsed.optimizedPrompt.substring(0, 50)
+          });
+          return {
+            optimizedPrompt: parsed.optimizedPrompt,
+            reasoning: parsed.reasoning || null,
+            skipped: false
+          };
+        }
+      }
+    } catch {
+      // If JSON parsing fails but we have reasonable output, use it
+      if (output && output.length > 10 && output.length < 500) {
+        return {
+          optimizedPrompt: output.trim(),
+          reasoning: 'Enhanced for FLUX 2 editing',
+          skipped: false
+        };
+      }
+    }
+
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'Failed to parse LLM response' };
+
+  } catch (error) {
+    const err = error as Error;
+    logger.error('FLUX 2 prompt optimization error', { error: err.message });
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: err.message };
+  }
+}
+
+// ============================================================================
+// END FLUX 2 IMAGE EDITING PROMPT OPTIMIZATION SERVICE
+// ============================================================================
+
+// ============================================================================
+// FLUX 2 TEXT-TO-IMAGE PROMPT OPTIMIZATION SERVICE
+// ============================================================================
+
+/**
+ * Flux 2 text-to-image prompt optimization guidelines
+ * Optimized for FLUX.2 [dev] from Black Forest Labs
+ */
+const FLUX2_T2I_PROMPT_GUIDELINES = `You are an expert prompt engineer for FLUX.2, a state-of-the-art text-to-image AI model known for enhanced realism and crisp text generation.
+
+Your goal: Transform a user's simple image description into a detailed, well-structured prompt that leverages FLUX.2's strengths.
+
+FLUX.2 Strengths:
+- Exceptional photorealism and fine details
+- Accurate text rendering in images
+- Precise composition and subject placement
+- Realistic lighting and shadows
+- Natural skin textures and facial features
+
+Guidelines:
+1. Include visual elements that FLUX.2 excels at:
+   - Camera angle/shot type (close-up, wide shot, Dutch angle, eye-level)
+   - Lighting description (dramatic lighting, soft diffused light, golden hour, studio lighting)
+   - Style descriptors (photorealistic, cinematic, professional photography)
+   - Atmosphere/mood (moody, vibrant, serene, dystopian)
+   - Specific details (textures, materials, expressions)
+
+2. Keep the user's core intent - enhance, don't change the subject
+3. Be descriptive but concise - avoid overly long prompts
+4. Use photography/cinematography terminology naturally
+5. For text in images, specify font style and placement
+
+Examples:
+- "a cat" → "Close-up portrait of a fluffy tabby cat with striking green eyes, soft natural window light illuminating fur details, shallow depth of field, photorealistic, warm cozy atmosphere"
+- "futuristic city" → "Wide establishing shot of a neon-lit cyberpunk cityscape at night, towering skyscrapers with holographic advertisements, rain-slicked streets reflecting colorful lights, cinematic atmosphere, blade runner aesthetic"
+- "woman portrait" → "Professional headshot of a woman in her 30s, confident expression, studio lighting with soft fill, sharp focus on eyes, neutral background, commercial photography style"
+
+JSON only:
+{"optimizedPrompt": "enhanced version of the prompt", "reasoning": "what you enhanced and why"}`;
+
+interface Flux2T2IOptimizationResult {
+  optimizedPrompt: string;
+  reasoning: string | null;
+  skipped: boolean;
+  error?: string;
+}
+
+/**
+ * Optimize a prompt for FLUX 2 text-to-image generation
+ */
+async function optimizePromptForFlux2T2I(
+  originalPrompt: string
+): Promise<Flux2T2IOptimizationResult> {
+  // Skip optimization for empty prompts
+  if (!originalPrompt || originalPrompt.trim() === '') {
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
+  }
+
+  const FAL_API_KEY = getFalApiKey();
+  
+  if (!FAL_API_KEY) {
+    logger.warn('FLUX 2 T2I prompt optimization skipped: FAL_API_KEY not configured');
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'API key not configured' };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const userPrompt = `User's image prompt: "${originalPrompt}"
+
+Enhance this prompt to leverage FLUX.2's strengths in photorealism, lighting, and detail. Keep the same subject and core concept, just add helpful visual specifics that will produce a stunning image.`;
+
+    const response = await fetch('https://fal.run/fal-ai/any-llm', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3-haiku',
+        prompt: userPrompt,
+        system_prompt: FLUX2_T2I_PROMPT_GUIDELINES,
+        temperature: 0.6,
+        max_tokens: 300
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      logger.warn('FLUX 2 T2I prompt optimization LLM request failed', { status: response.status, error: errorText });
+      return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM request failed' };
+    }
+
+    const data = await response.json() as { output?: string; text?: string; response?: string };
+    const output = data.output || data.text || data.response || '';
+
+    // Try to parse JSON response
+    try {
+      const jsonMatch = output.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
+        if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+          logger.debug('FLUX 2 T2I prompt optimized', { 
+            original: originalPrompt.substring(0, 50),
+            optimized: parsed.optimizedPrompt.substring(0, 50)
+          });
+          return {
+            optimizedPrompt: parsed.optimizedPrompt,
+            reasoning: parsed.reasoning || null,
+            skipped: false
+          };
+        }
+      }
+    } catch {
+      // If JSON parsing fails but we have reasonable output, use it
+      if (output && output.length > 10 && output.length < 500) {
+        return {
+          optimizedPrompt: output.trim(),
+          reasoning: 'Enhanced for FLUX 2 text-to-image',
+          skipped: false
+        };
+      }
+    }
+
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'Failed to parse LLM response' };
+
+  } catch (error) {
+    const err = error as Error;
+    logger.error('FLUX 2 T2I prompt optimization error', { error: err.message });
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: err.message };
+  }
+}
+
+// ============================================================================
+// END FLUX 2 TEXT-TO-IMAGE PROMPT OPTIMIZATION SERVICE
+// ============================================================================
+
 export function createGenerationRoutes(deps: Dependencies) {
   const router = Router();
   const { 
@@ -241,7 +531,8 @@ export function createGenerationRoutes(deps: Dependencies) {
         image_urls,
         aspect_ratio,
         seed,
-        model
+        model,
+        optimizePrompt = false
       } = req.body as {
         prompt?: string;
         guidanceScale?: number;
@@ -251,6 +542,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         aspect_ratio?: string;
         seed?: number;
         model?: string;
+        optimizePrompt?: boolean;
       };
 
       if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
@@ -261,17 +553,61 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Determine endpoint based on image inputs and model selection
+      // Determine image inputs first for optimization decision
       const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
       const isSingleImage = image_url || (image_urls && image_urls.length === 1);
       const hasImages = isMultipleImages || isSingleImage;
+      const isFlux2Model = model === 'flux-2';
+      
+      // Apply FLUX 2 prompt optimization if requested
+      let finalPrompt = prompt.trim();
+      let promptOptimizationResult: ImageEditOptimizationResult | Flux2T2IOptimizationResult | null = null;
+      
+      if (optimizePrompt && isFlux2Model) {
+        try {
+          if (hasImages) {
+            // Use edit-specific optimization for image editing
+            promptOptimizationResult = await optimizePromptForFlux2Edit(prompt.trim());
+            
+            if (promptOptimizationResult && !promptOptimizationResult.skipped && promptOptimizationResult.optimizedPrompt) {
+              finalPrompt = promptOptimizationResult.optimizedPrompt;
+              logger.debug('FLUX 2 prompt optimized for editing', { 
+                original: prompt.substring(0, 50),
+                optimized: finalPrompt.substring(0, 50)
+              });
+            }
+          } else {
+            // Use text-to-image optimization for generation
+            promptOptimizationResult = await optimizePromptForFlux2T2I(prompt.trim());
+            
+            if (promptOptimizationResult && !promptOptimizationResult.skipped && promptOptimizationResult.optimizedPrompt) {
+              finalPrompt = promptOptimizationResult.optimizedPrompt;
+              logger.debug('FLUX 2 prompt optimized for text-to-image', { 
+                original: prompt.substring(0, 50),
+                optimized: finalPrompt.substring(0, 50)
+              });
+            }
+          }
+        } catch (err) {
+          logger.warn('FLUX 2 prompt optimization failed, using original prompt', { error: (err as Error).message });
+        }
+      }
+
+      // Determine endpoint based on image inputs and model selection
       const isNanoBananaPro = model === 'nano-banana-pro';
+      const isFlux2 = isFlux2Model;
 
       let endpoint: string;
       if (isNanoBananaPro) {
         endpoint = hasImages 
           ? 'https://fal.run/fal-ai/nano-banana-pro/edit'
           : 'https://fal.run/fal-ai/nano-banana-pro';
+      } else if (isFlux2 && hasImages) {
+        // FLUX 2 Edit - precise image editing with natural language
+        endpoint = 'https://fal.run/fal-ai/flux-2/edit';
+      } else if (isFlux2 && !hasImages) {
+        // FLUX 2 Text-to-Image - enhanced realism and crisper text
+        endpoint = 'https://fal.run/fal-ai/flux-2';
       } else if (isMultipleImages) {
         endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/max/multi';
       } else if (isSingleImage) {
@@ -299,6 +635,61 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
         if (!hasImages && numImages) {
           requestBody.num_images = numImages;
+        }
+      } else if (isFlux2 && hasImages) {
+        // FLUX 2 Edit API format - precise image editing
+        // Build image_urls array from available image inputs
+        const imageUrlsArray: string[] = [];
+        if (image_urls && Array.isArray(image_urls)) {
+          imageUrlsArray.push(...image_urls);
+        } else if (image_url) {
+          imageUrlsArray.push(image_url);
+        }
+        
+        requestBody = {
+          prompt: finalPrompt, // Use optimized prompt if available
+          image_urls: imageUrlsArray,
+          guidance_scale: 2.5, // FLUX 2 default
+          num_inference_steps: 28, // FLUX 2 default
+          num_images: numImages,
+          output_format: 'png',
+          enable_safety_checker: false, // Disabled for user flexibility
+          acceleration: 'regular'
+        };
+        
+        if (seed !== undefined) {
+          requestBody.seed = seed;
+        }
+      } else if (isFlux2 && !hasImages) {
+        // FLUX 2 Text-to-Image API format
+        // Based on https://fal.ai/models/fal-ai/flux-2/api
+        requestBody = {
+          prompt: finalPrompt, // Use optimized prompt if available
+          guidance_scale: 2.5, // FLUX 2 default
+          num_inference_steps: 28, // FLUX 2 default
+          num_images: numImages,
+          output_format: 'png',
+          enable_safety_checker: false, // Disabled for user flexibility
+          acceleration: 'regular'
+        };
+        
+        // Add image size/aspect ratio
+        if (aspect_ratio) {
+          // Convert aspect ratio to image_size format
+          const aspectToSize: Record<string, string> = {
+            '1:1': 'square',
+            '4:3': 'landscape_4_3',
+            '16:9': 'landscape_16_9',
+            '3:4': 'portrait_4_3',
+            '9:16': 'portrait_16_9'
+          };
+          requestBody.image_size = aspectToSize[aspect_ratio] || 'landscape_4_3';
+        } else {
+          requestBody.image_size = 'landscape_4_3';
+        }
+        
+        if (seed !== undefined) {
+          requestBody.seed = seed;
         }
       } else {
         // FLUX Kontext API format
@@ -362,12 +753,24 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
       }
 
-      res.json({
+      // Build response with optional prompt optimization info
+      const responseData: Record<string, unknown> = {
         success: true,
         images,
         remainingCredits: updateResult.credits,
         creditsDeducted: creditsRequired
-      });
+      };
+      
+      // Include prompt optimization details if optimization was performed for FLUX 2
+      if (promptOptimizationResult && !promptOptimizationResult.skipped) {
+        responseData.promptOptimization = {
+          originalPrompt: prompt.trim(),
+          optimizedPrompt: promptOptimizationResult.optimizedPrompt,
+          reasoning: promptOptimizationResult.reasoning
+        };
+      }
+      
+      res.json(responseData);
     } catch (error) {
       const err = error as Error;
       logger.error('Image generation error:', { error: err.message });
@@ -375,6 +778,321 @@ export function createGenerationRoutes(deps: Dependencies) {
         success: false,
         error: err.message
       });
+    }
+  });
+
+  /**
+   * FLUX 2 Image Editing with Streaming
+   * POST /api/generate/image-stream
+   * Uses Server-Sent Events for real-time progress updates
+   */
+  router.post('/image-stream', freeImageLimiter, requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    
+    const sendEvent = (event: string, data: unknown) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      const user = req.user;
+      if (!user) {
+        sendEvent('error', { error: 'User authentication required' });
+        res.end();
+        return;
+      }
+
+      const FAL_API_KEY = getFalApiKey();
+      if (!FAL_API_KEY) {
+        sendEvent('error', { error: 'AI service not configured' });
+        res.end();
+        return;
+      }
+
+      const creditsRequired = req.creditsRequired || 1;
+      
+      // Deduct credits atomically
+      const User = mongoose.model<IUser>('User');
+      const updateQuery = buildUserUpdateQuery(user);
+      
+      if (!updateQuery) {
+        sendEvent('error', { error: 'User account required' });
+        res.end();
+        return;
+      }
+
+      const updateResult = await User.findOneAndUpdate(
+        {
+          ...updateQuery,
+          credits: { $gte: creditsRequired }
+        },
+        {
+          $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
+        },
+        { new: true }
+      );
+
+      if (!updateResult) {
+        sendEvent('error', { error: 'Insufficient credits' });
+        res.end();
+        return;
+      }
+
+      sendEvent('credits', { 
+        creditsDeducted: creditsRequired, 
+        remainingCredits: updateResult.credits 
+      });
+
+      // Extract request parameters
+      const {
+        prompt,
+        image_url,
+        image_urls,
+        seed,
+        numImages = 1,
+        aspect_ratio,
+        optimizePrompt = false
+      } = req.body as {
+        prompt?: string;
+        image_url?: string;
+        image_urls?: string[];
+        seed?: number;
+        numImages?: number;
+        aspect_ratio?: string;
+        optimizePrompt?: boolean;
+      };
+
+      if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+        sendEvent('error', { error: 'prompt is required and must be a non-empty string' });
+        res.end();
+        return;
+      }
+
+      // Build image_urls array
+      const imageUrlsArray: string[] = [];
+      if (image_urls && Array.isArray(image_urls)) {
+        imageUrlsArray.push(...image_urls);
+      } else if (image_url) {
+        imageUrlsArray.push(image_url);
+      }
+
+      const hasImages = imageUrlsArray.length > 0;
+      const isTextToImage = !hasImages;
+
+      // Apply FLUX 2 prompt optimization if requested
+      let finalPrompt = prompt.trim();
+      let streamPromptOptimization: ImageEditOptimizationResult | Flux2T2IOptimizationResult | null = null;
+      
+      if (optimizePrompt) {
+        sendEvent('status', { 
+          message: isTextToImage ? 'Optimizing prompt for FLUX 2 generation...' : 'Optimizing prompt for FLUX 2 editing...', 
+          progress: 5 
+        });
+        try {
+          if (isTextToImage) {
+            // Use text-to-image optimization
+            streamPromptOptimization = await optimizePromptForFlux2T2I(prompt.trim());
+          } else {
+            // Use edit-specific optimization
+            streamPromptOptimization = await optimizePromptForFlux2Edit(prompt.trim());
+          }
+          
+          if (streamPromptOptimization && !streamPromptOptimization.skipped && streamPromptOptimization.optimizedPrompt) {
+            finalPrompt = streamPromptOptimization.optimizedPrompt;
+            sendEvent('promptOptimized', {
+              originalPrompt: prompt.trim(),
+              optimizedPrompt: finalPrompt,
+              reasoning: streamPromptOptimization.reasoning
+            });
+          }
+        } catch (err) {
+          logger.warn('FLUX 2 streaming prompt optimization failed', { error: (err as Error).message });
+        }
+      }
+
+      sendEvent('status', { 
+        message: isTextToImage ? 'Starting FLUX 2 generation...' : 'Starting FLUX 2 image editing...', 
+        progress: 10 
+      });
+
+      // Build request body based on mode
+      let requestBody: Record<string, unknown>;
+      let queueEndpoint: string;
+
+      if (isTextToImage) {
+        // FLUX 2 Text-to-Image
+        queueEndpoint = 'https://queue.fal.run/fal-ai/flux-2';
+        
+        // Convert aspect ratio to image_size format
+        const aspectToSize: Record<string, string> = {
+          '1:1': 'square',
+          '4:3': 'landscape_4_3',
+          '16:9': 'landscape_16_9',
+          '3:4': 'portrait_4_3',
+          '9:16': 'portrait_16_9'
+        };
+        
+        requestBody = {
+          prompt: finalPrompt, // Use optimized prompt if available
+          guidance_scale: 2.5,
+          num_inference_steps: 28,
+          num_images: numImages,
+          image_size: aspect_ratio ? (aspectToSize[aspect_ratio] || 'landscape_4_3') : 'landscape_4_3',
+          output_format: 'png',
+          enable_safety_checker: false,
+          acceleration: 'regular',
+          ...(seed !== undefined && { seed })
+        };
+      } else {
+        // FLUX 2 Image Editing
+        queueEndpoint = 'https://queue.fal.run/fal-ai/flux-2/edit';
+        
+        requestBody = {
+          prompt: finalPrompt, // Use optimized prompt if available
+          image_urls: imageUrlsArray,
+          guidance_scale: 2.5,
+          num_inference_steps: 28,
+          num_images: numImages,
+          output_format: 'png',
+          enable_safety_checker: false,
+          acceleration: 'regular',
+          ...(seed !== undefined && { seed })
+        };
+      }
+
+      logger.debug('FLUX 2 streaming request', { 
+        endpoint: queueEndpoint, 
+        mode: isTextToImage ? 'text-to-image' : 'edit',
+        imageCount: imageUrlsArray.length 
+      });
+      
+      // Submit to queue
+      const submitResponse = await fetch(queueEndpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!submitResponse.ok) {
+        const errorText = await submitResponse.text();
+        logger.error('FLUX 2 queue submit error', { status: submitResponse.status, error: errorText });
+        sendEvent('error', { error: `Failed to start generation: ${submitResponse.status}` });
+        res.end();
+        return;
+      }
+
+      const queueData = await submitResponse.json() as { request_id: string };
+      const requestId = queueData.request_id;
+      
+      // Determine the model path for polling based on mode
+      const modelPath = isTextToImage ? 'fal-ai/flux-2' : 'fal-ai/flux-2/edit';
+
+      sendEvent('status', { message: 'Processing...', progress: 10, requestId });
+
+      // Poll for status
+      let completed = false;
+      let attempts = 0;
+      const maxAttempts = 120; // 2 minutes max with 1s intervals
+      
+      while (!completed && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        attempts++;
+
+        const statusResponse = await fetch(
+          `https://queue.fal.run/${modelPath}/requests/${requestId}/status`,
+          {
+            headers: { 'Authorization': `Key ${FAL_API_KEY}` }
+          }
+        );
+
+        if (!statusResponse.ok) {
+          continue;
+        }
+
+        const statusData = await statusResponse.json() as { 
+          status: string; 
+          logs?: Array<{ message: string }>; 
+          queue_position?: number 
+        };
+        
+        if (statusData.status === 'IN_QUEUE') {
+          const queuePos = statusData.queue_position ?? 0;
+          sendEvent('status', { 
+            message: `In queue (position: ${queuePos})...`, 
+            progress: 15,
+            queuePosition: queuePos
+          });
+        } else if (statusData.status === 'IN_PROGRESS') {
+          // Send progress based on attempts
+          const progress = Math.min(20 + (attempts * 2), 90);
+          sendEvent('status', { 
+            message: 'Generating...', 
+            progress,
+            logs: statusData.logs?.map(l => l.message) 
+          });
+        } else if (statusData.status === 'COMPLETED') {
+          completed = true;
+          sendEvent('status', { message: 'Finalizing...', progress: 95 });
+        } else if (statusData.status === 'FAILED') {
+          sendEvent('error', { error: 'Generation failed' });
+          res.end();
+          return;
+        }
+      }
+
+      if (!completed) {
+        sendEvent('error', { error: 'Generation timed out' });
+        res.end();
+        return;
+      }
+
+      // Fetch result
+      const resultResponse = await fetch(
+        `https://queue.fal.run/${modelPath}/requests/${requestId}`,
+        {
+          headers: { 'Authorization': `Key ${FAL_API_KEY}` }
+        }
+      );
+
+      if (!resultResponse.ok) {
+        sendEvent('error', { error: 'Failed to fetch result' });
+        res.end();
+        return;
+      }
+
+      const result = await resultResponse.json() as FalImageResponse;
+
+      // Extract image URLs
+      const images: string[] = [];
+      if (result.images && Array.isArray(result.images)) {
+        for (const img of result.images) {
+          if (typeof img === 'string') {
+            images.push(img);
+          } else if (img && typeof img === 'object' && img.url) {
+            images.push(img.url);
+          }
+        }
+      }
+
+      sendEvent('complete', {
+        success: true,
+        images,
+        remainingCredits: updateResult.credits,
+        creditsDeducted: creditsRequired
+      });
+      
+      res.end();
+    } catch (error) {
+      const err = error as Error;
+      logger.error('FLUX 2 streaming error:', { error: err.message });
+      sendEvent('error', { error: err.message });
+      res.end();
     }
   });
 
