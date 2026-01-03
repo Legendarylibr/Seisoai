@@ -1,8 +1,9 @@
 [build]
 builder = "nixpacks"
+buildCommand = "npm run build"
 
 [deploy]
-startCommand = "npm run build && npx tsx serve-real-backend.ts"
+startCommand = "npx tsx serve-real-backend.ts"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 180
 restartPolicyType = "ON_FAILURE"

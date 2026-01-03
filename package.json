@@ -10,8 +10,7 @@
     "start:backend": "cd backend && tsx server.ts",
     "build:start": "npm run build && npm start",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview",
-    "postinstall": "cd backend && npm install"
+    "preview": "vite preview"
   },
   "dependencies": {
     "tsx": "^4.7.1",
