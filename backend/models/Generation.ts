@@ -75,8 +75,8 @@ const generationSchema = new mongoose.Schema<IGeneration>({
 // Compound index for efficient user queries
 generationSchema.index({ userId: 1, createdAt: -1 });
 
-// TTL index - auto-delete generations older than 90 days (optional, can be removed)
-// generationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
+// TTL index - auto-delete generations older than 90 days (storage optimization)
+generationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
 
 const Generation = mongoose.model<IGeneration>('Generation', generationSchema);
 

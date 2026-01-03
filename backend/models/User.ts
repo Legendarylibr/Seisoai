@@ -77,6 +77,19 @@ interface UserModel extends Model<IUser> {
   buildUserUpdateQuery(user: { walletAddress?: string; userId?: string; email?: string }): { walletAddress?: string; userId?: string; email?: string } | null;
 }
 
+// Array limit validators for storage optimization
+function arrayLimit20(val: unknown[]): boolean {
+  return val.length <= 20;
+}
+
+function arrayLimit50(val: unknown[]): boolean {
+  return val.length <= 50;
+}
+
+function arrayLimit100(val: unknown[]): boolean {
+  return val.length <= 100;
+}
+
 const userSchema = new mongoose.Schema<IUser>({
   walletAddress: { 
     type: String, 
@@ -127,38 +140,53 @@ const userSchema = new mongoose.Schema<IUser>({
     tokenIds: [String],
     lastChecked: { type: Date, default: Date.now }
   }],
-  paymentHistory: [{
-    txHash: String,
-    tokenSymbol: String,
-    amount: Number,
-    credits: Number,
-    chainId: String,
-    walletType: String,
-    timestamp: { type: Date, default: Date.now },
-    paymentIntentId: String,
-    subscriptionId: String,
-    type: { type: String, enum: ['crypto', 'stripe', 'nft_bonus', 'referral', 'admin', 'subscription'] }
-  }],
-  generationHistory: [{
-    id: String,
-    prompt: String,
-    style: String,
-    imageUrl: String,
-    videoUrl: String,
-    requestId: String,
-    status: { type: String, enum: ['queued', 'processing', 'completed', 'failed'], default: 'completed' },
-    creditsUsed: Number,
-    timestamp: { type: Date, default: Date.now }
-  }],
-  gallery: [{
-    id: String,
-    imageUrl: String,
-    videoUrl: String,
-    prompt: String,
-    style: String,
-    creditsUsed: Number,
-    timestamp: { type: Date, default: Date.now }
-  }],
+  // NOTE: Full payment history stored in separate Payment collection
+  // This array only keeps last 100 for quick access (storage optimization)
+  paymentHistory: {
+    type: [{
+      txHash: String,
+      tokenSymbol: String,
+      amount: Number,
+      credits: Number,
+      chainId: String,
+      walletType: String,
+      timestamp: { type: Date, default: Date.now },
+      paymentIntentId: String,
+      subscriptionId: String,
+      type: { type: String, enum: ['crypto', 'stripe', 'nft_bonus', 'referral', 'admin', 'subscription'] }
+    }],
+    validate: [arrayLimit100, 'Payment history exceeds limit of 100']
+  },
+  // NOTE: Full generation history stored in separate Generation collection
+  // This array only keeps last 20 for quick access (storage optimization)
+  generationHistory: {
+    type: [{
+      id: String,
+      prompt: { type: String, maxlength: 500 }, // Limit prompt length
+      style: String,
+      imageUrl: String,
+      videoUrl: String,
+      requestId: String,
+      status: { type: String, enum: ['queued', 'processing', 'completed', 'failed'], default: 'completed' },
+      creditsUsed: Number,
+      timestamp: { type: Date, default: Date.now }
+    }],
+    validate: [arrayLimit20, 'Generation history exceeds limit of 20']
+  },
+  // NOTE: Full gallery stored in separate GalleryItem collection
+  // This array only keeps last 50 for quick access (storage optimization)
+  gallery: {
+    type: [{
+      id: String,
+      imageUrl: String,
+      videoUrl: String,
+      prompt: { type: String, maxlength: 500 }, // Limit prompt length
+      style: String,
+      creditsUsed: Number,
+      timestamp: { type: Date, default: Date.now }
+    }],
+    validate: [arrayLimit50, 'Gallery exceeds limit of 50']
+  },
   settings: {
     preferredStyle: String,
     defaultImageSize: String,

@@ -61,7 +61,7 @@ const app: Express = express();
 // Trust proxy for accurate IP addresses
 app.set('trust proxy', 1);
 
-// Security middleware - Helmet
+// Security middleware - Helmet (configured for compatibility with in-app browsers like Instagram, Twitter, etc.)
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -70,56 +70,34 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.stripe.com", "https://checkout.stripe.com", "https://hooks.stripe.com", "https://static.cloudflareinsights.com"],
       imgSrc: ["'self'", "data:", "https:", "blob:", "https://*.stripe.com"],
       connectSrc: ["'self'", "http://localhost:3001", "http://localhost:3000", "http://localhost:5173", "https://api.fal.ai", "https://api.mainnet-beta.solana.com", "https://solana-api.projectserum.com", "https://rpc.ankr.com", "https://solana-mainnet.g.alchemy.com", "https://mainnet.helius-rpc.com", "https://api.devnet.solana.com", "https://js.stripe.com", "https://api.stripe.com", "https://hooks.stripe.com", "https://checkout.stripe.com", "https://static.cloudflareinsights.com", "https:", "wss:"],
-      fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+      fontSrc: ["'self'", "data:", "https://fonts.gstatic.com", "https:"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'", "data:", "blob:", "https:"],
       frameSrc: ["'self'", "https://js.stripe.com", "https://checkout.stripe.com", "https://hooks.stripe.com"],
+      frameAncestors: ["'self'", "https:", "http:"], // Allow embedding from any origin
     },
   },
   crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false, // Disable for in-app browser compatibility
+  crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin resource loading
   hidePoweredBy: true,
-  referrerPolicy: { policy: "strict-origin-when-cross-origin" }
+  referrerPolicy: { policy: "no-referrer-when-downgrade" } // More permissive referrer policy
 }));
 
 // Compression
 app.use(compression());
 
-// CORS Configuration
-const allowedOriginsStr = config.ALLOWED_ORIGINS || '';
-const allowedOrigins = allowedOriginsStr
-  .split(',')
-  .map(origin => origin.trim())
-  .filter(origin => origin.length > 0);
-
-logger.info('CORS configuration', {
-  allowedOrigins: allowedOrigins.length > 0 ? allowedOrigins : 'All origins allowed (development)'
-});
+// CORS Configuration - Allow all origins (security handled by auth middleware)
+// This ensures the app works in all browsers including in-app browsers (Instagram, Twitter, etc.)
+logger.info('CORS configuration', { mode: 'permissive - all origins allowed' });
 
 app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    // Development mode - allow all origins
-    if (config.isDevelopment) {
-      logger.info('External request in development', { origin });
-      return callback(null, true);
-    }
-
-    // Production mode - check whitelist
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    logger.warn('Blocked request from unauthorized origin', { origin });
-    callback(new Error('Not allowed by CORS'));
-  },
+  origin: true, // Allow all origins
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Stripe-Signature', 'Cache-Control', 'Pragma'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Stripe-Signature', 'Cache-Control', 'Pragma', 'Accept', 'Origin', 'X-CSRF-Token'],
   exposedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400, // Cache preflight for 24 hours
   optionsSuccessStatus: 200
 }));
 
