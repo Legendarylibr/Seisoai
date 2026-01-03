@@ -22,6 +22,53 @@ interface AuthenticatedRequest extends Request {
 
 const FAL_API_KEY = config.FAL_API_KEY;
 
+/**
+ * Refund credits to a user after a failed generation
+ */
+async function refundCredits(
+  user: IUser,
+  credits: number,
+  reason: string
+): Promise<IUser | null> {
+  try {
+    const User = mongoose.model<IUser>('User');
+    const updateQuery = buildUserUpdateQuery(user);
+    
+    if (!updateQuery) {
+      logger.error('Cannot refund credits: no valid user identifier', { userId: user.userId });
+      return null;
+    }
+
+    const updatedUser = await User.findOneAndUpdate(
+      updateQuery,
+      {
+        $inc: { credits: credits, totalCreditsSpent: -credits }
+      },
+      { new: true }
+    );
+
+    if (updatedUser) {
+      logger.info('Credits refunded for failed layer extraction', {
+        userId: user.userId || user.email || user.walletAddress,
+        creditsRefunded: credits,
+        newBalance: updatedUser.credits,
+        reason
+      });
+    }
+
+    return updatedUser;
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to refund credits', {
+      userId: user.userId,
+      credits,
+      reason,
+      error: err.message
+    });
+    return null;
+  }
+}
+
 export function createExtractRoutes(deps: Dependencies) {
   const router = Router();
   const { freeImageRateLimiter, requireCredits } = deps;
@@ -107,9 +154,12 @@ export function createExtractRoutes(deps: Dependencies) {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({})) as { detail?: string };
+          // Refund credits on API failure
+          await refundCredits(user, creditsToDeduct, `Layer extraction API error: ${response.status}`);
           res.status(response.status).json({
             success: false,
-            error: errorData.detail || 'Failed to extract layers'
+            error: errorData.detail || 'Failed to extract layers',
+            creditsRefunded: creditsToDeduct
           });
           return;
         }
@@ -125,9 +175,16 @@ export function createExtractRoutes(deps: Dependencies) {
       } catch (error) {
         const err = error as Error;
         logger.error('Extract layers error', { error: err.message });
+        // Refund credits on unexpected error
+        const user = req.user;
+        const creditsToRefund = 1;
+        if (user) {
+          await refundCredits(user, creditsToRefund, `Layer extraction error: ${err.message}`);
+        }
         res.status(500).json({ 
           success: false, 
-          error: 'Failed to extract layers' 
+          error: 'Failed to extract layers',
+          creditsRefunded: user ? creditsToRefund : 0
         });
       }
     }

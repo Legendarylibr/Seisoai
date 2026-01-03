@@ -160,7 +160,13 @@ const ImageOutput: React.FC = () => {
     }
 
     const modelForCredits = selectedModel || multiImageModel || 'flux';
-    const requiredCredits = modelForCredits === 'nano-banana-pro' ? 2 : 1;
+    // 20% above cost pricing: Flux Pro = 0.6, Flux 2/Qwen = 0.3, Nano Banana = 1.25
+    const getCreditsForModel = (model: string): number => {
+      if (model === 'flux-2' || model === 'qwen-image-layered') return 0.3;
+      if (model === 'nano-banana-pro') return 1.25;
+      return 0.6;
+    };
+    const requiredCredits = getCreditsForModel(modelForCredits);
     if (availableCredits < requiredCredits) {
       setError(`Insufficient credits. Need ${requiredCredits}, have ${availableCredits}.`);
       return;
@@ -221,7 +227,9 @@ const ImageOutput: React.FC = () => {
       
       // Save and deduct credits
       const userIdentifier = isEmailAuth ? emailContext.userId : address;
-      const creditsUsed = (selectedModel || multiImageModel) === 'nano-banana-pro' ? 2 : 1;
+      // 20% above cost pricing
+      const modelUsed = selectedModel || multiImageModel || 'flux';
+      const creditsUsed = getCreditsForModel(modelUsed);
       const promptForHistory = trimmedPrompt || (currentGeneration?.style?.prompt || 'No prompt');
       
       try {

@@ -19,7 +19,7 @@ const MODEL_CONFIG: Record<string, ModelConfig> = {
     id: 'flux',
     name: 'FLUX',
     icon: Zap,
-    credits: 1,
+    credits: 0.6,
     tagline: 'Fast',
     description: 'Quick generation'
   },
@@ -27,7 +27,7 @@ const MODEL_CONFIG: Record<string, ModelConfig> = {
     id: 'flux-multi',
     name: 'FLUX',
     icon: Zap,
-    credits: 1,
+    credits: 0.6,
     tagline: 'Fast',
     description: 'Multi-image blending'
   },
@@ -35,23 +35,23 @@ const MODEL_CONFIG: Record<string, ModelConfig> = {
     id: 'flux-2',
     name: 'FLUX 2',
     icon: Wand2,
-    credits: 1,
-    tagline: 'Realism',
+    credits: 0.3,
+    tagline: 'Cheap',
     description: 'Enhanced realism & text'
   },
   'nano-banana-pro': {
     id: 'nano-banana-pro',
-    name: 'Banana',
+    name: 'Nano Banana',
     icon: Sparkles,
-    credits: 2,
-    tagline: 'Quality',
-    description: 'Better quality'
+    credits: 1.25,
+    tagline: '50% OFF',
+    description: 'Premium quality'
   },
   'qwen-image-layered': {
     id: 'qwen-image-layered',
     name: 'Qwen',
     icon: Layers,
-    credits: 1,
+    credits: 0.3,
     tagline: 'Layers',
     description: 'Extract RGBA layers'
   }

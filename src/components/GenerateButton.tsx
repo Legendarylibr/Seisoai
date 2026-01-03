@@ -67,7 +67,13 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
       return;
     }
 
-    const creditsToDeduct = multiImageModel === 'nano-banana-pro' ? 2 : 1;
+    // 20% above cost pricing: Flux Pro = 0.6, Flux 2/Qwen = 0.3, Nano Banana = 1.25 (50% off loss leader)
+    const getCreditsForModel = (model: string | undefined): number => {
+      if (model === 'flux-2' || model === 'qwen-image-layered') return 0.3;
+      if (model === 'nano-banana-pro') return 1.25;
+      return 0.6; // flux, flux-multi
+    };
+    const creditsToDeduct = getCreditsForModel(multiImageModel);
     const currentCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
     const newCredits = Math.max(0, currentCredits - creditsToDeduct);
     
@@ -134,7 +140,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
         prompt: promptForDisplay,
         style: selectedStyle?.name || 'No Style',
         imageUrl: imageUrls[0],
-        creditsUsed: multiImageModel === 'nano-banana-pro' ? 2 : 1,
+        creditsUsed: getCreditsForModel(multiImageModel),
         userId: isEmailAuth ? emailContext.userId : undefined,
         email: isEmailAuth ? emailContext.email : undefined
       }).catch(e => logger.debug('Gallery save failed', { error: e instanceof Error ? e.message : 'Unknown error' }));
@@ -178,7 +184,13 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
   }, []);
 
   const isDisabled = isGenerating || walletLoading || (!isConnected && !isEmailAuth);
-  const creditsNeeded = multiImageModel === 'nano-banana-pro' ? 2 : 1;
+  // 20% above cost pricing
+  const getCreditsNeeded = (model: string | undefined): number => {
+    if (model === 'flux-2' || model === 'qwen-image-layered') return 0.3;
+    if (model === 'nano-banana-pro') return 1.25;
+    return 0.6;
+  };
+  const creditsNeeded = getCreditsNeeded(multiImageModel);
   const isLayerExtract = multiImageModel === 'qwen-image-layered';
   
   // Determine button text

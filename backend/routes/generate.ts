@@ -19,6 +19,57 @@ interface Dependencies {
   requireCredits: (credits: number) => RequestHandler;
 }
 
+/**
+ * Refund credits to a user after a failed generation
+ * @param user - The user to refund
+ * @param credits - Number of credits to refund
+ * @param reason - Reason for the refund (for logging)
+ * @returns The updated user document or null if refund failed
+ */
+async function refundCredits(
+  user: IUser,
+  credits: number,
+  reason: string
+): Promise<IUser | null> {
+  try {
+    const User = mongoose.model<IUser>('User');
+    const updateQuery = buildUserUpdateQuery(user);
+    
+    if (!updateQuery) {
+      logger.error('Cannot refund credits: no valid user identifier', { userId: user.userId });
+      return null;
+    }
+
+    const updatedUser = await User.findOneAndUpdate(
+      updateQuery,
+      {
+        $inc: { credits: credits, totalCreditsSpent: -credits }
+      },
+      { new: true }
+    );
+
+    if (updatedUser) {
+      logger.info('Credits refunded for failed generation', {
+        userId: user.userId || user.email || user.walletAddress,
+        creditsRefunded: credits,
+        newBalance: updatedUser.credits,
+        reason
+      });
+    }
+
+    return updatedUser;
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to refund credits', {
+      userId: user.userId,
+      credits,
+      reason,
+      error: err.message
+    });
+    return null;
+  }
+}
+
 interface AuthenticatedRequest extends Request {
   user?: IUser;
   creditsRequired?: number;
@@ -730,7 +781,14 @@ export function createGenerationRoutes(deps: Dependencies) {
       if (!response.ok) {
         const errorText = await response.text();
         logger.error('FAL API error', { status: response.status, error: errorText });
-        throw new Error(`FAL API error: ${response.status} - ${errorText}`);
+        // Refund credits on API failure
+        await refundCredits(user, creditsRequired, `FAL API error: ${response.status}`);
+        res.status(500).json({
+          success: false,
+          error: `Image generation failed: ${response.status}`,
+          creditsRefunded: creditsRequired
+        });
+        return;
       }
 
       const result = await response.json() as FalImageResponse;
@@ -774,9 +832,16 @@ export function createGenerationRoutes(deps: Dependencies) {
     } catch (error) {
       const err = error as Error;
       logger.error('Image generation error:', { error: err.message });
+      // Refund credits on unexpected error
+      const user = req.user;
+      const creditsRequired = req.creditsRequired || 1;
+      if (user) {
+        await refundCredits(user, creditsRequired, `Image generation error: ${err.message}`);
+      }
       res.status(500).json({
         success: false,
-        error: err.message
+        error: err.message,
+        creditsRefunded: user ? creditsRequired : 0
       });
     }
   });
@@ -982,7 +1047,9 @@ export function createGenerationRoutes(deps: Dependencies) {
       if (!submitResponse.ok) {
         const errorText = await submitResponse.text();
         logger.error('FLUX 2 queue submit error', { status: submitResponse.status, error: errorText });
-        sendEvent('error', { error: `Failed to start generation: ${submitResponse.status}` });
+        // Refund credits on queue submit failure
+        await refundCredits(user, creditsRequired, `FLUX 2 queue submit error: ${submitResponse.status}`);
+        sendEvent('error', { error: `Failed to start generation: ${submitResponse.status}`, creditsRefunded: creditsRequired });
         res.end();
         return;
       }
@@ -1040,14 +1107,18 @@ export function createGenerationRoutes(deps: Dependencies) {
           completed = true;
           sendEvent('status', { message: 'Finalizing...', progress: 95 });
         } else if (statusData.status === 'FAILED') {
-          sendEvent('error', { error: 'Generation failed' });
+          // Refund credits on generation failure
+          await refundCredits(user, creditsRequired, 'FLUX 2 streaming generation failed');
+          sendEvent('error', { error: 'Generation failed', creditsRefunded: creditsRequired });
           res.end();
           return;
         }
       }
 
       if (!completed) {
-        sendEvent('error', { error: 'Generation timed out' });
+        // Refund credits on timeout
+        await refundCredits(user, creditsRequired, 'FLUX 2 streaming generation timed out');
+        sendEvent('error', { error: 'Generation timed out', creditsRefunded: creditsRequired });
         res.end();
         return;
       }
@@ -1061,7 +1132,9 @@ export function createGenerationRoutes(deps: Dependencies) {
       );
 
       if (!resultResponse.ok) {
-        sendEvent('error', { error: 'Failed to fetch result' });
+        // Refund credits if result fetch fails
+        await refundCredits(user, creditsRequired, 'Failed to fetch FLUX 2 streaming result');
+        sendEvent('error', { error: 'Failed to fetch result', creditsRefunded: creditsRequired });
         res.end();
         return;
       }
@@ -1091,7 +1164,13 @@ export function createGenerationRoutes(deps: Dependencies) {
     } catch (error) {
       const err = error as Error;
       logger.error('FLUX 2 streaming error:', { error: err.message });
-      sendEvent('error', { error: err.message });
+      // Refund credits on unexpected error
+      const user = req.user;
+      const creditsRequired = req.creditsRequired || 1;
+      if (user) {
+        await refundCredits(user, creditsRequired, `FLUX 2 streaming error: ${err.message}`);
+      }
+      sendEvent('error', { error: err.message, creditsRefunded: user ? creditsRequired : 0 });
       res.end();
     }
   });
@@ -1324,7 +1403,9 @@ export function createGenerationRoutes(deps: Dependencies) {
         } catch {
           logger.error('Failed to parse Veo 3.1 error response');
         }
-        res.status(submitResponse.status).json({ success: false, error: errorMessage });
+        // Refund credits on video submit failure
+        await refundCredits(user, creditsToDeduct, `Veo 3.1 submit error: ${submitResponse.status}`);
+        res.status(submitResponse.status).json({ success: false, error: errorMessage, creditsRefunded: creditsToDeduct });
         return;
       }
 
@@ -1525,7 +1606,9 @@ export function createGenerationRoutes(deps: Dependencies) {
               fetchUrl,
               errorDetails
             });
-            res.status(500).json({ success: false, error: `Failed to fetch video result (${resultResponse.status})` });
+            // Refund credits on fetch result failure
+            await refundCredits(user, creditsToDeduct, `Failed to fetch video result: ${resultResponse.status}`);
+            res.status(500).json({ success: false, error: `Failed to fetch video result (${resultResponse.status})`, creditsRefunded: creditsToDeduct });
             return;
           }
 
@@ -1601,27 +1684,57 @@ export function createGenerationRoutes(deps: Dependencies) {
             resultData: JSON.stringify(resultData).substring(0, 1000),
             checkedPaths: ['video.url', 'data.video.url', 'output.video.url', 'response.video.url', 'result.video.url', 'payload.video.url', 'url', 'video_url', 'output.url']
           });
-          res.status(500).json({ success: false, error: 'Video generation completed but no video URL found' });
+          // Refund credits when video URL not found
+          await refundCredits(user, creditsToDeduct, 'Video completed but no URL found');
+          res.status(500).json({ success: false, error: 'Video generation completed but no video URL found', creditsRefunded: creditsToDeduct });
           return;
         }
 
         // Check for failed status
         if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
           logger.error('Video generation failed', { requestId, status: normalizedStatus });
-          res.status(500).json({ success: false, error: 'Video generation failed' });
+          // Refund credits on generation failure
+          await refundCredits(user, creditsToDeduct, `Video generation failed: ${normalizedStatus}`);
+          res.status(500).json({ success: false, error: 'Video generation failed', creditsRefunded: creditsToDeduct });
           return;
         }
       }
 
       // Timeout
       logger.error('Video generation timeout', { requestId, elapsed: maxWaitTime / 1000 + 's' });
-      res.status(504).json({ success: false, error: 'Video generation timed out. Please try again.' });
+      // Refund credits on timeout
+      await refundCredits(user, creditsToDeduct, 'Video generation timed out');
+      res.status(504).json({ success: false, error: 'Video generation timed out. Please try again.', creditsRefunded: creditsToDeduct });
     } catch (error) {
       const err = error as Error;
       logger.error('Video generation error:', { error: err.message });
+      // Refund credits on unexpected error
+      const user = req.user;
+      // Calculate credits for refund (same calculation as in the route)
+      const { duration = '8s', generate_audio = true, quality = 'fast' } = req.body as {
+        duration?: string;
+        generate_audio?: boolean;
+        quality?: string;
+      };
+      const calculateVideoCreditsForRefund = (dur: string, hasAudio: boolean, qual: string): number => {
+        const durationSeconds = parseInt(dur.replace('s', '')) || 8;
+        let pricePerSecond: number;
+        if (qual === 'quality') {
+          pricePerSecond = hasAudio ? 0.825 : 0.55;
+        } else {
+          pricePerSecond = hasAudio ? 0.44 : 0.22;
+        }
+        const totalCost = durationSeconds * pricePerSecond;
+        return Math.max(2, Math.ceil(totalCost / 0.20));
+      };
+      const creditsToRefund = calculateVideoCreditsForRefund(duration, generate_audio, quality);
+      if (user) {
+        await refundCredits(user, creditsToRefund, `Video generation error: ${err.message}`);
+      }
       res.status(500).json({
         success: false,
-        error: err.message
+        error: err.message,
+        creditsRefunded: user ? creditsToRefund : 0
       });
     }
   });
@@ -1652,10 +1765,11 @@ export function createGenerationRoutes(deps: Dependencies) {
       // Clamp duration between 10 and 180 seconds
       const clampedDuration = Math.max(10, Math.min(180, duration));
 
-      // Calculate credits based on duration: 1 credit per minute (rounded up), minimum 1
+      // Calculate credits based on duration: 0.25 credits per minute (20% margin)
+      // API cost: $0.02/min × 1.2 = $0.024/min
       const calculateMusicCredits = (durationSecs: number): number => {
         const minutes = durationSecs / 60;
-        return Math.max(1, Math.ceil(minutes));
+        return Math.max(0.25, Math.ceil(minutes * 4) / 4); // Round up to nearest 0.25
       };
       const creditsRequired = calculateMusicCredits(clampedDuration);
       
@@ -1804,12 +1918,16 @@ export function createGenerationRoutes(deps: Dependencies) {
               return;
             } else {
               logger.error('Music completed but no audio in response', { requestId, resultData: JSON.stringify(resultData).substring(0, 500) });
-              res.status(500).json({ success: false, error: 'No audio in response' });
+              // Refund credits when no audio in response
+              await refundCredits(user, creditsRequired, 'Music completed but no audio in response');
+              res.status(500).json({ success: false, error: 'No audio in response', creditsRefunded: creditsRequired });
               return;
             }
           } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
             logger.error('Music generation failed', { requestId, statusData });
-            res.status(500).json({ success: false, error: 'Music generation failed' });
+            // Refund credits on music generation failure
+            await refundCredits(user, creditsRequired, `Music generation failed: ${normalizedStatus}`);
+            res.status(500).json({ success: false, error: 'Music generation failed', creditsRefunded: creditsRequired });
             return;
           }
 
@@ -1831,7 +1949,9 @@ export function createGenerationRoutes(deps: Dependencies) {
               consecutiveErrors,
               lastError: pollErr.message 
             });
-            res.status(500).json({ success: false, error: 'Music generation failed - polling errors' });
+            // Refund credits on repeated polling errors
+            await refundCredits(user, creditsRequired, 'Music generation polling errors');
+            res.status(500).json({ success: false, error: 'Music generation failed - polling errors', creditsRefunded: creditsRequired });
             return;
           }
         }
@@ -1839,13 +1959,29 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Timeout reached
       logger.warn('Music generation timed out', { requestId, pollCount, elapsedMs: Date.now() - startTime });
-      res.status(504).json({ success: false, error: 'Music generation timed out. Please try again.' });
+      // Refund credits on timeout
+      await refundCredits(user, creditsRequired, 'Music generation timed out');
+      res.status(504).json({ success: false, error: 'Music generation timed out. Please try again.', creditsRefunded: creditsRequired });
     } catch (error) {
       const err = error as Error;
       logger.error('Music generation error:', { error: err.message });
+      // Refund credits on unexpected error
+      const user = req.user;
+      // Calculate credits for refund (same calculation as in the route)
+      const { duration = 30 } = req.body as { duration?: number };
+      const clampedDuration = Math.max(10, Math.min(180, duration));
+      const calculateMusicCreditsForRefund = (durationSecs: number): number => {
+        const minutes = durationSecs / 60;
+        return Math.max(1, Math.ceil(minutes * 2));
+      };
+      const creditsToRefund = calculateMusicCreditsForRefund(clampedDuration);
+      if (user) {
+        await refundCredits(user, creditsToRefund, `Music generation error: ${err.message}`);
+      }
       res.status(500).json({
         success: false,
-        error: err.message
+        error: err.message,
+        creditsRefunded: user ? creditsToRefund : 0
       });
     }
   });

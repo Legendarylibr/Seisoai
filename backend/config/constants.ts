@@ -6,10 +6,12 @@
 // Types
 export interface CreditsConfig {
   IMAGE_GENERATION: number;
+  IMAGE_GENERATION_FLUX_2: number;
+  IMAGE_GENERATION_NANO: number;
   IMAGE_GENERATION_MULTI: number;
   VIDEO_GENERATION_PER_SECOND: number;
   VIDEO_GENERATION_MINIMUM: number;
-  MUSIC_GENERATION: number;
+  MUSIC_GENERATION_PER_MINUTE: number;
   LAYER_EXTRACTION: number;
 }
 
@@ -66,14 +68,17 @@ export interface SupportedChains {
   solana: ChainInfo;
 }
 
-// Credit costs
+// Credit costs - 20% above API cost, Nano Banana at 50% off (loss leader)
+// 1 credit = $0.10
 export const CREDITS: CreditsConfig = {
-  IMAGE_GENERATION: 1,
-  IMAGE_GENERATION_MULTI: 2,
+  IMAGE_GENERATION: 0.6,         // Flux Pro Kontext ($0.05 API × 1.2 = $0.06)
+  IMAGE_GENERATION_FLUX_2: 0.3,  // Flux 2 ($0.025 API × 1.2 = $0.03)
+  IMAGE_GENERATION_NANO: 1.25,   // Nano Banana Pro ($0.25 API × 0.5 = $0.125 - LOSS LEADER)
+  IMAGE_GENERATION_MULTI: 0.6,   // Multi-image (same as Flux Pro)
   VIDEO_GENERATION_PER_SECOND: 2,
   VIDEO_GENERATION_MINIMUM: 2,
-  MUSIC_GENERATION: 1,
-  LAYER_EXTRACTION: 1
+  MUSIC_GENERATION_PER_MINUTE: 0.25, // Music ($0.02/min API × 1.2 = $0.024/min)
+  LAYER_EXTRACTION: 0.3          // Same as Flux 2
 };
 
 // Free image limits

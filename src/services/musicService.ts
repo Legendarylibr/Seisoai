@@ -130,21 +130,21 @@ export const generateMusic = async ({
 
 /**
  * Calculate music generation credits based on duration
- * Pricing: 1 credit per minute (rounded up), minimum 1 credit
- * 1 credit = $0.10
+ * Pricing: 0.25 credits per minute (rounded up), minimum 0.25 credits
+ * API cost: $0.02/min × 1.2 = $0.024/min (20% margin)
  */
 export const calculateMusicCredits = (duration: number): number => {
-  // 1 credit per minute (60 seconds), rounded up, minimum 1
+  // 0.25 credits per minute, rounded up to nearest 0.25, minimum 0.25
   const seconds = Math.max(10, Math.min(180, duration || 30));
   const minutes = seconds / 60;
-  return Math.max(1, Math.ceil(minutes));
+  return Math.max(0.25, Math.ceil(minutes * 4) / 4); // Round up to nearest 0.25
 };
 
 /**
  * Calculate cost in dollars
  */
 export const calculateMusicCost = (duration: number): string => {
-  // $0.10 per credit (1 credit per minute)
+  // $0.10 per credit
   const credits = calculateMusicCredits(duration);
   return (credits * 0.10).toFixed(2);
 };

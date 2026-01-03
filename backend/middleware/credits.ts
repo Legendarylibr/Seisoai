@@ -89,17 +89,22 @@ export const createRequireCreditsForModel = (
 
         req.user = user;
 
-        // Determine credit cost based on model and image count
-        const { model, image_urls, image_url } = req.body;
-        let requiredCredits = 1;
+        // Determine credit cost based on model
+        // 20% above API cost, Nano Banana Pro at 50% off (loss leader)
+        const { model } = req.body;
+        let requiredCredits = 0.6; // Default: Flux Pro = 0.6 credits (+20%)
 
-        // Multi-image or certain models cost more
-        if (model === 'nano-banana-pro') {
-          const imageCount = image_urls?.length || (image_url ? 1 : 0);
-          requiredCredits = imageCount >= 2 ? 2 : 1;
-        } else if (image_urls && image_urls.length >= 2) {
-          requiredCredits = 2;
+        if (model === 'flux-2') {
+          // Flux 2 ($0.025 API × 1.2 = $0.03)
+          requiredCredits = 0.3;
+        } else if (model === 'nano-banana-pro') {
+          // Nano Banana Pro - LOSS LEADER ($0.25 API × 0.5 = $0.125)
+          requiredCredits = 1.25;
+        } else if (model === 'qwen-image-layered') {
+          // Layer extraction (same as Flux 2)
+          requiredCredits = 0.3;
         }
+        // Default: flux, flux-multi = 0.6 credits
 
         if ((user.credits || 0) < requiredCredits) {
           res.status(402).json({
