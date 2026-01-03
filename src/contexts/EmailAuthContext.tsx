@@ -30,10 +30,14 @@ const EmailAuthContext = createContext<EmailAuthContextValue | null>(null);
 const REFRESH_INTERVAL = 60000;
 
 // PERFORMANCE: Check if we have a token synchronously to avoid blocking UI
+// Handles in-app browsers (Instagram, Twitter) where localStorage may be blocked
 const hasStoredToken = (): boolean => {
   try {
     return !!localStorage.getItem('authToken') && localStorage.getItem('authType') === 'email';
-  } catch { return false; }
+  } catch { 
+    // In-app browsers may block localStorage - return false to show UI immediately
+    return false; 
+  }
 };
 
 interface EmailAuthProviderProps {

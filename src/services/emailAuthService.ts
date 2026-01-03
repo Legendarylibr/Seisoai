@@ -30,6 +30,38 @@ export interface VerifyResponse {
 }
 
 /**
+ * Detect if running in an in-app browser (Twitter, Instagram, Facebook, etc.)
+ * These browsers may have restricted storage access
+ */
+const isInAppBrowser = (): boolean => {
+  const ua = navigator.userAgent || navigator.vendor || '';
+  return (
+    // Instagram in-app browser
+    ua.includes('Instagram') ||
+    // Twitter/X in-app browser
+    ua.includes('Twitter') ||
+    // Facebook in-app browser
+    ua.includes('FBAN') ||
+    ua.includes('FBAV') ||
+    ua.includes('FB_IAB') ||
+    // LinkedIn in-app browser
+    ua.includes('LinkedInApp') ||
+    // TikTok in-app browser
+    ua.includes('BytedanceWebview') ||
+    ua.includes('musical_ly') ||
+    // Snapchat in-app browser
+    ua.includes('Snapchat') ||
+    // Pinterest in-app browser
+    ua.includes('Pinterest') ||
+    // Generic WebView detection
+    (ua.includes('wv') && ua.includes('Android'))
+  );
+};
+
+// In-memory storage fallback for when localStorage is blocked (Instagram, etc.)
+const memoryStorage: Map<string, string> = new Map();
+
+/**
  * Helper function to check if localStorage is available
  */
 const isLocalStorageAvailable = (): boolean => {
@@ -44,47 +76,64 @@ const isLocalStorageAvailable = (): boolean => {
 };
 
 /**
- * Helper function to safely get from localStorage
+ * Helper function to safely get from localStorage with memory fallback
+ * Instagram and other in-app browsers may block localStorage
  */
 const safeGetItem = (key: string): string | null => {
-  if (!isLocalStorageAvailable()) return null;
-  try {
-    return localStorage.getItem(key);
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-    logger.error('Failed to read from localStorage', { key, error: errorMessage });
-    return null;
+  // First try localStorage
+  if (isLocalStorageAvailable()) {
+    try {
+      const value = localStorage.getItem(key);
+      if (value !== null) return value;
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+      logger.debug('Failed to read from localStorage, using memory fallback', { key, error: errorMessage });
+    }
   }
+  // Fallback to memory storage (for in-app browsers)
+  return memoryStorage.get(key) || null;
 };
 
 /**
- * Helper function to safely set to localStorage
+ * Helper function to safely set to localStorage with memory fallback
+ * Stores in both localStorage (when available) and memory (always)
  */
 const safeSetItem = (key: string, value: string): boolean => {
+  // Always store in memory as fallback (for in-app browsers like Instagram)
+  memoryStorage.set(key, value);
+  
   if (!isLocalStorageAvailable()) {
-    logger.warn('localStorage not available, auth state will not persist');
-    return false;
+    if (isInAppBrowser()) {
+      // Silent in in-app browsers - this is expected
+      logger.debug('In-app browser detected, using memory storage for auth');
+    } else {
+      logger.warn('localStorage not available, auth state will not persist across page reloads');
+    }
+    return true; // Return true since we stored in memory
   }
   try {
     localStorage.setItem(key, value);
     return true;
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-    logger.error('Failed to write to localStorage', { key, error: errorMessage });
-    return false;
+    logger.debug('Failed to write to localStorage, using memory fallback', { key, error: errorMessage });
+    return true; // Return true since we stored in memory
   }
 };
 
 /**
- * Helper function to safely remove from localStorage
+ * Helper function to safely remove from localStorage and memory
  */
 const safeRemoveItem = (key: string): void => {
+  // Always remove from memory
+  memoryStorage.delete(key);
+  
   if (!isLocalStorageAvailable()) return;
   try {
     localStorage.removeItem(key);
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-    logger.error('Failed to remove from localStorage', { key, error: errorMessage });
+    logger.debug('Failed to remove from localStorage', { key, error: errorMessage });
   }
 };
 

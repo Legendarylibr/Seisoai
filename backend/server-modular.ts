@@ -78,10 +78,23 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: false,
-  crossOriginOpenerPolicy: false, // Disable for in-app browser compatibility
+  crossOriginOpenerPolicy: { policy: "unsafe-none" }, // Explicitly allow navigation from Twitter/other apps
   crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin resource loading
   hidePoweredBy: true,
-  referrerPolicy: { policy: "no-referrer-when-downgrade" } // More permissive referrer policy
+  referrerPolicy: { policy: "no-referrer-when-downgrade" }, // More permissive referrer policy
+  originAgentCluster: false // Disable for in-app browser compatibility
+}));
+
+// CRITICAL: Handle preflight OPTIONS requests explicitly for all routes
+// This ensures Twitter/Instagram in-app browsers work on first load
+app.options('*', cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Stripe-Signature', 'Cache-Control', 'Pragma', 'Accept', 'Origin', 'X-CSRF-Token'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400,
+  optionsSuccessStatus: 200
 }));
 
 // Compression
@@ -106,12 +119,31 @@ app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static files
+// Static files with in-app browser compatible headers
 const distPath = path.join(__dirname, '..', 'dist');
 if (config.isProduction) {
+  // Add headers for HTML files to work in Twitter/Instagram in-app browsers
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // For HTML pages, add headers that help with in-app browsers
+    if (req.path === '/' || req.path.endsWith('.html') || !req.path.includes('.')) {
+      res.setHeader('X-Frame-Options', 'ALLOWALL');
+      // Ensure browser doesn't block storage in in-app browsers
+      res.setHeader('Permissions-Policy', 'interest-cohort=()');
+    }
+    next();
+  });
+  
   app.use(express.static(distPath, {
     maxAge: '1d',
-    etag: true
+    etag: true,
+    setHeaders: (res, filePath) => {
+      // For HTML files, set no-cache to ensure fresh content
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    }
   }));
   logger.info(`✅ Serving static files from ${distPath}`);
 }
@@ -184,6 +216,11 @@ app.post('/create-checkout-session', (req: Request, res: Response, next: NextFun
 // Fallback for SPA routing (production only)
 if (config.isProduction) {
   app.get('*', (req: Request, res: Response) => {
+    // Set headers for in-app browser compatibility
+    res.setHeader('X-Frame-Options', 'ALLOWALL');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
