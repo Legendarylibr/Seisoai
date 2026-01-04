@@ -182,7 +182,11 @@ export function createGalleryRoutes(deps: Dependencies) {
    */
   router.post('/save', authenticateFlexible, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { walletAddress, userId, email, imageUrl, prompt, model, generationId } = req.body as {
+      const { 
+        walletAddress, userId, email, imageUrl, prompt, model, generationId,
+        // 3D model fields
+        modelType, glbUrl, objUrl, fbxUrl, thumbnailUrl
+      } = req.body as {
         walletAddress?: string;
         userId?: string;
         email?: string;
@@ -190,12 +194,18 @@ export function createGalleryRoutes(deps: Dependencies) {
         prompt?: string;
         model?: string;
         generationId?: string;
+        // 3D model fields
+        modelType?: '3d' | 'image' | 'video';
+        glbUrl?: string;
+        objUrl?: string;
+        fbxUrl?: string;
+        thumbnailUrl?: string;
       };
       
-      if (!imageUrl) {
+      if (!imageUrl && !glbUrl) {
         res.status(400).json({ 
           success: false, 
-          error: 'Image URL required' 
+          error: 'Image URL or GLB URL required' 
         });
         return;
       }
@@ -210,19 +220,41 @@ export function createGalleryRoutes(deps: Dependencies) {
         return;
       }
 
+      // Build gallery item
+      const galleryItem: Record<string, unknown> = {
+        id: generationId || `gen-${Date.now()}`,
+        imageUrl: imageUrl || thumbnailUrl,
+        prompt,
+        style: model,
+        timestamp: new Date(),
+        modelType: modelType || 'image'
+      };
+
+      // Add 3D model fields if present
+      if (modelType === '3d' || glbUrl) {
+        galleryItem.modelType = '3d';
+        galleryItem.glbUrl = glbUrl;
+        galleryItem.objUrl = objUrl;
+        galleryItem.fbxUrl = fbxUrl;
+        galleryItem.thumbnailUrl = thumbnailUrl;
+        // 3D models expire after 1 day
+        galleryItem.expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        
+        logger.info('Saving 3D model to gallery', {
+          userId: user.userId,
+          hasGlb: !!glbUrl,
+          hasObj: !!objUrl,
+          expiresAt: galleryItem.expiresAt
+        });
+      }
+
       const User = mongoose.model<IUser>('User');
       await User.findOneAndUpdate(
         { userId: user.userId },
         {
           $push: {
             gallery: {
-              $each: [{
-                id: generationId || `gen-${Date.now()}`,
-                imageUrl,
-                prompt,
-                style: model,
-                timestamp: new Date()
-              }],
+              $each: [galleryItem],
               $slice: -100 // Keep last 100 items
             }
           }
@@ -231,7 +263,8 @@ export function createGalleryRoutes(deps: Dependencies) {
 
       res.json({
         success: true,
-        message: 'Saved to gallery'
+        message: 'Saved to gallery',
+        expiresAt: galleryItem.expiresAt
       });
     } catch (error) {
       const err = error as Error;
@@ -242,6 +275,38 @@ export function createGalleryRoutes(deps: Dependencies) {
       });
     }
   });
+
+  /**
+   * Clean up expired gallery items (3D models expire after 1 day)
+   * This runs periodically or can be called manually
+   */
+  const cleanupExpiredGalleryItems = async (): Promise<number> => {
+    try {
+      const User = mongoose.model<IUser>('User');
+      const now = new Date();
+      
+      // Remove expired gallery items from all users
+      const result = await User.updateMany(
+        { 'gallery.expiresAt': { $lt: now } },
+        { $pull: { gallery: { expiresAt: { $lt: now } } } }
+      );
+      
+      if (result.modifiedCount > 0) {
+        logger.info('Cleaned up expired gallery items', { 
+          usersAffected: result.modifiedCount 
+        });
+      }
+      
+      return result.modifiedCount;
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Gallery cleanup error', { error: err.message });
+      return 0;
+    }
+  };
+
+  // Run cleanup every hour
+  setInterval(cleanupExpiredGalleryItems, 60 * 60 * 1000);
 
   return router;
 }

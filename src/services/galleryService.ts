@@ -12,6 +12,12 @@ export interface GenerationData {
   userId?: string;
   email?: string;
   settings?: Record<string, unknown>;
+  // 3D model fields
+  modelType?: '3d' | 'image' | 'video';
+  glbUrl?: string;
+  objUrl?: string;
+  fbxUrl?: string;
+  thumbnailUrl?: string;
 }
 
 export interface AddGenerationResult {
@@ -28,6 +34,13 @@ export interface GalleryItem {
   model?: string;
   createdAt: string;
   isPublic?: boolean;
+  // 3D model fields
+  modelType?: '3d' | 'image' | 'video';
+  glbUrl?: string;
+  objUrl?: string;
+  fbxUrl?: string;
+  thumbnailUrl?: string;
+  expiresAt?: string;
 }
 
 export interface GalleryResponse {

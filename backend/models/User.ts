@@ -47,6 +47,13 @@ interface GalleryItem {
   style?: string;
   creditsUsed?: number;
   timestamp?: Date;
+  // 3D model fields
+  modelType?: '3d' | 'image' | 'video';
+  glbUrl?: string;
+  objUrl?: string;
+  fbxUrl?: string;
+  thumbnailUrl?: string;
+  expiresAt?: Date;
 }
 
 interface UserSettings {
@@ -183,7 +190,14 @@ const userSchema = new mongoose.Schema<IUser>({
       prompt: { type: String, maxlength: 500 }, // Limit prompt length
       style: String,
       creditsUsed: Number,
-      timestamp: { type: Date, default: Date.now }
+      timestamp: { type: Date, default: Date.now },
+      // 3D model fields
+      modelType: { type: String, enum: ['3d', 'image', 'video'], default: 'image' },
+      glbUrl: String,
+      objUrl: String,
+      fbxUrl: String,
+      thumbnailUrl: String,
+      expiresAt: Date // For 3D models: expires 1 day after creation
     }],
     validate: [arrayLimit50, 'Gallery exceeds limit of 50']
   },
@@ -206,6 +220,7 @@ userSchema.index({ userId: 1 });
 userSchema.index({ createdAt: 1 });
 userSchema.index({ expiresAt: 1 });
 userSchema.index({ 'gallery.timestamp': 1 });
+userSchema.index({ 'gallery.expiresAt': 1 }); // For cleaning up expired 3D models
 
 // Generate unique userId for all users
 userSchema.pre('save', async function(next) {

@@ -605,16 +605,28 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
           walletContext.fetchCredits(walletContext.address, 3, true);
         }
 
-        // Save to gallery
+        // Save to main gallery with 3D model URLs (expires after 1 day)
         const identifier = isEmailAuth ? emailContext.userId : walletContext.address;
-        if (identifier) {
+        const glbUrl = result.model_glb?.url || result.model_urls?.glb?.url;
+        if (identifier && glbUrl) {
           addGeneration(identifier, {
             prompt: prompt || 'Character 3D Model',
             style: `3D ${generateType}`,
             imageUrl: result.thumbnail?.url || finalImageUrl,
             creditsUsed: generateType === 'Geometry' ? 2 : 3,
             userId: isEmailAuth ? emailContext.userId : undefined,
-            email: isEmailAuth ? emailContext.email : undefined
+            email: isEmailAuth ? emailContext.email : undefined,
+            // 3D model data - saved to gallery for 1 day
+            modelType: '3d',
+            glbUrl: glbUrl,
+            objUrl: result.model_urls?.obj?.url,
+            fbxUrl: result.model_urls?.fbx?.url,
+            thumbnailUrl: result.thumbnail?.url
+          }).then(() => {
+            logger.info('3D model saved to gallery (expires in 24h)', { 
+              hasGlb: !!glbUrl,
+              hasObj: !!result.model_urls?.obj?.url 
+            });
           }).catch(e => logger.debug('Gallery save failed', { error: e.message }));
         }
         

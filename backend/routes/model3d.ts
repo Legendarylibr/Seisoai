@@ -262,35 +262,45 @@ export function createModel3dRoutes(deps: Dependencies) {
           continue;
         }
 
-        const statusData = await statusResponse.json() as { 
+        const rawStatusData = await statusResponse.json() as { 
           status?: string;
+          // FAL may include result data in status response
+          data?: {
+            model_glb?: { url?: string };
+            thumbnail?: { url?: string };
+            model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+          };
+          // Or unwrapped
           model_glb?: { url?: string };
           thumbnail?: { url?: string };
           model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
         };
         
-        const normalizedStatus = (statusData.status || '').toUpperCase();
+        // Handle wrapped or unwrapped data
+        const statusResult = rawStatusData.data || rawStatusData;
+        const normalizedStatus = (rawStatusData.status || '').toUpperCase();
 
         logger.debug('3D model polling', { 
           requestId, 
           status: normalizedStatus,
+          hasDataWrapper: !!rawStatusData.data,
           elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
         });
 
-        // Check if model in status response
-        if (statusData.model_glb?.url || statusData.model_urls?.glb?.url) {
+        // Check if model in status response (some FAL endpoints include result in status)
+        if (statusResult.model_glb?.url || statusResult.model_urls?.glb?.url) {
           logger.info('3D model completed (from status)', { 
             requestId,
-            hasGlb: !!statusData.model_glb?.url,
-            hasThumbnail: !!statusData.thumbnail?.url,
-            glbUrl: statusData.model_glb?.url?.substring(0, 100),
+            hasGlb: !!statusResult.model_glb?.url,
+            hasThumbnail: !!statusResult.thumbnail?.url,
+            glbUrl: statusResult.model_glb?.url?.substring(0, 100),
             elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
           });
           res.json({
             success: true,
-            model_glb: statusData.model_glb,
-            thumbnail: statusData.thumbnail,
-            model_urls: statusData.model_urls,
+            model_glb: statusResult.model_glb,
+            thumbnail: statusResult.thumbnail,
+            model_urls: statusResult.model_urls,
             remainingCredits: updateResult.credits,
             creditsDeducted: creditsRequired
           });
@@ -316,7 +326,20 @@ export function createModel3dRoutes(deps: Dependencies) {
             return;
           }
 
-          const resultData = await resultResponse.json() as {
+          const rawResult = await resultResponse.json() as {
+            // FAL queue result wraps response in 'data' field
+            data?: {
+              model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+              thumbnail?: { url?: string };
+              model_urls?: { 
+                glb?: { url?: string }; 
+                obj?: { url?: string }; 
+                fbx?: { url?: string }; 
+                usdz?: { url?: string } 
+              };
+              seed?: number;
+            };
+            // Or it might be unwrapped (for direct API calls)
             model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
             thumbnail?: { url?: string };
             model_urls?: { 
@@ -327,6 +350,21 @@ export function createModel3dRoutes(deps: Dependencies) {
             };
             seed?: number;
           };
+
+          // Handle both wrapped (queue API) and unwrapped responses
+          const resultData = rawResult.data || rawResult as {
+            model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+            thumbnail?: { url?: string };
+            model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+            seed?: number;
+          };
+          
+          logger.debug('3D result response structure', {
+            hasDataWrapper: !!rawResult.data,
+            hasModelGlb: !!resultData.model_glb?.url,
+            hasModelUrls: !!resultData.model_urls,
+            keys: Object.keys(rawResult).slice(0, 10)
+          });
 
           if (resultData.model_glb?.url || resultData.model_urls?.glb?.url) {
             logger.info('3D model generation completed (from result endpoint)', { 
