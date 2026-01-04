@@ -24,7 +24,7 @@ const PaymentSuccessModal = lazy(() => import('./components/PaymentSuccessModal'
 const ImageGallery = lazy(() => import('./components/ImageGallery'));
 const VideoGenerator = lazy(() => import('./components/VideoGenerator'));
 const MusicGenerator = lazy(() => import('./components/MusicGenerator'));
-const WorkflowWizard = lazy(() => import('./components/WorkflowWizard'));
+// const WorkflowWizard = lazy(() => import('./components/WorkflowWizard'));
 const TermsModal = lazy(() => import('./components/TermsModal'));
 import Footer from './components/Footer';
 import type { LegalPage } from './components/TermsModal';
@@ -292,6 +292,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           </Suspense>
         )}
         
+        {/* Workflows tab - coming soon
         {currentTab === 'workflows' && (
           <Suspense fallback={<Win95LoadingFallback text="Loading Workflows..." />}>
             <div className="container mx-auto max-w-4xl h-full">
@@ -302,6 +303,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
             </div>
           </Suspense>
         )}
+        */}
         
         {currentTab === 'gallery' && (
           <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
