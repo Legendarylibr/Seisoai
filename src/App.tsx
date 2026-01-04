@@ -12,6 +12,7 @@ import PromptOptimizer from './components/PromptOptimizer';
 import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import GenerateButton from './components/GenerateButton';
+import GenerationQueue from './components/GenerationQueue';
 import { Grid, Sparkles, Film, Music, type LucideIcon } from 'lucide-react';
 import logger from './utils/logger';
 import { API_URL } from './utils/apiConfig';
@@ -226,6 +227,10 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                     <MultiImageModelSelector />
                     <GenerateButton 
                       customPrompt={userPrompt}
+                      onShowTokenPayment={handleShowTokenPayment}
+                      onShowStripePayment={handleShowStripePayment}
+                    />
+                    <GenerationQueue
                       onShowTokenPayment={handleShowTokenPayment}
                       onShowStripePayment={handleShowStripePayment}
                     />

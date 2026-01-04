@@ -5,8 +5,9 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
 import { extractLayers } from '../services/layerExtractionService';
 import { addGeneration } from '../services/galleryService';
-import { X, Sparkles, Layers, Image as ImageIcon, AlertTriangle, Brain } from 'lucide-react';
+import { X, Sparkles, Layers, Image as ImageIcon, AlertTriangle, Brain, ZoomIn } from 'lucide-react';
 import { BTN, WIN95, hoverHandlers } from '../utils/buttonStyles';
+import { API_URL } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
 interface ActionButtonProps {
@@ -50,6 +51,8 @@ const ImageOutput: React.FC = () => {
   const [newPrompt, setNewPrompt] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [optimizePromptEnabled, setOptimizePromptEnabled] = useState<boolean>(false);
+  const [isUpscaling, setIsUpscaling] = useState<boolean>(false);
+  const [showUpscaleMenu, setShowUpscaleMenu] = useState<boolean>(false);
 
   // Close modal helper
   const closeModal = () => {
@@ -58,6 +61,77 @@ const ImageOutput: React.FC = () => {
     setError(null);
     setSelectedModel(null);
     setOptimizePromptEnabled(true); // Reset to default
+  };
+
+  // Handle upscale
+  const handleUpscale = async (scale: 2 | 4) => {
+    const img = imagesToDisplay[0];
+    if (!img || isUpscaling) return;
+    
+    const isAuthenticated = isConnected || isEmailAuth;
+    if (!isAuthenticated) {
+      setError('Please sign in to upscale images');
+      return;
+    }
+
+    const requiredCredits = scale === 4 ? 1.0 : 0.5;
+    if (availableCredits < requiredCredits) {
+      setError(`Insufficient credits. Need ${requiredCredits}, have ${availableCredits}.`);
+      return;
+    }
+
+    setIsUpscaling(true);
+    setShowUpscaleMenu(false);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_URL}/api/generate/upscale`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          image_url: img,
+          scale,
+          walletAddress: isEmailAuth ? undefined : address,
+          userId: isEmailAuth ? emailContext.userId : undefined,
+          email: isEmailAuth ? emailContext.email : undefined
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || `Upscale failed: ${response.status}`);
+      }
+
+      if (data.image_url) {
+        setGeneratedImage(data.image_url);
+        setCurrentGeneration({
+          ...currentGeneration,
+          image: data.image_url,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Update credits
+        if (data.remainingCredits !== undefined) {
+          const validated = Math.max(0, Math.floor(Number(data.remainingCredits) || 0));
+          if (isEmailAuth && emailContext.setCreditsManually) {
+            emailContext.setCreditsManually(validated);
+          } else if (setCreditsManually) {
+            setCreditsManually(validated);
+          }
+        }
+        
+        logger.info('Image upscaled successfully', { scale });
+      }
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Upscale failed';
+      logger.error('Upscale failed', { error: errorMessage });
+      setError(errorMessage);
+    } finally {
+      setIsUpscaling(false);
+    }
   };
 
   // Strip metadata from image
@@ -496,6 +570,56 @@ const ImageOutput: React.FC = () => {
           <span>🗑️</span>
           <span className="hidden sm:inline">Clear</span>
         </button>
+
+        {/* Upscale Button with Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowUpscaleMenu(!showUpscaleMenu)}
+            disabled={isUpscaling || !hasImages || availableCredits < 0.5}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold"
+            style={(isUpscaling || !hasImages || availableCredits < 0.5) ? BTN.disabled : BTN.base}
+            {...((isUpscaling || !hasImages || availableCredits < 0.5) ? {} : hoverHandlers)}
+            title="Upscale image"
+          >
+            {isUpscaling ? (
+              <>
+                <span className="animate-spin">⏳</span>
+                <span>Upscaling...</span>
+              </>
+            ) : (
+              <>
+                <ZoomIn className="w-3 h-3" />
+                <span className="hidden sm:inline">Upscale</span>
+              </>
+            )}
+          </button>
+          
+          {showUpscaleMenu && !isUpscaling && (
+            <div 
+              className="absolute top-full left-0 mt-0.5 z-50"
+              style={{
+                background: WIN95.bg,
+                boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 2px 2px 0 rgba(0,0,0,0.2)`
+              }}
+            >
+              <button
+                onClick={() => handleUpscale(2)}
+                className="w-full px-4 py-1.5 text-[10px] text-left hover:bg-[#000080] hover:text-white"
+                style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif', color: WIN95.text }}
+              >
+                2x Upscale (0.5 credits)
+              </button>
+              <button
+                onClick={() => handleUpscale(4)}
+                disabled={availableCredits < 1.0}
+                className="w-full px-4 py-1.5 text-[10px] text-left hover:bg-[#000080] hover:text-white disabled:opacity-50"
+                style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif', color: WIN95.text }}
+              >
+                4x Upscale (1.0 credits)
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Separator */}
         <div className="w-px h-5 mx-1" style={{ background: `linear-gradient(180deg, ${WIN95.border.dark} 0%, ${WIN95.border.light} 100%)` }} />

@@ -2034,6 +2034,174 @@ export function createGenerationRoutes(deps: Dependencies) {
   });
 
   /**
+   * Upscale image
+   * POST /api/generate/upscale
+   * Uses fal.ai creative-upscaler for 2x/4x upscaling
+   */
+  router.post('/upscale', freeImageLimiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({
+          success: false,
+          error: 'User authentication required'
+        });
+        return;
+      }
+
+      const FAL_API_KEY = getFalApiKey();
+      if (!FAL_API_KEY) {
+        res.status(500).json({
+          success: false,
+          error: 'AI service not configured'
+        });
+        return;
+      }
+
+      const { image_url, scale = 2 } = req.body as {
+        image_url?: string;
+        scale?: number;
+      };
+
+      if (!image_url) {
+        res.status(400).json({
+          success: false,
+          error: 'image_url is required'
+        });
+        return;
+      }
+
+      // Validate scale (2 or 4)
+      const validScale = scale === 4 ? 4 : 2;
+      
+      // Credits: 0.5 for 2x, 1.0 for 4x
+      const creditsRequired = validScale === 4 ? 1.0 : 0.5;
+
+      // Deduct credits atomically
+      const User = mongoose.model<IUser>('User');
+      const updateQuery = buildUserUpdateQuery(user);
+      
+      if (!updateQuery) {
+        res.status(400).json({
+          success: false,
+          error: 'User account required'
+        });
+        return;
+      }
+
+      const updateResult = await User.findOneAndUpdate(
+        {
+          ...updateQuery,
+          credits: { $gte: creditsRequired }
+        },
+        {
+          $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
+        },
+        { new: true }
+      );
+
+      if (!updateResult) {
+        res.status(402).json({
+          success: false,
+          error: 'Insufficient credits'
+        });
+        return;
+      }
+
+      logger.info('Upscale request', { 
+        scale: validScale, 
+        userId: user.userId,
+        creditsRequired
+      });
+
+      // Use fal.ai creative-upscaler
+      // API: https://fal.ai/models/fal-ai/creative-upscaler/api
+      const endpoint = 'https://fal.run/fal-ai/creative-upscaler';
+      
+      const requestBody = {
+        image_url,
+        scale: validScale,
+        creativity: 0.3, // Low creativity to preserve original
+        detail: 1.0,
+        shape_preservation: 0.75,
+        prompt_suffix: '' // No additional styling
+      };
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error('Upscale API error', { status: response.status, error: errorText });
+        // Refund credits on API failure
+        await refundCredits(user, creditsRequired, `Upscale API error: ${response.status}`);
+        res.status(500).json({
+          success: false,
+          error: `Upscale failed: ${response.status}`,
+          creditsRefunded: creditsRequired
+        });
+        return;
+      }
+
+      const result = await response.json() as { image?: { url?: string }; images?: Array<{ url?: string }> };
+
+      // Extract upscaled image URL
+      let upscaledUrl: string | null = null;
+      if (result.image?.url) {
+        upscaledUrl = result.image.url;
+      } else if (result.images?.[0]?.url) {
+        upscaledUrl = result.images[0].url;
+      }
+
+      if (!upscaledUrl) {
+        // Refund credits if no image returned
+        await refundCredits(user, creditsRequired, 'No upscaled image returned');
+        res.status(500).json({
+          success: false,
+          error: 'No upscaled image returned',
+          creditsRefunded: creditsRequired
+        });
+        return;
+      }
+
+      logger.info('Upscale completed', { 
+        scale: validScale, 
+        userId: user.userId 
+      });
+
+      res.json({
+        success: true,
+        image_url: upscaledUrl,
+        scale: validScale,
+        remainingCredits: updateResult.credits,
+        creditsDeducted: creditsRequired
+      });
+
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Upscale error:', { error: err.message });
+      // Refund credits on unexpected error
+      const user = req.user;
+      const { scale = 2 } = req.body as { scale?: number };
+      const creditsToRefund = scale === 4 ? 1.0 : 0.5;
+      if (user) {
+        await refundCredits(user, creditsToRefund, `Upscale error: ${err.message}`);
+      }
+      res.status(500).json({
+        success: false,
+        error: err.message,
+        creditsRefunded: user ? creditsToRefund : 0
+      });
+    }
+  });
+
+  /**
    * Add generation to history
    * POST /api/generations/add
    */

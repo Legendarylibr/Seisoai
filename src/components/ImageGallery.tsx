@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
-import { Download, Trash2, Eye, Calendar, Sparkles, X, Video, Play, Image as ImageIcon, Grid } from 'lucide-react';
+import { Download, Trash2, Eye, Calendar, Sparkles, X, Video, Play, Image as ImageIcon, Grid, Archive, Loader2 } from 'lucide-react';
+import JSZip from 'jszip';
 import logger from '../utils/logger';
 import { WIN95 } from '../utils/buttonStyles';
 import { stripImageMetadata } from '../utils/imageOptimizer';
@@ -40,6 +41,8 @@ const ImageGallery: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [galleryItems, setGalleryItems] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isDownloadingAll, setIsDownloadingAll] = useState<boolean>(false);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
 
   // PERFORMANCE: Handle item selection with preloading
   const handleSelectItem = (item: any): void => {
@@ -167,6 +170,86 @@ const ImageGallery: React.FC = () => {
     });
   };
 
+  // Bulk download all images as ZIP
+  const handleDownloadAll = async (): Promise<void> => {
+    const validItems = galleryItems.filter(item => {
+      const url = item.imageUrl || item.image;
+      return url && typeof url === 'string' && !item.isVideo && !item.videoUrl;
+    });
+
+    if (validItems.length === 0) {
+      logger.warn('No images to download');
+      return;
+    }
+
+    setIsDownloadingAll(true);
+    setDownloadProgress(0);
+
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder('seiso-gallery');
+      
+      if (!folder) {
+        throw new Error('Failed to create zip folder');
+      }
+
+      let completed = 0;
+      const total = validItems.length;
+
+      // Download all images
+      const downloadPromises = validItems.map(async (item, index) => {
+        const url = item.imageUrl || item.image;
+        const fileName = `seiso-${index + 1}.png`;
+
+        try {
+          // Try to strip metadata and get blob
+          const blob = await stripImageMetadata(url, { format: 'png' });
+          folder.file(fileName, blob);
+        } catch (err) {
+          // Fallback: fetch directly
+          try {
+            const response = await fetch(url);
+            if (response.ok) {
+              const blob = await response.blob();
+              folder.file(fileName, blob);
+            }
+          } catch (fetchErr) {
+            logger.warn('Failed to download image for zip', { url, error: (fetchErr as Error).message });
+          }
+        }
+
+        completed++;
+        setDownloadProgress(Math.round((completed / total) * 100));
+      });
+
+      await Promise.all(downloadPromises);
+
+      // Generate and download ZIP
+      const zipBlob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
+
+      // Create download link
+      const downloadUrl = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `seiso-gallery-${Date.now()}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+
+      logger.info('Gallery downloaded as ZIP', { imageCount: validItems.length });
+    } catch (error) {
+      logger.error('Failed to create ZIP', { error: (error as Error).message });
+    } finally {
+      setIsDownloadingAll(false);
+      setDownloadProgress(0);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-full flex flex-col" style={{ background: WIN95.bg }}>
@@ -256,6 +339,22 @@ const ImageGallery: React.FC = () => {
         className="flex items-center gap-2 px-2 py-1"
         style={{ borderBottom: `1px solid ${WIN95.bgDark}` }}
       >
+        <Win95Button 
+          onClick={handleDownloadAll}
+          disabled={isDownloadingAll || galleryItems.filter(i => !i.isVideo && !i.videoUrl).length === 0}
+        >
+          {isDownloadingAll ? (
+            <>
+              <Loader2 className="w-3 h-3 mr-1 inline animate-spin" />
+              {downloadProgress}%
+            </>
+          ) : (
+            <>
+              <Archive className="w-3 h-3 mr-1 inline" />
+              Download All
+            </>
+          )}
+        </Win95Button>
         <Win95Button onClick={clearAll}>
           <Trash2 className="w-3 h-3 mr-1 inline" />
           Clear All
