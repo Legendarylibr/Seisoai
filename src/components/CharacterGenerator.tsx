@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, memo, ReactNode, ChangeEvent } from 'react';
+import React, { useState, useRef, useCallback, memo, ReactNode, ChangeEvent, useEffect } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generate3dModel } from '../services/model3dService';
@@ -7,10 +7,45 @@ import { API_URL } from '../utils/apiConfig';
 import { 
   Box, Upload, Play, X, Download, AlertCircle, ChevronDown, 
   Sparkles, Image, Wand2, RotateCcw, Eye, Layers, Settings,
-  ArrowRight, Check, Loader2
+  ArrowRight, Check, Loader2, Clock
 } from 'lucide-react';
 import logger from '../utils/logger';
 import { WIN95 } from '../utils/buttonStyles';
+
+// Session storage key for 3D generations
+const SESSION_3D_GALLERY_KEY = 'seiso_3d_session_gallery';
+
+// Interface for session gallery items
+interface Session3dItem {
+  id: string;
+  timestamp: number;
+  sourceImageUrl: string;
+  thumbnailUrl: string;
+  glbUrl: string;
+  objUrl?: string;
+  fbxUrl?: string;
+  generateType: string;
+  prompt?: string;
+}
+
+// Load session gallery from storage
+const loadSessionGallery = (): Session3dItem[] => {
+  try {
+    const stored = sessionStorage.getItem(SESSION_3D_GALLERY_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+// Save session gallery to storage
+const saveSessionGallery = (items: Session3dItem[]) => {
+  try {
+    sessionStorage.setItem(SESSION_3D_GALLERY_KEY, JSON.stringify(items));
+  } catch (e) {
+    logger.debug('Failed to save session gallery', { error: (e as Error).message });
+  }
+};
 
 // Step definitions for the workflow
 type WorkflowStep = 'create' | 'preview' | 'generate3d' | 'result';
@@ -307,6 +342,14 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Session gallery for 3D generations
+  const [sessionGallery, setSessionGallery] = useState<Session3dItem[]>([]);
+  
+  // Load session gallery on mount
+  useEffect(() => {
+    setSessionGallery(loadSessionGallery());
+  }, []);
 
   // Start/stop timer
   const startTimer = useCallback(() => {
@@ -501,6 +544,25 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
             email: isEmailAuth ? emailContext.email : undefined
           }).catch(e => logger.debug('Gallery save failed', { error: e.message }));
         }
+        
+        // Save to session gallery for persistence during session
+        const glbUrl = result.model_glb?.url || result.model_urls?.glb?.url;
+        if (glbUrl) {
+          const newSessionItem: Session3dItem = {
+            id: `3d-${Date.now()}`,
+            timestamp: Date.now(),
+            sourceImageUrl: imageUrl,
+            thumbnailUrl: result.thumbnail?.url || imageUrl,
+            glbUrl,
+            objUrl: result.model_urls?.obj?.url,
+            fbxUrl: result.model_urls?.fbx?.url,
+            generateType,
+            prompt: prompt || undefined
+          };
+          const updatedGallery = [newSessionItem, ...sessionGallery].slice(0, 10); // Keep last 10
+          setSessionGallery(updatedGallery);
+          saveSessionGallery(updatedGallery);
+        }
       } else {
         throw new Error(result.error || '3D generation failed');
       }
@@ -513,7 +575,7 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
       setIsGenerating3d(false);
       stopTimer();
     }
-  }, [imageUrl, isConnected, enablePbr, faceCount, generateType, prompt, walletContext, emailContext, isEmailAuth, startTimer, stopTimer]);
+  }, [imageUrl, isConnected, enablePbr, faceCount, generateType, prompt, walletContext, emailContext, isEmailAuth, startTimer, stopTimer, sessionGallery]);
 
   // Download 3D model
   const handleDownload = useCallback(async (url: string, format: string) => {
@@ -542,6 +604,29 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
     setEditPrompt('');
     setError(null);
   }, []);
+
+  // Load a previous generation from session gallery
+  const loadFromSessionGallery = useCallback((item: Session3dItem) => {
+    setImageUrl(item.sourceImageUrl);
+    setModel3dResult({
+      model_glb: { url: item.glbUrl },
+      thumbnail: { url: item.thumbnailUrl },
+      model_urls: {
+        glb: { url: item.glbUrl },
+        obj: item.objUrl ? { url: item.objUrl } : undefined,
+        fbx: item.fbxUrl ? { url: item.fbxUrl } : undefined
+      }
+    });
+    setCurrentStep('result');
+    setError(null);
+  }, []);
+
+  // Remove item from session gallery
+  const removeFromSessionGallery = useCallback((id: string) => {
+    const updatedGallery = sessionGallery.filter(item => item.id !== id);
+    setSessionGallery(updatedGallery);
+    saveSessionGallery(updatedGallery);
+  }, [sessionGallery]);
 
   return (
     <div className="fade-in h-full flex flex-col" style={{ background: '#1a4a5e' }}>
@@ -859,6 +944,59 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
                 </Win95Button>
               </Win95GroupBox>
             </>
+          )}
+          
+          {/* Session Gallery - shows previous 3D generations from this session */}
+          {sessionGallery.length > 0 && (
+            <Win95GroupBox title={`Session History (${sessionGallery.length})`} className="flex-shrink-0" icon={<Clock className="w-3.5 h-3.5" />}>
+              <div className="grid grid-cols-3 gap-1 max-h-32 overflow-y-auto">
+                {sessionGallery.map((item) => (
+                  <div 
+                    key={item.id}
+                    className="relative group cursor-pointer"
+                    style={{
+                      background: WIN95.inputBg,
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                    }}
+                  >
+                    <img 
+                      src={item.thumbnailUrl} 
+                      alt="3D Model"
+                      className="w-full h-16 object-cover"
+                      onClick={() => loadFromSessionGallery(item)}
+                    />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFromSessionGallery(item.id);
+                      }}
+                      className="absolute top-0.5 right-0.5 w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{
+                        background: '#c0c0c0',
+                        boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
+                        fontSize: '10px',
+                        color: WIN95.text
+                      }}
+                    >
+                      ×
+                    </button>
+                    <div 
+                      className="absolute bottom-0 left-0 right-0 text-center py-0.5 text-[7px] opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ 
+                        background: 'rgba(0,0,128,0.9)', 
+                        color: '#fff',
+                        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                      }}
+                    >
+                      {item.generateType}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[8px] mt-1 text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                Click to view • Saved for this session
+              </p>
+            </Win95GroupBox>
           )}
         </div>
         

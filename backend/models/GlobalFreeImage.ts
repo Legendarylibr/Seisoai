@@ -35,3 +35,4 @@ const GlobalFreeImage = mongoose.model<IGlobalFreeImage>('GlobalFreeImage', glob
 
 export default GlobalFreeImage;
 
+

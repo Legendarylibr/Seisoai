@@ -97,3 +97,4 @@ export default {
   NFT_HOLDER_BONUS
 };
 
+

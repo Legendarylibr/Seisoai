@@ -73,3 +73,4 @@ export function calculateCredits(amountInDollars: number, isNFTHolder: boolean =
 
 export default { initializeStripe, getStripe, calculateCredits };
 
+

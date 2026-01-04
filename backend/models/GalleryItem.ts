@@ -71,3 +71,4 @@ const GalleryItem = mongoose.model<IGalleryItem>('GalleryItem', galleryItemSchem
 
 export default GalleryItem;
 
+

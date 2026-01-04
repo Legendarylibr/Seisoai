@@ -139,3 +139,4 @@ export const canGenerateForFree = (isNFTHolder: boolean, credits: number): boole
   return isNFTHolder || credits > 0;
 };
 
+

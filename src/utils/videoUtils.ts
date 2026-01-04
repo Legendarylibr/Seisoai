@@ -33,3 +33,4 @@ export const calculateVideoCredits = (durationInSeconds: number): number => {
   return Math.max(credits, 2); // Minimum 2 credits
 };
 
+

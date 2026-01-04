@@ -176,3 +176,4 @@ if (!sessionId) {
 
 await addCreditsForSession(sessionId, userId);
 
+

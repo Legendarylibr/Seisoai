@@ -603,3 +603,4 @@ export const getPaymentConfig = (): PaymentConfig => {
   return PAYMENT_CONFIG;
 };
 
+

@@ -490,3 +490,4 @@ function WalletPrompt({ onBack }: WalletPromptProps) {
 
 export default AuthPrompt;
 
+

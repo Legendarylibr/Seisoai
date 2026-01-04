@@ -404,3 +404,4 @@ const SimpleWalletConnect: React.FC = () => {
 
 export default SimpleWalletConnect;
 
+

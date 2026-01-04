@@ -641,3 +641,4 @@ const LegalPages = memo(function LegalPages({ isOpen, onClose, initialPage = 'te
 export default LegalPages;
 export type { LegalPage };
 
+
