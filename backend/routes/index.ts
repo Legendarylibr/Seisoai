@@ -18,6 +18,7 @@ import createExtractRoutes from './extract';
 import createAudioRoutes from './audio';
 import createImageToolsRoutes from './image-tools';
 import createWorkflowRoutes from './workflows';
+import createModel3dRoutes from './model3d';
 
 // Types
 interface Dependencies {
@@ -78,6 +79,9 @@ export function createApiRoutes(deps: Dependencies) {
   
   // Multi-step workflows (AI Influencer, Music Video, Avatar Creator, Remix Visualizer)
   router.use('/workflows', createWorkflowRoutes(deps));
+  
+  // 3D Model Generation (Hunyuan3D V3)
+  router.use('/model3d', createModel3dRoutes(deps));
   
   // Payments
   const paymentRoutes = createPaymentRoutes(deps);

@@ -13,7 +13,7 @@ import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
-import { Grid, Sparkles, Film, Music, Wand2, Layers, type LucideIcon } from 'lucide-react';
+import { Grid, Sparkles, Film, Music, Wand2, Layers, Box, type LucideIcon } from 'lucide-react';
 import logger from './utils/logger';
 import { API_URL } from './utils/apiConfig';
 
@@ -24,6 +24,7 @@ const PaymentSuccessModal = lazy(() => import('./components/PaymentSuccessModal'
 const ImageGallery = lazy(() => import('./components/ImageGallery'));
 const VideoGenerator = lazy(() => import('./components/VideoGenerator'));
 const MusicGenerator = lazy(() => import('./components/MusicGenerator'));
+const CharacterGenerator = lazy(() => import('./components/CharacterGenerator'));
 // const WorkflowWizard = lazy(() => import('./components/WorkflowWizard'));
 const TermsModal = lazy(() => import('./components/TermsModal'));
 import Footer from './components/Footer';
@@ -76,6 +77,7 @@ function App(): JSX.Element {
     { id: 'batch', name: 'Batch', icon: Layers },
     { id: 'video', name: 'Video', icon: Film },
     { id: 'music', name: 'Music', icon: Music },
+    { id: '3d', name: '3D', icon: Box },
     // { id: 'workflows', name: 'Workflows', icon: Wand2 }, // Coming soon
     { id: 'gallery', name: 'Gallery', icon: Grid }
   ];
@@ -285,6 +287,15 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         {currentTab === 'music' && (
           <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
             <MusicGenerator 
+              onShowTokenPayment={handleShowTokenPayment}
+              onShowStripePayment={handleShowStripePayment}
+            />
+          </Suspense>
+        )}
+        
+        {currentTab === '3d' && (
+          <Suspense fallback={<Win95LoadingFallback text="Loading 3D Character Creator..." />}>
+            <CharacterGenerator 
               onShowTokenPayment={handleShowTokenPayment}
               onShowStripePayment={handleShowStripePayment}
             />

@@ -1,8 +1,8 @@
 import React, { useState, useCallback, memo, ReactNode, useRef, ChangeEvent } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import { generateMusic, calculateMusicCredits, calculateMusicCost } from '../services/musicService';
-import { Music, Play, Pause, Download, AlertCircle, ChevronDown, Disc3, Square, Brain, Mic, Sliders, Upload, X, Volume2 } from 'lucide-react';
+import { generateMusic, calculateMusicCredits } from '../services/musicService';
+import { Music, Play, Pause, Download, AlertCircle, ChevronDown, Disc3, Square, Brain, Mic, Sliders, Upload, X } from 'lucide-react';
 import { API_URL } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
@@ -326,40 +326,6 @@ const Win95GenreDropdown = memo<Win95GenreDropdownProps>(function Win95GenreDrop
         </div>
       )}
     </div>
-  );
-});
-
-// Transport button (play/pause/stop)
-interface TransportButtonProps {
-  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
-  label: string;
-  onClick: () => void;
-  active?: boolean;
-  color?: 'default' | 'green' | 'red';
-}
-
-const TransportButton = memo<TransportButtonProps>(function TransportButton({ icon: Icon, label, onClick, active, color = 'default' }) {
-  const colors = {
-    default: WIN95.buttonFace,
-    green: '#00aa00',
-    red: '#aa0000'
-  };
-  
-  return (
-    <button
-      onClick={onClick}
-      className="flex flex-col items-center gap-1 px-4 py-2"
-      style={{
-        background: active ? WIN95.bgDark : WIN95.buttonFace,
-        boxShadow: active 
-          ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
-          : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
-        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-      }}
-    >
-      <Icon className="w-5 h-5" style={{ color: active ? colors[color] : WIN95.text }} />
-      <span className="text-[9px]" style={{ color: WIN95.text }}>{label}</span>
-    </button>
   );
 });
 
@@ -802,8 +768,8 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
           onClick={() => setMusicMode('generate')}
           className="px-3 py-1 text-[10px] font-bold flex items-center gap-1"
           style={{
-            background: musicMode === 'generate' ? WIN95.bg : WIN95.bgDark,
-            color: musicMode === 'generate' ? WIN95.text : WIN95.textDisabled,
+            background: musicMode === 'generate' ? WIN95.bg : WIN95.bgLight,
+            color: WIN95.text,
             boxShadow: musicMode === 'generate' 
               ? `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 0 -1px 0 ${WIN95.bg}`
               : `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.border.darker}`,
@@ -812,14 +778,14 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
             zIndex: musicMode === 'generate' ? 2 : 1
           }}
         >
-          <Music className="w-3 h-3" /> Generate
+          <Music className="w-3 h-3" /> Sounds
         </button>
         <button
           onClick={() => setMusicMode('voice')}
           className="px-3 py-1 text-[10px] font-bold flex items-center gap-1"
           style={{
-            background: musicMode === 'voice' ? WIN95.bg : WIN95.bgDark,
-            color: musicMode === 'voice' ? WIN95.text : WIN95.textDisabled,
+            background: musicMode === 'voice' ? WIN95.bg : WIN95.bgLight,
+            color: WIN95.text,
             boxShadow: musicMode === 'voice' 
               ? `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 0 -1px 0 ${WIN95.bg}`
               : `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.border.darker}`,
@@ -834,8 +800,8 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
           onClick={() => setMusicMode('remix')}
           className="px-3 py-1 text-[10px] font-bold flex items-center gap-1"
           style={{
-            background: musicMode === 'remix' ? WIN95.bg : WIN95.bgDark,
-            color: musicMode === 'remix' ? WIN95.text : WIN95.textDisabled,
+            background: musicMode === 'remix' ? WIN95.bg : WIN95.bgLight,
+            color: WIN95.text,
             boxShadow: musicMode === 'remix' 
               ? `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 0 -1px 0 ${WIN95.bg}`
               : `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.border.darker}`,
