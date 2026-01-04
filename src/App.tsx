@@ -76,7 +76,7 @@ function App(): JSX.Element {
     { id: 'batch', name: 'Batch', icon: Layers },
     { id: 'video', name: 'Video', icon: Film },
     { id: 'music', name: 'Music', icon: Music },
-    { id: 'workflows', name: 'Workflows', icon: Wand2 },
+    // { id: 'workflows', name: 'Workflows', icon: Wand2 }, // Coming soon
     { id: 'gallery', name: 'Gallery', icon: Grid }
   ];
 
