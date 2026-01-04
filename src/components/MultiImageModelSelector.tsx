@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
-import { Sparkles, Zap, Layers, Cpu, Wand2, type LucideIcon } from 'lucide-react';
+import { Sparkles, Zap, Layers, Cpu, Wand2, RefreshCw, type LucideIcon } from 'lucide-react';
 import { WIN95, BTN } from '../utils/buttonStyles';
 import logger from '../utils/logger';
 
@@ -54,6 +54,14 @@ const MODEL_CONFIG: Record<string, ModelConfig> = {
     credits: 0.3,
     tagline: 'Layers',
     description: 'Extract RGBA layers'
+  },
+  'face-swap': {
+    id: 'face-swap',
+    name: 'Face Swap',
+    icon: RefreshCw,
+    credits: 2,
+    tagline: 'Swap',
+    description: 'Swap faces between images'
   }
 };
 
@@ -104,8 +112,11 @@ const MultiImageModelSelector: React.FC<MultiImageModelSelectorProps> = ({ custo
     if (!hasImages) {
       // Text-to-image: FLUX, FLUX 2, and Banana
       return ['flux', 'flux-2', 'nano-banana-pro'];
+    } else if (isMultipleImages) {
+      // With 2+ images: FLUX, FLUX 2 (edit), Banana, Qwen, Face Swap
+      return [fluxModelId, 'flux-2', 'nano-banana-pro', 'qwen-image-layered', 'face-swap'];
     } else {
-      // With images: FLUX, FLUX 2 (edit), Banana, and Qwen
+      // With 1 image: FLUX, FLUX 2 (edit), Banana, and Qwen
       return [fluxModelId, 'flux-2', 'nano-banana-pro', 'qwen-image-layered'];
     }
   };

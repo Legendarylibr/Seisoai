@@ -8,6 +8,8 @@ import helmet from 'helmet';
 import compression from 'compression';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import swaggerUi from 'swagger-ui-express';
+import fs from 'fs';
 import logger from './utils/logger.js';
 
 // Config
@@ -17,6 +19,9 @@ import { connectDatabase } from './config/database.js';
 // Services
 import { initializeStripe } from './services/stripe.js';
 import { TTLCache } from './services/cache.js';
+import { initializeRedis, closeRedis } from './services/redis.js';
+import { initializeQueues, closeAll as closeQueues } from './services/jobQueue.js';
+import { getAllCircuitStats } from './services/circuitBreaker.js';
 
 // Middleware
 import {
@@ -39,9 +44,10 @@ import {
   requireCreditsForVideo,
   requireCredits
 } from './middleware/credits.js';
+import { requestIdMiddleware } from './middleware/requestId.js';
 
 // Routes
-import { createApiRoutes } from './routes/index';
+import { createVersionedRoutes } from './routes/versioned.js';
 
 // Models - imported to register with mongoose
 import './models/User.js';
@@ -82,7 +88,8 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin resource loading
   hidePoweredBy: true,
   referrerPolicy: { policy: "no-referrer-when-downgrade" }, // More permissive referrer policy
-  originAgentCluster: false // Disable for in-app browser compatibility
+  originAgentCluster: false, // Disable for in-app browser compatibility
+  xFrameOptions: false // Disable X-Frame-Options - CSP frame-ancestors handles this (ALLOWALL is not valid)
 }));
 
 // CRITICAL: Handle preflight OPTIONS requests explicitly for all routes
@@ -126,7 +133,6 @@ if (config.isProduction) {
   app.use((req: Request, res: Response, next: NextFunction) => {
     // For HTML pages, add headers that help with in-app browsers
     if (req.path === '/' || req.path.endsWith('.html') || !req.path.includes('.')) {
-      res.setHeader('X-Frame-Options', 'ALLOWALL');
       // Ensure browser doesn't block storage in in-app browsers
       res.setHeader('Permissions-Policy', 'interest-cohort=()');
     }
@@ -160,6 +166,9 @@ const wanStatusLimiter = createWanStatusLimiter();
 const wanSubmitLimiter = createWanSubmitLimiter();
 const wanResultLimiter = createWanResultLimiter();
 const blockchainRpcLimiter = createBlockchainRpcLimiter();
+
+// Request ID middleware for tracing
+app.use(requestIdMiddleware);
 
 // Apply general rate limiting to all API routes
 app.use('/api/', generalRateLimiter);
@@ -201,8 +210,39 @@ app.get('/favicon.ico', (req: Request, res: Response) => {
   res.redirect(301, '/1d1c7555360a737bb22bbdfc2784655f.png');
 });
 
-// API Routes
-app.use('/api', createApiRoutes(routeDeps));
+// API Documentation (Swagger UI)
+const openapiPath = path.join(__dirname, 'docs', 'openapi.yaml');
+if (fs.existsSync(openapiPath)) {
+  // Load YAML and parse it
+  import('fs').then(fsModule => {
+    const yamlContent = fsModule.readFileSync(openapiPath, 'utf8');
+    // Simple YAML to JSON conversion for swagger-ui
+    try {
+      // Use dynamic import for yaml parsing or serve raw
+      app.use('/api/docs', swaggerUi.serve);
+      app.get('/api/docs', swaggerUi.setup(null, {
+        swaggerUrl: '/api/openapi.yaml'
+      }));
+      app.get('/api/openapi.yaml', (req, res) => {
+        res.type('text/yaml').send(yamlContent);
+      });
+      logger.info('API documentation available at /api/docs');
+    } catch {
+      logger.warn('Failed to load OpenAPI spec');
+    }
+  });
+}
+
+// API Routes (versioned: /api/v1/* and /api/*)
+app.use('/api', createVersionedRoutes(routeDeps));
+
+// Circuit breaker stats endpoint
+app.get('/api/circuit-stats', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    circuits: getAllCircuitStats()
+  });
+});
 
 // Legacy checkout route at root level for backwards compatibility
 // Forward /create-checkout-session to /api/stripe/checkout-session
@@ -225,17 +265,22 @@ if (config.isProduction) {
   });
 }
 
-// Error handler
-const errorHandler: ErrorRequestHandler = (err: Error & { status?: number }, req: Request, res: Response, next: NextFunction) => {
+// Error handler with request ID
+const errorHandler: ErrorRequestHandler = (err: Error & { status?: number }, req: Request, res: Response, _next: NextFunction) => {
+  const requestId = req.requestId || 'unknown';
+  
   logger.error('Unhandled error:', {
+    requestId,
     error: err.message,
     stack: config.isDevelopment ? err.stack : undefined,
-    path: req.path
+    path: req.path,
+    method: req.method
   });
 
   res.status(err.status || 500).json({
     success: false,
-    error: config.isProduction ? 'Internal server error' : err.message
+    error: config.isProduction ? 'Internal server error' : err.message,
+    requestId
   });
 };
 
@@ -246,6 +291,12 @@ async function startServer(): Promise<void> {
   try {
     // Connect to database
     await connectDatabase();
+
+    // Initialize Redis (optional - falls back to in-memory cache)
+    await initializeRedis();
+
+    // Initialize job queues (requires Redis)
+    initializeQueues();
 
     // Initialize Stripe
     await initializeStripe();
@@ -261,11 +312,12 @@ async function startServer(): Promise<void> {
     const PORT = config.PORT;
     const HOST = config.HOST || '0.0.0.0';
 
-    logger.info('Starting server...', { host: HOST, port: PORT });
+    logger.info('Starting server...', { host: HOST, port: PORT, apiVersion: config.API_VERSION });
 
     app.listen(PORT, HOST, () => {
       logger.info(`AI Image Generator API running on port ${PORT}`);
       logger.info(`Environment: ${config.NODE_ENV}`);
+      logger.info(`API Version: ${config.API_VERSION}`);
       logger.info('Server started successfully');
     });
   } catch (error) {
@@ -276,15 +328,27 @@ async function startServer(): Promise<void> {
 }
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down gracefully');
+async function gracefulShutdown(signal: string): Promise<void> {
+  logger.info(`${signal} received, shutting down gracefully`);
+  
+  try {
+    // Close job queues
+    await closeQueues();
+    
+    // Close Redis connection
+    await closeRedis();
+    
+    logger.info('All connections closed successfully');
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Error during shutdown:', { error: err.message });
+  }
+  
   process.exit(0);
-});
+}
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, shutting down gracefully');
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught errors
 process.on('uncaughtException', (error: Error) => {

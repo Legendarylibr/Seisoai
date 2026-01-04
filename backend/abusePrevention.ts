@@ -216,7 +216,7 @@ export async function checkSuspiciousPatterns(
   ipAddress: string, 
   email: string | null, 
   User: Model<IUser>, 
-  IPFreeImage: Model<IIPFreeImage>
+  _IPFreeImage: Model<IIPFreeImage>
 ): Promise<{ suspicious: boolean; reason?: string }> {
   // Check how many accounts were created from this IP recently
   const recentAccountWindow = 24 * 60 * 60 * 1000; // 24 hours

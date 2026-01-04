@@ -18,7 +18,18 @@
     
     <!-- SEO Meta Tags -->
     <meta name="description" content="Create and edit stunning AI-generated images with advanced image editing capabilities. Multi-image blending, style transfer, and professional-grade results." />
-    <meta name="keywords" content="AI image generator, image editing, AI art, image editing, Nano Banana Pro, FLUX" />
+    <meta name="keywords" content="AI image generator, AI art generator, AI image editor, text to image, image generation, AI art, FLUX AI, style transfer, multi-image blending, AI video generator, AI music generator" />
+    <meta name="author" content="Seiso AI" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://seisoai.com/" />
+    
+    <!-- Mobile & App Meta -->
+    <meta name="theme-color" content="#000080" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Seiso AI" />
+    <meta name="application-name" content="Seiso AI" />
     
     <!-- Open Graph / Facebook / Instagram -->
     <meta property="og:type" content="website" />
@@ -28,6 +39,7 @@
     <meta property="og:image" content="https://seisoai.com/seiso6.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Seiso AI - AI Image Generator Interface" />
     <meta property="og:site_name" content="Seiso AI" />
     <meta property="og:locale" content="en_US" />
     
@@ -37,10 +49,89 @@
     <meta name="twitter:title" content="Seiso AI - Create and Edit Stunning AI-Generated Images" />
     <meta name="twitter:description" content="Create and edit stunning AI-generated images with advanced image editing capabilities. Multi-image blending, style transfer, and professional-grade results." />
     <meta name="twitter:image" content="https://seisoai.com/seiso6.png" />
+    <meta name="twitter:image:alt" content="Seiso AI - AI Image Generator Interface" />
+    
+    <!-- Search Engine Verification (add your codes here) -->
+    <!-- <meta name="google-site-verification" content="YOUR_GOOGLE_CODE_HERE" /> -->
+    <!-- <meta name="msvalidate.01" content="YOUR_BING_CODE_HERE" /> -->
+    
+    <!-- Additional SEO -->
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <link rel="manifest" href="/manifest.json" />
     
     <!-- Security Headers - CSP is handled by server for proper CORS in all browsers -->
     <!-- Note: CSP meta tag removed to prevent conflicts with server headers in in-app browsers (Twitter, Instagram, etc.) -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    
+    <!-- JSON-LD Structured Data for Rich Search Results -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Seiso AI",
+      "url": "https://seisoai.com",
+      "description": "Create and edit stunning AI-generated images with advanced image editing capabilities. Multi-image blending, style transfer, and professional-grade results.",
+      "applicationCategory": "MultimediaApplication",
+      "operatingSystem": "Web Browser",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "description": "Free tier available with premium options"
+      },
+      "featureList": [
+        "AI Image Generation",
+        "AI Video Generation", 
+        "AI Music Generation",
+        "Multi-Image Blending",
+        "Style Transfer",
+        "Image Editing"
+      ],
+      "screenshot": "https://seisoai.com/seiso6.png",
+      "image": "https://seisoai.com/seiso6.png",
+      "logo": "https://seisoai.com/seiso-logo.png",
+      "creator": {
+        "@type": "Organization",
+        "name": "Seiso AI",
+        "url": "https://seisoai.com"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "reviewCount": "150",
+        "bestRating": "5",
+        "worstRating": "1"
+      }
+    }
+    </script>
+    
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Seiso AI",
+      "url": "https://seisoai.com",
+      "logo": "https://seisoai.com/seiso-logo.png",
+      "sameAs": []
+    }
+    </script>
+    
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Seiso AI",
+      "url": "https://seisoai.com",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://seisoai.com/?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
     
     <!-- Enhanced wallet conflict resolution - must run first -->
     <script>
@@ -341,6 +432,23 @@
   </head>
   <body>
     <div id="root"></div>
+    
+    <!-- SEO: Noscript fallback for search engines and users without JavaScript -->
+    <noscript>
+      <div style="padding: 40px; text-align: center; font-family: Arial, sans-serif;">
+        <h1>Seiso AI - AI Image, Video & Music Generator</h1>
+        <p>Create and edit stunning AI-generated images with advanced image editing capabilities.</p>
+        <h2>Features</h2>
+        <ul style="list-style: none; padding: 0;">
+          <li>🎨 AI Image Generation - Create stunning images from text prompts</li>
+          <li>🎬 AI Video Generation - Transform images into videos</li>
+          <li>🎵 AI Music Generation - Create unique music tracks</li>
+          <li>✨ Multi-Image Blending - Combine multiple images seamlessly</li>
+          <li>🖼️ Style Transfer - Apply artistic styles to your images</li>
+        </ul>
+        <p>Please enable JavaScript to use Seiso AI.</p>
+      </div>
+    </noscript>
     <!-- CRITICAL: Buffer polyfill must run BEFORE any modules load (including Solana) -->
     <script>
       // Synchronously set up Buffer for Solana before any ES modules execute

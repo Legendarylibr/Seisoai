@@ -79,12 +79,12 @@ server {
     ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
     ssl_prefer_server_ciphers off;
 
-    # Security Headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
+    # Security Headers (configured for in-app browser compatibility - Instagram, Twitter, etc.)
+    # Note: X-Frame-Options removed - CSP frame-ancestors handles framing restrictions
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "no-referrer-when-downgrade" always;
-    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'; frame-ancestors 'self' https: http:" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     # Frontend (React App)

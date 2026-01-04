@@ -25,6 +25,17 @@ If you're helping with the JavaScript-to-TypeScript migration:
 - **Auto-cleanup**: Automatically delete user data after 30 days
 - **Multi-chain Support**: Ethereum, Polygon, Arbitrum, Optimism, Base, Solana
 
+## New Features (v1.1.0)
+
+- **API Versioning**: Supports `/api/v1/*` and `/api/*` (defaults to v1)
+- **Request ID Tracing**: Every request has a unique ID for debugging
+- **Redis Integration**: Distributed caching and session management
+- **Job Queues**: Background job processing with BullMQ
+- **Circuit Breakers**: Protection against cascading failures
+- **OpenAPI Documentation**: API docs available at `/api/docs`
+- **CI/CD Pipeline**: GitHub Actions for automated testing and deployment
+- **Comprehensive Testing**: Jest test framework with coverage
+
 ## Quick Start
 
 ### 1. Install Dependencies
@@ -32,6 +43,19 @@ If you're helping with the JavaScript-to-TypeScript migration:
 ```bash
 cd backend
 npm install
+```
+
+### 2. Run Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Run in watch mode
+npm run test:watch
 ```
 
 ### 2. Set Up Environment Variables

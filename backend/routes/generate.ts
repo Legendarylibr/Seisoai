@@ -2202,6 +2202,299 @@ export function createGenerationRoutes(deps: Dependencies) {
   });
 
   /**
+   * Generate audio from video (MMAudio V2)
+   * POST /api/generate/video-to-audio
+   * Uses fal.ai MMAudio V2 for synchronized audio generation
+   */
+  router.post('/video-to-audio', freeImageLimiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({
+          success: false,
+          error: 'User authentication required'
+        });
+        return;
+      }
+
+      const FAL_API_KEY = getFalApiKey();
+      if (!FAL_API_KEY) {
+        res.status(500).json({
+          success: false,
+          error: 'AI service not configured'
+        });
+        return;
+      }
+
+      const { 
+        video_url, 
+        prompt = '',
+        negative_prompt = '',
+        num_steps = 25,
+        cfg_strength = 4.5,
+        duration = 8
+      } = req.body as {
+        video_url?: string;
+        prompt?: string;
+        negative_prompt?: string;
+        num_steps?: number;
+        cfg_strength?: number;
+        duration?: number;
+      };
+
+      if (!video_url) {
+        res.status(400).json({
+          success: false,
+          error: 'video_url is required'
+        });
+        return;
+      }
+
+      // Credits: 0.5 per generation (flat rate for simplicity)
+      const creditsRequired = 0.5;
+
+      // Deduct credits atomically
+      const User = mongoose.model<IUser>('User');
+      const updateQuery = buildUserUpdateQuery(user);
+      
+      if (!updateQuery) {
+        res.status(400).json({
+          success: false,
+          error: 'User account required'
+        });
+        return;
+      }
+
+      const updateResult = await User.findOneAndUpdate(
+        {
+          ...updateQuery,
+          credits: { $gte: creditsRequired }
+        },
+        {
+          $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
+        },
+        { new: true }
+      );
+
+      if (!updateResult) {
+        res.status(402).json({
+          success: false,
+          error: 'Insufficient credits'
+        });
+        return;
+      }
+
+      logger.info('Video-to-audio request', { 
+        userId: user.userId,
+        hasPrompt: !!prompt,
+        duration,
+        creditsRequired
+      });
+
+      // Submit to MMAudio V2 queue
+      // API: https://fal.ai/models/fal-ai/mmaudio-v2/api
+      const queueEndpoint = 'https://queue.fal.run/fal-ai/mmaudio-v2';
+      
+      const requestBody: Record<string, unknown> = {
+        video_url,
+        num_steps: Math.min(50, Math.max(10, num_steps)),
+        cfg_strength: Math.min(10, Math.max(1, cfg_strength)),
+        duration: Math.min(30, Math.max(1, duration))
+      };
+
+      // Add optional prompts
+      if (prompt && prompt.trim()) {
+        requestBody.prompt = prompt.trim();
+      }
+      if (negative_prompt && negative_prompt.trim()) {
+        requestBody.negative_prompt = negative_prompt.trim();
+      }
+
+      const submitResponse = await fetch(queueEndpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!submitResponse.ok) {
+        const errorText = await submitResponse.text();
+        logger.error('MMAudio V2 submit error', { status: submitResponse.status, error: errorText });
+        // Refund credits on submit failure
+        await refundCredits(user, creditsRequired, `MMAudio submit error: ${submitResponse.status}`);
+        res.status(500).json({
+          success: false,
+          error: `Failed to start audio generation: ${submitResponse.status}`,
+          creditsRefunded: creditsRequired
+        });
+        return;
+      }
+
+      const submitData = await submitResponse.json() as { request_id?: string };
+      const requestId = submitData.request_id;
+
+      if (!requestId) {
+        logger.error('No request_id from MMAudio', { submitData });
+        await refundCredits(user, creditsRequired, 'No request_id from MMAudio');
+        res.status(500).json({
+          success: false,
+          error: 'Failed to submit audio generation request',
+          creditsRefunded: creditsRequired
+        });
+        return;
+      }
+
+      logger.info('MMAudio V2 submitted', { requestId });
+
+      // Poll for completion
+      const modelPath = 'fal-ai/mmaudio-v2';
+      const maxWaitTime = 3 * 60 * 1000; // 3 minutes max
+      const pollInterval = 2000; // Poll every 2 seconds
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        const statusResponse = await fetch(
+          `https://queue.fal.run/${modelPath}/requests/${requestId}/status`,
+          {
+            headers: { 'Authorization': `Key ${FAL_API_KEY}` }
+          }
+        );
+
+        if (!statusResponse.ok) {
+          continue;
+        }
+
+        const statusData = await statusResponse.json() as { 
+          status?: string;
+          audio?: { url?: string; content_type?: string; file_name?: string; file_size?: number };
+        };
+        
+        const normalizedStatus = (statusData.status || '').toUpperCase();
+
+        logger.debug('MMAudio polling', { 
+          requestId, 
+          status: normalizedStatus,
+          elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
+        });
+
+        // Check if audio in status response
+        if (statusData.audio?.url) {
+          logger.info('MMAudio completed (from status)', { requestId });
+          res.json({
+            success: true,
+            audio: statusData.audio,
+            remainingCredits: updateResult.credits,
+            creditsDeducted: creditsRequired
+          });
+          return;
+        }
+
+        if (normalizedStatus === 'COMPLETED') {
+          // Fetch the result
+          const resultResponse = await fetch(
+            `https://queue.fal.run/${modelPath}/requests/${requestId}`,
+            {
+              headers: { 'Authorization': `Key ${FAL_API_KEY}` }
+            }
+          );
+
+          if (!resultResponse.ok) {
+            await refundCredits(user, creditsRequired, 'Failed to fetch MMAudio result');
+            res.status(500).json({
+              success: false,
+              error: 'Failed to fetch audio result',
+              creditsRefunded: creditsRequired
+            });
+            return;
+          }
+
+          const resultData = await resultResponse.json() as {
+            audio?: { url?: string; content_type?: string; file_name?: string; file_size?: number };
+            audio_url?: string;
+            url?: string;
+          };
+
+          // Extract audio URL
+          let audioUrl: string | null = null;
+          let audioMeta: { content_type?: string; file_name?: string; file_size?: number } | null = null;
+
+          if (resultData.audio?.url) {
+            audioUrl = resultData.audio.url;
+            audioMeta = resultData.audio;
+          } else if (resultData.audio_url) {
+            audioUrl = resultData.audio_url;
+          } else if (resultData.url) {
+            audioUrl = resultData.url;
+          }
+
+          if (audioUrl) {
+            logger.info('MMAudio V2 completed', { requestId, audioUrl: audioUrl.substring(0, 50) });
+            res.json({
+              success: true,
+              audio: {
+                url: audioUrl,
+                content_type: audioMeta?.content_type || 'audio/wav',
+                file_name: audioMeta?.file_name || `audio-${requestId}.wav`,
+                file_size: audioMeta?.file_size
+              },
+              remainingCredits: updateResult.credits,
+              creditsDeducted: creditsRequired
+            });
+            return;
+          }
+
+          logger.error('No audio URL in MMAudio result', { resultData: JSON.stringify(resultData).substring(0, 500) });
+          await refundCredits(user, creditsRequired, 'No audio in MMAudio result');
+          res.status(500).json({
+            success: false,
+            error: 'Audio generation completed but no audio URL found',
+            creditsRefunded: creditsRequired
+          });
+          return;
+        }
+
+        if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          logger.error('MMAudio generation failed', { requestId, status: normalizedStatus });
+          await refundCredits(user, creditsRequired, `MMAudio failed: ${normalizedStatus}`);
+          res.status(500).json({
+            success: false,
+            error: 'Audio generation failed',
+            creditsRefunded: creditsRequired
+          });
+          return;
+        }
+      }
+
+      // Timeout
+      logger.error('MMAudio generation timeout', { requestId });
+      await refundCredits(user, creditsRequired, 'MMAudio timeout');
+      res.status(504).json({
+        success: false,
+        error: 'Audio generation timed out. Please try again.',
+        creditsRefunded: creditsRequired
+      });
+
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Video-to-audio error:', { error: err.message });
+      const user = req.user;
+      const creditsToRefund = 0.5;
+      if (user) {
+        await refundCredits(user, creditsToRefund, `Video-to-audio error: ${err.message}`);
+      }
+      res.status(500).json({
+        success: false,
+        error: err.message,
+        creditsRefunded: user ? creditsToRefund : 0
+      });
+    }
+  });
+
+  /**
    * Add generation to history
    * POST /api/generations/add
    */

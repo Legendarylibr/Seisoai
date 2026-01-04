@@ -1,18 +1,18 @@
-# Frontend Dockerfile for Railway
-FROM node:18-alpine
+# Frontend Dockerfile - Multi-stage build for minimal image size
+# Final image: ~25MB vs ~400MB+ single-stage
 
-# Security: Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 -G nodejs
+# ============================================
+# Stage 1: Build
+# ============================================
+FROM node:18-alpine AS builder
 
-# Set working directory
-WORKDIR /app
+WORKDIR /build
 
-# Copy package files
+# Copy package files first for better layer caching
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install ALL dependencies (including devDependencies for build)
+RUN npm ci --ignore-scripts
 
 # Copy source code
 COPY . .
@@ -20,14 +20,70 @@ COPY . .
 # Build the frontend
 RUN npm run build
 
-# Security: Change ownership to non-root user
-RUN chown -R nodejs:nodejs /app
+# ============================================
+# Stage 2: Production (minimal nginx image)
+# ============================================
+FROM nginx:1.27-alpine-slim AS production
 
-# Security: Switch to non-root user
-USER nodejs
+# Security: Remove default nginx config and html
+RUN rm -rf /usr/share/nginx/html/* /etc/nginx/conf.d/default.conf
 
-# Expose port
+# Create minimal nginx config with security headers
+RUN cat > /etc/nginx/conf.d/default.conf << 'EOF'
+server {
+    listen 3000;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/javascript application/javascript application/json image/svg+xml;
+
+    # SPA routing - serve index.html for all routes
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Cache static assets aggressively
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Deny access to hidden files
+    location ~ /\. {
+        deny all;
+        return 404;
+    }
+}
+EOF
+
+# Copy only the built static files from builder stage
+COPY --from=builder /build/dist /usr/share/nginx/html
+
+# Security: Use non-root user (nginx alpine includes nginx user)
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/log/nginx && \
+    touch /var/run/nginx.pid && \
+    chown nginx:nginx /var/run/nginx.pid
+
+USER nginx
+
 EXPOSE 3000
 
-# Start the frontend server
-CMD ["npm", "run", "start:frontend"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

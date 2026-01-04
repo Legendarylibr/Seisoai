@@ -15,6 +15,9 @@ import createRpcRoutes from './rpc';
 import createGalleryRoutes from './gallery';
 import createStaticRoutes from './static';
 import createExtractRoutes from './extract';
+import createAudioRoutes from './audio';
+import createImageToolsRoutes from './image-tools';
+import createWorkflowRoutes from './workflows';
 
 // Types
 interface Dependencies {
@@ -67,6 +70,15 @@ export function createApiRoutes(deps: Dependencies) {
   // WAN Animate
   router.use('/wan-animate', createWanAnimateRoutes(deps));
   
+  // Audio routes (voice clone, TTS, lip sync, audio separation, SFX)
+  router.use('/audio', createAudioRoutes(deps));
+  
+  // Image tools (face swap, inpaint, describe)
+  router.use('/image-tools', createImageToolsRoutes(deps));
+  
+  // Multi-step workflows (AI Influencer, Music Video, Avatar Creator, Remix Visualizer)
+  router.use('/workflows', createWorkflowRoutes(deps));
+  
   // Payments
   const paymentRoutes = createPaymentRoutes(deps);
   router.use('/payments', paymentRoutes);
@@ -90,7 +102,7 @@ export function createApiRoutes(deps: Dependencies) {
   router.use('/admin', createAdminRoutes(deps));
 
   // 404 handler for API routes
-  router.use('*', (req: Request, res: Response) => {
+  router.use('*', (_req: Request, res: Response) => {
     res.status(404).json({
       success: false,
       error: 'API endpoint not found'

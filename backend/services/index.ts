@@ -8,4 +8,7 @@ export * from './fal';
 export * from './stripe';
 export * from './blockchain';
 export * from './user';
+export * from './redis';
+export * from './circuitBreaker';
+export * from './jobQueue';
 

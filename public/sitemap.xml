@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  
+  <!-- Homepage - AI Image Generator -->
+  <url>
+    <loc>https://seisoai.com/</loc>
+    <lastmod>2026-01-03</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://seisoai.com/seiso6.png</image:loc>
+      <image:title>Seiso AI - AI Image Generator</image:title>
+      <image:caption>Create stunning AI-generated images with Seiso AI</image:caption>
+    </image:image>
+  </url>
+  
+  <!-- Image Generator Tab -->
+  <url>
+    <loc>https://seisoai.com/#generate</loc>
+    <lastmod>2026-01-03</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  
+  <!-- Video Generator Tab -->
+  <url>
+    <loc>https://seisoai.com/#video</loc>
+    <lastmod>2026-01-03</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Music Generator Tab -->
+  <url>
+    <loc>https://seisoai.com/#music</loc>
+    <lastmod>2026-01-03</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Gallery Tab -->
+  <url>
+    <loc>https://seisoai.com/#gallery</loc>
+    <lastmod>2026-01-03</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+</urlset>
+

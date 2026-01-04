@@ -1,0 +1,58 @@
+# Dependencies
+node_modules
+backend/node_modules
+
+# Environment files (SECURITY: never include secrets in image)
+.env
+.env.*
+*.env
+backend.env
+backend/.env
+
+# Git
+.git
+.gitignore
+
+# IDE/Editor
+.vscode
+.idea
+*.swp
+*.swo
+.cursor
+
+# Logs
+*.log
+logs/
+backend/logs/
+
+# Build artifacts (will be rebuilt in container)
+dist/
+
+# Documentation
+*.md
+docs/
+
+# Tests
+test/
+tests/
+__tests__/
+*.test.*
+*.spec.*
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker files (don't need Dockerfile inside the image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Misc
+*.tgz
+*.tar.gz
+*.zip
+grafana/
+scripts/
+

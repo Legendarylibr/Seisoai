@@ -7,7 +7,7 @@ import { Film, Upload, Play, X, Clock, Monitor, Volume2, VolumeX, Sparkles, Down
 import logger from '../utils/logger';
 import { WIN95 } from '../utils/buttonStyles';
 
-// Generation mode options - all Veo 3.1 variants
+// Generation mode options - Veo 3.1 variants + Lip Sync
 // Note: Actual endpoint construction is handled by the backend
 const GENERATION_MODES = [
   { 
@@ -16,7 +16,8 @@ const GENERATION_MODES = [
     icon: '✍️',
     description: 'Generate video from text prompt only',
     requiresFirstFrame: false,
-    requiresLastFrame: false
+    requiresLastFrame: false,
+    requiresAudio: false
   },
   { 
     value: 'image-to-video', 
@@ -24,7 +25,8 @@ const GENERATION_MODES = [
     icon: '🖼️',
     description: 'Animate a single image',
     requiresFirstFrame: true,
-    requiresLastFrame: false
+    requiresLastFrame: false,
+    requiresAudio: false
   },
   { 
     value: 'first-last-frame', 
@@ -32,7 +34,18 @@ const GENERATION_MODES = [
     icon: '🎞️',
     description: 'Animate between two frames',
     requiresFirstFrame: true,
-    requiresLastFrame: true
+    requiresLastFrame: true,
+    requiresAudio: false
+  },
+  { 
+    value: 'lip-sync', 
+    label: 'Lip Sync', 
+    icon: '🗣️',
+    description: 'Make portrait speak from audio',
+    requiresFirstFrame: true,
+    requiresLastFrame: false,
+    requiresAudio: true,
+    fixedCredits: 3
   }
 ];
 
@@ -337,7 +350,6 @@ const CollapsibleVideoHowToUse = memo(function CollapsibleVideoHowToUse(): React
         <div className="flex items-center gap-1.5">
           <Film className="w-3.5 h-3.5" />
           <span className="text-[10px] font-bold">Video Guide</span>
-          <span className="text-[8px] px-1.5 py-0.5 rounded-sm" style={{ background: 'rgba(255,255,255,0.2)' }}>Veo 3.1</span>
         </div>
         <ChevronDown 
           className="w-3.5 h-3.5 transition-transform" 
@@ -411,6 +423,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
   const [quality, setQuality] = useState<string>('fast');
   const [firstFrameUrl, setFirstFrameUrl] = useState<string | null>(null);
   const [lastFrameUrl, setLastFrameUrl] = useState<string | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null); // For lip sync
   const [prompt, setPrompt] = useState<string>('');
   const [duration, setDuration] = useState<string>('8s');
   const [resolution, setResolution] = useState<string>('720p');
@@ -421,7 +434,9 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
   const [error, setError] = useState<string | null>(null);
   const [videoReady, setVideoReady] = useState<boolean>(false);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [isUploadingAudio, setIsUploadingAudio] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
   const startTimeRef = useRef<number | null>(null);
 
   // Timer for elapsed time during generation
@@ -513,15 +528,68 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
 
   // Get current mode configuration
   const currentMode = GENERATION_MODES.find(m => m.value === generationMode) || GENERATION_MODES[2];
+  const isLipSyncMode = generationMode === 'lip-sync';
   
   // Determine if we can generate based on mode requirements
-  const hasRequiredFrames = () => {
+  const hasRequiredInputs = () => {
     if (currentMode.requiresFirstFrame && !firstFrameUrl) return false;
     if (currentMode.requiresLastFrame && !lastFrameUrl) return false;
+    if (currentMode.requiresAudio && !audioUrl) return false;
     return true;
   };
 
-  const canGenerate = isConnected && hasRequiredFrames() && prompt.trim().length > 0 && !isGenerating;
+  // For lip sync, prompt is optional (we can just animate to audio)
+  const canGenerate = isConnected && hasRequiredInputs() && (isLipSyncMode || prompt.trim().length > 0) && !isGenerating;
+  
+  // Handle audio file upload for lip sync
+  const handleAudioUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('audio/')) {
+      setError('Please select a valid audio file (MP3, WAV, M4A, etc.)');
+      return;
+    }
+    
+    if (file.size > 25 * 1024 * 1024) {
+      setError('Audio file too large. Maximum size is 25MB.');
+      return;
+    }
+    
+    setIsUploadingAudio(true);
+    setError(null);
+    
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const dataUri = event.target?.result as string;
+        
+        // Upload to backend
+        const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/audio/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audioDataUri: dataUri })
+        });
+        
+        const data = await response.json();
+        if (data.success && data.url) {
+          setAudioUrl(data.url);
+          logger.info('Audio uploaded successfully');
+        } else {
+          setError(data.error || 'Failed to upload audio');
+        }
+        setIsUploadingAudio(false);
+      };
+      reader.onerror = () => {
+        setError('Failed to read audio file');
+        setIsUploadingAudio(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setError((err as Error).message);
+      setIsUploadingAudio(false);
+    }
+  }, []);
 
   const handleGenerate = useCallback(async () => {
     if (!canGenerate) return;
@@ -531,20 +599,51 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
     setGeneratedVideoUrl(null);
 
     try {
-      const result = await generateVideo({
-        prompt,
-        firstFrameUrl: currentMode.requiresFirstFrame ? firstFrameUrl : null,
-        lastFrameUrl: currentMode.requiresLastFrame ? lastFrameUrl : null,
-        aspectRatio,
-        duration,
-        resolution,
-        generateAudio,
-        generationMode,
-        quality,
-        userId: emailContext.userId,
-        walletAddress: walletContext.address,
-        email: emailContext.email
-      });
+      let result;
+      
+      // Handle lip sync mode separately
+      if (isLipSyncMode && firstFrameUrl && audioUrl) {
+        const apiUrl = import.meta.env.VITE_API_URL || '';
+        const response = await fetch(`${apiUrl}/api/audio/lip-sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image_url: firstFrameUrl,
+            audio_url: audioUrl,
+            expression_scale: 1.0,
+            walletAddress: walletContext.address,
+            userId: emailContext.userId,
+            email: emailContext.email
+          })
+        });
+        
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Lip sync generation failed');
+        }
+        
+        result = {
+          videoUrl: data.video_url,
+          remainingCredits: data.remainingCredits,
+          creditsDeducted: data.creditsDeducted || 3
+        };
+      } else {
+        // Standard video generation
+        result = await generateVideo({
+          prompt,
+          firstFrameUrl: currentMode.requiresFirstFrame ? firstFrameUrl : null,
+          lastFrameUrl: currentMode.requiresLastFrame ? lastFrameUrl : null,
+          aspectRatio,
+          duration,
+          resolution,
+          generateAudio,
+          generationMode,
+          quality,
+          userId: emailContext.userId,
+          walletAddress: walletContext.address,
+          email: emailContext.email
+        });
+      }
 
       setGeneratedVideoUrl(result.videoUrl);
       
@@ -556,12 +655,12 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
       }
       
       // Save to gallery (non-blocking)
-      const creditsUsed = result.creditsDeducted || calculateVideoCredits(duration, generateAudio, quality);
+      const creditsUsed = result.creditsDeducted || (isLipSyncMode ? 3 : calculateVideoCredits(duration, generateAudio, quality));
       const identifier = isEmailAuth ? emailContext.userId : walletContext.address;
       if (identifier) {
         addGeneration(identifier, {
-          prompt: prompt.trim() || 'Video generation',
-          style: `${currentMode.label} - ${quality === 'quality' ? 'Quality' : 'Fast'}`,
+          prompt: prompt.trim() || (isLipSyncMode ? 'Lip Sync' : 'Video generation'),
+          style: `${currentMode.label}${isLipSyncMode ? '' : ` - ${quality === 'quality' ? 'Quality' : 'Fast'}`}`,
           videoUrl: result.videoUrl,
           creditsUsed: creditsUsed,
           userId: isEmailAuth ? emailContext.userId : undefined,
@@ -570,7 +669,8 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
       }
       
       logger.info('Video generated successfully', { 
-        remainingCredits: result.remainingCredits 
+        remainingCredits: result.remainingCredits,
+        mode: generationMode
       });
     } catch (err) {
       const error = err as Error;
@@ -579,7 +679,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
     } finally {
       setIsGenerating(false);
     }
-  }, [canGenerate, prompt, firstFrameUrl, lastFrameUrl, aspectRatio, duration, resolution, generateAudio, generationMode, quality, currentMode, emailContext, walletContext, isEmailAuth]);
+  }, [canGenerate, prompt, firstFrameUrl, lastFrameUrl, audioUrl, aspectRatio, duration, resolution, generateAudio, generationMode, quality, currentMode, emailContext, walletContext, isEmailAuth, isLipSyncMode]);
 
   const handleDownload = useCallback(async () => {
     if (!generatedVideoUrl) return;
@@ -637,8 +737,8 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
                 </Win95Panel>
               </div>
               
-              {/* Quality Selector */}
-              {generationMode !== 'text-to-video' && (
+              {/* Quality Selector - hide for lip sync mode */}
+              {generationMode !== 'text-to-video' && !isLipSyncMode && (
                 <div className="flex-1">
                   <label className="text-[8px] font-bold flex items-center gap-1 mb-0.5" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
                     <Zap className="w-2.5 h-2.5" /> Quality
@@ -662,12 +762,12 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
 
           {/* Frame Uploads - conditional based on mode */}
           {(currentMode.requiresFirstFrame || currentMode.requiresLastFrame) && (
-            <Win95GroupBox title={currentMode.requiresLastFrame ? "Frames" : "Reference"} className="flex-shrink-0" icon={<Image className="w-3.5 h-3.5" />}>
+            <Win95GroupBox title={isLipSyncMode ? "Portrait" : currentMode.requiresLastFrame ? "Frames" : "Reference"} className="flex-shrink-0" icon={<Image className="w-3.5 h-3.5" />}>
               <div className={`grid ${currentMode.requiresLastFrame ? 'grid-cols-2' : 'grid-cols-1'} gap-1`}>
                 {currentMode.requiresFirstFrame && (
                   <FrameUpload 
-                    label={currentMode.requiresLastFrame ? "Start" : "Source"}
-                    icon={currentMode.requiresLastFrame ? "🎬" : "🖼️"}
+                    label={isLipSyncMode ? "Face" : currentMode.requiresLastFrame ? "Start" : "Source"}
+                    icon={isLipSyncMode ? "👤" : currentMode.requiresLastFrame ? "🎬" : "🖼️"}
                     frameUrl={firstFrameUrl}
                     onUpload={setFirstFrameUrl}
                     onRemove={() => setFirstFrameUrl(null)}
@@ -686,26 +786,90 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
             </Win95GroupBox>
           )}
 
-          {/* Motion Description */}
-          <Win95GroupBox title="Motion Prompt" className="flex-shrink-0" icon={<Sparkles className="w-3.5 h-3.5" />}>
-            <Win95Panel sunken className="p-0">
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe animation: action, camera, mood..."
-                className="w-full p-1 resize-none text-[10px] focus:outline-none"
-                rows={1}
-                style={{ 
-                  background: 'transparent',
-                  color: WIN95.text,
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                  minHeight: '22px'
-                }}
-              />
-            </Win95Panel>
-          </Win95GroupBox>
+          {/* Audio Upload - for lip sync mode */}
+          {isLipSyncMode && (
+            <Win95GroupBox title="Audio" className="flex-shrink-0" icon={<Volume2 className="w-3.5 h-3.5" />}>
+              <div className="flex flex-col gap-1">
+                {!audioUrl ? (
+                  <div 
+                    onClick={() => audioInputRef.current?.click()}
+                    className="flex items-center justify-center gap-2 p-2 cursor-pointer"
+                    style={{
+                      background: WIN95.inputBg,
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`
+                    }}
+                  >
+                    {isUploadingAudio ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#000080', borderTopColor: 'transparent' }} />
+                        <span className="text-[9px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" style={{ color: WIN95.textDisabled }} />
+                        <span className="text-[9px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Upload Audio (MP3, WAV, M4A)</span>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div 
+                    className="flex items-center justify-between p-1.5"
+                    style={{
+                      background: WIN95.inputBg,
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                    }}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px]">🎵</span>
+                      <span className="text-[9px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Audio ready</span>
+                    </div>
+                    <div className="flex gap-0.5">
+                      <Win95Button onClick={() => audioInputRef.current?.click()} className="px-1.5 py-0.5 text-[9px]">
+                        Replace
+                      </Win95Button>
+                      <Win95Button onClick={() => setAudioUrl(null)} className="px-1.5 py-0.5 text-[9px]">
+                        <X className="w-3 h-3" />
+                      </Win95Button>
+                    </div>
+                  </div>
+                )}
+                <input 
+                  ref={audioInputRef}
+                  type="file"
+                  accept="audio/*"
+                  onChange={handleAudioUpload}
+                  className="hidden"
+                />
+                <p className="text-[8px] text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                  Tip: Use Voice Clone in Music tab to generate speech from text
+                </p>
+              </div>
+            </Win95GroupBox>
+          )}
 
-          {/* Video Settings - compact grid */}
+          {/* Motion Description - optional for lip sync */}
+          {!isLipSyncMode && (
+            <Win95GroupBox title="Motion Prompt" className="flex-shrink-0" icon={<Sparkles className="w-3.5 h-3.5" />}>
+              <Win95Panel sunken className="p-0">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe animation: action, camera, mood..."
+                  className="w-full p-1 resize-none text-[10px] focus:outline-none"
+                  rows={1}
+                  style={{ 
+                    background: 'transparent',
+                    color: WIN95.text,
+                    fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+                    minHeight: '22px'
+                  }}
+                />
+              </Win95Panel>
+            </Win95GroupBox>
+          )}
+
+          {/* Video Settings - compact grid (hide for lip sync) */}
+          {!isLipSyncMode && (
           <Win95GroupBox title="Settings" className="flex-shrink-0" icon={<Monitor className="w-3.5 h-3.5" />}>
             <div className="grid grid-cols-4 gap-1">
               {/* Duration */}
@@ -780,6 +944,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
               </div>
             </div>
           </Win95GroupBox>
+          )}
 
           {/* Generate Section */}
           <Win95GroupBox title="Generate" className="flex-shrink-0" icon={<Play className="w-3.5 h-3.5" />}>
@@ -798,17 +963,18 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
-                {isGenerating ? '⏳ Generating...' : '▶ Generate'}
+                {isGenerating ? '⏳ Generating...' : isLipSyncMode ? '🗣️ Generate Lip Sync' : '▶ Generate'}
               </button>
               <div className="text-[9px] text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                {calculateVideoCredits(duration, generateAudio, quality)} credits per generation
+                {isLipSyncMode ? '3' : calculateVideoCredits(duration, generateAudio, quality)} credits per generation
               </div>
             </div>
             {!canGenerate && !isGenerating && (
               <div className="mt-1 text-[8px] text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                {currentMode.requiresFirstFrame && !firstFrameUrl && '⬆️ First  '}
+                {currentMode.requiresFirstFrame && !firstFrameUrl && '⬆️ Portrait  '}
+                {currentMode.requiresAudio && !audioUrl && '🎵 Audio  '}
                 {currentMode.requiresLastFrame && !lastFrameUrl && '⬆️ Last  '}
-                {prompt.trim().length === 0 && '✏️ Prompt'}
+                {!isLipSyncMode && prompt.trim().length === 0 && '✏️ Prompt'}
               </div>
             )}
           </Win95GroupBox>

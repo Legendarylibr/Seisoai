@@ -1,6 +1,52 @@
-# robots.txt - Prevent web crawlers and AI networks from indexing sensitive endpoints
+# robots.txt - SEO optimized with protection for sensitive endpoints
+# https://seisoai.com
 
-# Allow all crawlers for public pages
+# Sitemap location for search engines
+Sitemap: https://seisoai.com/sitemap.xml
+
+# Allow all standard search engine crawlers
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /internal/
+Crawl-delay: 1
+
+User-agent: Bingbot
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /internal/
+Crawl-delay: 2
+
+User-agent: Slurp
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /internal/
+Crawl-delay: 2
+
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /internal/
+
+User-agent: Baiduspider
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /internal/
+Crawl-delay: 5
+
+User-agent: YandexBot
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /internal/
+Crawl-delay: 5
+
+# Default rules for other crawlers
 User-agent: *
 Allow: /
 Allow: /favicon.ico
@@ -11,7 +57,7 @@ Allow: /*.gif
 Allow: /*.svg
 Allow: /*.ico
 
-# Disallow all API endpoints - these contain sensitive information
+# Disallow API and sensitive endpoints
 Disallow: /api/
 Disallow: /api/health
 Disallow: /api/cors-info
@@ -37,10 +83,10 @@ Disallow: /*.map
 Disallow: /dist/
 Disallow: /build/
 
-# Crawl delay to reduce server load
+# Crawl delay for other bots
 Crawl-delay: 10
 
-# Block specific AI crawlers that may scrape for training data
+# Block AI training crawlers (opt-out of AI training)
 User-agent: GPTBot
 Disallow: /
 
@@ -68,9 +114,12 @@ Disallow: /
 User-agent: Omgilibot
 Disallow: /
 
-User-agent: FacebookBot
+User-agent: ia_archiver
 Disallow: /
 
-User-agent: ia_archiver
+User-agent: Bytespider
+Disallow: /
+
+User-agent: cohere-ai
 Disallow: /
 

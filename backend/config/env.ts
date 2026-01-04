@@ -17,8 +17,8 @@ dotenv.config({ path: envPath });
 // Required environment variables
 const REQUIRED_VARS = ['JWT_SECRET'];
 
-// Production-required variables
-const PRODUCTION_REQUIRED_VARS = ['MONGODB_URI'];
+// Production-required variables (for documentation/future use)
+// const PRODUCTION_REQUIRED_VARS = ['MONGODB_URI'];
 
 // Validate required vars
 const missingVars = REQUIRED_VARS.filter(v => !process.env[v]);
@@ -32,7 +32,9 @@ export interface Config {
   PORT: number;
   NODE_ENV: string;
   HOST?: string;
+  API_VERSION: string;
   MONGODB_URI?: string;
+  REDIS_URL?: string;
   JWT_SECRET?: string;
   JWT_REFRESH_SECRET?: string;
   SESSION_SECRET?: string;
@@ -57,9 +59,11 @@ export const config: Config = {
   PORT: parseInt(process.env.PORT || '3001', 10),
   NODE_ENV: process.env.NODE_ENV || 'development',
   HOST: process.env.HOST,
+  API_VERSION: process.env.API_VERSION || 'v1',
   
   // Database
   MONGODB_URI: process.env.MONGODB_URI,
+  REDIS_URL: process.env.REDIS_URL,
   
   // Security
   JWT_SECRET: process.env.JWT_SECRET,

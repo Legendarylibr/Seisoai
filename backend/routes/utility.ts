@@ -18,14 +18,14 @@ interface HealthResponse {
   database?: string;
 }
 
-export function createUtilityRoutes(deps: Dependencies = {}) {
+export function createUtilityRoutes(_deps: Dependencies = {}) {
   const router = Router();
 
   /**
    * Health check
    * GET /api/health
    */
-  router.get('/health', (req: Request, res: Response) => {
+  router.get('/health', (_req: Request, res: Response) => {
     try {
       const dbState = mongoose.connection.readyState;
       const dbStatus = dbState === 1 ? 'connected' : dbState === 2 ? 'connecting' : 'disconnected';

@@ -127,28 +127,48 @@ export function createWanAnimateRoutes(deps: Dependencies) {
         req.on('error', reject);
       });
 
-      // Upload to fal.ai
+      // Upload to fal.ai using presigned URL
       const mimeType = 'video/mp4';
-      const boundary = `----formdata-${Date.now()}`;
-      const CRLF = '\r\n';
 
-      let formDataBody = `--${boundary}${CRLF}`;
-      formDataBody += `Content-Disposition: form-data; name="file"; filename="video.mp4"${CRLF}`;
-      formDataBody += `Content-Type: ${mimeType}${CRLF}${CRLF}`;
-
-      const formDataBuffer = Buffer.concat([
-        Buffer.from(formDataBody, 'utf8'),
-        formData,
-        Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8')
-      ]);
-
-      const uploadResponse = await fetch('https://fal.ai/files', {
+      // Step 1: Initiate upload to get presigned URL
+      const initiateResponse = await fetch('https://rest.fal.run/storage/upload/initiate', {
         method: 'POST',
         headers: {
           'Authorization': `Key ${FAL_API_KEY}`,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Type': 'application/json'
         },
-        body: formDataBuffer
+        body: JSON.stringify({
+          file_name: 'video.mp4',
+          content_type: mimeType
+        })
+      });
+
+      if (!initiateResponse.ok) {
+        const errorText = await initiateResponse.text();
+        logger.error('Failed to initiate video upload to fal.ai (direct)', {
+          status: initiateResponse.status,
+          error: errorText.substring(0, 200)
+        });
+        res.status(initiateResponse.status).json({
+          success: false,
+          error: `Failed to initiate upload: ${errorText.substring(0, 200)}`
+        });
+        return;
+      }
+
+      const initiateData = await initiateResponse.json() as { upload_url?: string; file_url?: string };
+      if (!initiateData.upload_url || !initiateData.file_url) {
+        res.status(500).json({ success: false, error: 'No upload URL returned from fal.ai' });
+        return;
+      }
+
+      // Step 2: Upload file to presigned URL
+      const uploadResponse = await fetch(initiateData.upload_url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': mimeType
+        },
+        body: formData
       });
 
       if (!uploadResponse.ok) {
@@ -164,8 +184,7 @@ export function createWanAnimateRoutes(deps: Dependencies) {
         return;
       }
 
-      const uploadData = await uploadResponse.json() as { url?: string; file?: { url?: string } };
-      const videoUrl = uploadData.url || uploadData.file?.url;
+      const videoUrl = initiateData.file_url;
 
       if (!videoUrl) {
         res.status(500).json({ success: false, error: 'No video URL in response' });
@@ -223,27 +242,42 @@ export function createWanAnimateRoutes(deps: Dependencies) {
       const mimeType = mimeMatch ? mimeMatch[1] : 'video/mp4';
       const extension = mimeType.includes('quicktime') ? 'mov' : 'mp4';
       
-      // Upload to fal.ai
-      const boundary = `----formdata-${Date.now()}`;
-      const CRLF = '\r\n';
-      
-      let formDataBody = `--${boundary}${CRLF}`;
-      formDataBody += `Content-Disposition: form-data; name="file"; filename="video.${extension}"${CRLF}`;
-      formDataBody += `Content-Type: ${mimeType}${CRLF}${CRLF}`;
-      
-      const formDataBuffer = Buffer.concat([
-        Buffer.from(formDataBody, 'utf8'),
-        buffer,
-        Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8')
-      ]);
-      
-      const uploadResponse = await fetch('https://fal.ai/files', {
+      // Upload to fal.ai using presigned URL
+      // Step 1: Initiate upload to get presigned URL
+      const initiateResponse = await fetch('https://rest.fal.run/storage/upload/initiate', {
         method: 'POST',
         headers: {
           'Authorization': `Key ${FAL_API_KEY}`,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Type': 'application/json'
         },
-        body: formDataBuffer
+        body: JSON.stringify({
+          file_name: `video.${extension}`,
+          content_type: mimeType
+        })
+      });
+
+      if (!initiateResponse.ok) {
+        const errorText = await initiateResponse.text();
+        res.status(initiateResponse.status).json({ 
+          success: false, 
+          error: `Failed to initiate upload: ${errorText.substring(0, 200)}` 
+        });
+        return;
+      }
+
+      const initiateData = await initiateResponse.json() as { upload_url?: string; file_url?: string };
+      if (!initiateData.upload_url || !initiateData.file_url) {
+        res.status(500).json({ success: false, error: 'No upload URL returned from fal.ai' });
+        return;
+      }
+
+      // Step 2: Upload file to presigned URL
+      const uploadResponse = await fetch(initiateData.upload_url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': mimeType
+        },
+        body: buffer
       });
 
       if (!uploadResponse.ok) {
@@ -255,15 +289,7 @@ export function createWanAnimateRoutes(deps: Dependencies) {
         return;
       }
 
-      const uploadData = await uploadResponse.json() as { url?: string; file?: { url?: string } };
-      const videoUrl = uploadData.url || uploadData.file?.url;
-      
-      if (!videoUrl) {
-        res.status(500).json({ success: false, error: 'No video URL returned from upload' });
-        return;
-      }
-
-      res.json({ success: true, url: videoUrl });
+      res.json({ success: true, url: initiateData.file_url });
     } catch (error) {
       const err = error as Error;
       logger.error('Wan-animate video upload error', { error: err.message });
@@ -308,27 +334,42 @@ export function createWanAnimateRoutes(deps: Dependencies) {
       const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
       const extension = mimeType.includes('png') ? 'png' : 'jpg';
       
-      // Upload to fal.ai
-      const boundary = `----formdata-${Date.now()}`;
-      const CRLF = '\r\n';
-      
-      let formDataBody = `--${boundary}${CRLF}`;
-      formDataBody += `Content-Disposition: form-data; name="file"; filename="image.${extension}"${CRLF}`;
-      formDataBody += `Content-Type: ${mimeType}${CRLF}${CRLF}`;
-      
-      const formDataBuffer = Buffer.concat([
-        Buffer.from(formDataBody, 'utf8'),
-        buffer,
-        Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8')
-      ]);
-      
-      const uploadResponse = await fetch('https://fal.ai/files', {
+      // Upload to fal.ai using presigned URL
+      // Step 1: Initiate upload to get presigned URL
+      const initiateResponse = await fetch('https://rest.fal.run/storage/upload/initiate', {
         method: 'POST',
         headers: {
           'Authorization': `Key ${FAL_API_KEY}`,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Type': 'application/json'
         },
-        body: formDataBuffer
+        body: JSON.stringify({
+          file_name: `image.${extension}`,
+          content_type: mimeType
+        })
+      });
+
+      if (!initiateResponse.ok) {
+        const errorText = await initiateResponse.text();
+        res.status(initiateResponse.status).json({ 
+          success: false, 
+          error: `Failed to initiate upload: ${errorText.substring(0, 200)}` 
+        });
+        return;
+      }
+
+      const initiateData = await initiateResponse.json() as { upload_url?: string; file_url?: string };
+      if (!initiateData.upload_url || !initiateData.file_url) {
+        res.status(500).json({ success: false, error: 'No upload URL returned from fal.ai' });
+        return;
+      }
+
+      // Step 2: Upload file to presigned URL
+      const uploadResponse = await fetch(initiateData.upload_url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': mimeType
+        },
+        body: buffer
       });
 
       if (!uploadResponse.ok) {
@@ -340,15 +381,7 @@ export function createWanAnimateRoutes(deps: Dependencies) {
         return;
       }
 
-      const uploadData = await uploadResponse.json() as { url?: string; file?: { url?: string } };
-      const imageUrl = uploadData.url || uploadData.file?.url;
-      
-      if (!imageUrl) {
-        res.status(500).json({ success: false, error: 'No image URL returned from upload' });
-        return;
-      }
-
-      res.json({ success: true, url: imageUrl });
+      res.json({ success: true, url: initiateData.file_url });
     } catch (error) {
       const err = error as Error;
       logger.error('Wan-animate image upload error', { error: err.message });

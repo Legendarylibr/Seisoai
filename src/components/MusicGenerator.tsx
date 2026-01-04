@@ -1,8 +1,9 @@
-import React, { useState, useCallback, memo, ReactNode } from 'react';
+import React, { useState, useCallback, memo, ReactNode, useRef, ChangeEvent } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateMusic, calculateMusicCredits, calculateMusicCost } from '../services/musicService';
-import { Music, Play, Pause, Download, AlertCircle, ChevronDown, Disc3, Square, Brain } from 'lucide-react';
+import { Music, Play, Pause, Download, AlertCircle, ChevronDown, Disc3, Square, Brain, Mic, Sliders, Upload, X, Volume2 } from 'lucide-react';
+import { API_URL } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
 // Windows 95 style constants
@@ -376,7 +377,6 @@ const CollapsibleMusicHowToUse = memo(function CollapsibleMusicHowToUse(): React
         <div className="flex items-center gap-1 lg:gap-2">
           <Music className="w-3 h-3 lg:w-4 lg:h-4" style={{ color: WIN95.text }} />
           <span className="text-[9px] lg:text-[10px] font-bold" style={{ color: WIN95.text }}>Guide</span>
-          <span className="text-[7px] lg:text-[8px] px-1 py-0.5 rounded" style={{ background: '#008080', color: '#fff' }}>Cassette</span>
         </div>
         <ChevronDown 
           className="w-3 h-3 transition-transform" 
@@ -449,7 +449,11 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
   const isEmailAuth = emailContext.isAuthenticated;
   const isConnected = isEmailAuth || walletContext.isConnected;
   
-  // State
+  // Music mode tabs
+  type MusicMode = 'generate' | 'voice' | 'remix';
+  const [musicMode, setMusicMode] = useState<MusicMode>('generate');
+  
+  // State - Generate mode
   const [prompt, setPrompt] = useState<string>('');
   const [duration, setDuration] = useState<number>(30);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -460,6 +464,21 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [optimizePrompt, setOptimizePrompt] = useState<boolean>(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  
+  // State - Voice mode (TTS/Voice Clone)
+  const [voiceText, setVoiceText] = useState<string>('');
+  const [voiceRefUrl, setVoiceRefUrl] = useState<string | null>(null);
+  const [isVoiceGenerating, setIsVoiceGenerating] = useState<boolean>(false);
+  const [voiceAudioUrl, setVoiceAudioUrl] = useState<string | null>(null);
+  const [isUploadingVoiceRef, setIsUploadingVoiceRef] = useState<boolean>(false);
+  const voiceRefInputRef = useRef<HTMLInputElement | null>(null);
+  
+  // State - Remix mode (Audio Separation)
+  const [remixSourceUrl, setRemixSourceUrl] = useState<string | null>(null);
+  const [isRemixing, setIsRemixing] = useState<boolean>(false);
+  const [remixStems, setRemixStems] = useState<{ vocals?: string; drums?: string; bass?: string; other?: string } | null>(null);
+  const [isUploadingRemixSource, setIsUploadingRemixSource] = useState<boolean>(false);
+  const remixSourceInputRef = useRef<HTMLInputElement | null>(null);
 
   const canGenerate = isConnected && prompt.trim().length > 0 && !isGenerating;
 
@@ -543,6 +562,170 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
     }
   }, []);
 
+  // Voice Clone handlers
+  const handleVoiceRefUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('audio/')) {
+      setError('Please select a valid audio file');
+      return;
+    }
+    
+    if (file.size > 25 * 1024 * 1024) {
+      setError('Audio file too large. Maximum 25MB.');
+      return;
+    }
+    
+    setIsUploadingVoiceRef(true);
+    setError(null);
+    
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const dataUri = event.target?.result as string;
+        const response = await fetch(`${API_URL}/api/audio/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audioDataUri: dataUri })
+        });
+        const data = await response.json();
+        if (data.success && data.url) {
+          setVoiceRefUrl(data.url);
+        } else {
+          setError(data.error || 'Failed to upload voice reference');
+        }
+        setIsUploadingVoiceRef(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setError((err as Error).message);
+      setIsUploadingVoiceRef(false);
+    }
+  }, []);
+
+  const handleVoiceGenerate = useCallback(async () => {
+    if (!voiceText.trim()) return;
+    
+    setIsVoiceGenerating(true);
+    setError(null);
+    setVoiceAudioUrl(null);
+    
+    try {
+      const response = await fetch(`${API_URL}/api/audio/voice-clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: voiceText,
+          voice_url: voiceRefUrl || undefined,
+          language: 'en',
+          walletAddress: walletContext.address,
+          userId: emailContext.userId,
+          email: emailContext.email
+        })
+      });
+      
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Voice generation failed');
+      }
+      
+      setVoiceAudioUrl(data.audio_url);
+      
+      // Refresh credits
+      if (isEmailAuth && emailContext.refreshCredits) {
+        emailContext.refreshCredits();
+      } else if (walletContext.fetchCredits && walletContext.address) {
+        walletContext.fetchCredits(walletContext.address, 3, true);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsVoiceGenerating(false);
+    }
+  }, [voiceText, voiceRefUrl, emailContext, walletContext, isEmailAuth]);
+
+  // Remix (Audio Separation) handlers
+  const handleRemixSourceUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('audio/')) {
+      setError('Please select a valid audio file');
+      return;
+    }
+    
+    if (file.size > 25 * 1024 * 1024) {
+      setError('Audio file too large. Maximum 25MB.');
+      return;
+    }
+    
+    setIsUploadingRemixSource(true);
+    setError(null);
+    
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const dataUri = event.target?.result as string;
+        const response = await fetch(`${API_URL}/api/audio/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audioDataUri: dataUri })
+        });
+        const data = await response.json();
+        if (data.success && data.url) {
+          setRemixSourceUrl(data.url);
+        } else {
+          setError(data.error || 'Failed to upload audio');
+        }
+        setIsUploadingRemixSource(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setError((err as Error).message);
+      setIsUploadingRemixSource(false);
+    }
+  }, []);
+
+  const handleRemixSeparate = useCallback(async () => {
+    if (!remixSourceUrl) return;
+    
+    setIsRemixing(true);
+    setError(null);
+    setRemixStems(null);
+    
+    try {
+      const response = await fetch(`${API_URL}/api/audio/separate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audio_url: remixSourceUrl,
+          walletAddress: walletContext.address,
+          userId: emailContext.userId,
+          email: emailContext.email
+        })
+      });
+      
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Audio separation failed');
+      }
+      
+      setRemixStems(data.stems);
+      
+      // Refresh credits
+      if (isEmailAuth && emailContext.refreshCredits) {
+        emailContext.refreshCredits();
+      } else if (walletContext.fetchCredits && walletContext.address) {
+        walletContext.fetchCredits(walletContext.address, 3, true);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsRemixing(false);
+    }
+  }, [remixSourceUrl, emailContext, walletContext, isEmailAuth]);
+
   const handleStyleClick = useCallback((style: { label: string; prompt: string; category: string }) => {
     // Don't autofill the prompt - just set the genre for context
     // User writes their own prompt which gets optimized for the music model
@@ -554,10 +737,70 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
       {/* Menu bar style how to use */}
       <CollapsibleMusicHowToUse />
       
+      {/* Mode Tabs */}
+      <div 
+        className="flex items-center gap-0 mx-1 lg:mx-1.5 mt-1"
+        style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
+      >
+        <button
+          onClick={() => setMusicMode('generate')}
+          className="px-3 py-1 text-[10px] font-bold flex items-center gap-1"
+          style={{
+            background: musicMode === 'generate' ? WIN95.bg : WIN95.bgDark,
+            color: musicMode === 'generate' ? WIN95.text : WIN95.textDisabled,
+            boxShadow: musicMode === 'generate' 
+              ? `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 0 -1px 0 ${WIN95.bg}`
+              : `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.border.darker}`,
+            borderBottom: musicMode === 'generate' ? 'none' : `1px solid ${WIN95.border.darker}`,
+            marginBottom: musicMode === 'generate' ? '-1px' : '0',
+            zIndex: musicMode === 'generate' ? 2 : 1
+          }}
+        >
+          <Music className="w-3 h-3" /> Generate
+        </button>
+        <button
+          onClick={() => setMusicMode('voice')}
+          className="px-3 py-1 text-[10px] font-bold flex items-center gap-1"
+          style={{
+            background: musicMode === 'voice' ? WIN95.bg : WIN95.bgDark,
+            color: musicMode === 'voice' ? WIN95.text : WIN95.textDisabled,
+            boxShadow: musicMode === 'voice' 
+              ? `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 0 -1px 0 ${WIN95.bg}`
+              : `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.border.darker}`,
+            borderBottom: musicMode === 'voice' ? 'none' : `1px solid ${WIN95.border.darker}`,
+            marginBottom: musicMode === 'voice' ? '-1px' : '0',
+            zIndex: musicMode === 'voice' ? 2 : 1
+          }}
+        >
+          <Mic className="w-3 h-3" /> Voice
+        </button>
+        <button
+          onClick={() => setMusicMode('remix')}
+          className="px-3 py-1 text-[10px] font-bold flex items-center gap-1"
+          style={{
+            background: musicMode === 'remix' ? WIN95.bg : WIN95.bgDark,
+            color: musicMode === 'remix' ? WIN95.text : WIN95.textDisabled,
+            boxShadow: musicMode === 'remix' 
+              ? `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 0 -1px 0 ${WIN95.bg}`
+              : `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.border.darker}`,
+            borderBottom: musicMode === 'remix' ? 'none' : `1px solid ${WIN95.border.darker}`,
+            marginBottom: musicMode === 'remix' ? '-1px' : '0',
+            zIndex: musicMode === 'remix' ? 2 : 1
+          }}
+        >
+          <Sliders className="w-3 h-3" /> Remix
+        </button>
+        <div className="flex-1" style={{ borderBottom: `1px solid ${WIN95.border.darker}` }} />
+      </div>
+      
       {/* Main content */}
       <div className="flex-1 min-h-0 p-1 lg:p-1.5 flex flex-col lg:flex-row gap-1 lg:gap-1.5 overflow-auto lg:overflow-hidden">
         {/* Left panel - Controls */}
         <div className="lg:w-[45%] flex flex-col gap-0.5 lg:gap-1 min-h-0 overflow-auto lg:overflow-hidden">
+          
+          {/* ========== GENERATE MODE ========== */}
+          {musicMode === 'generate' && (
+          <>
           {/* Genre Selection */}
           <Win95GroupBox title="Genre" className="flex-shrink-0">
             <Win95GenreDropdown
@@ -662,13 +905,228 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
               </div>
             )}
           </Win95GroupBox>
+          </>
+          )}
+          
+          {/* ========== VOICE MODE ========== */}
+          {musicMode === 'voice' && (
+          <>
+          {/* Voice Reference (Optional) */}
+          <Win95GroupBox title="Voice Reference (Optional)" className="flex-shrink-0">
+            <div className="flex flex-col gap-1">
+              {!voiceRefUrl ? (
+                <div 
+                  onClick={() => voiceRefInputRef.current?.click()}
+                  className="flex items-center justify-center gap-2 p-2 cursor-pointer"
+                  style={{
+                    background: WIN95.inputBg,
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`
+                  }}
+                >
+                  {isUploadingVoiceRef ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#000080', borderTopColor: 'transparent' }} />
+                      <span className="text-[9px]" style={{ color: WIN95.text }}>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" style={{ color: WIN95.textDisabled }} />
+                      <span className="text-[9px]" style={{ color: WIN95.text }}>Upload voice sample to clone (5-30s)</span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div 
+                  className="flex items-center justify-between p-1.5"
+                  style={{ background: WIN95.inputBg, boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}` }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px]">🎤</span>
+                    <span className="text-[9px]" style={{ color: WIN95.text }}>Voice sample loaded</span>
+                  </div>
+                  <Win95Button onClick={() => setVoiceRefUrl(null)} className="px-1.5 py-0.5 text-[9px]">
+                    <X className="w-3 h-3" />
+                  </Win95Button>
+                </div>
+              )}
+              <input ref={voiceRefInputRef} type="file" accept="audio/*" onChange={handleVoiceRefUpload} className="hidden" />
+              <p className="text-[8px] text-center" style={{ color: WIN95.textDisabled }}>
+                Leave empty for default AI voice
+              </p>
+            </div>
+          </Win95GroupBox>
+          
+          {/* Text to Speak */}
+          <Win95GroupBox title="Text to Speak" className="flex-shrink-0">
+            <Win95Panel sunken className="p-0">
+              <textarea
+                value={voiceText}
+                onChange={(e) => setVoiceText(e.target.value)}
+                placeholder="Type what you want the AI to say..."
+                className="w-full p-1 resize-none text-[11px] focus:outline-none"
+                rows={4}
+                style={{ background: 'transparent', color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
+              />
+            </Win95Panel>
+            <div className="text-[8px] text-right mt-0.5" style={{ color: WIN95.textDisabled }}>
+              {voiceText.length}/5000 characters
+            </div>
+          </Win95GroupBox>
+          
+          {/* Generate Voice */}
+          <Win95GroupBox title="Generate" className="flex-shrink-0">
+            <button
+              onClick={handleVoiceGenerate}
+              disabled={!voiceText.trim() || isVoiceGenerating || !isConnected}
+              className="w-full py-2 text-[11px] font-bold"
+              style={{
+                background: '#2d8a2d',
+                color: '#ffffff',
+                border: 'none',
+                boxShadow: `inset 1px 1px 0 #4db84d, inset -1px -1px 0 #1a5c1a, inset 2px 2px 0 #3da83d, inset -2px -2px 0 #206b20`,
+                cursor: (!voiceText.trim() || isVoiceGenerating || !isConnected) ? 'default' : 'pointer',
+                opacity: (!voiceText.trim() || isVoiceGenerating || !isConnected) ? 0.7 : 1,
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+              }}
+            >
+              {isVoiceGenerating ? '⏳ Generating...' : '🗣️ Generate Speech'}
+            </button>
+            <div className="text-[9px] text-center mt-1" style={{ color: WIN95.textDisabled }}>
+              ~1 credit per generation • {voiceRefUrl ? 'Cloned voice' : 'Default AI voice'}
+            </div>
+          </Win95GroupBox>
+          
+          {/* Voice Output */}
+          {voiceAudioUrl && (
+            <Win95GroupBox title="Output" className="flex-shrink-0">
+              <audio controls src={voiceAudioUrl} className="w-full h-8" style={{ filter: 'sepia(0.3)' }} />
+              <div className="flex gap-1 mt-1">
+                <Win95Button 
+                  onClick={() => {
+                    const a = document.createElement('a');
+                    a.href = voiceAudioUrl;
+                    a.download = `voice-${Date.now()}.wav`;
+                    a.click();
+                  }}
+                  className="flex-1 text-[9px]"
+                >
+                  💾 Download
+                </Win95Button>
+              </div>
+            </Win95GroupBox>
+          )}
+          </>
+          )}
+          
+          {/* ========== REMIX MODE ========== */}
+          {musicMode === 'remix' && (
+          <>
+          {/* Upload Audio to Separate */}
+          <Win95GroupBox title="Source Audio" className="flex-shrink-0">
+            <div className="flex flex-col gap-1">
+              {!remixSourceUrl ? (
+                <div 
+                  onClick={() => remixSourceInputRef.current?.click()}
+                  className="flex items-center justify-center gap-2 p-3 cursor-pointer"
+                  style={{
+                    background: WIN95.inputBg,
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`
+                  }}
+                >
+                  {isUploadingRemixSource ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#000080', borderTopColor: 'transparent' }} />
+                      <span className="text-[9px]" style={{ color: WIN95.text }}>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-5 h-5" style={{ color: WIN95.textDisabled }} />
+                      <div className="text-center">
+                        <span className="text-[10px] block" style={{ color: WIN95.text }}>Upload song to separate</span>
+                        <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>MP3, WAV, M4A (max 25MB)</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div 
+                  className="flex items-center justify-between p-2"
+                  style={{ background: WIN95.inputBg, boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}` }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Disc3 className="w-5 h-5" style={{ color: '#000080' }} />
+                    <span className="text-[10px]" style={{ color: WIN95.text }}>Audio loaded</span>
+                  </div>
+                  <Win95Button onClick={() => { setRemixSourceUrl(null); setRemixStems(null); }} className="px-2 py-0.5 text-[9px]">
+                    <X className="w-3 h-3" />
+                  </Win95Button>
+                </div>
+              )}
+              <input ref={remixSourceInputRef} type="file" accept="audio/*" onChange={handleRemixSourceUpload} className="hidden" />
+            </div>
+          </Win95GroupBox>
+          
+          {/* Separate Button */}
+          <Win95GroupBox title="Extract Stems" className="flex-shrink-0">
+            <button
+              onClick={handleRemixSeparate}
+              disabled={!remixSourceUrl || isRemixing || !isConnected}
+              className="w-full py-2 text-[11px] font-bold"
+              style={{
+                background: '#8a2d8a',
+                color: '#ffffff',
+                border: 'none',
+                boxShadow: `inset 1px 1px 0 #b84db8, inset -1px -1px 0 #5c1a5c, inset 2px 2px 0 #a83da8, inset -2px -2px 0 #6b206b`,
+                cursor: (!remixSourceUrl || isRemixing || !isConnected) ? 'default' : 'pointer',
+                opacity: (!remixSourceUrl || isRemixing || !isConnected) ? 0.7 : 1,
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+              }}
+            >
+              {isRemixing ? '⏳ Separating...' : '🎛️ Separate into Stems'}
+            </button>
+            <div className="text-[9px] text-center mt-1" style={{ color: WIN95.textDisabled }}>
+              2 credits • Extracts: Vocals, Drums, Bass, Other
+            </div>
+          </Win95GroupBox>
+          
+          {/* Stems Output */}
+          {remixStems && (
+            <Win95GroupBox title="Extracted Stems" className="flex-shrink-0">
+              <div className="grid grid-cols-2 gap-1">
+                {Object.entries(remixStems).map(([stem, url]) => url && (
+                  <div key={stem} className="p-1.5" style={{ background: WIN95.inputBg, boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}` }}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[9px] font-bold capitalize" style={{ color: WIN95.text }}>
+                        {stem === 'vocals' ? '🎤' : stem === 'drums' ? '🥁' : stem === 'bass' ? '🎸' : '🎹'} {stem}
+                      </span>
+                      <Win95Button 
+                        onClick={() => {
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `${stem}-${Date.now()}.wav`;
+                          a.click();
+                        }}
+                        className="px-1 py-0 text-[8px]"
+                      >
+                        💾
+                      </Win95Button>
+                    </div>
+                    <audio controls src={url} className="w-full h-6" style={{ filter: 'sepia(0.3)' }} />
+                  </div>
+                ))}
+              </div>
+            </Win95GroupBox>
+          )}
+          </>
+          )}
         </div>
         
-        {/* Right panel - Output */}
+        {/* Right panel - Output (only for generate mode) */}
+        {musicMode === 'generate' && (
         <div className="flex-1 flex flex-col gap-0.5 lg:gap-1 min-h-0">
           {/* Waveform Display */}
           <Win95GroupBox title="Waveform" className="flex-1 flex flex-col min-h-0">
-            <Win95Panel sunken className="overflow-hidden flex-1" style={{ minHeight: '60px' }}>
+            <Win95Panel sunken className="overflow-hidden flex-1 min-h-[60px]">
               <AnimatedWaveform isPlaying={isPlaying} isGenerating={isGenerating} />
             </Win95Panel>
           </Win95GroupBox>
@@ -729,6 +1187,16 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
             </div>
           )}
         </div>
+        )}
+        
+        {/* Error display for voice/remix modes */}
+        {musicMode !== 'generate' && error && (
+          <div className="flex items-center gap-1 px-1 py-0.5 mx-1" style={{ background: '#ffe0e0' }}>
+            <AlertCircle className="w-3 h-3 flex-shrink-0" style={{ color: '#800000' }} />
+            <div className="text-[8px] flex-1" style={{ color: '#800000' }}>{error}</div>
+            <Win95Button onClick={() => setError(null)} className="text-[8px] px-1">✕</Win95Button>
+          </div>
+        )}
       </div>
       
       {/* Status bar */}

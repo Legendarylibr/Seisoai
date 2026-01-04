@@ -122,39 +122,56 @@ export async function getQueueResult<T = unknown>(requestId: string, model?: str
 }
 
 /**
- * Upload file to FAL storage
+ * Upload file to FAL storage using presigned URL approach
  */
 export async function uploadToFal(buffer: Buffer, mimeType: string, filename: string): Promise<string> {
-  const boundary = `----formdata-${Date.now()}`;
-  const CRLF = '\r\n';
-  
-  let formDataBody = '';
-  formDataBody += `--${boundary}${CRLF}`;
-  formDataBody += `Content-Disposition: form-data; name="file"; filename="${filename}"${CRLF}`;
-  formDataBody += `Content-Type: ${mimeType}${CRLF}${CRLF}`;
-  
-  const formDataBuffer = Buffer.concat([
-    Buffer.from(formDataBody, 'utf8'),
-    buffer,
-    Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8')
-  ]);
-  
-  const response = await fetch('https://fal.ai/files', {
+  if (!FAL_API_KEY) {
+    throw new Error('FAL API not configured');
+  }
+
+  // Step 1: Initiate upload to get presigned URL
+  const initiateResponse = await fetch('https://rest.fal.run/storage/upload/initiate', {
     method: 'POST',
     headers: {
       'Authorization': `Key ${FAL_API_KEY}`,
-      'Content-Type': `multipart/form-data; boundary=${boundary}`
+      'Content-Type': 'application/json'
     },
-    body: formDataBuffer
+    body: JSON.stringify({
+      file_name: filename,
+      content_type: mimeType
+    })
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Upload failed: ${response.status} - ${error}`);
+  if (!initiateResponse.ok) {
+    const error = await initiateResponse.text();
+    throw new Error(`Upload initiate failed: ${initiateResponse.status} - ${error}`);
   }
 
-  const data = await response.json() as { url?: string; file?: { url?: string } };
-  return data.url || data.file?.url || '';
+  const initiateData = await initiateResponse.json() as { 
+    upload_url?: string; 
+    file_url?: string;
+  };
+
+  if (!initiateData.upload_url || !initiateData.file_url) {
+    throw new Error('No upload URL returned from FAL');
+  }
+
+  // Step 2: Upload file to presigned URL
+  const uploadResponse = await fetch(initiateData.upload_url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': mimeType
+    },
+    body: buffer
+  });
+
+  if (!uploadResponse.ok) {
+    const error = await uploadResponse.text();
+    throw new Error(`File upload failed: ${uploadResponse.status} - ${error}`);
+  }
+
+  logger.info('File uploaded to FAL storage', { filename, url: initiateData.file_url });
+  return initiateData.file_url;
 }
 
 export default {

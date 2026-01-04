@@ -150,34 +150,54 @@ export async function uploadToFal({ dataUri, type, apiKey, ip }: UploadOptions):
     }
   }
   
-  // Create multipart/form-data
-  const boundary = `----formdata-${Date.now()}`;
-  const CRLF = '\r\n';
-  
-  let formDataBody = '';
-  formDataBody += `--${boundary}${CRLF}`;
-  formDataBody += `Content-Disposition: form-data; name="file"; filename="${type}.${extension}"${CRLF}`;
-  formDataBody += `Content-Type: ${mimeType}${CRLF}${CRLF}`;
-  
-  const formDataBuffer = Buffer.concat([
-    Buffer.from(formDataBody, 'utf8'),
-    buffer,
-    Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf8')
-  ]);
-  
   try {
-    const uploadResponse = await fetch('https://fal.ai/files', {
+    // Step 1: Initiate upload to get presigned URL
+    const initiateResponse = await fetch('https://rest.fal.run/storage/upload/initiate', {
       method: 'POST',
       headers: {
         'Authorization': `Key ${apiKey}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Type': 'application/json'
       },
-      body: formDataBuffer
+      body: JSON.stringify({
+        file_name: `${type}.${extension}`,
+        content_type: mimeType
+      })
+    });
+
+    if (!initiateResponse.ok) {
+      const errorText = await initiateResponse.text();
+      logger.error(`Failed to initiate ${type} upload to fal.ai`, { 
+        status: initiateResponse.status, 
+        error: errorText.substring(0, 200) 
+      });
+      return { 
+        success: false, 
+        error: `Failed to initiate ${type} upload: ${errorText.substring(0, 200)}` 
+      };
+    }
+
+    const initiateData = await initiateResponse.json() as { 
+      upload_url?: string; 
+      file_url?: string;
+    };
+
+    if (!initiateData.upload_url || !initiateData.file_url) {
+      logger.error(`No upload URL in fal.ai initiate response`, { initiateData });
+      return { success: false, error: `No upload URL returned from fal.ai` };
+    }
+
+    // Step 2: Upload file to presigned URL
+    const uploadResponse = await fetch(initiateData.upload_url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': mimeType
+      },
+      body: buffer
     });
 
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse.text();
-      logger.error(`Failed to upload ${type} to fal.ai`, { 
+      logger.error(`Failed to upload ${type} to presigned URL`, { 
         status: uploadResponse.status, 
         error: errorText.substring(0, 200) 
       });
@@ -187,16 +207,8 @@ export async function uploadToFal({ dataUri, type, apiKey, ip }: UploadOptions):
       };
     }
 
-    const uploadData = await uploadResponse.json() as { url?: string; file?: { url?: string } };
-    const fileUrl = uploadData.url || uploadData.file?.url;
-    
-    if (!fileUrl) {
-      logger.error(`No ${type} URL in fal.ai upload response`, { uploadData });
-      return { success: false, error: `No ${type} URL returned from upload` };
-    }
-
-    logger.info(`${type} uploaded to fal.ai`, { url: fileUrl });
-    return { success: true, url: fileUrl };
+    logger.info(`${type} uploaded to fal.ai`, { url: initiateData.file_url });
+    return { success: true, url: initiateData.file_url };
     
   } catch (error) {
     const err = error as Error;
