@@ -124,9 +124,8 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
     for (const item of pendingItems) {
       if (abortRef.current || isPaused) break;
 
-      // Check credits
-      const requiredCredits = multiImageModel === 'nano-banana-pro' ? 1.25 : 0.6;
-      if (availableCredits < requiredCredits) {
+      // Check credits (using batch premium pricing)
+      if (availableCredits < creditsPerImageWithPremium) {
         setQueue(prev => prev.map(i => 
           i.id === item.id ? { ...i, status: 'failed' as const, error: 'Insufficient credits' } : i
         ));
@@ -219,6 +218,13 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
   const processingItem = queue.find(i => i.status === 'processing');
 
   const isAuthenticated = isConnected || isEmailAuth;
+
+  // Batch pricing: base cost per image + 15% convenience premium
+  const BATCH_PREMIUM = 0.15; // 15% premium for batch convenience
+  const baseCreditsPerImage = multiImageModel === 'nano-banana-pro' ? 1.25 : 0.6;
+  const creditsPerImageWithPremium = baseCreditsPerImage * (1 + BATCH_PREMIUM);
+  const totalBatchCost = pendingCount * creditsPerImageWithPremium;
+  const hasEnoughCredits = availableCredits >= totalBatchCost;
 
   return (
     <div 
@@ -390,9 +396,9 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
             {!isProcessing ? (
               <button
                 onClick={processQueue}
-                disabled={pendingCount === 0 || !prompt.trim() || !isAuthenticated || availableCredits <= 0}
+                disabled={pendingCount === 0 || !prompt.trim() || !isAuthenticated || !hasEnoughCredits}
                 className="flex items-center gap-1 px-3 py-1 text-[10px] font-bold"
-                style={(pendingCount === 0 || !prompt.trim() || !isAuthenticated || availableCredits <= 0) ? BTN.disabled : {
+                style={(pendingCount === 0 || !prompt.trim() || !isAuthenticated || !hasEnoughCredits) ? BTN.disabled : {
                   background: 'linear-gradient(180deg, #1084d0 0%, #000080 100%)',
                   color: '#ffffff',
                   border: 'none',
@@ -402,7 +408,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                 }}
               >
                 <Play className="w-3 h-3" />
-                Start Queue ({pendingCount})
+                Start ({pendingCount}) • {totalBatchCost.toFixed(1)} credits
               </button>
             ) : (
               <button
@@ -448,13 +454,29 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                 background: WIN95.bg,
                 boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
                 fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                color: WIN95.textDisabled
+                color: hasEnoughCredits ? WIN95.textDisabled : '#800000'
               }}
             >
               <span>💰</span>
               <span>{availableCredits.toFixed(1)} credits</span>
             </div>
           </div>
+
+          {/* Batch pricing info */}
+          {pendingCount > 0 && (
+            <div 
+              className="p-1.5 text-[9px]"
+              style={{
+                background: WIN95.bgLight,
+                boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+                color: WIN95.text
+              }}
+            >
+              <span className="font-bold">Batch pricing:</span> {creditsPerImageWithPremium.toFixed(2)} credits/image × {pendingCount} = <span className="font-bold">{totalBatchCost.toFixed(1)} total</span>
+              <span className="ml-2 text-[8px]" style={{ color: WIN95.textDisabled }}>(includes 15% convenience fee)</span>
+            </div>
+          )}
 
           {/* Processing status */}
           {processingItem && (
@@ -473,7 +495,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
           )}
 
           {/* Insufficient credits warning */}
-          {isAuthenticated && availableCredits <= 0 && (
+          {isAuthenticated && pendingCount > 0 && !hasEnoughCredits && (
             <div 
               className="p-1.5 flex items-center justify-between gap-2"
               style={{
@@ -482,7 +504,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
               }}
             >
               <span className="text-[10px]" style={{ color: '#800000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                ⚠️ No credits remaining
+                ⚠️ Need {totalBatchCost.toFixed(1)} credits, have {availableCredits.toFixed(1)}
               </span>
               <div className="flex gap-1">
                 {onShowStripePayment && (

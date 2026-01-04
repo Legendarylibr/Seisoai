@@ -1,5 +1,49 @@
-import React, { createContext, useContext, useReducer, ReactNode, Dispatch } from 'react';
+import React, { createContext, useContext, useReducer, ReactNode, Dispatch, useEffect } from 'react';
 import type { VisualStyle } from '../types';
+
+const GALLERY_STORAGE_KEY = 'seiso_gallery_history';
+const GALLERY_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Helper to load persisted gallery items (filtering out expired ones)
+const loadPersistedGallery = (): GenerationHistoryItem[] => {
+  try {
+    const stored = localStorage.getItem(GALLERY_STORAGE_KEY);
+    if (!stored) return [];
+    
+    const items: GenerationHistoryItem[] = JSON.parse(stored);
+    const now = Date.now();
+    
+    // Filter out items older than 24 hours
+    const validItems = items.filter(item => {
+      const itemTime = new Date(item.timestamp).getTime();
+      return (now - itemTime) < GALLERY_EXPIRY_MS;
+    });
+    
+    // If we filtered some out, save the cleaned list
+    if (validItems.length !== items.length) {
+      localStorage.setItem(GALLERY_STORAGE_KEY, JSON.stringify(validItems));
+    }
+    
+    return validItems;
+  } catch {
+    return [];
+  }
+};
+
+// Helper to save gallery items to localStorage
+const saveGalleryToStorage = (items: GenerationHistoryItem[]): void => {
+  try {
+    // Only keep items from last 24 hours
+    const now = Date.now();
+    const validItems = items.filter(item => {
+      const itemTime = new Date(item.timestamp).getTime();
+      return (now - itemTime) < GALLERY_EXPIRY_MS;
+    });
+    localStorage.setItem(GALLERY_STORAGE_KEY, JSON.stringify(validItems));
+  } catch {
+    // Storage full or unavailable - silently fail
+  }
+};
 
 // Types
 interface ImageDimensions {
@@ -92,13 +136,13 @@ interface ImageGeneratorContextValue extends ImageGeneratorState {
 
 const ImageGeneratorContext = createContext<ImageGeneratorContextValue | null>(null);
 
-const initialState: ImageGeneratorState = {
+const getInitialState = (): ImageGeneratorState => ({
   selectedStyle: null,
   generatedImage: null,
   generatedImages: [],
   isGenerating: false,
   error: null,
-  generationHistory: [],
+  generationHistory: loadPersistedGallery(),
   currentGeneration: null,
   guidanceScale: 7.5,
   imageSize: 'square',
@@ -111,7 +155,9 @@ const initialState: ImageGeneratorState = {
   controlNetImageDimensions: null,
   optimizePrompt: false,
   promptOptimizationResult: null
-};
+});
+
+const initialState: ImageGeneratorState = getInitialState();
 
 const imageGeneratorReducer = (state: ImageGeneratorState, action: ImageGeneratorAction): ImageGeneratorState => {
   switch (action.type) {
@@ -133,21 +179,25 @@ const imageGeneratorReducer = (state: ImageGeneratorState, action: ImageGenerato
       const isArray = Array.isArray(action.payload);
       const images = isArray ? action.payload : [action.payload];
       
+      const newHistoryItems = images.map((image, index) => ({
+        id: Date.now() + index,
+        image: image,
+        style: state.selectedStyle,
+        timestamp: new Date().toISOString()
+      }));
+      
+      const updatedHistory = [...state.generationHistory, ...newHistoryItems];
+      
+      // Persist to localStorage for 24-hour retention
+      saveGalleryToStorage(updatedHistory);
+      
       return {
         ...state,
         generatedImage: isArray ? action.payload[0] : action.payload,
         generatedImages: images,
         isGenerating: false,
         error: null,
-        generationHistory: [
-          ...state.generationHistory,
-          ...images.map((image, index) => ({
-            id: Date.now() + index,
-            image: image,
-            style: state.selectedStyle,
-            timestamp: new Date().toISOString()
-          }))
-        ]
+        generationHistory: updatedHistory
       };
     }
     
@@ -173,9 +223,15 @@ const imageGeneratorReducer = (state: ImageGeneratorState, action: ImageGenerato
       };
     
     case 'CLEAR_ALL':
+      // Clear persisted gallery when clearing all
+      try {
+        localStorage.removeItem(GALLERY_STORAGE_KEY);
+      } catch {
+        // Ignore storage errors
+      }
       return {
-        ...initialState,
-        generationHistory: state.generationHistory
+        ...getInitialState(),
+        generationHistory: []
       };
     
     case 'SET_GUIDANCE_SCALE':
@@ -233,7 +289,7 @@ interface ImageGeneratorProviderProps {
 }
 
 export const ImageGeneratorProvider: React.FC<ImageGeneratorProviderProps> = ({ children }) => {
-  const [state, dispatch] = useReducer(imageGeneratorReducer, initialState);
+  const [state, dispatch] = useReducer(imageGeneratorReducer, undefined, getInitialState);
 
   const selectStyle = (style: VisualStyle | null): void => {
     dispatch({ type: 'SELECT_STYLE', payload: style });
