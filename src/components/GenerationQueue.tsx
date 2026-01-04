@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
@@ -35,7 +35,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
   const isEmailAuth = emailContext.isAuthenticated;
   const availableCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
   
-  const { setGeneratedImage, setCurrentGeneration, selectedStyle, multiImageModel } = useImageGenerator();
+  const { setGeneratedImage, setCurrentGeneration, selectedStyle, multiImageModel, optimizePrompt, setOptimizePrompt } = useImageGenerator();
 
   // Handle file selection
   const handleFileSelect = useCallback((files: FileList | null) => {
@@ -277,6 +277,40 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
               }}
               disabled={isProcessing}
             />
+            {/* AI Enhance Toggle */}
+            <div className="flex justify-between items-center mt-1">
+              <span 
+                className="text-[9px] px-1.5 py-0.5"
+                style={{ 
+                  color: WIN95.textDisabled, 
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+                  background: WIN95.bg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                }}
+              >
+                {prompt.length} chars
+              </span>
+              <label 
+                onClick={() => setOptimizePrompt(!optimizePrompt)}
+                className="flex items-center gap-1.5 cursor-pointer select-none px-1 py-0.5 hover:bg-[#d0d0d0]"
+                style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
+                title="Enhance your prompt with AI for better results"
+              >
+                <div 
+                  className="w-3.5 h-3.5 flex items-center justify-center"
+                  style={{
+                    background: WIN95.inputBg,
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`
+                  }}
+                >
+                  {optimizePrompt && (
+                    <span className="text-[10px] font-bold" style={{ color: WIN95.text }}>✓</span>
+                  )}
+                </div>
+                <Brain className="w-3 h-3" style={{ color: optimizePrompt ? '#800080' : WIN95.textDisabled }} />
+                <span className="text-[10px]" style={{ color: WIN95.text }}>AI Enhance</span>
+              </label>
+            </div>
           </div>
 
           {/* Drop Zone */}
