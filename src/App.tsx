@@ -255,7 +255,6 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   {/* Left Column - Batch Controls */}
                   <div className="space-y-3">
-                    <PromptOptimizer onPromptChange={() => {}} />
                     <StyleSelector />
                     <MultiImageModelSelector />
                     <GenerationQueue
