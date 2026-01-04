@@ -637,6 +637,129 @@ export function createAudioRoutes(deps: Dependencies) {
   });
 
   // ============================================================================
+  // EXTRACT AUDIO FROM VIDEO
+  // Extracts audio track from video files using FFmpeg
+  // ============================================================================
+
+  /**
+   * Extract audio from video file
+   * POST /api/audio/extract-audio
+   */
+  router.post('/extract-audio', async (req: Request, res: Response) => {
+    try {
+      const { videoDataUri } = req.body as { videoDataUri?: string };
+      
+      if (!videoDataUri || !videoDataUri.startsWith('data:')) {
+        res.status(400).json({ success: false, error: 'Invalid video data URI' });
+        return;
+      }
+
+      const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+      if (videoDataUri.length > MAX_VIDEO_SIZE) {
+        res.status(400).json({ 
+          success: false, 
+          error: `Video file too large. Maximum size is ${MAX_VIDEO_SIZE / (1024 * 1024)}MB.` 
+        });
+        return;
+      }
+
+      const base64Data = videoDataUri.split(',')[1];
+      if (!base64Data) {
+        res.status(400).json({ success: false, error: 'Invalid video data URI format' });
+        return;
+      }
+      
+      const buffer = Buffer.from(base64Data, 'base64');
+      const mimeMatch = videoDataUri.match(/data:([^;]+)/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'video/mp4';
+      
+      // Check if it's actually a video file
+      if (!mimeType.startsWith('video/')) {
+        res.status(400).json({ success: false, error: 'File must be a video' });
+        return;
+      }
+
+      // Use FFmpeg to extract audio
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const { createWriteStream, unlink } = await import('fs');
+      const { tmpdir } = await import('os');
+      const { join } = await import('path');
+      const execAsync = promisify(exec);
+      const unlinkAsync = promisify(unlink);
+      const fs = await import('fs/promises');
+
+      // Determine input format from mime type
+      let inputExt = 'mp4';
+      if (mimeType.includes('webm')) inputExt = 'webm';
+      else if (mimeType.includes('mov')) inputExt = 'mov';
+      else if (mimeType.includes('avi')) inputExt = 'avi';
+      else if (mimeType.includes('mkv')) inputExt = 'mkv';
+
+      const tempInput = join(tmpdir(), `video-input-${Date.now()}-${Math.random().toString(36).substring(7)}.${inputExt}`);
+      const tempOutput = join(tmpdir(), `audio-output-${Date.now()}-${Math.random().toString(36).substring(7)}.wav`);
+
+      try {
+        // Write video buffer to temp file
+        const writeStream = createWriteStream(tempInput);
+        writeStream.write(buffer);
+        writeStream.end();
+        await new Promise<void>((resolve, reject) => {
+          writeStream.on('finish', resolve);
+          writeStream.on('error', reject);
+        });
+
+        // Extract audio using FFmpeg: -vn removes video, -acodec pcm_s16le outputs WAV
+        const ffmpegCommand = `ffmpeg -i "${tempInput}" -vn -acodec pcm_s16le -ar 44100 -ac 2 "${tempOutput}" -y`;
+        
+        await execAsync(ffmpegCommand);
+
+        // Read extracted audio
+        const audioBuffer = await fs.readFile(tempOutput);
+
+        // Upload extracted audio to FAL storage
+        const audioUrl = await uploadToFal(audioBuffer, 'audio/wav', 'extracted-audio.wav');
+
+        if (!audioUrl) {
+          res.status(500).json({ success: false, error: 'No audio URL returned from upload' });
+          return;
+        }
+
+        // Clean up temp files
+        try {
+          await unlinkAsync(tempInput);
+          await unlinkAsync(tempOutput);
+        } catch (cleanupError) {
+          const err = cleanupError as Error;
+          logger.warn('Failed to cleanup temp files', { error: err.message });
+        }
+
+        res.json({ success: true, url: audioUrl });
+      } catch (ffmpegError) {
+        const err = ffmpegError as Error;
+        logger.error('Audio extraction error', { error: err.message });
+        
+        // Clean up temp files on error
+        try {
+          await unlinkAsync(tempInput).catch(() => {});
+          await unlinkAsync(tempOutput).catch(() => {});
+        } catch {
+          // Ignore cleanup errors
+        }
+
+        res.status(500).json({ 
+          success: false, 
+          error: `Failed to extract audio: ${err.message}. Make sure FFmpeg is installed.` 
+        });
+      }
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Audio extraction error', { error: err.message, stack: err.stack });
+      res.status(500).json({ success: false, error: err.message || 'Failed to extract audio' });
+    }
+  });
+
+  // ============================================================================
   // UPLOAD AUDIO FILE
   // Helper endpoint to upload audio to FAL storage
   // ============================================================================

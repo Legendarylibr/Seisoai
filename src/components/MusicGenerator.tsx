@@ -442,7 +442,7 @@ interface MusicGeneratorProps {
   onShowStripePayment?: () => void;
 }
 
-const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onShowTokenPayment, onShowStripePayment }) {
+const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onShowTokenPayment: _onShowTokenPayment, onShowStripePayment: _onShowStripePayment }) {
   const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   
@@ -567,13 +567,17 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
     const file = e.target.files?.[0];
     if (!file) return;
     
-    if (!file.type.startsWith('audio/')) {
-      setError('Please select a valid audio file');
+    const isAudio = file.type.startsWith('audio/');
+    const isVideo = file.type.startsWith('video/');
+    
+    if (!isAudio && !isVideo) {
+      setError('Please select a valid audio or video file');
       return;
     }
     
-    if (file.size > 25 * 1024 * 1024) {
-      setError('Audio file too large. Maximum 25MB.');
+    const maxSize = isVideo ? 100 * 1024 * 1024 : 25 * 1024 * 1024; // 100MB for video, 25MB for audio
+    if (file.size > maxSize) {
+      setError(`File too large. Maximum ${maxSize / (1024 * 1024)}MB.`);
       return;
     }
     
@@ -584,18 +588,42 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
       const reader = new FileReader();
       reader.onload = async (event) => {
         const dataUri = event.target?.result as string;
-        const response = await fetch(`${API_URL}/api/audio/upload`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audioDataUri: dataUri })
-        });
-        const data = await response.json();
-        if (data.success && data.url) {
-          setVoiceRefUrl(data.url);
-        } else {
-          setError(data.error || 'Failed to upload voice reference');
+        
+        try {
+          let audioUrl: string;
+          
+          if (isVideo) {
+            // Extract audio from video
+            const extractResponse = await fetch(`${API_URL}/api/audio/extract-audio`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ videoDataUri: dataUri })
+            });
+            const extractData = await extractResponse.json();
+            if (!extractResponse.ok || !extractData.success) {
+              throw new Error(extractData.error || 'Failed to extract audio from video');
+            }
+            audioUrl = extractData.url;
+          } else {
+            // Upload audio directly
+            const uploadResponse = await fetch(`${API_URL}/api/audio/upload`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audioDataUri: dataUri })
+            });
+            const uploadData = await uploadResponse.json();
+            if (!uploadResponse.ok || !uploadData.success) {
+              throw new Error(uploadData.error || 'Failed to upload voice reference');
+            }
+            audioUrl = uploadData.url;
+          }
+          
+          setVoiceRefUrl(audioUrl);
+        } catch (err) {
+          setError((err as Error).message);
+        } finally {
+          setIsUploadingVoiceRef(false);
         }
-        setIsUploadingVoiceRef(false);
       };
       reader.readAsDataURL(file);
     } catch (err) {
@@ -650,13 +678,17 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
     const file = e.target.files?.[0];
     if (!file) return;
     
-    if (!file.type.startsWith('audio/')) {
-      setError('Please select a valid audio file');
+    const isAudio = file.type.startsWith('audio/');
+    const isVideo = file.type.startsWith('video/');
+    
+    if (!isAudio && !isVideo) {
+      setError('Please select a valid audio or video file');
       return;
     }
     
-    if (file.size > 25 * 1024 * 1024) {
-      setError('Audio file too large. Maximum 25MB.');
+    const maxSize = isVideo ? 100 * 1024 * 1024 : 25 * 1024 * 1024; // 100MB for video, 25MB for audio
+    if (file.size > maxSize) {
+      setError(`File too large. Maximum ${maxSize / (1024 * 1024)}MB.`);
       return;
     }
     
@@ -667,18 +699,42 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
       const reader = new FileReader();
       reader.onload = async (event) => {
         const dataUri = event.target?.result as string;
-        const response = await fetch(`${API_URL}/api/audio/upload`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audioDataUri: dataUri })
-        });
-        const data = await response.json();
-        if (data.success && data.url) {
-          setRemixSourceUrl(data.url);
-        } else {
-          setError(data.error || 'Failed to upload audio');
+        
+        try {
+          let audioUrl: string;
+          
+          if (isVideo) {
+            // Extract audio from video
+            const extractResponse = await fetch(`${API_URL}/api/audio/extract-audio`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ videoDataUri: dataUri })
+            });
+            const extractData = await extractResponse.json();
+            if (!extractResponse.ok || !extractData.success) {
+              throw new Error(extractData.error || 'Failed to extract audio from video');
+            }
+            audioUrl = extractData.url;
+          } else {
+            // Upload audio directly
+            const uploadResponse = await fetch(`${API_URL}/api/audio/upload`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audioDataUri: dataUri })
+            });
+            const uploadData = await uploadResponse.json();
+            if (!uploadResponse.ok || !uploadData.success) {
+              throw new Error(uploadData.error || 'Failed to upload audio');
+            }
+            audioUrl = uploadData.url;
+          }
+          
+          setRemixSourceUrl(audioUrl);
+        } catch (err) {
+          setError((err as Error).message);
+        } finally {
+          setIsUploadingRemixSource(false);
         }
-        setIsUploadingRemixSource(false);
       };
       reader.readAsDataURL(file);
     } catch (err) {
@@ -931,7 +987,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
                   ) : (
                     <>
                       <Upload className="w-4 h-4" style={{ color: WIN95.textDisabled }} />
-                      <span className="text-[9px]" style={{ color: WIN95.text }}>Upload voice sample to clone (5-30s)</span>
+                      <span className="text-[9px]" style={{ color: WIN95.text }}>Upload audio or video to clone voice (5-30s)</span>
                     </>
                   )}
                 </div>
@@ -949,7 +1005,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
                   </Win95Button>
                 </div>
               )}
-              <input ref={voiceRefInputRef} type="file" accept="audio/*" onChange={handleVoiceRefUpload} className="hidden" />
+              <input ref={voiceRefInputRef} type="file" accept="audio/*,video/*" onChange={handleVoiceRefUpload} className="hidden" />
               <p className="text-[8px] text-center" style={{ color: WIN95.textDisabled }}>
                 Leave empty for default AI voice
               </p>
@@ -1042,8 +1098,8 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
                     <>
                       <Upload className="w-5 h-5" style={{ color: WIN95.textDisabled }} />
                       <div className="text-center">
-                        <span className="text-[10px] block" style={{ color: WIN95.text }}>Upload song to separate</span>
-                        <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>MP3, WAV, M4A (max 25MB)</span>
+                        <span className="text-[10px] block" style={{ color: WIN95.text }}>Upload song or video to separate</span>
+                        <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>Audio: MP3, WAV, M4A (max 25MB) | Video: MP4, WebM (max 100MB)</span>
                       </div>
                     </>
                   )}
@@ -1062,7 +1118,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
                   </Win95Button>
                 </div>
               )}
-              <input ref={remixSourceInputRef} type="file" accept="audio/*" onChange={handleRemixSourceUpload} className="hidden" />
+              <input ref={remixSourceInputRef} type="file" accept="audio/*,video/*" onChange={handleRemixSourceUpload} className="hidden" />
             </div>
           </Win95GroupBox>
           
