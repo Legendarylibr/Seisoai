@@ -44,3 +44,4 @@ const IPFreeImage = mongoose.model<IIPFreeImage>('IPFreeImage', ipFreeImageSchem
 export default IPFreeImage;
 
 
+

@@ -330,6 +330,8 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
   const [editPrompt, setEditPrompt] = useState<string>('');
   const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
+  const [isUploadedImage, setIsUploadedImage] = useState<boolean>(false); // Track if image was uploaded
   
   // 3D generation state
   const [generateType, setGenerateType] = useState<'Normal' | 'LowPoly' | 'Geometry'>('Normal');
@@ -392,6 +394,7 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
     const reader = new FileReader();
     reader.onload = (event) => {
       setImageUrl(event.target?.result as string);
+      setIsUploadedImage(true); // Mark as uploaded image
       setCurrentStep('preview');
       setError(null);
     };
@@ -430,6 +433,7 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
       const generatedUrl = data.images?.[0] || data.imageUrl;
       if (generatedUrl) {
         setImageUrl(generatedUrl);
+        setIsUploadedImage(false); // Mark as generated (already optimized)
         setCurrentStep('preview');
         
         // Refresh credits
@@ -482,6 +486,7 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
       if (editedUrl) {
         setImageUrl(editedUrl);
         setEditPrompt('');
+        setIsUploadedImage(false); // AI-edited image no longer needs optimization
         
         // Refresh credits
         if (isEmailAuth && emailContext.refreshCredits) {
@@ -500,18 +505,78 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
     }
   }, [editPrompt, imageUrl, isConnected, walletContext, emailContext, isEmailAuth, startTimer, stopTimer]);
 
+  // Optimize uploaded image for 3D generation
+  const optimizeImageFor3d = useCallback(async (inputImageUrl: string): Promise<string> => {
+    logger.info('Optimizing uploaded image for 3D generation');
+    
+    const optimizationPrompt = 'Clean isolated character on plain white background, centered, front-facing view, clear details, high contrast, suitable for 3D model conversion, no complex background, single subject';
+    
+    const response = await fetch(`${API_URL}/api/generate/image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: optimizationPrompt,
+        model: 'nano-banana-pro',
+        image_urls: [inputImageUrl],
+        num_images: 1,
+        aspect_ratio: '1:1',
+        walletAddress: walletContext.address,
+        userId: emailContext.userId,
+        email: emailContext.email
+      })
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to optimize image for 3D');
+    }
+
+    const optimizedUrl = data.images?.[0] || data.imageUrl;
+    if (!optimizedUrl) {
+      throw new Error('No optimized image returned');
+    }
+
+    logger.info('Image optimized for 3D generation');
+    return optimizedUrl;
+  }, [walletContext.address, emailContext.userId, emailContext.email]);
+
   // Generate 3D model
   const handleGenerate3d = useCallback(async () => {
     if (!imageUrl || !isConnected) return;
     
-    setIsGenerating3d(true);
     setError(null);
     setCurrentStep('generate3d');
     startTimer();
 
+    let finalImageUrl = imageUrl;
+
     try {
+      // If image was uploaded (not generated), optimize it first for 3D
+      if (isUploadedImage) {
+        setIsOptimizing(true);
+        logger.info('Uploaded image detected - optimizing for 3D conversion');
+        
+        try {
+          finalImageUrl = await optimizeImageFor3d(imageUrl);
+          setImageUrl(finalImageUrl); // Update with optimized image
+          setIsUploadedImage(false); // Mark as processed
+          
+          // Refresh credits after optimization
+          if (isEmailAuth && emailContext.refreshCredits) {
+            emailContext.refreshCredits();
+          } else if (walletContext.fetchCredits && walletContext.address) {
+            walletContext.fetchCredits(walletContext.address, 3, true);
+          }
+        } finally {
+          setIsOptimizing(false);
+        }
+      }
+      
+      setIsGenerating3d(true);
+      
       const result = await generate3dModel({
-        input_image_url: imageUrl,
+        input_image_url: finalImageUrl,
         enable_pbr: enablePbr && generateType !== 'Geometry',
         face_count: faceCount,
         generate_type: generateType,
@@ -519,6 +584,14 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
         walletAddress: walletContext.address,
         userId: emailContext.userId,
         email: emailContext.email
+      });
+
+      logger.info('3D generation result received', {
+        success: result.success,
+        hasModelGlb: !!result.model_glb?.url,
+        hasModelUrlsGlb: !!result.model_urls?.glb?.url,
+        hasThumbnail: !!result.thumbnail?.url,
+        error: result.error
       });
 
       if (result.success && (result.model_glb?.url || result.model_urls?.glb?.url)) {
@@ -538,7 +611,7 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
           addGeneration(identifier, {
             prompt: prompt || 'Character 3D Model',
             style: `3D ${generateType}`,
-            imageUrl: result.thumbnail?.url || imageUrl,
+            imageUrl: result.thumbnail?.url || finalImageUrl,
             creditsUsed: generateType === 'Geometry' ? 2 : 3,
             userId: isEmailAuth ? emailContext.userId : undefined,
             email: isEmailAuth ? emailContext.email : undefined
@@ -551,8 +624,8 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
           const newSessionItem: Session3dItem = {
             id: `3d-${Date.now()}`,
             timestamp: Date.now(),
-            sourceImageUrl: imageUrl,
-            thumbnailUrl: result.thumbnail?.url || imageUrl,
+            sourceImageUrl: finalImageUrl,
+            thumbnailUrl: result.thumbnail?.url || finalImageUrl,
             glbUrl,
             objUrl: result.model_urls?.obj?.url,
             fbxUrl: result.model_urls?.fbx?.url,
@@ -564,18 +637,19 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
           saveSessionGallery(updatedGallery);
         }
       } else {
-        throw new Error(result.error || '3D generation failed');
+        logger.error('3D generation returned but no model URL found', { result });
+        throw new Error(result.error || '3D generation completed but no model URL was returned. Please try again.');
       }
     } catch (err) {
       const error = err as Error;
       setError(error.message);
       setCurrentStep('preview');
-      logger.error('3D generation failed', { error: error.message });
+      logger.error('3D generation failed', { error: error.message, stack: error.stack });
     } finally {
       setIsGenerating3d(false);
       stopTimer();
     }
-  }, [imageUrl, isConnected, enablePbr, faceCount, generateType, prompt, walletContext, emailContext, isEmailAuth, startTimer, stopTimer, sessionGallery]);
+  }, [imageUrl, isConnected, enablePbr, faceCount, generateType, prompt, walletContext, emailContext, isEmailAuth, startTimer, stopTimer, sessionGallery, isUploadedImage, optimizeImageFor3d]);
 
   // Download 3D model
   const handleDownload = useCallback(async (url: string, format: string) => {
@@ -603,6 +677,7 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
     setPrompt('');
     setEditPrompt('');
     setError(null);
+    setIsUploadedImage(false);
   }, []);
 
   // Load a previous generation from session gallery
@@ -825,13 +900,33 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
                     </span>
                   </div>
                   
+                  {/* Info about optimization for uploaded images */}
+                  {isUploadedImage && (
+                    <div 
+                      className="p-1.5"
+                      style={{
+                        background: '#ffffcc',
+                        boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                      }}
+                    >
+                      <p className="text-[8px]" style={{ color: '#666600' }}>
+                        💡 Your image will be automatically optimized for best 3D results (+1 credit)
+                      </p>
+                    </div>
+                  )}
+                  
                   <Win95Button 
                     onClick={handleGenerate3d}
-                    disabled={!imageUrl || isGenerating3d}
+                    disabled={!imageUrl || isGenerating3d || isOptimizing}
                     primary
                     className="w-full py-2"
                   >
-                    📦 Convert to 3D Model ({GENERATE_TYPE_OPTIONS.find(o => o.value === generateType)?.credits} credits)
+                    {isUploadedImage ? (
+                      <>📦 Optimize & Convert to 3D ({(GENERATE_TYPE_OPTIONS.find(o => o.value === generateType)?.credits || 3) + 1} credits)</>
+                    ) : (
+                      <>📦 Convert to 3D Model ({GENERATE_TYPE_OPTIONS.find(o => o.value === generateType)?.credits} credits)</>
+                    )}
                   </Win95Button>
                   
                   <div className="flex gap-1">
@@ -855,7 +950,11 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
 
           {/* Step 3: Generating 3D */}
           {currentStep === 'generate3d' && (
-            <Win95GroupBox title="Generating 3D Model" className="flex-1" icon={<Loader2 className="w-3.5 h-3.5 animate-spin" />}>
+            <Win95GroupBox 
+              title={isOptimizing ? "Optimizing Image" : "Generating 3D Model"} 
+              className="flex-1" 
+              icon={<Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            >
               <div className="flex flex-col items-center justify-center h-full py-8">
                 <div 
                   className="w-16 h-16 mb-4 flex items-center justify-center"
@@ -864,13 +963,13 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
                     boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
                   }}
                 >
-                  <div className="w-10 h-10 border-3 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#000080', borderTopColor: 'transparent', borderWidth: '3px' }} />
+                  <div className="w-10 h-10 border-3 border-t-transparent rounded-full animate-spin" style={{ borderColor: isOptimizing ? '#2d8a2d' : '#000080', borderTopColor: 'transparent', borderWidth: '3px' }} />
                 </div>
                 
                 <div 
                   className="px-4 py-2 mb-3"
                   style={{
-                    background: '#000080',
+                    background: isOptimizing ? '#2d8a2d' : '#000080',
                     color: '#00ff00',
                     fontFamily: 'Consolas, monospace',
                     fontSize: '14px',
@@ -880,12 +979,25 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
                   ⏱️ {formatTime(elapsedTime)}
                 </div>
                 
-                <p className="text-[11px] font-bold text-center" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                  Converting image to 3D model...
-                </p>
-                <p className="text-[9px] mt-1 text-center" style={{ color: WIN95.textDisabled }}>
-                  This typically takes 1-3 minutes
-                </p>
+                {isOptimizing ? (
+                  <>
+                    <p className="text-[11px] font-bold text-center" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                      🎨 Step 1/2: Optimizing image for 3D...
+                    </p>
+                    <p className="text-[9px] mt-1 text-center" style={{ color: WIN95.textDisabled }}>
+                      Preparing your image for best 3D results
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[11px] font-bold text-center" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                      📦 {isUploadedImage ? 'Step 2/2:' : ''} Converting to 3D model...
+                    </p>
+                    <p className="text-[9px] mt-1 text-center" style={{ color: WIN95.textDisabled }}>
+                      This typically takes 1-3 minutes
+                    </p>
+                  </>
+                )}
               </div>
             </Win95GroupBox>
           )}
@@ -1104,16 +1216,35 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
                 boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040'
               }}
             >
-              {currentStep === 'result' && model3dResult?.thumbnail?.url ? (
+              {currentStep === 'result' && model3dResult ? (
                 <div className="text-center p-4">
-                  <img 
-                    src={model3dResult.thumbnail.url} 
-                    alt="3D Model Preview"
-                    className="max-w-full max-h-[400px] object-contain mx-auto mb-4"
-                    style={{ boxShadow: '2px 2px 0 rgba(0,0,0,0.2)' }}
-                  />
+                  {model3dResult.thumbnail?.url ? (
+                    <img 
+                      src={model3dResult.thumbnail.url} 
+                      alt="3D Model Preview"
+                      className="max-w-full max-h-[400px] object-contain mx-auto mb-4"
+                      style={{ boxShadow: '2px 2px 0 rgba(0,0,0,0.2)' }}
+                      onError={(e) => {
+                        // If thumbnail fails to load, hide it
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div 
+                      className="w-32 h-32 mb-4 mx-auto flex items-center justify-center"
+                      style={{
+                        background: WIN95.inputBg,
+                        boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                      }}
+                    >
+                      <Box className="w-16 h-16" style={{ color: '#000080' }} />
+                    </div>
+                  )}
                   <p className="text-[10px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
                     ✅ 3D model generated successfully!
+                  </p>
+                  <p className="text-[9px] mt-1" style={{ color: WIN95.textDisabled }}>
+                    Download the GLB file to view in a 3D viewer
                   </p>
                 </div>
               ) : imageUrl ? (
@@ -1167,6 +1298,7 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
           <span className="text-[10px] flex-1">
             {isGeneratingImage ? '⏳ Generating image...' :
              isEditing ? '⏳ Editing image...' :
+             isOptimizing ? '🎨 Optimizing for 3D...' :
              isGenerating3d ? '⏳ Converting to 3D...' :
              error ? '❌ Error' :
              currentStep === 'result' ? '✅ 3D model ready!' :

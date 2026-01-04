@@ -10,7 +10,7 @@ cmds = ['npm install', 'cd backend && npm install']
 cmds = ['npm run build']
 
 [start]
-cmd = 'npx tsx start-app.ts'
+cmd = 'npx tsx serve-real-backend.ts'
 
 [variables]
 NODE_ENV = "production"

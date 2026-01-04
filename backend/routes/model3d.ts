@@ -279,7 +279,13 @@ export function createModel3dRoutes(deps: Dependencies) {
 
         // Check if model in status response
         if (statusData.model_glb?.url || statusData.model_urls?.glb?.url) {
-          logger.info('3D model completed (from status)', { requestId });
+          logger.info('3D model completed (from status)', { 
+            requestId,
+            hasGlb: !!statusData.model_glb?.url,
+            hasThumbnail: !!statusData.thumbnail?.url,
+            glbUrl: statusData.model_glb?.url?.substring(0, 100),
+            elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
+          });
           res.json({
             success: true,
             model_glb: statusData.model_glb,
@@ -323,10 +329,13 @@ export function createModel3dRoutes(deps: Dependencies) {
           };
 
           if (resultData.model_glb?.url || resultData.model_urls?.glb?.url) {
-            logger.info('3D model generation completed', { 
+            logger.info('3D model generation completed (from result endpoint)', { 
               requestId, 
               hasGlb: !!resultData.model_glb?.url,
-              hasObj: !!resultData.model_urls?.obj?.url
+              hasObj: !!resultData.model_urls?.obj?.url,
+              hasThumbnail: !!resultData.thumbnail?.url,
+              glbUrl: (resultData.model_glb?.url || resultData.model_urls?.glb?.url)?.substring(0, 100),
+              elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
             });
             
             res.json({
@@ -431,5 +440,6 @@ export function createModel3dRoutes(deps: Dependencies) {
 }
 
 export default createModel3dRoutes;
+
 
 

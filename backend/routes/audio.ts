@@ -647,25 +647,49 @@ export function createAudioRoutes(deps: Dependencies) {
    */
   router.post('/extract-audio', async (req: Request, res: Response) => {
     try {
-      const { videoDataUri } = req.body as { videoDataUri?: string };
-      
-      if (!videoDataUri || !videoDataUri.startsWith('data:')) {
-        res.status(400).json({ success: false, error: 'Invalid video data URI' });
-        return;
-      }
+      // Import utilities at the start
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const { createWriteStream, unlink } = await import('fs');
+      const { tmpdir } = await import('os');
+      const { join } = await import('path');
+      const execAsync = promisify(exec);
+      const unlinkAsync = promisify(unlink);
+      const fs = await import('fs/promises');
 
-      const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
-      if (videoDataUri.length > MAX_VIDEO_SIZE) {
-        res.status(400).json({ 
+      // Check if FFmpeg is available
+      try {
+        await execAsync('ffmpeg -version');
+      } catch {
+        logger.error('FFmpeg not available for audio extraction');
+        res.status(503).json({ 
           success: false, 
-          error: `Video file too large. Maximum size is ${MAX_VIDEO_SIZE / (1024 * 1024)}MB.` 
+          error: 'Audio extraction service unavailable. FFmpeg is not installed on this server.' 
         });
         return;
       }
 
+      const { videoDataUri } = req.body as { videoDataUri?: string };
+      
+      if (!videoDataUri || !videoDataUri.startsWith('data:')) {
+        res.status(400).json({ success: false, error: 'Invalid video data URI. Please upload a valid video file.' });
+        return;
+      }
+
+      // Calculate actual file size from base64 (base64 is ~33% larger than binary)
       const base64Data = videoDataUri.split(',')[1];
       if (!base64Data) {
         res.status(400).json({ success: false, error: 'Invalid video data URI format' });
+        return;
+      }
+
+      const actualSize = Math.ceil(base64Data.length * 0.75); // Approximate binary size
+      const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+      if (actualSize > MAX_VIDEO_SIZE) {
+        res.status(400).json({ 
+          success: false, 
+          error: `Video file too large (${Math.round(actualSize / (1024 * 1024))}MB). Maximum size is ${MAX_VIDEO_SIZE / (1024 * 1024)}MB.` 
+        });
         return;
       }
       
@@ -679,15 +703,11 @@ export function createAudioRoutes(deps: Dependencies) {
         return;
       }
 
-      // Use FFmpeg to extract audio
-      const { exec } = await import('child_process');
-      const { promisify } = await import('util');
-      const { createWriteStream, unlink } = await import('fs');
-      const { tmpdir } = await import('os');
-      const { join } = await import('path');
-      const execAsync = promisify(exec);
-      const unlinkAsync = promisify(unlink);
-      const fs = await import('fs/promises');
+      logger.info('Extracting audio from video', { 
+        mimeType, 
+        sizeBytes: buffer.length,
+        sizeMB: Math.round(buffer.length / (1024 * 1024) * 10) / 10 
+      });
 
       // Determine input format from mime type
       let inputExt = 'mp4';
