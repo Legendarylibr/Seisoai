@@ -631,7 +631,6 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
         }
         
         // Save to session gallery for persistence during session
-        const glbUrl = result.model_glb?.url || result.model_urls?.glb?.url;
         if (glbUrl) {
           const newSessionItem: Session3dItem = {
             id: `3d-${Date.now()}`,
