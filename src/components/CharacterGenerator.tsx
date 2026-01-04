@@ -12,6 +12,9 @@ import {
 import logger from '../utils/logger';
 import { WIN95 } from '../utils/buttonStyles';
 
+// Import model-viewer for 3D rendering
+import '@google/model-viewer';
+
 // Session storage key for 3D generations
 const SESSION_3D_GALLERY_KEY = 'seiso_3d_session_gallery';
 
@@ -1228,35 +1231,67 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
               }}
             >
               {currentStep === 'result' && model3dResult ? (
-                <div className="text-center p-4">
-                  {model3dResult.thumbnail?.url ? (
-                    <img 
-                      src={model3dResult.thumbnail.url} 
-                      alt="3D Model Preview"
-                      className="max-w-full max-h-[400px] object-contain mx-auto mb-4"
-                      style={{ boxShadow: '2px 2px 0 rgba(0,0,0,0.2)' }}
-                      onError={(e) => {
-                        // If thumbnail fails to load, hide it
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
+                <div className="w-full h-full flex flex-col">
+                  {/* Interactive 3D Model Viewer */}
+                  {(model3dResult.model_glb?.url || model3dResult.model_urls?.glb?.url) ? (
+                    <div className="flex-1 relative min-h-[300px]">
+                      <model-viewer
+                        src={model3dResult.model_glb?.url || model3dResult.model_urls?.glb?.url}
+                        alt="3D Character Model"
+                        poster={model3dResult.thumbnail?.url}
+                        auto-rotate=""
+                        camera-controls=""
+                        shadow-intensity={1}
+                        exposure={0.95}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          minHeight: '300px',
+                          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+                          borderRadius: '0'
+                        }}
+                      />
+                      {/* Overlay instructions */}
+                      <div 
+                        className="absolute bottom-2 left-2 right-2 text-center py-1 px-2"
+                        style={{
+                          background: 'rgba(0, 0, 128, 0.85)',
+                          color: '#ffffff',
+                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+                          fontSize: '9px',
+                          boxShadow: `inset 1px 1px 0 rgba(255,255,255,0.2), inset -1px -1px 0 rgba(0,0,0,0.3)`
+                        }}
+                      >
+                        🖱️ Drag to rotate • Scroll to zoom • ✅ Auto-rotating
+                      </div>
+                    </div>
+                  ) : model3dResult.thumbnail?.url ? (
+                    <div className="flex-1 flex items-center justify-center p-4">
+                      <img 
+                        src={model3dResult.thumbnail.url} 
+                        alt="3D Model Preview"
+                        className="max-w-full max-h-[400px] object-contain"
+                        style={{ boxShadow: '2px 2px 0 rgba(0,0,0,0.2)' }}
+                      />
+                    </div>
                   ) : (
-                    <div 
-                      className="w-32 h-32 mb-4 mx-auto flex items-center justify-center"
-                      style={{
-                        background: WIN95.inputBg,
-                        boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
-                      }}
-                    >
-                      <Box className="w-16 h-16" style={{ color: '#000080' }} />
+                    <div className="flex-1 flex items-center justify-center">
+                      <div 
+                        className="w-32 h-32 flex items-center justify-center"
+                        style={{
+                          background: WIN95.inputBg,
+                          boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                        }}
+                      >
+                        <Box className="w-16 h-16" style={{ color: '#000080' }} />
+                      </div>
                     </div>
                   )}
-                  <p className="text-[10px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                    ✅ 3D model generated successfully!
-                  </p>
-                  <p className="text-[9px] mt-1" style={{ color: WIN95.textDisabled }}>
-                    Download the GLB file to view in a 3D viewer
-                  </p>
+                  <div className="text-center p-2 flex-shrink-0" style={{ background: WIN95.bg }}>
+                    <p className="text-[10px]" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                      ✅ 3D model generated successfully!
+                    </p>
+                  </div>
                 </div>
               ) : imageUrl ? (
                 <img 

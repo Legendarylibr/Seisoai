@@ -266,11 +266,14 @@ export function createModel3dRoutes(deps: Dependencies) {
           status?: string;
           // FAL may include result data in status response
           data?: {
+            // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
+            glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
             model_glb?: { url?: string };
             thumbnail?: { url?: string };
             model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
           };
-          // Or unwrapped
+          // Or unwrapped - FAL returns 'glb' directly
+          glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
           model_glb?: { url?: string };
           thumbnail?: { url?: string };
           model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
@@ -284,21 +287,27 @@ export function createModel3dRoutes(deps: Dependencies) {
           requestId, 
           status: normalizedStatus,
           hasDataWrapper: !!rawStatusData.data,
+          hasGlb: !!statusResult.glb?.url,
+          hasModelGlb: !!statusResult.model_glb?.url,
+          keys: Object.keys(statusResult).slice(0, 10),
           elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
         });
 
         // Check if model in status response (some FAL endpoints include result in status)
-        if (statusResult.model_glb?.url || statusResult.model_urls?.glb?.url) {
+        // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
+        const glbFromStatus = statusResult.glb || statusResult.model_glb || statusResult.model_urls?.glb;
+        if (glbFromStatus?.url) {
           logger.info('3D model completed (from status)', { 
             requestId,
-            hasGlb: !!statusResult.model_glb?.url,
+            hasGlb: !!glbFromStatus?.url,
             hasThumbnail: !!statusResult.thumbnail?.url,
-            glbUrl: statusResult.model_glb?.url?.substring(0, 100),
+            glbUrl: glbFromStatus?.url?.substring(0, 100),
             elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
           });
           res.json({
             success: true,
-            model_glb: statusResult.model_glb,
+            // Normalize to model_glb for frontend compatibility
+            model_glb: statusResult.glb || statusResult.model_glb,
             thumbnail: statusResult.thumbnail,
             model_urls: statusResult.model_urls,
             remainingCredits: updateResult.credits,
@@ -329,6 +338,8 @@ export function createModel3dRoutes(deps: Dependencies) {
           const rawResult = await resultResponse.json() as {
             // FAL queue result wraps response in 'data' field
             data?: {
+              // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
+              glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
               model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
               thumbnail?: { url?: string };
               model_urls?: { 
@@ -340,6 +351,8 @@ export function createModel3dRoutes(deps: Dependencies) {
               seed?: number;
             };
             // Or it might be unwrapped (for direct API calls)
+            // FAL Hunyuan3D returns 'glb' directly
+            glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
             model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
             thumbnail?: { url?: string };
             model_urls?: { 
@@ -353,6 +366,7 @@ export function createModel3dRoutes(deps: Dependencies) {
 
           // Handle both wrapped (queue API) and unwrapped responses
           const resultData = rawResult.data || rawResult as {
+            glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
             model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
             thumbnail?: { url?: string };
             model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
@@ -361,24 +375,30 @@ export function createModel3dRoutes(deps: Dependencies) {
           
           logger.debug('3D result response structure', {
             hasDataWrapper: !!rawResult.data,
+            hasGlb: !!resultData.glb?.url,
             hasModelGlb: !!resultData.model_glb?.url,
             hasModelUrls: !!resultData.model_urls,
-            keys: Object.keys(rawResult).slice(0, 10)
+            keys: Object.keys(rawResult).slice(0, 10),
+            resultDataKeys: Object.keys(resultData).slice(0, 10)
           });
 
-          if (resultData.model_glb?.url || resultData.model_urls?.glb?.url) {
+          // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
+          const glbResult = resultData.glb || resultData.model_glb || resultData.model_urls?.glb;
+          
+          if (glbResult?.url) {
             logger.info('3D model generation completed (from result endpoint)', { 
               requestId, 
-              hasGlb: !!resultData.model_glb?.url,
+              hasGlb: !!glbResult?.url,
               hasObj: !!resultData.model_urls?.obj?.url,
               hasThumbnail: !!resultData.thumbnail?.url,
-              glbUrl: (resultData.model_glb?.url || resultData.model_urls?.glb?.url)?.substring(0, 100),
+              glbUrl: glbResult?.url?.substring(0, 100),
               elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
             });
             
             res.json({
               success: true,
-              model_glb: resultData.model_glb,
+              // Normalize to model_glb for frontend compatibility
+              model_glb: resultData.glb || resultData.model_glb,
               thumbnail: resultData.thumbnail,
               model_urls: resultData.model_urls,
               seed: resultData.seed,
@@ -388,7 +408,11 @@ export function createModel3dRoutes(deps: Dependencies) {
             return;
           }
 
-          logger.error('No model URL in 3D result', { resultData: JSON.stringify(resultData).substring(0, 500) });
+          logger.error('No model URL in 3D result', { 
+            rawResultKeys: Object.keys(rawResult).slice(0, 15),
+            resultDataKeys: Object.keys(resultData).slice(0, 15),
+            resultData: JSON.stringify(resultData).substring(0, 1000)
+          });
           await refundCredits(user, creditsRequired, 'No model in 3D result');
           res.status(500).json({
             success: false,
