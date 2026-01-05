@@ -128,3 +128,11 @@ backend/*.js
 
 # Generated/temporary images
 public/**/[a-f0-9][a-f0-9][a-f0-9][a-f0-9]*.png
+
+# Security-sensitive files - never commit
+SECURITY_AUDIT_REPORT.md
+CODEBASE_AUDIT_REPORT.md
+EFFICIENCY_ANALYSIS.md
+SECURITY_CHECKLIST.md
+railway.json
+create-webhook-with-url.sh
