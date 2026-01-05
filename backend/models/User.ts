@@ -251,21 +251,8 @@ userSchema.pre('save', async function(next) {
   next();
 });
 
-/**
- * Build update query for user based on wallet address, userId, or email
- */
-export function buildUserUpdateQuery(user: { walletAddress?: string; userId?: string; email?: string }): { walletAddress?: string; userId?: string; email?: string } | null {
-  if (user.walletAddress) {
-    const isSolanaAddress = !user.walletAddress.startsWith('0x');
-    const normalizedWalletAddress = isSolanaAddress ? user.walletAddress : user.walletAddress.toLowerCase();
-    return { walletAddress: normalizedWalletAddress };
-  } else if (user.userId) {
-    return { userId: user.userId };
-  } else if (user.email) {
-    return { email: user.email.toLowerCase() };
-  }
-  return null;
-}
+// Note: buildUserUpdateQuery is exported from services/user.ts to avoid circular dependencies
+// The function in services/user.ts is the canonical implementation
 
 const User = mongoose.model<IUser, UserModel>('User', userSchema);
 

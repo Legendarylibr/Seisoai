@@ -7,7 +7,7 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
-import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey } from '../services/fal';
+import { checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 
@@ -269,6 +269,8 @@ export function createModel3dRoutes(deps: Dependencies) {
 
         const rawStatusData = await statusResponse.json() as { 
           status?: string;
+          // FAL queue returns response_url when completed
+          response_url?: string;
           // FAL may include result data in status response
           data?: {
             // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
@@ -282,10 +284,19 @@ export function createModel3dRoutes(deps: Dependencies) {
           model_glb?: { url?: string };
           thumbnail?: { url?: string };
           model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+          // Output fields that FAL may return
+          output?: {
+            glb?: { url?: string };
+            model_glb?: { url?: string };
+          };
+          result?: {
+            glb?: { url?: string };
+            model_glb?: { url?: string };
+          };
         };
         
         // Handle wrapped or unwrapped data
-        const statusResult = rawStatusData.data || rawStatusData;
+        const statusResult = rawStatusData.data || rawStatusData.output || rawStatusData.result || rawStatusData;
         const rawStatus = rawStatusData.status || '';
         const normalizedStatus = rawStatus.toUpperCase();
 
@@ -295,29 +306,38 @@ export function createModel3dRoutes(deps: Dependencies) {
           rawStatus,
           normalizedStatus,
           hasDataWrapper: !!rawStatusData.data,
-          hasGlb: !!statusResult.glb?.url,
-          hasModelGlb: !!statusResult.model_glb?.url,
-          statusKeys: Object.keys(rawStatusData).slice(0, 10),
+          hasOutputWrapper: !!rawStatusData.output,
+          hasResultWrapper: !!rawStatusData.result,
+          hasResponseUrl: !!rawStatusData.response_url,
+          hasGlb: !!(statusResult as { glb?: { url?: string } }).glb?.url,
+          hasModelGlb: !!(statusResult as { model_glb?: { url?: string } }).model_glb?.url,
+          statusKeys: Object.keys(rawStatusData).slice(0, 15),
           elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
         });
 
         // Check if model in status response (some FAL endpoints include result in status)
         // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
-        const glbFromStatus = statusResult.glb || statusResult.model_glb || statusResult.model_urls?.glb;
+        const typedStatusResult = statusResult as {
+          glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+          model_glb?: { url?: string };
+          thumbnail?: { url?: string };
+          model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+        };
+        const glbFromStatus = typedStatusResult.glb || typedStatusResult.model_glb || typedStatusResult.model_urls?.glb;
         if (glbFromStatus?.url) {
           logger.info('3D model completed (from status response)', { 
             requestId,
             hasGlb: !!glbFromStatus?.url,
-            hasThumbnail: !!statusResult.thumbnail?.url,
+            hasThumbnail: !!typedStatusResult.thumbnail?.url,
             glbUrl: glbFromStatus?.url?.substring(0, 100),
             elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
           });
           res.json({
             success: true,
             // Normalize to model_glb for frontend compatibility
-            model_glb: statusResult.glb || statusResult.model_glb,
-            thumbnail: statusResult.thumbnail,
-            model_urls: statusResult.model_urls,
+            model_glb: typedStatusResult.glb || typedStatusResult.model_glb,
+            thumbnail: typedStatusResult.thumbnail,
+            model_urls: typedStatusResult.model_urls,
             remainingCredits: updateResult.credits,
             creditsDeducted: creditsRequired
           });
@@ -325,21 +345,21 @@ export function createModel3dRoutes(deps: Dependencies) {
         }
 
         // Check for completion - handle various status formats from FAL
-        const isCompleted = normalizedStatus === 'COMPLETED' || 
-                           normalizedStatus === 'OK' || 
-                           normalizedStatus === 'SUCCESS' ||
-                           normalizedStatus === 'SUCCEEDED';
-
-        if (isCompleted) {
+        if (isStatusCompleted(normalizedStatus)) {
+          // Use response_url if provided, otherwise construct the result endpoint
+          const resultUrl = rawStatusData.response_url || `https://queue.fal.run/${modelPath}/requests/${requestId}`;
+          
           logger.info('3D model status COMPLETED, fetching result', { 
             requestId, 
             normalizedStatus,
+            hasResponseUrl: !!rawStatusData.response_url,
+            resultUrl: resultUrl.substring(0, 100),
             elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
           });
           
           // Fetch the result
           const resultResponse = await fetch(
-            `https://queue.fal.run/${modelPath}/requests/${requestId}`,
+            resultUrl,
             {
               headers: { 'Authorization': `Key ${FAL_API_KEY}` }
             }
@@ -362,50 +382,62 @@ export function createModel3dRoutes(deps: Dependencies) {
           }
 
           const rawResult = await resultResponse.json() as {
-            // FAL queue result wraps response in 'data' field
+            // FAL queue result may wrap response in various fields
             data?: {
-              // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
               glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
               model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
               thumbnail?: { url?: string };
-              model_urls?: { 
-                glb?: { url?: string }; 
-                obj?: { url?: string }; 
-                fbx?: { url?: string }; 
-                usdz?: { url?: string } 
-              };
+              model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
               seed?: number;
             };
-            // Or it might be unwrapped (for direct API calls)
-            // FAL Hunyuan3D returns 'glb' directly
-            glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-            model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-            thumbnail?: { url?: string };
-            model_urls?: { 
-              glb?: { url?: string }; 
-              obj?: { url?: string }; 
-              fbx?: { url?: string }; 
-              usdz?: { url?: string } 
+            output?: {
+              glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+              model_glb?: { url?: string };
+              thumbnail?: { url?: string };
+              model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
             };
-            seed?: number;
-          };
-
-          // Handle both wrapped (queue API) and unwrapped responses
-          const resultData = rawResult.data || rawResult as {
+            result?: {
+              glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+              model_glb?: { url?: string };
+              thumbnail?: { url?: string };
+              model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+            };
+            response?: {
+              glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+              model_glb?: { url?: string };
+              thumbnail?: { url?: string };
+              model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+            };
+            // Or it might be unwrapped (for direct API calls)
             glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
             model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
             thumbnail?: { url?: string };
             model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
             seed?: number;
           };
+
+          // Handle all possible wrapper formats - FAL can return in data/output/result/response or unwrapped
+          type ResultShape = {
+            glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+            model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+            thumbnail?: { url?: string };
+            model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+            seed?: number;
+          };
+          const resultData: ResultShape = rawResult.data || rawResult.output || rawResult.result || rawResult.response || rawResult;
           
-          logger.debug('3D result response structure', {
+          // Log the full raw response for debugging (truncated)
+          logger.info('3D result response structure', {
             hasDataWrapper: !!rawResult.data,
+            hasOutputWrapper: !!rawResult.output,
+            hasResultWrapper: !!rawResult.result,
+            hasResponseWrapper: !!rawResult.response,
             hasGlb: !!resultData.glb?.url,
             hasModelGlb: !!resultData.model_glb?.url,
             hasModelUrls: !!resultData.model_urls,
-            keys: Object.keys(rawResult).slice(0, 10),
-            resultDataKeys: Object.keys(resultData).slice(0, 10)
+            keys: Object.keys(rawResult).slice(0, 15),
+            resultDataKeys: Object.keys(resultData).slice(0, 15),
+            fullResponse: JSON.stringify(rawResult).substring(0, 800)
           });
 
           // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
@@ -448,7 +480,7 @@ export function createModel3dRoutes(deps: Dependencies) {
           return;
         }
 
-        if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+        if (isStatusFailed(normalizedStatus)) {
           logger.error('3D model generation failed', { requestId, status: normalizedStatus });
           await refundCredits(user, creditsRequired, `3D generation failed: ${normalizedStatus}`);
           res.status(500).json({

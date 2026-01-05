@@ -6,7 +6,7 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
-import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey } from '../services/fal';
+import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 
@@ -232,7 +232,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
           const statusData = await checkQueueStatus<{ status?: string }>(requestId, FAL_MODELS.TTS);
           const normalizedStatus = (statusData.status || '').toUpperCase();
           
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{ audio?: { url?: string }; audio_url?: string }>(
               requestId, FAL_MODELS.TTS
             );
@@ -253,7 +253,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
               res.status(500).json({ success: false, error: 'No audio generated' });
               return;
             }
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'TTS generation failed');
             res.status(500).json({ success: false, error: 'Voice generation failed' });
             return;
@@ -352,7 +352,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
           const statusData = await checkQueueStatus<{ status?: string }>(requestId, FAL_MODELS.LIP_SYNC);
           const normalizedStatus = (statusData.status || '').toUpperCase();
           
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{ video?: { url?: string }; video_url?: string }>(
               requestId, FAL_MODELS.LIP_SYNC
             );
@@ -373,7 +373,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
               res.status(500).json({ success: false, error: 'No video generated' });
               return;
             }
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'Lip sync failed');
             res.status(500).json({ success: false, error: 'Lip sync generation failed' });
             return;
@@ -469,7 +469,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
           const statusData = await checkQueueStatus<{ status?: string }>(requestId, FAL_MODELS.MUSIC_GEN);
           const normalizedStatus = (statusData.status || '').toUpperCase();
           
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{ audio_file?: { url?: string } }>(
               requestId, FAL_MODELS.MUSIC_GEN
             );
@@ -490,7 +490,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
               res.status(500).json({ success: false, error: 'No music generated' });
               return;
             }
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'Music generation failed');
             res.status(500).json({ success: false, error: 'Music generation failed' });
             return;
@@ -588,7 +588,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
           const statusData = await checkQueueStatus<{ status?: string }>(requestId, FAL_MODELS.IMAGE_GEN);
           const normalizedStatus = (statusData.status || '').toUpperCase();
           
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{ images?: { url: string }[] }>(
               requestId, FAL_MODELS.IMAGE_GEN
             );
@@ -609,7 +609,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
               res.status(500).json({ success: false, error: 'No image generated' });
               return;
             }
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'Image generation failed');
             res.status(500).json({ success: false, error: 'Image generation failed' });
             return;
@@ -707,7 +707,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
           const statusData = await checkQueueStatus<{ status?: string }>(requestId, FAL_MODELS.STEM_SEPARATE);
           const normalizedStatus = (statusData.status || '').toUpperCase();
           
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{
               vocals?: { url?: string };
               drums?: { url?: string };
@@ -729,7 +729,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
               creditsDeducted: creditsRequired
             });
             return;
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'Stem separation failed');
             res.status(500).json({ success: false, error: 'Stem separation failed' });
             return;

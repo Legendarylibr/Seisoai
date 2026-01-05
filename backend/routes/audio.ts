@@ -6,7 +6,7 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
-import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, uploadToFal } from '../services/fal';
+import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, uploadToFal, isStatusCompleted, isStatusFailed } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 
@@ -180,7 +180,7 @@ export function createAudioRoutes(deps: Dependencies) {
           const statusData = await checkQueueStatus<{ status?: string }>( requestId, 'fal-ai/xtts-v2');
           const normalizedStatus = (statusData.status || '').toUpperCase();
 
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{ audio?: { url?: string }; audio_url?: string }>(
               requestId, 
               'fal-ai/xtts-v2'
@@ -202,7 +202,7 @@ export function createAudioRoutes(deps: Dependencies) {
               res.status(500).json({ success: false, error: 'No audio generated' });
               return;
             }
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'TTS generation failed');
             res.status(500).json({ success: false, error: 'Voice generation failed' });
             return;
@@ -309,7 +309,7 @@ export function createAudioRoutes(deps: Dependencies) {
           const statusData = await checkQueueStatus<{ status?: string }>(requestId, 'fal-ai/demucs');
           const normalizedStatus = (statusData.status || '').toUpperCase();
 
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{
               vocals?: { url?: string };
               drums?: { url?: string };
@@ -331,7 +331,7 @@ export function createAudioRoutes(deps: Dependencies) {
               creditsDeducted: creditsRequired
             });
             return;
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'Audio separation failed');
             res.status(500).json({ success: false, error: 'Audio separation failed' });
             return;
@@ -459,7 +459,7 @@ export function createAudioRoutes(deps: Dependencies) {
 
           logger.debug('Lip sync status', { requestId, status: normalizedStatus });
 
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{
               video?: { url?: string };
               video_url?: string;
@@ -481,7 +481,7 @@ export function createAudioRoutes(deps: Dependencies) {
               res.status(500).json({ success: false, error: 'No video generated' });
               return;
             }
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'Lip sync failed');
             res.status(500).json({ success: false, error: 'Lip sync generation failed' });
             return;
@@ -594,7 +594,7 @@ export function createAudioRoutes(deps: Dependencies) {
           const statusData = await checkQueueStatus<{ status?: string }>(requestId, 'fal-ai/audioldm2');
           const normalizedStatus = (statusData.status || '').toUpperCase();
 
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{
               audio?: { url?: string };
               audio_url?: string;
@@ -617,7 +617,7 @@ export function createAudioRoutes(deps: Dependencies) {
               res.status(500).json({ success: false, error: 'No audio generated' });
               return;
             }
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'SFX generation failed');
             res.status(500).json({ success: false, error: 'SFX generation failed' });
             return;

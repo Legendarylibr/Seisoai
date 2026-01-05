@@ -164,11 +164,31 @@ export function createExtractRoutes(deps: Dependencies) {
           return;
         }
 
-        const data = await response.json() as { image?: string };
+        const data = await response.json() as { image?: { url?: string } | string };
+        
+        // Extract image URL from response (can be string or object with url)
+        let imageUrl: string | undefined;
+        if (typeof data.image === 'string') {
+          imageUrl = data.image;
+        } else if (data.image?.url) {
+          imageUrl = data.image.url;
+        }
 
+        if (!imageUrl) {
+          // Refund credits if no image returned
+          await refundCredits(user, creditsToDeduct, 'No image returned from layer extraction');
+          res.status(500).json({
+            success: false,
+            error: 'No image returned from layer extraction',
+            creditsRefunded: creditsToDeduct
+          });
+          return;
+        }
+
+        // Return as 'images' array to match frontend expectations
         res.json({
           success: true,
-          image: data.image,
+          images: [imageUrl],
           remainingCredits: updateResult.credits,
           creditsDeducted: creditsToDeduct
         });

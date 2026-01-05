@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # MongoDB database
   mongodb:
-    image: mongo:7.0
+    image: mongo:7.0-jammy
     container_name: ai-image-generator-db
     restart: unless-stopped
     environment:
@@ -28,18 +28,26 @@ services:
       - CHOWN
       - SETGID
       - SETUID
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
 
-  # Redis for caching and session storage
+  # Redis for caching and session storage (Alpine-based slim image)
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: ai-image-generator-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispassword}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispassword} --maxmemory 128mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     # Security: Don't expose Redis port publicly - only accessible within Docker network
@@ -57,16 +65,29 @@ services:
       - SETUID
     read_only: true
     tmpfs:
-      - /tmp:mode=1777,size=64M
+      - /tmp:mode=1777,size=32M
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redispassword}", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
   # AI Image Generator Application
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Build args for optimization
+      args:
+        NODE_ENV: production
     container_name: ai-image-generator-app
     restart: unless-stopped
     environment:
@@ -91,12 +112,14 @@ services:
       SENTRY_DSN: ${SENTRY_DSN}
       # CORS
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+      # Node.js optimizations
+      NODE_OPTIONS: "--max-old-space-size=512"
     # Security: App should only be accessible through Nginx reverse proxy
     # ports:
     #   - "3001:3001"
     volumes:
       # Use named volumes only - no host bind mounts
-      - app_logs:/app/logs
+      - app_logs:/app/backend/logs
     networks:
       - ai-network
     # Security hardening
@@ -105,21 +128,29 @@ services:
     cap_drop:
       - ALL
     tmpfs:
-      - /tmp:mode=1777,size=256M
+      - /tmp:mode=1777,size=128M
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
     depends_on:
       mongodb:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://app:3001/api/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
 
-  # Nginx reverse proxy
+  # Nginx reverse proxy (Alpine slim image)
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine-slim
     container_name: ai-image-generator-nginx
     restart: unless-stopped
     ports:
@@ -144,20 +175,29 @@ services:
       - NET_BIND_SERVICE
     read_only: true
     tmpfs:
-      - /var/cache/nginx:mode=1777,size=128M
-      - /var/run:mode=1777,size=16M
-      - /tmp:mode=1777,size=64M
+      - /var/cache/nginx:mode=1777,size=64M
+      - /var/run:mode=1777,size=8M
+      - /tmp:mode=1777,size=32M
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 32M
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://nginx/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
-  # Monitoring with Prometheus
+  # Monitoring with Prometheus (specific version for stability)
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.48.1
     container_name: ai-image-generator-prometheus
     restart: unless-stopped
     # Security: Only expose Prometheus internally or through reverse proxy
@@ -176,18 +216,32 @@ services:
       - ALL
     read_only: true
     tmpfs:
-      - /tmp:mode=1777,size=64M
+      - /tmp:mode=1777,size=32M
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--storage.tsdb.retention.size=1GB'
+      - '--web.enable-lifecycle'
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
-      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
-  # Grafana for visualization
+  # Grafana for visualization (specific version for stability)
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.2.3
     container_name: ai-image-generator-grafana
     restart: unless-stopped
     # Security: Only expose Grafana internally or through reverse proxy
@@ -199,6 +253,8 @@ services:
       GF_SECURITY_DISABLE_GRAVATAR: "true"
       GF_SECURITY_COOKIE_SECURE: "true"
       GF_SECURITY_STRICT_TRANSPORT_SECURITY: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
     volumes:
       # Read-only bind mounts for provisioning configs (secure - no write access)
       - grafana_data:/var/lib/grafana
@@ -212,7 +268,20 @@ services:
     cap_drop:
       - ALL
     tmpfs:
-      - /tmp:mode=1777,size=64M
+      - /tmp:mode=1777,size=32M
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
   mongodb_data:
@@ -233,3 +302,5 @@ volumes:
 networks:
   ai-network:
     driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1450

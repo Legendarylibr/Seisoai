@@ -181,12 +181,15 @@ export const createAuthenticateFlexible = (
         return;
       }
       
-      logger.debug('Body-based authentication used (less secure)', { 
+      // SECURITY WARNING: Body-based authentication is less secure than JWT
+      // This fallback allows legacy clients but should be phased out
+      logger.warn('SECURITY: Body-based authentication used (less secure than JWT)', { 
         walletAddress: walletAddress ? walletAddress.substring(0, 10) + '...' : null,
         userId: userId ? userId.substring(0, 10) + '...' : null,
         email: email ? '***' : null,
         path: req.path,
-        ip: req.ip
+        ip: req.ip,
+        userAgent: req.headers['user-agent']?.substring(0, 50)
       });
 
       const user = await getUserFromRequest(req);

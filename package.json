@@ -6,12 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "start": "tsx start-app.ts",
-    "start:backend": "cd backend && tsx server.ts",
+    "build:analyze": "vite build --mode analyze",
+    "start": "node --import tsx start-app.ts",
+    "start:backend": "cd backend && node --import tsx server-modular.ts",
     "build:start": "npm run build && npm start",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "postinstall": "cd backend && npm install"
+    "docker:build": "docker build -t seiso-ai:latest .",
+    "docker:build:frontend": "docker build -f Dockerfile.frontend -t seiso-frontend:latest .",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "clean": "rm -rf dist node_modules/.vite"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

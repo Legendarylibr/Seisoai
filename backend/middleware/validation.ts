@@ -5,6 +5,8 @@
 import { PublicKey } from '@solana/web3.js';
 import type { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
+// Import shared wallet normalization from user service to avoid duplication
+import { normalizeWalletAddress } from '../services/user';
 
 /**
  * Validate Ethereum address format
@@ -35,13 +37,8 @@ export const isValidWalletAddress = (address: unknown): boolean => {
   return isValidEthereumAddress(address) || isValidSolanaAddress(address);
 };
 
-/**
- * Normalize wallet address (lowercase for EVM, as-is for Solana)
- */
-export const normalizeWalletAddress = (address: unknown): string | null => {
-  if (!address || typeof address !== 'string') return null;
-  return address.startsWith('0x') ? address.toLowerCase() : address;
-};
+// Re-export normalizeWalletAddress from user service for backwards compatibility
+export { normalizeWalletAddress };
 
 /**
  * Sanitize string input (trim and limit length)

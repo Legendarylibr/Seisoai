@@ -49,18 +49,6 @@ export const createPaymentLimiter = (): RateLimitRequestHandler => rateLimit({
 });
 
 /**
- * Create instant check rate limiter (for polling)
- */
-export const createInstantCheckLimiter = (): RateLimitRequestHandler => rateLimit({
-  windowMs: RATE_LIMITS.INSTANT_CHECK.windowMs,
-  max: RATE_LIMITS.INSTANT_CHECK.max,
-  message: {
-    error: 'Too many requests from this IP, please try again later.',
-    retryAfter: '1 minute'
-  }
-});
-
-/**
  * Create video status check limiter
  */
 export const createWanStatusLimiter = (): RateLimitRequestHandler => rateLimit({
@@ -143,7 +131,6 @@ export default {
   createGeneralLimiter,
   createAuthLimiter,
   createPaymentLimiter,
-  createInstantCheckLimiter,
   createWanStatusLimiter,
   createWanSubmitLimiter,
   createWanResultLimiter,

@@ -31,39 +31,85 @@ export default defineConfig({
   },
   build: {
     // Production build optimizations
-    target: 'esnext',
+    target: 'es2020',
     minify: 'terser',
-    sourcemap: process.env.NODE_ENV === 'development',
+    sourcemap: false, // Disable sourcemaps in production for smaller bundles
+    cssCodeSplit: true, // Enable CSS code splitting
+    cssMinify: true, // Minify CSS
+    reportCompressedSize: false, // Faster builds by skipping gzip size report
+    chunkSizeWarningLimit: 1000, // Increase limit for vendor chunks
+    
+    // Terser minification options for maximum compression
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove console.log in production
+        drop_debugger: true, // Remove debugger statements
+        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.trace'],
+        passes: 2, // Multiple passes for better compression
+        ecma: 2020,
+        toplevel: true,
+        unsafe_arrows: true,
+        unsafe_methods: true,
+      },
+      mangle: {
+        safari10: true, // Safari 10 compatibility
+        toplevel: true,
+      },
+      format: {
+        comments: false, // Remove all comments
+        ecma: 2020,
+      },
+    },
+    
     rollupOptions: {
       output: {
         // PERFORMANCE: Better chunking strategy
         manualChunks: (id: string) => {
           // React core - loaded immediately
           if (id.includes('react-dom') || id.includes('react/')) {
-            return 'vendor';
+            return 'vendor-react';
           }
           // UI icons - loaded immediately but separate chunk
           if (id.includes('lucide-react')) {
-            return 'ui';
+            return 'vendor-ui';
           }
           // WalletConnect - lazy loaded when user clicks wallet connect
           if (id.includes('@walletconnect') || id.includes('w3m-modal') || id.includes('@web3modal')) {
-            return 'walletconnect';
+            return 'vendor-walletconnect';
           }
           // Ethers - lazy loaded with payment modal
           if (id.includes('ethers')) {
-            return 'ethers';
+            return 'vendor-ethers';
           }
           // Solana - lazy loaded with payment modal
           if (id.includes('@solana')) {
-            return 'solana';
+            return 'vendor-solana';
           }
-        }
-      }
+          // Stripe - lazy loaded with payment
+          if (id.includes('@stripe') || id.includes('stripe')) {
+            return 'vendor-stripe';
+          }
+          // Other large dependencies
+          if (id.includes('node_modules')) {
+            // Group smaller deps together
+            return 'vendor-misc';
+          }
+        },
+        // Compact chunk file names
+        chunkFileNames: 'assets/[name]-[hash:8].js',
+        entryFileNames: 'assets/[name]-[hash:8].js',
+        assetFileNames: 'assets/[name]-[hash:8].[ext]',
+      },
+      // Tree-shake for smaller bundles
+      treeshake: {
+        moduleSideEffects: false,
+        propertyReadSideEffects: false,
+        tryCatchDeoptimization: false,
+      },
     },
     // CDN configuration for production
     assetsDir: 'assets',
-    assetsInlineLimit: 4096, // Inline assets smaller than 4kb
+    assetsInlineLimit: 4096, // Inline assets smaller than 4kb as base64
   },
   // CDN configuration
   base: process.env.NODE_ENV === 'production' 
@@ -103,9 +149,7 @@ export default defineConfig({
     port: 4173,
     host: true,
     cors: true
-  }
+  },
+  // Enable build caching
+  cacheDir: 'node_modules/.vite',
 });
-
-
-
-

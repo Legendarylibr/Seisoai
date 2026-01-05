@@ -6,9 +6,10 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
-import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey } from '../services/fal';
+import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed, normalizeStatus, FAL_STATUS } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
+import { calculateVideoCredits, calculateMusicCredits, calculateUpscaleCredits, calculateVideoToAudioCredits } from '../utils/creditCalculations';
 
 // Types
 interface Dependencies {
@@ -1088,14 +1089,15 @@ export function createGenerationRoutes(deps: Dependencies) {
           queue_position?: number 
         };
         
-        if (statusData.status === 'IN_QUEUE') {
+        const streamStatus = normalizeStatus(statusData.status);
+        if (streamStatus === FAL_STATUS.IN_QUEUE) {
           const queuePos = statusData.queue_position ?? 0;
           sendEvent('status', { 
             message: `In queue (position: ${queuePos})...`, 
             progress: 15,
             queuePosition: queuePos
           });
-        } else if (statusData.status === 'IN_PROGRESS') {
+        } else if (streamStatus === FAL_STATUS.IN_PROGRESS) {
           // Send progress based on attempts
           const progress = Math.min(20 + (attempts * 2), 90);
           sendEvent('status', { 
@@ -1103,10 +1105,10 @@ export function createGenerationRoutes(deps: Dependencies) {
             progress,
             logs: statusData.logs?.map(l => l.message) 
           });
-        } else if (statusData.status === 'COMPLETED') {
+        } else if (isStatusCompleted(streamStatus)) {
           completed = true;
           sendEvent('status', { message: 'Finalizing...', progress: 95 });
-        } else if (statusData.status === 'FAILED') {
+        } else if (isStatusFailed(streamStatus)) {
           // Refund credits on generation failure
           await refundCredits(user, creditsRequired, 'FLUX 2 streaming generation failed');
           sendEvent('error', { error: 'Generation failed', creditsRefunded: creditsRequired });
@@ -1244,20 +1246,7 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       const modeConfig = VIDEO_GENERATION_MODES[generation_mode] || VIDEO_GENERATION_MODES['first-last-frame'];
 
-      // Calculate credits based on duration, audio, and quality
-      const calculateVideoCredits = (dur: string, hasAudio: boolean, qual: string): number => {
-        const durationSeconds = parseInt(dur.replace('s', '')) || 8;
-        let pricePerSecond: number;
-        if (qual === 'quality') {
-          pricePerSecond = hasAudio ? 0.825 : 0.55;
-        } else {
-          pricePerSecond = hasAudio ? 0.44 : 0.22;
-        }
-        const totalCost = durationSeconds * pricePerSecond;
-        // Convert dollars to credits (1 credit = $0.20)
-        return Math.max(2, Math.ceil(totalCost / 0.20));
-      };
-
+      // Calculate credits based on duration, audio, and quality using shared utility
       const creditsToDeduct = calculateVideoCredits(duration, generate_audio, quality);
 
       // Deduct credits atomically
@@ -1585,7 +1574,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
 
         // Check for completed status
-        if (normalizedStatus === 'COMPLETED' || normalizedStatus === 'OK' || normalizedStatus === 'DONE' || normalizedStatus === 'SUCCESS') {
+        if (isStatusCompleted(normalizedStatus)) {
           const fetchUrl = statusData.response_url || resultEndpoint;
           logger.info('Fetching video result', { requestId, fetchUrl, hasResponseUrl: !!statusData.response_url });
           
@@ -1691,7 +1680,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
 
         // Check for failed status
-        if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+        if (isStatusFailed(normalizedStatus)) {
           logger.error('Video generation failed', { requestId, status: normalizedStatus });
           // Refund credits on generation failure
           await refundCredits(user, creditsToDeduct, `Video generation failed: ${normalizedStatus}`);
@@ -1710,24 +1699,13 @@ export function createGenerationRoutes(deps: Dependencies) {
       logger.error('Video generation error:', { error: err.message });
       // Refund credits on unexpected error
       const user = req.user;
-      // Calculate credits for refund (same calculation as in the route)
+      // Calculate credits for refund using shared utility
       const { duration = '8s', generate_audio = true, quality = 'fast' } = req.body as {
         duration?: string;
         generate_audio?: boolean;
         quality?: string;
       };
-      const calculateVideoCreditsForRefund = (dur: string, hasAudio: boolean, qual: string): number => {
-        const durationSeconds = parseInt(dur.replace('s', '')) || 8;
-        let pricePerSecond: number;
-        if (qual === 'quality') {
-          pricePerSecond = hasAudio ? 0.825 : 0.55;
-        } else {
-          pricePerSecond = hasAudio ? 0.44 : 0.22;
-        }
-        const totalCost = durationSeconds * pricePerSecond;
-        return Math.max(2, Math.ceil(totalCost / 0.20));
-      };
-      const creditsToRefund = calculateVideoCreditsForRefund(duration, generate_audio, quality);
+      const creditsToRefund = calculateVideoCredits(duration, generate_audio, quality);
       if (user) {
         await refundCredits(user, creditsToRefund, `Video generation error: ${err.message}`);
       }
@@ -1765,12 +1743,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       // Clamp duration between 10 and 180 seconds
       const clampedDuration = Math.max(10, Math.min(180, duration));
 
-      // Calculate credits based on duration: 0.25 credits per minute (20% margin)
-      // API cost: $0.02/min × 1.2 = $0.024/min
-      const calculateMusicCredits = (durationSecs: number): number => {
-        const minutes = durationSecs / 60;
-        return Math.max(0.25, Math.ceil(minutes * 4) / 4); // Round up to nearest 0.25
-      };
+      // Calculate credits based on duration using shared utility
       const creditsRequired = calculateMusicCredits(clampedDuration);
       
       // Deduct credits
@@ -1884,7 +1857,7 @@ export function createGenerationRoutes(deps: Dependencies) {
             elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
           });
 
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             // Fetch the result
             const resultData = await getQueueResult<{ audio_file?: { url?: string; content_type?: string; file_name?: string; file_size?: number } }>(requestId, musicModel);
 
@@ -1923,7 +1896,7 @@ export function createGenerationRoutes(deps: Dependencies) {
               res.status(500).json({ success: false, error: 'No audio in response', creditsRefunded: creditsRequired });
               return;
             }
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             logger.error('Music generation failed', { requestId, statusData });
             // Refund credits on music generation failure
             await refundCredits(user, creditsRequired, `Music generation failed: ${normalizedStatus}`);
@@ -1967,14 +1940,10 @@ export function createGenerationRoutes(deps: Dependencies) {
       logger.error('Music generation error:', { error: err.message });
       // Refund credits on unexpected error
       const user = req.user;
-      // Calculate credits for refund (same calculation as in the route)
+      // Calculate credits for refund using shared utility
       const { duration = 30 } = req.body as { duration?: number };
       const clampedDuration = Math.max(10, Math.min(180, duration));
-      const calculateMusicCreditsForRefund = (durationSecs: number): number => {
-        const minutes = durationSecs / 60;
-        return Math.max(1, Math.ceil(minutes * 2));
-      };
-      const creditsToRefund = calculateMusicCreditsForRefund(clampedDuration);
+      const creditsToRefund = calculateMusicCredits(clampedDuration);
       if (user) {
         await refundCredits(user, creditsToRefund, `Music generation error: ${err.message}`);
       }
@@ -2074,8 +2043,8 @@ export function createGenerationRoutes(deps: Dependencies) {
       // Validate scale (2 or 4)
       const validScale = scale === 4 ? 4 : 2;
       
-      // Credits: 0.5 for 2x, 1.0 for 4x
-      const creditsRequired = validScale === 4 ? 1.0 : 0.5;
+      // Credits based on scale using shared utility
+      const creditsRequired = calculateUpscaleCredits(validScale);
 
       // Deduct credits atomically
       const User = mongoose.model<IUser>('User');
@@ -2186,10 +2155,10 @@ export function createGenerationRoutes(deps: Dependencies) {
     } catch (error) {
       const err = error as Error;
       logger.error('Upscale error:', { error: err.message });
-      // Refund credits on unexpected error
+      // Refund credits on unexpected error using shared utility
       const user = req.user;
       const { scale = 2 } = req.body as { scale?: number };
-      const creditsToRefund = scale === 4 ? 1.0 : 0.5;
+      const creditsToRefund = calculateUpscaleCredits(scale === 4 ? 4 : 2);
       if (user) {
         await refundCredits(user, creditsToRefund, `Upscale error: ${err.message}`);
       }
@@ -2250,8 +2219,8 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Credits: 0.5 per generation (flat rate for simplicity)
-      const creditsRequired = 0.5;
+      // Credits for video-to-audio generation using shared utility
+      const creditsRequired = calculateVideoToAudioCredits();
 
       // Deduct credits atomically
       const User = mongoose.model<IUser>('User');
@@ -2393,7 +2362,7 @@ export function createGenerationRoutes(deps: Dependencies) {
           return;
         }
 
-        if (normalizedStatus === 'COMPLETED') {
+        if (isStatusCompleted(normalizedStatus)) {
           // Fetch the result
           const resultResponse = await fetch(
             `https://queue.fal.run/${modelPath}/requests/${requestId}`,
@@ -2457,7 +2426,7 @@ export function createGenerationRoutes(deps: Dependencies) {
           return;
         }
 
-        if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+        if (isStatusFailed(normalizedStatus)) {
           logger.error('MMAudio generation failed', { requestId, status: normalizedStatus });
           await refundCredits(user, creditsRequired, `MMAudio failed: ${normalizedStatus}`);
           res.status(500).json({
@@ -2482,7 +2451,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       const err = error as Error;
       logger.error('Video-to-audio error:', { error: err.message });
       const user = req.user;
-      const creditsToRefund = 0.5;
+      const creditsToRefund = calculateVideoToAudioCredits();
       if (user) {
         await refundCredits(user, creditsToRefund, `Video-to-audio error: ${err.message}`);
       }

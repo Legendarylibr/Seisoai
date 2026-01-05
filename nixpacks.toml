@@ -1,16 +1,39 @@
+# Nixpacks configuration for Railway deployment
+# Optimized for fast builds and minimal image size
+
 providers = ["node"]
 
 [phases.setup]
-nixPkgs = ['nodejs', 'ffmpeg']
+# Minimal system dependencies - only what's needed
+nixPkgs = ['nodejs_22', 'ffmpeg-headless']
 
 [phases.install]
-cmds = ['npm install', 'cd backend && npm install']
+# Use npm ci for reproducible builds, clean cache after
+cmds = [
+    'npm ci --prefer-offline --no-audit --no-fund',
+    'cd backend && npm ci --prefer-offline --no-audit --no-fund',
+    'npm cache clean --force'
+]
+# Cache node_modules between builds
+cacheDirectories = ['node_modules', 'backend/node_modules', '.npm']
 
 [phases.build]
-cmds = ['npm run build']
+# Build frontend with production optimizations
+cmds = [
+    'NODE_ENV=production npm run build',
+    # Prune devDependencies after build to reduce image size
+    'npm prune --omit=dev',
+    'cd backend && npm prune --omit=dev',
+    # Clean up unnecessary files
+    'rm -rf .git .github .vscode *.md docs __tests__ coverage'
+]
 
 [start]
-cmd = 'npx tsx serve-real-backend.ts'
+cmd = 'node --import tsx serve-real-backend.ts'
 
 [variables]
 NODE_ENV = "production"
+# Enable Node.js production optimizations
+NODE_OPTIONS = "--max-old-space-size=512"
+# Disable npm update checks
+NPM_CONFIG_UPDATE_NOTIFIER = "false"

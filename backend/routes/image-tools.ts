@@ -6,7 +6,7 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
-import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey } from '../services/fal';
+import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 
@@ -165,7 +165,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
           const statusData = await checkQueueStatus<{ status?: string }>(requestId, 'fal-ai/face-swap');
           const normalizedStatus = (statusData.status || '').toUpperCase();
 
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{
               image?: { url?: string };
               images?: Array<{ url?: string }>;
@@ -187,7 +187,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
               res.status(500).json({ success: false, error: 'No image generated' });
               return;
             }
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'Face swap failed');
             res.status(500).json({ success: false, error: 'Face swap failed' });
             return;
@@ -324,7 +324,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
           const statusData = await checkQueueStatus<{ status?: string }>(requestId, 'fal-ai/flux-pro/v1.1/inpaint');
           const normalizedStatus = (statusData.status || '').toUpperCase();
 
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{
               image?: { url?: string };
               images?: Array<{ url?: string } | string>;
@@ -352,7 +352,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
               res.status(500).json({ success: false, error: 'No image generated' });
               return;
             }
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'Inpaint failed');
             res.status(500).json({ success: false, error: 'Inpaint failed' });
             return;
@@ -608,7 +608,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
           const statusData = await checkQueueStatus<{ status?: string }>(requestId, 'fal-ai/flux-pro/v1.1/outpaint');
           const normalizedStatus = (statusData.status || '').toUpperCase();
 
-          if (normalizedStatus === 'COMPLETED') {
+          if (isStatusCompleted(normalizedStatus)) {
             const resultData = await getQueueResult<{
               image?: { url?: string };
               images?: Array<{ url?: string } | string>;
@@ -636,7 +636,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
               res.status(500).json({ success: false, error: 'No image generated' });
               return;
             }
-          } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'ERROR') {
+          } else if (isStatusFailed(normalizedStatus)) {
             await refundCredits(user, creditsRequired, 'Outpaint failed');
             res.status(500).json({ success: false, error: 'Outpaint failed' });
             return;

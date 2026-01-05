@@ -3,11 +3,14 @@
  * Administrative functions for managing users and data
  */
 import { Router, type Request, type Response, type NextFunction } from 'express';
+import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
+import rateLimit from 'express-rate-limit';
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin-secret-key';
+// SECURITY: Admin secret must be configured - no default allowed
+const ADMIN_SECRET = process.env.ADMIN_SECRET;
 
 // Types
 interface Dependencies {
@@ -20,18 +23,43 @@ interface UserQuery {
   userId?: string;
 }
 
+// Admin rate limiter - 10 requests per 15 minutes per IP
+const adminRateLimiter: RequestHandler = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { success: false, error: 'Too many admin requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 export function createAdminRoutes(deps: Dependencies = {}) {
   const router = Router();
+  
+  // Apply rate limiting to all admin routes
+  router.use(adminRateLimiter);
 
   // Admin authentication middleware
   const requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
+    // SECURITY: Fail if admin secret is not configured
+    if (!ADMIN_SECRET || ADMIN_SECRET.length < 32) {
+      logger.error('Admin access attempted but ADMIN_SECRET is not properly configured');
+      res.status(503).json({ success: false, error: 'Admin functionality not available' });
+      return;
+    }
+    
     const authHeader = req.headers.authorization;
     const providedSecret = authHeader?.replace('Bearer ', '') || (req.body as { adminSecret?: string }).adminSecret;
     
-    if (providedSecret !== ADMIN_SECRET) {
+    if (!providedSecret || providedSecret !== ADMIN_SECRET) {
+      logger.warn('Failed admin authentication attempt', { 
+        ip: req.ip,
+        path: req.path 
+      });
       res.status(403).json({ success: false, error: 'Unauthorized' });
       return;
     }
+    
+    logger.info('Admin access granted', { ip: req.ip, path: req.path });
     next();
   };
 

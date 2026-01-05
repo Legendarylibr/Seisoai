@@ -6,6 +6,7 @@ import type { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
 import type { Model } from 'mongoose';
+import { CREDITS } from '../config/constants';
 
 // Types
 interface CreditsRequest extends Request {
@@ -90,21 +91,18 @@ export const createRequireCreditsForModel = (
         req.user = user;
 
         // Determine credit cost based on model
-        // 20% above API cost, Nano Banana Pro at 50% off (loss leader)
+        // Uses centralized constants from config/constants.ts
         const { model } = req.body;
-        let requiredCredits = 0.6; // Default: Flux Pro = 0.6 credits (+20%)
+        let requiredCredits = CREDITS.IMAGE_GENERATION; // Default: Flux Pro
 
         if (model === 'flux-2') {
-          // Flux 2 ($0.025 API × 1.2 = $0.03)
-          requiredCredits = 0.3;
+          requiredCredits = CREDITS.IMAGE_GENERATION_FLUX_2;
         } else if (model === 'nano-banana-pro') {
-          // Nano Banana Pro - LOSS LEADER ($0.25 API × 0.5 = $0.125)
-          requiredCredits = 1.25;
+          requiredCredits = CREDITS.IMAGE_GENERATION_NANO;
         } else if (model === 'qwen-image-layered') {
-          // Layer extraction (same as Flux 2)
-          requiredCredits = 0.3;
+          requiredCredits = CREDITS.LAYER_EXTRACTION;
         }
-        // Default: flux, flux-multi = 0.6 credits
+        // Default: flux, flux-multi = CREDITS.IMAGE_GENERATION
 
         if ((user.credits || 0) < requiredCredits) {
           res.status(402).json({
@@ -153,8 +151,8 @@ export const createRequireCreditsForVideo = (
 
         req.user = user;
 
-        // Minimum 2 credits for video (1 second minimum)
-        const minimumCredits = 2;
+        // Minimum credits for video generation
+        const minimumCredits = CREDITS.VIDEO_GENERATION_MINIMUM;
 
         if ((user.credits || 0) < minimumCredits) {
           res.status(402).json({

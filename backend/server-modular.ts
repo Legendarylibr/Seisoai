@@ -107,12 +107,23 @@ app.options('*', cors({
 // Compression
 app.use(compression());
 
-// CORS Configuration - Allow all origins (security handled by auth middleware)
-// This ensures the app works in all browsers including in-app browsers (Instagram, Twitter, etc.)
-logger.info('CORS configuration', { mode: 'permissive - all origins allowed' });
+// CORS Configuration - Use allowed origins from env, fallback to permissive for in-app browsers
+// Parse allowed origins from environment variable
+const parseAllowedOrigins = (): string[] | true => {
+  const originsEnv = config.ALLOWED_ORIGINS;
+  if (!originsEnv || originsEnv.trim() === '' || originsEnv === '*') {
+    // Permissive mode for in-app browsers (Instagram, Twitter, etc.)
+    return true;
+  }
+  return originsEnv.split(',').map(o => o.trim()).filter(o => o.length > 0);
+};
+
+const allowedOrigins = parseAllowedOrigins();
+const corsMode = allowedOrigins === true ? 'permissive - all origins allowed' : `restricted - ${(allowedOrigins as string[]).length} origins`;
+logger.info('CORS configuration', { mode: corsMode });
 
 app.use(cors({
-  origin: true, // Allow all origins
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Stripe-Signature', 'Cache-Control', 'Pragma', 'Accept', 'Origin', 'X-CSRF-Token'],
@@ -261,7 +272,8 @@ app.post('/create-checkout-session', (req: Request, res: Response, next: NextFun
 if (config.isProduction) {
   app.get('*', (req: Request, res: Response) => {
     // Set headers for in-app browser compatibility
-    res.setHeader('X-Frame-Options', 'ALLOWALL');
+    // Note: X-Frame-Options is set to SAMEORIGIN for security; frame-ancestors in CSP handles embedding
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');

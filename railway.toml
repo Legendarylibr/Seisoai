@@ -1,13 +1,17 @@
 [build]
 builder = "nixpacks"
 nixpacksConfigPath = "nixpacks.toml"
+# Build optimization
+watchPatterns = ["src/**", "backend/**", "package.json", "vite.config.ts"]
 
 [deploy]
-startCommand = "npx tsx serve-real-backend.ts"
+startCommand = "node --import tsx serve-real-backend.ts"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 180
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 5
+restartPolicyMaxRetries = 3
+# Number of replicas for high availability (optional)
+numReplicas = 1
 
 [project]
 id = "ee55e7fa-b010-4946-a87b-013e15e329a8"

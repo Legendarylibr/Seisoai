@@ -17,14 +17,24 @@ dotenv.config({ path: envPath });
 // Required environment variables
 const REQUIRED_VARS = ['JWT_SECRET'];
 
-// Production-required variables (for documentation/future use)
-// const PRODUCTION_REQUIRED_VARS = ['MONGODB_URI'];
-
-// Validate required vars
+// Validate required vars - enforce in all environments for security
 const missingVars = REQUIRED_VARS.filter(v => !process.env[v]);
-if (missingVars.length > 0 && process.env.NODE_ENV === 'production') {
-  console.error('Missing required environment variables:', missingVars);
-  process.exit(1);
+if (missingVars.length > 0) {
+  console.error('SECURITY ERROR: Missing required environment variables:', missingVars);
+  console.error('Please set these variables in your backend.env file');
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  } else {
+    console.warn('WARNING: Running without proper security configuration. This is not safe for production.');
+  }
+}
+
+// Validate JWT_SECRET minimum length
+if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
+  console.error('SECURITY ERROR: JWT_SECRET must be at least 32 characters long');
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
 }
 
 // Export validated env vars
