@@ -118,10 +118,6 @@ export const VIDEO_METADATA_CLEANING_NOTE =
   'Browser-based video metadata cleaning is limited. For thorough metadata removal, ' +
   'use backend FFmpeg processing (backend/utils/videoMetadata.js).';
 
-export default {
-  stripVideoMetadata,
-  VIDEO_METADATA_CLEANING_NOTE
-};
 
 
 

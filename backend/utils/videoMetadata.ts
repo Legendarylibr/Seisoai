@@ -179,11 +179,6 @@ export const isVideoMetadataCleaningAvailable = async (): Promise<boolean> => {
   return ffmpegAvailable;
 };
 
-export default {
-  stripVideoMetadata,
-  stripVideoMetadataFromUrl,
-  isVideoMetadataCleaningAvailable
-};
 
 
 

@@ -34,29 +34,13 @@ export default defineConfig({
   build: {
     // Production build optimizations
     target: 'es2020',
-    minify: 'terser',
+    // Use esbuild for minification - faster and handles Solana/crypto libs better than terser
+    minify: 'esbuild',
     sourcemap: false, // Disable sourcemaps in production for smaller bundles
     cssCodeSplit: true, // Enable CSS code splitting
     cssMinify: true, // Minify CSS
     reportCompressedSize: false, // Faster builds by skipping gzip size report
     chunkSizeWarningLimit: 1000, // Increase limit for vendor chunks
-    
-    // Terser minification options (balanced for safety)
-    terserOptions: {
-      compress: {
-        drop_console: false, // Keep console for debugging deploy issues
-        drop_debugger: true,
-        passes: 1,
-        ecma: 2020,
-      },
-      mangle: {
-        safari10: true,
-      },
-      format: {
-        comments: false,
-        ecma: 2020,
-      },
-    },
     
     rollupOptions: {
       output: {

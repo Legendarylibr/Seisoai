@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, ReactNode, Dispatch, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import type { VisualStyle } from '../types';
 
 const GALLERY_STORAGE_KEY = 'seiso_gallery_history';

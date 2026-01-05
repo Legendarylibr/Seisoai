@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { ImageGeneratorProvider, useImageGenerator } from './contexts/ImageGeneratorContext';
-import { SimpleWalletProvider, useSimpleWallet } from './contexts/SimpleWalletContext';
+import { ImageGeneratorProvider } from './contexts/ImageGeneratorContext';
+import { SimpleWalletProvider } from './contexts/SimpleWalletContext';
 import { EmailAuthProvider, useEmailAuth } from './contexts/EmailAuthContext';
 import SimpleWalletConnect from './components/SimpleWalletConnect';
 import StyleSelector from './components/StyleSelector';
@@ -13,7 +13,7 @@ import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
-import { Grid, Sparkles, Film, Music, Wand2, Layers, Box, type LucideIcon } from 'lucide-react';
+import { Grid, Sparkles, Film, Music, Layers, Box, type LucideIcon } from 'lucide-react';
 import logger from './utils/logger';
 import { API_URL } from './utils/apiConfig';
 
@@ -25,7 +25,6 @@ const ImageGallery = lazy(() => import('./components/ImageGallery'));
 const VideoGenerator = lazy(() => import('./components/VideoGenerator'));
 const MusicGenerator = lazy(() => import('./components/MusicGenerator'));
 const CharacterGenerator = lazy(() => import('./components/CharacterGenerator'));
-// const WorkflowWizard = lazy(() => import('./components/WorkflowWizard'));
 const TermsModal = lazy(() => import('./components/TermsModal'));
 import Footer from './components/Footer';
 import type { LegalPage } from './components/TermsModal';
@@ -78,7 +77,6 @@ function App(): JSX.Element {
     { id: 'video', name: 'Video', icon: Film },
     { id: 'music', name: 'Music', icon: Music },
     { id: '3d', name: '3D', icon: Box },
-    // { id: 'workflows', name: 'Workflows', icon: Wand2 }, // Coming soon
     { id: 'gallery', name: 'Gallery', icon: Grid }
   ];
 
@@ -104,11 +102,9 @@ interface AppWithCreditsCheckProps {
 }
 
 function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCheckProps): JSX.Element {
-  const { isConnected } = useSimpleWallet();
   const { isAuthenticated, userId, refreshCredits } = useEmailAuth();
   const [showTokenPaymentModal, setShowTokenPaymentModal] = useState(false);
   const [showStripePaymentModal, setShowStripePaymentModal] = useState(false);
-  const [currentTab, setCurrentTab] = useState(activeTab);
   const [subscriptionSuccess, setSubscriptionSuccess] = useState<SubscriptionSuccess | null>(null);
   const [userPrompt, setUserPrompt] = useState('');
   const [showTermsModal, setShowTermsModal] = useState(false);
@@ -205,18 +201,15 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
   return (
     <div className="min-h-screen lg:h-screen animated-bg flex flex-col" style={{ position: 'relative', zIndex: 0 }}>
       <Navigation 
-        activeTab={currentTab} 
-        setActiveTab={(tab: string) => {
-          setCurrentTab(tab);
-          setActiveTab(tab);
-        }}
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab}
         tabs={tabs}
         onShowTokenPayment={handleShowTokenPayment}
         onShowStripePayment={handleShowStripePayment}
       />
       
       <div className="flex-1 overflow-auto p-2 lg:p-3">
-        {currentTab === 'generate' && (
+        {activeTab === 'generate' && (
           <div className="container mx-auto max-w-7xl">
             <AuthGuard>
               <div className="space-y-3">
@@ -247,7 +240,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           </div>
         )}
         
-        {currentTab === 'batch' && (
+        {activeTab === 'batch' && (
           <div className="container mx-auto max-w-7xl">
             <AuthGuard>
               <div className="space-y-3">
@@ -275,7 +268,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           </div>
         )}
         
-        {currentTab === 'video' && (
+        {activeTab === 'video' && (
           <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
             <VideoGenerator 
               onShowTokenPayment={handleShowTokenPayment}
@@ -284,7 +277,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           </Suspense>
         )}
         
-        {currentTab === 'music' && (
+        {activeTab === 'music' && (
           <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
             <MusicGenerator 
               onShowTokenPayment={handleShowTokenPayment}
@@ -293,7 +286,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           </Suspense>
         )}
         
-        {currentTab === '3d' && (
+        {activeTab === '3d' && (
           <Suspense fallback={<Win95LoadingFallback text="Loading 3D Character Creator..." />}>
             <CharacterGenerator 
               onShowTokenPayment={handleShowTokenPayment}
@@ -302,20 +295,8 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           </Suspense>
         )}
         
-        {/* Workflows tab - coming soon
-        {currentTab === 'workflows' && (
-          <Suspense fallback={<Win95LoadingFallback text="Loading Workflows..." />}>
-            <div className="container mx-auto max-w-4xl h-full">
-              <WorkflowWizard
-                onShowTokenPayment={handleShowTokenPayment}
-                onShowStripePayment={handleShowStripePayment}
-              />
-            </div>
-          </Suspense>
-        )}
-        */}
         
-        {currentTab === 'gallery' && (
+        {activeTab === 'gallery' && (
           <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
             <ImageGallery />
           </Suspense>

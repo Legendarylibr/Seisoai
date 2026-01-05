@@ -88,14 +88,6 @@ export function calculateSubscriptionCredits(user: UserDocument, amountInDollars
   };
 }
 
-export default {
-  calculateCredits,
-  calculateCreditsFromAmount,
-  isUserNFTHolder,
-  calculateSubscriptionCredits,
-  BASE_RATE,
-  NFT_HOLDER_BONUS
-};
 
 
 

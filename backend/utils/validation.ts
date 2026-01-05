@@ -86,17 +86,6 @@ export function getSafeErrorMessage(error: unknown, defaultMessage: string = 'An
   return err?.message || defaultMessage;
 }
 
-export default {
-  isValidEthereumAddress,
-  isValidSolanaAddress,
-  isValidWalletAddress,
-  normalizeWalletAddress,
-  sanitizeString,
-  sanitizeNumber,
-  isValidRequestId,
-  isValidEmail,
-  getSafeErrorMessage
-};
 
 
 

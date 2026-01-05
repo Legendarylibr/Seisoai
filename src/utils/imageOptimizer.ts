@@ -226,17 +226,6 @@ export const stripImagesMetadataToDataUri = async (
   return stripImageMetadataToDataUri(imageUrls, options);
 };
 
-// Default export for better module resolution
-export default {
-  optimizeImage,
-  optimizeImages,
-  getDataUriSize,
-  needsOptimization,
-  stripImageMetadata,
-  stripImageMetadataToDataUri,
-  stripImagesMetadata,
-  stripImagesMetadataToDataUri
-};
 
 
 

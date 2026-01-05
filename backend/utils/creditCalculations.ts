@@ -79,11 +79,4 @@ export function calculateVideoToAudioCredits(): number {
   return CREDITS.VIDEO_TO_AUDIO;
 }
 
-export default {
-  calculateVideoCredits,
-  calculateMusicCredits,
-  calculateImageCredits,
-  calculateUpscaleCredits,
-  calculateVideoToAudioCredits
-};
 
