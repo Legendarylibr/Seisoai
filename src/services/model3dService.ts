@@ -75,25 +75,35 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
       hasBackImage: !!back_image_url 
     });
 
-    const response = await fetch(`${API_URL}/api/model3d/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        input_image_url,
-        back_image_url,
-        left_image_url,
-        right_image_url,
-        enable_pbr,
-        face_count,
-        generate_type,
-        polygon_type,
-        walletAddress,
-        userId,
-        email
-      })
-    });
+    // Create abort controller with 8 minute timeout (3D gen can take 5+ mins)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8 * 60 * 1000);
+
+    let response: Response;
+    try {
+      response = await fetch(`${API_URL}/api/model3d/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          input_image_url,
+          back_image_url,
+          left_image_url,
+          right_image_url,
+          enable_pbr,
+          face_count,
+          generate_type,
+          polygon_type,
+          walletAddress,
+          userId,
+          email
+        }),
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const data = await response.json();
 
