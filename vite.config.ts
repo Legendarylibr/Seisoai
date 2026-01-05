@@ -6,8 +6,10 @@ export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
     include: [
-      'buffer'
-      // PERFORMANCE: ethers and WalletConnect are lazy-loaded, don't pre-bundle
+      'buffer',
+      // Pre-bundle Solana to avoid circular dependency issues
+      '@solana/web3.js',
+      '@solana/spl-token'
     ],
     exclude: [
       '@walletconnect/ethereum-provider'
@@ -76,8 +78,17 @@ export default defineConfig({
           if (id.includes('ethers')) {
             return 'vendor-ethers';
           }
-          // Solana - lazy loaded with payment modal
-          if (id.includes('@solana')) {
+          // Solana and its dependencies - keep together to avoid circular dep issues
+          // Include common Solana sub-dependencies in the same chunk
+          if (id.includes('@solana') || 
+              id.includes('rpc-websockets') || 
+              id.includes('superstruct') ||
+              id.includes('bn.js') ||
+              id.includes('borsh') ||
+              id.includes('bs58') ||
+              id.includes('jayson') ||
+              id.includes('@noble/curves') ||
+              id.includes('@noble/hashes')) {
             return 'vendor-solana';
           }
           // Stripe - lazy loaded with payment
