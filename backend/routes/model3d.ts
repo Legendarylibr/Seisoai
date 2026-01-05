@@ -259,6 +259,11 @@ export function createModel3dRoutes(deps: Dependencies) {
         );
 
         if (!statusResponse.ok) {
+          logger.warn('3D status check failed', { 
+            requestId, 
+            status: statusResponse.status,
+            elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
+          });
           continue;
         }
 
@@ -281,15 +286,18 @@ export function createModel3dRoutes(deps: Dependencies) {
         
         // Handle wrapped or unwrapped data
         const statusResult = rawStatusData.data || rawStatusData;
-        const normalizedStatus = (rawStatusData.status || '').toUpperCase();
+        const rawStatus = rawStatusData.status || '';
+        const normalizedStatus = rawStatus.toUpperCase();
 
-        logger.debug('3D model polling', { 
+        // Log every poll for debugging
+        logger.info('3D model polling status', { 
           requestId, 
-          status: normalizedStatus,
+          rawStatus,
+          normalizedStatus,
           hasDataWrapper: !!rawStatusData.data,
           hasGlb: !!statusResult.glb?.url,
           hasModelGlb: !!statusResult.model_glb?.url,
-          keys: Object.keys(statusResult).slice(0, 10),
+          statusKeys: Object.keys(rawStatusData).slice(0, 10),
           elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
         });
 
@@ -297,7 +305,7 @@ export function createModel3dRoutes(deps: Dependencies) {
         // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
         const glbFromStatus = statusResult.glb || statusResult.model_glb || statusResult.model_urls?.glb;
         if (glbFromStatus?.url) {
-          logger.info('3D model completed (from status)', { 
+          logger.info('3D model completed (from status response)', { 
             requestId,
             hasGlb: !!glbFromStatus?.url,
             hasThumbnail: !!statusResult.thumbnail?.url,
@@ -316,7 +324,19 @@ export function createModel3dRoutes(deps: Dependencies) {
           return;
         }
 
-        if (normalizedStatus === 'COMPLETED') {
+        // Check for completion - handle various status formats from FAL
+        const isCompleted = normalizedStatus === 'COMPLETED' || 
+                           normalizedStatus === 'OK' || 
+                           normalizedStatus === 'SUCCESS' ||
+                           normalizedStatus === 'SUCCEEDED';
+
+        if (isCompleted) {
+          logger.info('3D model status COMPLETED, fetching result', { 
+            requestId, 
+            normalizedStatus,
+            elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
+          });
+          
           // Fetch the result
           const resultResponse = await fetch(
             `https://queue.fal.run/${modelPath}/requests/${requestId}`,
@@ -326,6 +346,12 @@ export function createModel3dRoutes(deps: Dependencies) {
           );
 
           if (!resultResponse.ok) {
+            const errorText = await resultResponse.text().catch(() => 'Unknown error');
+            logger.error('Failed to fetch 3D result', { 
+              requestId, 
+              status: resultResponse.status,
+              error: errorText.substring(0, 500)
+            });
             await refundCredits(user, creditsRequired, 'Failed to fetch 3D result');
             res.status(500).json({
               success: false,
