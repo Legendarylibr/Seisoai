@@ -39,24 +39,19 @@ export default defineConfig({
     reportCompressedSize: false, // Faster builds by skipping gzip size report
     chunkSizeWarningLimit: 1000, // Increase limit for vendor chunks
     
-    // Terser minification options for maximum compression
+    // Terser minification options (balanced for safety)
     terserOptions: {
       compress: {
-        drop_console: true, // Remove console.log in production
-        drop_debugger: true, // Remove debugger statements
-        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.trace'],
-        passes: 2, // Multiple passes for better compression
+        drop_console: false, // Keep console for debugging deploy issues
+        drop_debugger: true,
+        passes: 1,
         ecma: 2020,
-        toplevel: true,
-        unsafe_arrows: true,
-        unsafe_methods: true,
       },
       mangle: {
-        safari10: true, // Safari 10 compatibility
-        toplevel: true,
+        safari10: true,
       },
       format: {
-        comments: false, // Remove all comments
+        comments: false,
         ecma: 2020,
       },
     },
@@ -100,11 +95,9 @@ export default defineConfig({
         entryFileNames: 'assets/[name]-[hash:8].js',
         assetFileNames: 'assets/[name]-[hash:8].[ext]',
       },
-      // Tree-shake for smaller bundles
+      // Tree-shake for smaller bundles (keep side effects for React)
       treeshake: {
-        moduleSideEffects: false,
-        propertyReadSideEffects: false,
-        tryCatchDeoptimization: false,
+        moduleSideEffects: true,
       },
     },
     // CDN configuration for production
