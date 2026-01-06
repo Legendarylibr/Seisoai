@@ -9,7 +9,9 @@ export default defineConfig({
       'buffer',
       // Pre-bundle Solana to avoid circular dependency issues
       '@solana/web3.js',
-      '@solana/spl-token'
+      '@solana/spl-token',
+      '@solana/buffer-layout',
+      '@solana/buffer-layout-utils'
     ],
     exclude: [
       '@walletconnect/ethereum-provider'
@@ -19,6 +21,8 @@ export default defineConfig({
       define: {
         global: 'globalThis',
       },
+      // Ensure proper handling of Solana dependencies
+      target: 'es2020',
     }
   },
   resolve: {

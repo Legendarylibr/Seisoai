@@ -94,6 +94,7 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
       }
 
       const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
+      const splToken = await import('@solana/spl-token');
       const { 
         createTransferInstruction, 
         getAssociatedTokenAddress, 
@@ -101,7 +102,7 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
         getAssociatedTokenAddressSync,
         TOKEN_PROGRAM_ID,
         ASSOCIATED_TOKEN_PROGRAM_ID
-      } = await import('@solana/spl-token');
+      } = splToken;
 
       // Test backend proxy connection first - all RPC calls go through proxy to avoid CORS/403 issues
       logger.debug('Testing backend Solana RPC proxy...');
@@ -189,6 +190,10 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
       
       // Create and add transfer instruction
       logger.debug('Adding transfer instruction');
+      // Ensure createTransferInstruction is available
+      if (!createTransferInstruction || typeof createTransferInstruction !== 'function') {
+        throw new Error('createTransferInstruction is not available. Please refresh the page and try again.');
+      }
       const transferInstruction = createTransferInstruction(
         userTokenAccount,    // source
         paymentTokenAccount, // destination

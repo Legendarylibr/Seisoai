@@ -37,6 +37,16 @@ if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
   }
 }
 
+// Warn about permissive CORS in production
+if (process.env.NODE_ENV === 'production') {
+  const allowedOrigins = process.env.ALLOWED_ORIGINS;
+  if (!allowedOrigins || allowedOrigins.trim() === '' || allowedOrigins === '*') {
+    console.warn('SECURITY WARNING: CORS is set to allow all origins in production.');
+    console.warn('This is acceptable for in-app browsers (Twitter, Instagram) but should be restricted for web-only deployments.');
+    console.warn('Consider setting ALLOWED_ORIGINS to specific domains in production.');
+  }
+}
+
 // Export validated env vars
 export interface Config {
   PORT: number;

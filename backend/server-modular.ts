@@ -45,6 +45,7 @@ import {
   requireCredits
 } from './middleware/credits.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
+import { createValidateInput } from './middleware/validation.js';
 
 // Routes
 import { createVersionedRoutes } from './routes/versioned.js';
@@ -184,6 +185,11 @@ const blockchainRpcLimiter = createBlockchainRpcLimiter();
 
 // Request ID middleware for tracing
 app.use(requestIdMiddleware);
+
+// Apply input validation globally to prevent NoSQL injection and sanitize inputs
+// This must come before routes but after body parsing
+const validateInput = createValidateInput();
+app.use('/api/', validateInput);
 
 // Apply general rate limiting to all API routes
 app.use('/api/', generalRateLimiter);
