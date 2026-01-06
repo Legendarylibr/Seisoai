@@ -93,16 +93,46 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
         throw new Error('Phantom wallet not found');
       }
 
-      const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
+      // Import Solana modules - access functions via module object to prevent tree-shaking issues
+      const solanaWeb3 = await import('@solana/web3.js');
       const splToken = await import('@solana/spl-token');
-      const { 
-        createTransferInstruction, 
-        getAssociatedTokenAddress, 
-        createAssociatedTokenAccountInstruction,
-        getAssociatedTokenAddressSync,
-        TOKEN_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
-      } = splToken;
+      
+      // Extract web3.js classes
+      const Connection = solanaWeb3.Connection;
+      const PublicKey = solanaWeb3.PublicKey;
+      const Transaction = solanaWeb3.Transaction;
+      
+      // Extract spl-token functions - use direct property access to avoid minification issues
+      const TOKEN_PROGRAM_ID = splToken.TOKEN_PROGRAM_ID;
+      const ASSOCIATED_TOKEN_PROGRAM_ID = splToken.ASSOCIATED_TOKEN_PROGRAM_ID;
+      
+      // Define helper functions that wrap the spl-token module functions
+      // This prevents tree-shaking from breaking function references
+      const getAssociatedTokenAddressSync = (mint: typeof PublicKey.prototype, owner: typeof PublicKey.prototype) => {
+        return splToken.getAssociatedTokenAddressSync(mint, owner);
+      };
+      
+      const createAssociatedTokenAccountInstruction = (
+        payer: typeof PublicKey.prototype,
+        associatedToken: typeof PublicKey.prototype,
+        owner: typeof PublicKey.prototype,
+        mint: typeof PublicKey.prototype,
+        programId?: typeof PublicKey.prototype,
+        associatedTokenProgramId?: typeof PublicKey.prototype
+      ) => {
+        return splToken.createAssociatedTokenAccountInstruction(
+          payer, associatedToken, owner, mint, programId, associatedTokenProgramId
+        );
+      };
+      
+      const createTransferInstruction = (
+        source: typeof PublicKey.prototype,
+        destination: typeof PublicKey.prototype,
+        owner: typeof PublicKey.prototype,
+        amount: number | bigint
+      ) => {
+        return splToken.createTransferInstruction(source, destination, owner, amount);
+      };
 
       // Test backend proxy connection first - all RPC calls go through proxy to avoid CORS/403 issues
       logger.debug('Testing backend Solana RPC proxy...');

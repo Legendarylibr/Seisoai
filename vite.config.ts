@@ -16,6 +16,8 @@ export default defineConfig({
     exclude: [
       '@walletconnect/ethereum-provider'
     ],
+    // Force re-optimization when dependencies change
+    force: false,
     esbuildOptions: {
       // Define Buffer globally for esbuild optimization
       define: {
@@ -23,6 +25,8 @@ export default defineConfig({
       },
       // Ensure proper handling of Solana dependencies
       target: 'es2020',
+      // Keep function names to prevent minification issues with dynamic imports
+      keepNames: true,
     }
   },
   resolve: {
@@ -45,6 +49,10 @@ export default defineConfig({
     cssMinify: true, // Minify CSS
     reportCompressedSize: false, // Faster builds by skipping gzip size report
     chunkSizeWarningLimit: 1000, // Increase limit for vendor chunks
+    // Keep function names for Solana SPL token functions - prevents minification issues
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
     
     rollupOptions: {
       output: {
