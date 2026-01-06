@@ -5,6 +5,7 @@ import { generateMusic, calculateMusicCredits } from '../services/musicService';
 import { Music, Play, Pause, Download, AlertCircle, ChevronDown, Disc3, Square, Brain, Mic, Sliders, Upload, X } from 'lucide-react';
 import { API_URL } from '../utils/apiConfig';
 import logger from '../utils/logger';
+import { extractAudioFromVideo, isFFmpegSupported } from '../utils/ffmpeg';
 
 // Windows 95 style constants
 const WIN95 = {
@@ -551,49 +552,49 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
     setError(null);
     
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const dataUri = event.target?.result as string;
-        
-        try {
-          let audioUrl: string;
-          
-          if (isVideo) {
-            // Extract audio from video
-            const extractResponse = await fetch(`${API_URL}/api/audio/extract-audio`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ videoDataUri: dataUri })
-            });
-            const extractData = await extractResponse.json();
-            if (!extractResponse.ok || !extractData.success) {
-              throw new Error(extractData.error || 'Failed to extract audio from video');
-            }
-            audioUrl = extractData.url;
-          } else {
-            // Upload audio directly
-            const uploadResponse = await fetch(`${API_URL}/api/audio/upload`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ audioDataUri: dataUri })
-            });
-            const uploadData = await uploadResponse.json();
-            if (!uploadResponse.ok || !uploadData.success) {
-              throw new Error(uploadData.error || 'Failed to upload voice reference');
-            }
-            audioUrl = uploadData.url;
-          }
-          
-          setVoiceRefUrl(audioUrl);
-        } catch (err) {
-          setError((err as Error).message);
-        } finally {
-          setIsUploadingVoiceRef(false);
+      let audioDataUri: string;
+      
+      if (isVideo) {
+        // Check if FFmpeg is supported in this browser
+        if (!isFFmpegSupported()) {
+          throw new Error('Audio extraction requires a browser with SharedArrayBuffer support. Please use Chrome, Firefox, or Edge with proper security headers.');
         }
-      };
-      reader.readAsDataURL(file);
+        
+        // Extract audio from video using client-side FFmpeg
+        const audioBlob = await extractAudioFromVideo(file, 'mp3');
+        
+        // Convert blob to data URI
+        audioDataUri = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read audio'));
+          reader.readAsDataURL(audioBlob);
+        });
+      } else {
+        // Read audio file directly as data URI
+        audioDataUri = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read audio file'));
+          reader.readAsDataURL(file);
+        });
+      }
+      
+      // Upload audio to server
+      const uploadResponse = await fetch(`${API_URL}/api/audio/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioDataUri })
+      });
+      const uploadData = await uploadResponse.json();
+      if (!uploadResponse.ok || !uploadData.success) {
+        throw new Error(uploadData.error || 'Failed to upload voice reference');
+      }
+      
+      setVoiceRefUrl(uploadData.url);
     } catch (err) {
       setError((err as Error).message);
+    } finally {
       setIsUploadingVoiceRef(false);
     }
   }, []);
@@ -662,49 +663,49 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
     setError(null);
     
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const dataUri = event.target?.result as string;
-        
-        try {
-          let audioUrl: string;
-          
-          if (isVideo) {
-            // Extract audio from video
-            const extractResponse = await fetch(`${API_URL}/api/audio/extract-audio`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ videoDataUri: dataUri })
-            });
-            const extractData = await extractResponse.json();
-            if (!extractResponse.ok || !extractData.success) {
-              throw new Error(extractData.error || 'Failed to extract audio from video');
-            }
-            audioUrl = extractData.url;
-          } else {
-            // Upload audio directly
-            const uploadResponse = await fetch(`${API_URL}/api/audio/upload`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ audioDataUri: dataUri })
-            });
-            const uploadData = await uploadResponse.json();
-            if (!uploadResponse.ok || !uploadData.success) {
-              throw new Error(uploadData.error || 'Failed to upload audio');
-            }
-            audioUrl = uploadData.url;
-          }
-          
-          setRemixSourceUrl(audioUrl);
-        } catch (err) {
-          setError((err as Error).message);
-        } finally {
-          setIsUploadingRemixSource(false);
+      let audioDataUri: string;
+      
+      if (isVideo) {
+        // Check if FFmpeg is supported in this browser
+        if (!isFFmpegSupported()) {
+          throw new Error('Audio extraction requires a browser with SharedArrayBuffer support. Please use Chrome, Firefox, or Edge with proper security headers.');
         }
-      };
-      reader.readAsDataURL(file);
+        
+        // Extract audio from video using client-side FFmpeg
+        const audioBlob = await extractAudioFromVideo(file, 'mp3');
+        
+        // Convert blob to data URI
+        audioDataUri = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read audio'));
+          reader.readAsDataURL(audioBlob);
+        });
+      } else {
+        // Read audio file directly as data URI
+        audioDataUri = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read audio file'));
+          reader.readAsDataURL(file);
+        });
+      }
+      
+      // Upload audio to server
+      const uploadResponse = await fetch(`${API_URL}/api/audio/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioDataUri })
+      });
+      const uploadData = await uploadResponse.json();
+      if (!uploadResponse.ok || !uploadData.success) {
+        throw new Error(uploadData.error || 'Failed to upload audio');
+      }
+      
+      setRemixSourceUrl(uploadData.url);
     } catch (err) {
       setError((err as Error).message);
+    } finally {
       setIsUploadingRemixSource(false);
     }
   }, []);

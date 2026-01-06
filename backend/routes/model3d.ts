@@ -84,9 +84,18 @@ export function createModel3dRoutes(deps: Dependencies) {
    * Uses Hunyuan3D V3 Image-to-3D
    */
   router.post('/generate', freeImageLimiter, requireCredits(3), async (req: AuthenticatedRequest, res: Response) => {
+    // Entry point logging - helps diagnose if requests reach this route
+    logger.info('3D model generation request received', {
+      hasUser: !!req.user,
+      userId: req.user?.userId || req.user?.email || req.user?.walletAddress,
+      hasInputImage: !!req.body?.input_image_url,
+      generateType: req.body?.generate_type
+    });
+
     try {
       const user = req.user;
       if (!user) {
+        logger.warn('3D generation rejected: no user', { body: Object.keys(req.body || {}) });
         res.status(401).json({
           success: false,
           error: 'User authentication required'
@@ -316,26 +325,30 @@ export function createModel3dRoutes(deps: Dependencies) {
         });
 
         // Check if model in status response (some FAL endpoints include result in status)
-        // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
+        // Per FAL docs: https://fal.ai/models/fal-ai/hunyuan3d-v3/image-to-3d/api
+        // Output includes: model_glb (File), thumbnail (File), model_urls (ModelUrls)
         const typedStatusResult = statusResult as {
-          glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-          model_glb?: { url?: string };
+          model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+          glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string }; // fallback alias
           thumbnail?: { url?: string };
           model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
         };
-        const glbFromStatus = typedStatusResult.glb || typedStatusResult.model_glb || typedStatusResult.model_urls?.glb;
+        // Prioritize model_glb as per FAL docs, with fallbacks
+        const glbFromStatus = typedStatusResult.model_glb || typedStatusResult.glb || typedStatusResult.model_urls?.glb;
         if (glbFromStatus?.url) {
           logger.info('3D model completed (from status response)', { 
             requestId,
-            hasGlb: !!glbFromStatus?.url,
+            hasModelGlb: !!typedStatusResult.model_glb?.url,
+            hasGlb: !!typedStatusResult.glb?.url,
+            hasModelUrlsGlb: !!typedStatusResult.model_urls?.glb?.url,
             hasThumbnail: !!typedStatusResult.thumbnail?.url,
             glbUrl: glbFromStatus?.url?.substring(0, 100),
             elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
           });
           res.json({
             success: true,
-            // Normalize to model_glb for frontend compatibility
-            model_glb: typedStatusResult.glb || typedStatusResult.model_glb,
+            // Use model_glb directly as that's what FAL returns
+            model_glb: typedStatusResult.model_glb || typedStatusResult.glb,
             thumbnail: typedStatusResult.thumbnail,
             model_urls: typedStatusResult.model_urls,
             remainingCredits: updateResult.credits,
@@ -440,13 +453,15 @@ export function createModel3dRoutes(deps: Dependencies) {
             fullResponse: JSON.stringify(rawResult).substring(0, 800)
           });
 
-          // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
-          const glbResult = resultData.glb || resultData.model_glb || resultData.model_urls?.glb;
+          // Per FAL docs: output has model_glb (File), model_urls (ModelUrls with glb, obj, etc)
+          const glbResult = resultData.model_glb || resultData.glb || resultData.model_urls?.glb;
           
           if (glbResult?.url) {
             logger.info('3D model generation completed (from result endpoint)', { 
               requestId, 
-              hasGlb: !!glbResult?.url,
+              hasModelGlb: !!resultData.model_glb?.url,
+              hasGlb: !!resultData.glb?.url,
+              hasModelUrlsGlb: !!resultData.model_urls?.glb?.url,
               hasObj: !!resultData.model_urls?.obj?.url,
               hasThumbnail: !!resultData.thumbnail?.url,
               glbUrl: glbResult?.url?.substring(0, 100),
@@ -455,8 +470,8 @@ export function createModel3dRoutes(deps: Dependencies) {
             
             res.json({
               success: true,
-              // Normalize to model_glb for frontend compatibility
-              model_glb: resultData.glb || resultData.model_glb,
+              // Return model_glb as per FAL docs
+              model_glb: resultData.model_glb || resultData.glb,
               thumbnail: resultData.thumbnail,
               model_urls: resultData.model_urls,
               seed: resultData.seed,

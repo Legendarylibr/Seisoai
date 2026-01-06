@@ -69,10 +69,16 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
   }
 
   try {
+    const apiEndpoint = `${API_URL}/api/model3d/generate`;
     logger.info('Starting 3D model generation', { 
+      apiEndpoint,
       generate_type, 
       face_count,
-      hasBackImage: !!back_image_url 
+      hasBackImage: !!back_image_url,
+      hasWalletAddress: !!walletAddress,
+      hasUserId: !!userId,
+      hasEmail: !!email,
+      hasInputImage: !!input_image_url
     });
 
     // Create abort controller with 8 minute timeout (3D gen can take 5+ mins)
@@ -81,7 +87,7 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
 
     let response: Response;
     try {
-      response = await fetch(`${API_URL}/api/model3d/generate`, {
+      response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -108,13 +114,22 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
     const data = await response.json();
 
     if (!response.ok) {
+      logger.error('3D generation API returned error', { 
+        status: response.status,
+        error: data.error,
+        creditsRefunded: data.creditsRefunded
+      });
       throw new Error(data.error || `3D generation failed: ${response.status}`);
     }
 
     logger.info('3D model generation completed', { 
-      hasGlb: !!data.model_glb?.url,
+      success: data.success,
+      hasModelGlb: !!data.model_glb?.url,
+      hasModelUrlsGlb: !!data.model_urls?.glb?.url,
       hasObj: !!data.model_urls?.obj?.url,
-      creditsDeducted: data.creditsDeducted
+      hasThumbnail: !!data.thumbnail?.url,
+      creditsDeducted: data.creditsDeducted,
+      remainingCredits: data.remainingCredits
     });
 
     return data as Model3dGenerationResult;
