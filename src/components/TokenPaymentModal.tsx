@@ -189,6 +189,10 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
       
       // Create and add transfer instruction
       logger.debug('Adding transfer instruction');
+      // Ensure createTransferInstruction is available
+      if (!createTransferInstruction || typeof createTransferInstruction !== 'function') {
+        throw new Error('createTransferInstruction is not available. Please refresh the page and try again.');
+      }
       const transferInstruction = createTransferInstruction(
         userTokenAccount,    // source
         paymentTokenAccount, // destination

@@ -9,7 +9,9 @@ export default defineConfig({
       'buffer',
       // Pre-bundle Solana to avoid circular dependency issues
       '@solana/web3.js',
-      '@solana/spl-token'
+      '@solana/spl-token',
+      '@solana/buffer-layout',
+      '@solana/buffer-layout-utils'
     ],
     exclude: [
       '@walletconnect/ethereum-provider'
@@ -19,6 +21,8 @@ export default defineConfig({
       define: {
         global: 'globalThis',
       },
+      // Ensure proper handling of Solana dependencies
+      target: 'es2020',
     }
   },
   resolve: {
@@ -109,6 +113,11 @@ export default defineConfig({
     host: true,
     cors: true,
     strictPort: false, // Allow Vite to find an available port
+    // Headers required for SharedArrayBuffer (used by FFmpeg.wasm for audio extraction)
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
     proxy: {
       '/api': {
         target: process.env.VITE_API_URL || 'http://localhost:3001',
@@ -136,7 +145,12 @@ export default defineConfig({
   preview: {
     port: 4173,
     host: true,
-    cors: true
+    cors: true,
+    // Headers required for SharedArrayBuffer (used by FFmpeg.wasm for audio extraction)
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
   // Enable build caching
   cacheDir: 'node_modules/.vite',
