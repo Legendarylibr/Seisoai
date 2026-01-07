@@ -21,6 +21,7 @@ cacheDirectories = ['node_modules', 'backend/node_modules', '.npm']
 [phases.build]
 # Build frontend with production optimizations
 cmds = [
+    'rm -rf dist',
     'NODE_ENV=production npm run build',
     # Prune devDependencies after build to reduce image size
     'npm prune --omit=dev',
