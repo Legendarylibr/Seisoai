@@ -42,8 +42,17 @@ export default defineConfig({
   build: {
     // Production build optimizations
     target: 'es2020',
-    // Use esbuild for minification - faster and handles Solana/crypto libs better than terser
-    minify: 'esbuild',
+    // Use terser for minification - esbuild breaks Solana spl-token internal references
+    minify: 'terser',
+    terserOptions: {
+      // Keep function names and class names to prevent Solana library breakage
+      keep_fnames: true,
+      keep_classnames: true,
+      mangle: {
+        // Don't mangle properties that might break library internals
+        reserved: ['createTransferInstruction', 'createAssociatedTokenAccountInstruction', 'getAssociatedTokenAddressSync'],
+      },
+    },
     sourcemap: false, // Disable sourcemaps in production for smaller bundles
     cssCodeSplit: true, // Enable CSS code splitting
     cssMinify: true, // Minify CSS
@@ -102,9 +111,16 @@ export default defineConfig({
         entryFileNames: 'assets/[name]-[hash:8].js',
         assetFileNames: 'assets/[name]-[hash:8].[ext]',
       },
-      // Tree-shake for smaller bundles (keep side effects for React)
+      // Tree-shake for smaller bundles but preserve Solana library internals
       treeshake: {
-        moduleSideEffects: true,
+        moduleSideEffects: (id) => {
+          // Don't tree-shake Solana libraries - they have complex internal dependencies
+          if (id.includes('@solana')) return true;
+          if (id.includes('spl-token')) return true;
+          return true; // Keep side effects for all modules
+        },
+        // Don't assume pure module calls - Solana libs have side effects
+        tryCatchDeoptimization: true,
       },
     },
     // CDN configuration for production
