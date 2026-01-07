@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+
+// Build version - check console to verify deployment
+console.log('%c[SEISOAI BUILD] v2026.01.06.1', 'background: #4f46e5; color: white; padding: 4px 8px; border-radius: 4px;');
 import { ImageGeneratorProvider } from './contexts/ImageGeneratorContext';
 import { SimpleWalletProvider } from './contexts/SimpleWalletContext';
 import { EmailAuthProvider, useEmailAuth } from './contexts/EmailAuthContext';
