@@ -10,6 +10,7 @@ nixPkgs = ['nodejs_22', 'ffmpeg-headless']
 [phases.install]
 # Use npm ci for reproducible builds, clean cache after
 cmds = [
+    'rm -rf node_modules/.vite',
     'npm ci --prefer-offline --no-audit --no-fund',
     'cd backend && npm ci --prefer-offline --no-audit --no-fund',
     'npm cache clean --force'
