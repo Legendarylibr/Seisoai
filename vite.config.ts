@@ -9,24 +9,16 @@ export default defineConfig({
       'buffer',
       // Pre-bundle Solana to avoid circular dependency issues
       '@solana/web3.js',
-      '@solana/spl-token',
-      '@solana/buffer-layout',
-      '@solana/buffer-layout-utils'
+      '@solana/spl-token'
     ],
     exclude: [
       '@walletconnect/ethereum-provider'
     ],
-    // Force re-optimization when dependencies change
-    force: false,
     esbuildOptions: {
       // Define Buffer globally for esbuild optimization
       define: {
         global: 'globalThis',
       },
-      // Ensure proper handling of Solana dependencies
-      target: 'es2020',
-      // Keep function names to prevent minification issues with dynamic imports
-      keepNames: true,
     }
   },
   resolve: {
@@ -42,26 +34,13 @@ export default defineConfig({
   build: {
     // Production build optimizations
     target: 'es2020',
-    // Use terser for minification - esbuild breaks Solana spl-token internal references
-    minify: 'terser',
-    terserOptions: {
-      // Keep function names and class names to prevent Solana library breakage
-      keep_fnames: true,
-      keep_classnames: true,
-      mangle: {
-        // Don't mangle properties that might break library internals
-        reserved: ['createTransferInstruction', 'createAssociatedTokenAccountInstruction', 'getAssociatedTokenAddressSync'],
-      },
-    },
+    // Use esbuild for minification - faster and handles Solana/crypto libs better than terser
+    minify: 'esbuild',
     sourcemap: false, // Disable sourcemaps in production for smaller bundles
     cssCodeSplit: true, // Enable CSS code splitting
     cssMinify: true, // Minify CSS
     reportCompressedSize: false, // Faster builds by skipping gzip size report
     chunkSizeWarningLimit: 1000, // Increase limit for vendor chunks
-    // Keep function names for Solana SPL token functions - prevents minification issues
-    commonjsOptions: {
-      transformMixedEsModules: true,
-    },
     
     rollupOptions: {
       output: {
@@ -111,16 +90,9 @@ export default defineConfig({
         entryFileNames: 'assets/[name]-[hash:8].js',
         assetFileNames: 'assets/[name]-[hash:8].[ext]',
       },
-      // Tree-shake for smaller bundles but preserve Solana library internals
+      // Tree-shake for smaller bundles (keep side effects for React)
       treeshake: {
-        moduleSideEffects: (id) => {
-          // Don't tree-shake Solana libraries - they have complex internal dependencies
-          if (id.includes('@solana')) return true;
-          if (id.includes('spl-token')) return true;
-          return true; // Keep side effects for all modules
-        },
-        // Don't assume pure module calls - Solana libs have side effects
-        tryCatchDeoptimization: true,
+        moduleSideEffects: true,
       },
     },
     // CDN configuration for production
@@ -137,11 +109,6 @@ export default defineConfig({
     host: true,
     cors: true,
     strictPort: false, // Allow Vite to find an available port
-    // Headers required for SharedArrayBuffer (used by FFmpeg.wasm for audio extraction)
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
     proxy: {
       '/api': {
         target: process.env.VITE_API_URL || 'http://localhost:3001',
@@ -169,12 +136,7 @@ export default defineConfig({
   preview: {
     port: 4173,
     host: true,
-    cors: true,
-    // Headers required for SharedArrayBuffer (used by FFmpeg.wasm for audio extraction)
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
+    cors: true
   },
   // Enable build caching
   cacheDir: 'node_modules/.vite',
