@@ -36,18 +36,17 @@ export interface CreditPackage {
   savings?: number;
 }
 
-// Initialize Stripe with error handling
-// Accepts live keys in production, test or live keys in development
-const getStripePublishableKey = (): string | null => {
-  const key = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
+// Cache for runtime config
+let cachedPublishableKey: string | null = null;
+let configFetched = false;
+
+/**
+ * Validate a Stripe publishable key
+ */
+const validatePublishableKey = (key: string | null | undefined): string | null => {
+  if (!key) return null;
   
-  // Debug: log key presence (not the actual key for security)
-  if (!key) {
-    logger.warn('Stripe publishable key not configured - VITE_STRIPE_PUBLISHABLE_KEY is empty or undefined');
-    return null;
-  }
-  
-  if (key.includes('your_stripe_publishable_key_here')) {
+  if (key.includes('your_stripe') || key.includes('_here') || key.includes('placeholder')) {
     logger.warn('Stripe publishable key contains placeholder text');
     return null;
   }
@@ -56,24 +55,57 @@ const getStripePublishableKey = (): string | null => {
   const isLiveKey = key.startsWith('pk_live_');
   const isTestKey = key.startsWith('pk_test_');
   
-  // Validate key format
   if (!isLiveKey && !isTestKey) {
-    logger.error('VITE_STRIPE_PUBLISHABLE_KEY has invalid format');
+    logger.error('Stripe publishable key has invalid format');
     return null;
   }
   
-  // In production, require live keys
   if (isProduction && !isLiveKey) {
-    logger.error('VITE_STRIPE_PUBLISHABLE_KEY must be a live key (pk_live_...) in production');
+    logger.error('Stripe publishable key must be a live key (pk_live_...) in production');
     return null;
-  }
-  
-  // Log key type for debugging
-  if (!isProduction && isTestKey) {
-    logger.info('Stripe configured with TEST key - ready for testing');
   }
   
   return key;
+};
+
+/**
+ * Get Stripe publishable key - tries build-time env var first, then fetches from backend
+ */
+const getStripePublishableKey = async (): Promise<string | null> => {
+  // 1. Try build-time VITE_ env var first
+  const buildTimeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
+  const validBuildKey = validatePublishableKey(buildTimeKey);
+  if (validBuildKey) {
+    return validBuildKey;
+  }
+  
+  // 2. Return cached runtime key if already fetched
+  if (configFetched) {
+    return cachedPublishableKey;
+  }
+  
+  // 3. Fetch from backend /api/config endpoint (runtime config)
+  try {
+    const response = await fetch(`${API_URL}/api/config`);
+    if (response.ok) {
+      const config = await response.json();
+      cachedPublishableKey = validatePublishableKey(config.stripePublishableKey);
+      configFetched = true;
+      
+      if (cachedPublishableKey) {
+        logger.info('Stripe publishable key loaded from backend config');
+      } else {
+        logger.warn('Stripe publishable key not available from backend');
+      }
+      return cachedPublishableKey;
+    }
+  } catch (error) {
+    logger.warn('Failed to fetch config from backend:', error);
+  }
+  
+  configFetched = true;
+  logger.warn('Stripe publishable key not configured - payments will be disabled');
+  return null;
 };
 
 /**
@@ -84,7 +116,6 @@ export const getEnhancedStripeError = (originalError: string | null): string | n
   
   const errorLower = originalError.toLowerCase();
   
-  // Check for common errors
   if (errorLower.includes('card was declined')) {
     return `Card Declined: ${originalError}. Please check your card details or try a different payment method.`;
   }
@@ -92,13 +123,18 @@ export const getEnhancedStripeError = (originalError: string | null): string | n
   return originalError;
 };
 
-// Initialize Stripe
-const stripePromise: Promise<Stripe | null> = (() => {
-  const publishableKey = getStripePublishableKey();
+// Initialize Stripe lazily (async)
+let stripeInstance: Stripe | null = null;
+let stripeInitialized = false;
+
+const stripePromise: Promise<Stripe | null> = (async () => {
+  const publishableKey = await getStripePublishableKey();
   if (!publishableKey) {
-    return Promise.resolve(null);
+    return null;
   }
-  return loadStripe(publishableKey);
+  stripeInstance = await loadStripe(publishableKey);
+  stripeInitialized = true;
+  return stripeInstance;
 })();
 
 /**
@@ -112,8 +148,9 @@ export const createPaymentIntent = async (
   userId: string | null = null
 ): Promise<PaymentIntentResponse> => {
   try {
-    // Check if Stripe is configured
-    if (!getStripePublishableKey()) {
+    // Check if Stripe is configured (wait for async init)
+    const key = await getStripePublishableKey();
+    if (!key) {
       throw new Error('Stripe payment is not configured');
     }
 

@@ -73,6 +73,24 @@ export function createUtilityRoutes(_deps: Dependencies = {}) {
   });
 
   /**
+   * Frontend config (runtime)
+   * GET /api/config
+   * Returns public config values that frontend needs at runtime
+   * (avoids build-time VITE_ env var issues)
+   */
+  router.get('/config', (_req: Request, res: Response) => {
+    // Only expose PUBLIC keys - never expose secrets!
+    // Check multiple env var names for flexibility
+    const stripePublishableKey = process.env.STRIPE_PUBLISHABLE_KEY || 
+                                  process.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
+    
+    res.json({
+      stripePublishableKey: stripePublishableKey,
+      // Add other public frontend config as needed
+    });
+  });
+
+  /**
    * CORS info
    * GET /api/cors-info
    */

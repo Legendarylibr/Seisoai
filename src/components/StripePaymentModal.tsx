@@ -217,20 +217,15 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
 
   const initializeStripe = async () => {
     try {
-      // Check if Stripe publishable key is configured
-      const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-      if (!publishableKey || publishableKey.includes('your_stripe_publishable_key_here')) {
+      // getStripe() handles key loading from build-time env or runtime config
+      const stripeInstance = await getStripe();
+      if (!stripeInstance) {
         setError('Stripe payment is not configured. Please contact support or use token payment instead.');
         return;
       }
-
-      const stripeInstance = await getStripe();
-      if (!stripeInstance) {
-        throw new Error('Failed to load Stripe');
-      }
       setStripe(stripeInstance);
     } catch (error) {
-      logger.error('Error initializing Stripe:', { error: error.message });
+      logger.error('Error initializing Stripe:', { error: (error as Error).message });
       setError('Failed to initialize payment system. Please use token payment instead.');
     }
   };
