@@ -190,14 +190,25 @@ export function createAuthRoutes(deps: Dependencies = {}) {
       const User = mongoose.model<IUser>('User');
       // Look up by emailHash (encrypted emails) or direct email (backward compatibility)
       const emailHash = createEmailHash(email);
-      const user = await User.findOne({ 
+      let user = await User.findOne({ 
         $or: [
           { emailHash },
           { email: email.toLowerCase() }  // Backward compatibility
         ]
       }).select('+password -generationHistory -gallery -paymentHistory');
 
+      // SECURITY FIX: Prevent timing attacks by always performing password comparison
+      // Use a dummy hash if user doesn't exist to maintain constant-time comparison
+      const dummyHash = '$2b$12$dummy.hash.that.takes.same.time.to.compare.and.is.64.chars.long';
+      const passwordToCompare = user?.password || dummyHash;
+
+      // SECURITY: Always perform password comparison to prevent user enumeration via timing
+      const isValid = await bcrypt.compare(password, passwordToCompare);
+      
+      // Only check user existence after password comparison
       if (!user) {
+        // SECURITY: Use same response time as failed password to prevent timing attacks
+        await bcrypt.compare('dummy', dummyHash); // Additional constant-time operation
         res.status(401).json({
           success: false,
           error: 'Invalid email or password'
@@ -228,8 +239,6 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         });
         return;
       }
-
-      const isValid = await bcrypt.compare(password, user.password);
       if (!isValid) {
         // SECURITY FIX: Track failed login attempts and lock account after 5 failures
         const failedAttempts = ((user as { failedLoginAttempts?: number }).failedLoginAttempts || 0) + 1;

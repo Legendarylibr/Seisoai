@@ -4,14 +4,15 @@
  * Uses FFmpeg if available, otherwise returns original
  */
 import logger from './logger';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { createWriteStream, unlink } from 'fs';
 import { pipeline } from 'stream/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { resolve } from 'path';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const unlinkAsync = promisify(unlink);
 
 // Types
@@ -21,10 +22,11 @@ interface StripVideoMetadataOptions {
 
 /**
  * Check if FFmpeg is available
+ * SECURITY: Use execFile to prevent command injection
  */
 const checkFFmpegAvailable = async (): Promise<boolean> => {
   try {
-    await execAsync('ffmpeg -version');
+    await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
     return true;
   } catch {
     return false;
@@ -67,8 +69,16 @@ export const stripVideoMetadata = async (
   }
 
   const { format = 'mp4' } = options;
-  const tempInput = join(tmpdir(), `video-input-${Date.now()}-${Math.random().toString(36).substring(7)}.${format}`);
-  const tempOutput = join(tmpdir(), `video-output-${Date.now()}-${Math.random().toString(36).substring(7)}.${format}`);
+  // SECURITY: Generate random filenames and validate they're within tmpdir
+  const randomSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  const tempInput = resolve(tmpdir(), `video-input-${randomSuffix}.${format}`);
+  const tempOutput = resolve(tmpdir(), `video-output-${randomSuffix}.${format}`);
+  
+  // SECURITY: Validate paths are within tmpdir (prevent path traversal)
+  const tmpDirResolved = resolve(tmpdir());
+  if (!tempInput.startsWith(tmpDirResolved) || !tempOutput.startsWith(tmpDirResolved)) {
+    throw new Error('Invalid temporary file path');
+  }
 
   try {
     // Download video if URL, or write buffer to temp file
@@ -107,13 +117,27 @@ export const stripVideoMetadata = async (
       });
     }
 
-    // Use FFmpeg to strip metadata by re-encoding without metadata
+    // SECURITY FIX: Use execFile with array arguments instead of exec with string
+    // This prevents shell interpretation and command injection
     // -map_metadata -1 removes all metadata
-    // -c copy copies streams without re-encoding (faster, but may preserve some metadata)
     // -c:v libx264 -c:a copy re-encodes video but keeps audio (more thorough metadata removal)
-    const ffmpegCommand = `ffmpeg -i "${tempInput}" -map_metadata -1 -c:v libx264 -preset fast -crf 23 -c:a copy -movflags +faststart "${tempOutput}" -y`;
+    const ffmpegArgs = [
+      '-i', tempInput,
+      '-map_metadata', '-1',
+      '-c:v', 'libx264',
+      '-preset', 'fast',
+      '-crf', '23',
+      '-c:a', 'copy',
+      '-movflags', '+faststart',
+      tempOutput,
+      '-y'
+    ];
     
-    await execAsync(ffmpegCommand);
+    // SECURITY: Set timeout and maxBuffer to prevent DoS
+    await execFileAsync('ffmpeg', ffmpegArgs, {
+      timeout: 300000, // 5 minutes max
+      maxBuffer: 10 * 1024 * 1024 // 10MB max output
+    });
 
     // Read cleaned video
     const fs = await import('fs/promises');

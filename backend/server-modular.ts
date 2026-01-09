@@ -113,13 +113,32 @@ app.use(helmet({
       frameAncestors: frameAncestors, // SECURITY: Restricted in production
     },
   },
+  // SECURITY ENHANCED: Additional security headers
+  hsts: config.isProduction ? {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true
+  } : false, // Disable HSTS in development
+  noSniff: true, // X-Content-Type-Options: nosniff
+  referrerPolicy: { policy: config.isProduction ? "strict-origin-when-cross-origin" : "no-referrer-when-downgrade" },
+  permissionsPolicy: {
+    features: {
+      geolocation: '()',
+      microphone: '()',
+      camera: '()',
+      payment: '()',
+      usb: '()',
+      magnetometer: '()',
+      gyroscope: '()',
+      accelerometer: '()'
+    }
+  },
   crossOriginEmbedderPolicy: false,
   crossOriginOpenerPolicy: { policy: "unsafe-none" }, // Explicitly allow navigation from Twitter/other apps
   crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin resource loading
   hidePoweredBy: true,
-  referrerPolicy: { policy: "no-referrer-when-downgrade" }, // More permissive referrer policy
   originAgentCluster: false, // Disable for in-app browser compatibility
-  xFrameOptions: false // Disable X-Frame-Options - CSP frame-ancestors handles this (ALLOWALL is not valid)
+  xFrameOptions: false // Disable X-Frame-Options - CSP frame-ancestors handles this
 }));
 
 // CRITICAL: Handle preflight OPTIONS requests explicitly for all routes
@@ -138,7 +157,7 @@ app.options('*', cors({
 app.use(compression());
 
 // CORS Configuration - Use allowed origins from env
-// SECURITY: In production, ALLOWED_ORIGINS should be explicitly set
+// SECURITY ENHANCED: Strict validation of allowed origins
 const parseAllowedOrigins = (): string[] | true => {
   const originsEnv = config.ALLOWED_ORIGINS;
   
@@ -155,11 +174,54 @@ const parseAllowedOrigins = (): string[] | true => {
   }
   
   if (!originsEnv || originsEnv.trim() === '' || originsEnv === '*') {
-    // Permissive mode - ONLY use in development or when in-app browsers are required
-    // SECURITY: This is dangerous in production!
+    // Permissive mode - ONLY use in development
+    if (config.isProduction) {
+      logger.error('🚨 CRITICAL: Cannot use permissive CORS in production!');
+      process.exit(1);
+    }
     return true;
   }
-  return originsEnv.split(',').map(o => o.trim()).filter(o => o.length > 0);
+  
+  // SECURITY ENHANCED: Validate each origin
+  const origins = originsEnv.split(',').map(o => o.trim()).filter(o => o.length > 0);
+  
+  // SECURITY: Reject any origin containing wildcards
+  const hasWildcard = origins.some(o => o.includes('*'));
+  if (hasWildcard) {
+    logger.error('🚨 CRITICAL SECURITY ERROR: Wildcards not allowed in ALLOWED_ORIGINS!');
+    logger.error('🚨 Wildcards in CORS allow any subdomain, which is a security risk!');
+    if (config.isProduction) {
+      process.exit(1);
+    }
+  }
+  
+  // SECURITY: Validate each origin is a valid URL
+  const validOrigins: string[] = [];
+  for (const origin of origins) {
+    try {
+      const url = new URL(origin);
+      // Only allow https in production (http allowed in development)
+      if (config.isProduction && url.protocol !== 'https:') {
+        logger.warn('SECURITY: Rejecting non-HTTPS origin in production', { origin });
+        continue;
+      }
+      // Validate it's a proper origin (no path, query, fragment)
+      if (url.pathname !== '/' || url.search || url.hash) {
+        logger.warn('SECURITY: Rejecting origin with path/query/fragment', { origin });
+        continue;
+      }
+      validOrigins.push(origin);
+    } catch (error) {
+      logger.warn('SECURITY: Invalid origin format rejected', { origin, error: (error as Error).message });
+    }
+  }
+  
+  if (validOrigins.length === 0 && config.isProduction) {
+    logger.error('🚨 CRITICAL: No valid origins found in ALLOWED_ORIGINS!');
+    process.exit(1);
+  }
+  
+  return validOrigins.length > 0 ? validOrigins : true;
 };
 
 const allowedOrigins = parseAllowedOrigins();

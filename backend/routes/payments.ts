@@ -337,10 +337,28 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
       // Use authenticated user, not arbitrary wallet
       const user = req.user;
 
+      // SECURITY: Validate amount is positive and reasonable
+      if (typeof amount !== 'number' || amount <= 0 || amount > 100000) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid payment amount'
+        });
+        return;
+      }
+
       // Check NFT holder status (before atomic update)
       const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
       const creditsPerUSDC = isNFTHolder ? NFT_HOLDER_CREDITS_PER_USDC : STANDARD_CREDITS_PER_USDC;
       const credits = Math.floor(amount * creditsPerUSDC);
+      
+      // SECURITY: Validate credits are positive integer
+      if (credits <= 0 || !Number.isInteger(credits)) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid credits calculation'
+        });
+        return;
+      }
 
       // Add credits to authenticated user
       const updateQuery = user.userId 
@@ -348,6 +366,30 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
         : user.email 
           ? { email: user.email.toLowerCase() }
           : { walletAddress: normalizedAddress };
+
+      // SECURITY ENHANCED: Use Redis distributed lock + $addToSet for duplicate prevention
+      // Check Redis first for transaction deduplication (if available)
+      let isDuplicate = false;
+      try {
+        const { markTransactionProcessed, isTransactionProcessed } = await import('../services/redis.js');
+        if (isTransactionProcessed && markTransactionProcessed) {
+          const alreadyProcessed = await isTransactionProcessed(txHash);
+          if (alreadyProcessed) {
+            logger.info('Payment already processed (Redis check)', { txHash, userId: user.userId });
+            isDuplicate = true;
+          } else {
+            // Mark as processing (atomic operation)
+            const marked = await markTransactionProcessed(txHash, 7 * 24 * 60 * 60); // 7 days
+            if (!marked) {
+              // Another process is already processing this transaction
+              logger.info('Payment processing conflict (Redis)', { txHash, userId: user.userId });
+              isDuplicate = true;
+            }
+          }
+        }
+      } catch (redisError) {
+        logger.debug('Redis transaction check failed, using database only', { error: (redisError as Error).message });
+      }
 
       // SECURITY FIX: Use $addToSet to prevent duplicate payment processing (atomic operation)
       // This prevents race conditions where the same transaction is processed multiple times
@@ -373,16 +415,22 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
         { new: true }
       );
 
-      // Check if payment was actually added (not a duplicate)
+      // SECURITY: Check if payment was actually added (not a duplicate)
       const wasAdded = updatedUser?.paymentHistory?.some(
         (p: { txHash?: string; timestamp?: Date }) => 
           p.txHash === txHash && 
           Math.abs(new Date(p.timestamp || 0).getTime() - paymentRecord.timestamp.getTime()) < 1000
       );
 
-      if (!wasAdded) {
+      if (!wasAdded || isDuplicate) {
         // Payment was already processed (duplicate detected)
-        logger.info('Payment already processed (duplicate detected)', { txHash, userId: user.userId });
+        logger.info('Payment already processed (duplicate detected)', { 
+          txHash, 
+          userId: user.userId,
+          wasAdded,
+          isDuplicate,
+          redisCheck: isDuplicate
+        });
         res.json({
           success: true,
           credits: 0,

@@ -23,14 +23,22 @@ interface UserQuery {
   userId?: string;
 }
 
-// Admin rate limiter - 5 requests per 15 minutes per IP (tightened for security)
+// SECURITY ENHANCED: Admin rate limiter with multi-factor key generation
+// Combines IP, browser fingerprint, and user agent for better tracking
 const adminRateLimiter: RequestHandler = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5, // SECURITY FIX: Reduced from 10 to 5 to prevent brute force attacks
   message: { success: false, error: 'Too many admin requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: false // Count all requests, not just failures
+  skipSuccessfulRequests: false, // Count all requests, not just failures
+  // SECURITY: Use multi-factor key generation to prevent bypass via proxy/VPN
+  keyGenerator: (req) => {
+    const { generateBrowserFingerprint } = require('../abusePrevention');
+    const fingerprint = generateBrowserFingerprint(req);
+    const userAgent = req.headers['user-agent']?.substring(0, 50) || 'unknown';
+    return `${req.ip || 'unknown'}-${fingerprint}-${userAgent}`;
+  }
 });
 
 export function createAdminRoutes(deps: Dependencies = {}) {

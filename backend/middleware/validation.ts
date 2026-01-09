@@ -58,12 +58,33 @@ export const sanitizeNumber = (num: unknown): number | null => {
 };
 
 /**
+ * SECURITY: List of all MongoDB operators to block
+ */
+const MONGO_OPERATORS = [
+  '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin', '$exists', '$type',
+  '$mod', '$regex', '$text', '$where', '$all', '$elemMatch', '$size',
+  '$bitsAllSet', '$bitsAnySet', '$bitsAllClear', '$bitsAnyClear',
+  '$geoWithin', '$geoIntersects', '$near', '$nearSphere',
+  '$eq', '$and', '$or', '$not', '$nor', '$expr', '$jsonSchema',
+  '$lookup', '$match', '$group', '$project', '$sort', '$limit', '$skip'
+];
+
+/**
+ * SECURITY: Prototype pollution prevention keys
+ */
+const PROTOTYPE_POLLUTION_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+/**
  * Deep sanitize object to prevent NoSQL injection
  * Removes MongoDB operators ($gt, $ne, etc.) from nested objects
+ * SECURITY ENHANCED: Blocks all MongoDB operators and prototype pollution
  * NOTE: Does NOT truncate data URIs (base64 images/videos) to preserve file integrity
  */
 export const deepSanitize = (obj: unknown, depth: number = 0): unknown => {
-  if (depth > 10) return obj;
+  // SECURITY: At max depth, return empty object for objects to prevent injection
+  if (depth > 10) {
+    return typeof obj === 'object' && obj !== null && !Array.isArray(obj) ? {} : obj;
+  }
   
   if (obj === null || obj === undefined) return obj;
   
@@ -74,10 +95,20 @@ export const deepSanitize = (obj: unknown, depth: number = 0): unknown => {
   if (typeof obj === 'object') {
     const sanitized: Record<string, unknown> = {};
     for (const key of Object.keys(obj)) {
-      if (key.startsWith('$')) {
-        logger.warn('NoSQL injection attempt blocked', { key, depth });
+      const keyLower = key.toLowerCase();
+      
+      // SECURITY: Block all MongoDB operators (case-insensitive)
+      if (MONGO_OPERATORS.includes(keyLower) || key.startsWith('$')) {
+        logger.warn('NoSQL injection attempt blocked', { key, depth, keyLower });
         continue;
       }
+      
+      // SECURITY: Block prototype pollution attempts
+      if (PROTOTYPE_POLLUTION_KEYS.includes(key)) {
+        logger.warn('Prototype pollution attempt blocked', { key, depth });
+        continue;
+      }
+      
       sanitized[key] = deepSanitize((obj as Record<string, unknown>)[key], depth + 1);
     }
     return sanitized;
@@ -99,20 +130,67 @@ export const deepSanitize = (obj: unknown, depth: number = 0): unknown => {
 };
 
 /**
- * Validate fal.ai URL (prevents SSRF attacks)
+ * SECURITY ENHANCED: Validate fal.ai URL (prevents SSRF attacks)
+ * Blocks private IPs, localhost, and only allows specific fal.ai domains
  */
 export const isValidFalUrl = (url: unknown): boolean => {
   if (!url || typeof url !== 'string') return false;
+  
+  // Allow data URIs (for uploaded files)
   if (url.startsWith('data:')) return true;
   
   try {
     const urlObj = new URL(url);
+    
+    // SECURITY: Only allow http/https protocols
+    if (!['http:', 'https:'].includes(urlObj.protocol)) {
+      logger.warn('SSRF attempt blocked - invalid protocol', { protocol: urlObj.protocol, url: url.substring(0, 100) });
+      return false;
+    }
+    
+    // SECURITY: Block URLs with userinfo (user:pass@host)
+    if (urlObj.username || urlObj.password) {
+      logger.warn('SSRF attempt blocked - userinfo in URL', { url: url.substring(0, 100) });
+      return false;
+    }
+    
     const hostname = urlObj.hostname.toLowerCase();
-    return hostname === 'fal.ai' || 
-           hostname === 'fal.media' ||
-           hostname.endsWith('.fal.ai') ||
-           hostname.endsWith('.fal.media');
-  } catch {
+    
+    // SECURITY: Block private IPv4 addresses
+    const isPrivateIPv4 = /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.)/.test(hostname);
+    if (isPrivateIPv4) {
+      logger.warn('SSRF attempt blocked - private IPv4', { hostname, url: url.substring(0, 100) });
+      return false;
+    }
+    
+    // SECURITY: Block private IPv6 addresses
+    const isPrivateIPv6 = /^(::1|fc00:|fe80:|::ffff:(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.))/.test(hostname);
+    if (isPrivateIPv6) {
+      logger.warn('SSRF attempt blocked - private IPv6', { hostname, url: url.substring(0, 100) });
+      return false;
+    }
+    
+    // SECURITY: Block localhost variations
+    if (hostname === 'localhost' || hostname === '0.0.0.0' || hostname.startsWith('127.')) {
+      logger.warn('SSRF attempt blocked - localhost', { hostname, url: url.substring(0, 100) });
+      return false;
+    }
+    
+    // SECURITY: Only allow specific fal.ai domains (no wildcard subdomains)
+    const allowedDomains = ['fal.ai', 'fal.media'];
+    const allowedSubdomains = ['api.fal.ai', 'queue.fal.run', 'rest.fal.run', 'fal.run'];
+    
+    const isAllowed = allowedDomains.some(domain => hostname === domain) ||
+                     allowedSubdomains.some(subdomain => hostname === subdomain);
+    
+    if (!isAllowed) {
+      logger.warn('SSRF attempt blocked - invalid domain', { hostname, url: url.substring(0, 100) });
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    logger.warn('SSRF attempt blocked - invalid URL format', { url: url.substring(0, 100), error: (error as Error).message });
     return false;
   }
 };
@@ -135,14 +213,30 @@ export const createValidateInput = () => {
 };
 
 /**
- * Get safe error message for client responses
+ * SECURITY ENHANCED: Get safe error message for client responses
+ * Sanitizes error messages to prevent information disclosure
  */
 export const getSafeErrorMessage = (error: unknown, defaultMessage: string = 'An error occurred'): string => {
+  const err = error as { message?: string } | null;
+  const message = err?.message || '';
+  
   if (process.env.NODE_ENV === 'production') {
+    // SECURITY: In production, never expose internal error details
     return defaultMessage;
   }
-  const err = error as { message?: string } | null;
-  return err?.message || defaultMessage;
+  
+  // SECURITY: In development, sanitize error messages to remove sensitive info
+  const sanitized = message
+    .replace(/mongodb:\/\/[^@]+@/g, 'mongodb://***@') // Hide MongoDB credentials
+    .replace(/\/[^\s]+\.(ts|js):\d+:\d+/g, '/*.ts:0:0') // Hide file paths
+    .replace(/at\s+[^\s]+\s+\([^)]+\)/g, 'at ***') // Hide stack frames
+    .replace(/ENOENT:\s+[^,]+/g, 'ENOENT: ***') // Hide file paths
+    .replace(/password[=:]\s*[^\s,]+/gi, 'password=***') // Hide passwords
+    .replace(/secret[=:]\s*[^\s,]+/gi, 'secret=***') // Hide secrets
+    .replace(/key[=:]\s*[^\s,]+/gi, 'key=***') // Hide keys
+    .substring(0, 200); // Limit length
+  
+  return sanitized || defaultMessage;
 };
 
 export default {

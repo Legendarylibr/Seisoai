@@ -59,6 +59,26 @@ export const createRequireCredits = (
 
         req.user = user;
 
+        // SECURITY: Validate requiredCredits is a positive integer
+        if (typeof requiredCredits !== 'number' || requiredCredits <= 0 || !Number.isInteger(requiredCredits)) {
+          logger.error('Invalid credits requirement', { requiredCredits, path: req.path });
+          res.status(400).json({
+            success: false,
+            error: 'Invalid credits amount'
+          });
+          return;
+        }
+
+        // SECURITY: Validate credits don't exceed reasonable limit
+        if (requiredCredits > 10000) {
+          logger.error('Credits requirement too high', { requiredCredits, path: req.path });
+          res.status(400).json({
+            success: false,
+            error: 'Credits amount too large'
+          });
+          return;
+        }
+
         if ((user.credits || 0) < requiredCredits) {
           res.status(402).json({
             success: false,

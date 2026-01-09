@@ -648,18 +648,19 @@ export function createAudioRoutes(deps: Dependencies) {
   router.post('/extract-audio', async (req: Request, res: Response) => {
     try {
       // Import utilities at the start
-      const { exec } = await import('child_process');
+      const { execFile } = await import('child_process');
       const { promisify } = await import('util');
       const { createWriteStream, unlink } = await import('fs');
       const { tmpdir } = await import('os');
-      const { join } = await import('path');
-      const execAsync = promisify(exec);
+      const { join, resolve } = await import('path');
+      const execFileAsync = promisify(execFile);
       const unlinkAsync = promisify(unlink);
       const fs = await import('fs/promises');
 
+      // SECURITY FIX: Use execFile to prevent command injection
       // Check if FFmpeg is available
       try {
-        await execAsync('ffmpeg -version');
+        await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
       } catch {
         logger.error('FFmpeg not available for audio extraction');
         res.status(503).json({ 
@@ -716,8 +717,17 @@ export function createAudioRoutes(deps: Dependencies) {
       else if (mimeType.includes('avi')) inputExt = 'avi';
       else if (mimeType.includes('mkv')) inputExt = 'mkv';
 
-      const tempInput = join(tmpdir(), `video-input-${Date.now()}-${Math.random().toString(36).substring(7)}.${inputExt}`);
-      const tempOutput = join(tmpdir(), `audio-output-${Date.now()}-${Math.random().toString(36).substring(7)}.wav`);
+      // SECURITY: Generate random filenames and validate they're within tmpdir
+      const randomSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const tempInput = resolve(tmpdir(), `video-input-${randomSuffix}.${inputExt}`);
+      const tempOutput = resolve(tmpdir(), `audio-output-${randomSuffix}.wav`);
+      
+      // SECURITY: Validate paths are within tmpdir (prevent path traversal)
+      const tmpDirResolved = resolve(tmpdir());
+      if (!tempInput.startsWith(tmpDirResolved) || !tempOutput.startsWith(tmpDirResolved)) {
+        res.status(500).json({ success: false, error: 'Invalid temporary file path' });
+        return;
+      }
 
       try {
         // Write video buffer to temp file
@@ -729,10 +739,24 @@ export function createAudioRoutes(deps: Dependencies) {
           writeStream.on('error', reject);
         });
 
-        // Extract audio using FFmpeg: -vn removes video, -acodec pcm_s16le outputs WAV
-        const ffmpegCommand = `ffmpeg -i "${tempInput}" -vn -acodec pcm_s16le -ar 44100 -ac 2 "${tempOutput}" -y`;
+        // SECURITY FIX: Use execFile with array arguments instead of exec with string
+        // This prevents shell interpretation and command injection
+        // -vn removes video, -acodec pcm_s16le outputs WAV
+        const ffmpegArgs = [
+          '-i', tempInput,
+          '-vn',
+          '-acodec', 'pcm_s16le',
+          '-ar', '44100',
+          '-ac', '2',
+          tempOutput,
+          '-y'
+        ];
         
-        await execAsync(ffmpegCommand);
+        // SECURITY: Set timeout and maxBuffer to prevent DoS
+        await execFileAsync('ffmpeg', ffmpegArgs, {
+          timeout: 300000, // 5 minutes max
+          maxBuffer: 10 * 1024 * 1024 // 10MB max output
+        });
 
         // Read extracted audio
         const audioBuffer = await fs.readFile(tempOutput);

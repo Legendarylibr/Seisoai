@@ -218,7 +218,8 @@ export async function uploadToFal({ dataUri, type, apiKey, ip }: UploadOptions):
 }
 
 /**
- * Validate fal.ai/fal.media URL (prevents SSRF attacks)
+ * SECURITY ENHANCED: Validate fal.ai/fal.media URL (prevents SSRF attacks)
+ * Blocks private IPs, localhost, and only allows specific fal.ai domains
  */
 export function isValidFalUrl(url: unknown): boolean {
   if (!url || typeof url !== 'string') return false;
@@ -226,14 +227,46 @@ export function isValidFalUrl(url: unknown): boolean {
   // Allow data URIs (for uploaded files)
   if (url.startsWith('data:')) return true;
   
-  // Allow fal.ai and fal.media domains
   try {
     const urlObj = new URL(url);
+    
+    // SECURITY: Only allow http/https protocols
+    if (!['http:', 'https:'].includes(urlObj.protocol)) {
+      return false;
+    }
+    
+    // SECURITY: Block URLs with userinfo (user:pass@host)
+    if (urlObj.username || urlObj.password) {
+      return false;
+    }
+    
     const hostname = urlObj.hostname.toLowerCase();
-    return hostname === 'fal.ai' || 
-           hostname === 'fal.media' ||
-           hostname.endsWith('.fal.ai') ||
-           hostname.endsWith('.fal.media');
+    
+    // SECURITY: Block private IPv4 addresses
+    const isPrivateIPv4 = /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.)/.test(hostname);
+    if (isPrivateIPv4) {
+      return false;
+    }
+    
+    // SECURITY: Block private IPv6 addresses
+    const isPrivateIPv6 = /^(::1|fc00:|fe80:|::ffff:(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.))/.test(hostname);
+    if (isPrivateIPv6) {
+      return false;
+    }
+    
+    // SECURITY: Block localhost variations
+    if (hostname === 'localhost' || hostname === '0.0.0.0' || hostname.startsWith('127.')) {
+      return false;
+    }
+    
+    // SECURITY: Only allow specific fal.ai domains (no wildcard subdomains)
+    const allowedDomains = ['fal.ai', 'fal.media'];
+    const allowedSubdomains = ['api.fal.ai', 'queue.fal.run', 'rest.fal.run', 'fal.run'];
+    
+    const isAllowed = allowedDomains.some(domain => hostname === domain) ||
+                     allowedSubdomains.some(subdomain => hostname === subdomain);
+    
+    return isAllowed;
   } catch {
     return false;
   }
