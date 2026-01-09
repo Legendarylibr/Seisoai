@@ -61,10 +61,13 @@ LABEL version="1.0"
 LABEL description="Seiso AI Backend - Optimized production image"
 
 # Install runtime dependencies only
+# ffmpeg includes codecs (libx264, etc.) needed for video processing
 RUN apk add --no-cache \
     ffmpeg \
     dumb-init \
-    && rm -rf /var/cache/apk/*
+    && rm -rf /var/cache/apk/* \
+    && ffmpeg -version > /dev/null 2>&1 || (echo "ERROR: FFmpeg installation verification failed" && exit 1) \
+    && echo "FFmpeg installed successfully"
 
 WORKDIR /app
 

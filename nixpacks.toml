@@ -4,8 +4,9 @@
 providers = ["node"]
 
 [phases.setup]
-# Minimal system dependencies - only what's needed
-nixPkgs = ['nodejs_22', 'ffmpeg-headless']
+# System dependencies - use full ffmpeg with codecs (libx264, etc.)
+# ffmpeg-headless doesn't include codecs needed for video encoding
+nixPkgs = ['nodejs_22', 'ffmpeg']
 
 [phases.install]
 # Use npm ci for reproducible builds, clean cache after

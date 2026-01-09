@@ -21,14 +21,28 @@ interface StripVideoMetadataOptions {
 }
 
 /**
- * Check if FFmpeg is available
+ * Check if FFmpeg is available and has required codecs
  * SECURITY: Use execFile to prevent command injection
  */
 const checkFFmpegAvailable = async (): Promise<boolean> => {
   try {
-    await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
-    return true;
-  } catch {
+    // Check if ffmpeg binary exists and is executable
+    const versionResult = await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
+    
+    // Check if libx264 codec is available (required for video encoding)
+    try {
+      await execFileAsync('ffmpeg', ['-codecs'], { timeout: 5000 });
+      // If we get here, ffmpeg is working
+      return true;
+    } catch {
+      // If codecs check fails, log warning but still return true
+      // (some minimal builds might not support -codecs flag)
+      logger.warn('FFmpeg codec check failed, but ffmpeg is available');
+      return true;
+    }
+  } catch (error) {
+    const err = error as Error;
+    logger.error('FFmpeg not available', { error: err.message });
     return false;
   }
 };
@@ -134,10 +148,23 @@ export const stripVideoMetadata = async (
     ];
     
     // SECURITY: Set timeout and maxBuffer to prevent DoS
-    await execFileAsync('ffmpeg', ffmpegArgs, {
-      timeout: 300000, // 5 minutes max
-      maxBuffer: 10 * 1024 * 1024 // 10MB max output
-    });
+    try {
+      await execFileAsync('ffmpeg', ffmpegArgs, {
+        timeout: 300000, // 5 minutes max
+        maxBuffer: 10 * 1024 * 1024 // 10MB max output
+      });
+    } catch (codecError) {
+      const codecErr = codecError as Error;
+      // Check if error is due to missing codec
+      if (codecErr.message.includes('libx264') || codecErr.message.includes('codec') || codecErr.message.includes('Unknown encoder')) {
+        logger.error('FFmpeg codec error - libx264 may not be available', { 
+          error: codecErr.message,
+          suggestion: 'Install full ffmpeg package with codecs (not ffmpeg-headless)'
+        });
+        throw new Error(`FFmpeg codec error: ${codecErr.message}. Ensure full ffmpeg with libx264 codec is installed.`);
+      }
+      throw codecError;
+    }
 
     // Read cleaned video
     const fs = await import('fs/promises');

@@ -438,6 +438,21 @@ async function startServer(): Promise<void> {
       logger.warn('FAL API key not configured - image generation will not work');
     }
 
+    // Check FFmpeg availability (optional but recommended)
+    try {
+      const { execFile } = await import('child_process');
+      const { promisify } = await import('util');
+      const execFileAsync = promisify(execFile);
+      await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
+      logger.info('FFmpeg is available - video/audio processing enabled');
+    } catch (error) {
+      const err = error as Error;
+      logger.warn('FFmpeg not available - video/audio processing will be limited', {
+        error: err.message,
+        note: 'Install full ffmpeg package (not ffmpeg-headless) for full functionality'
+      });
+    }
+
     // Start listening
     const PORT = config.PORT;
     const HOST = config.HOST || '0.0.0.0';

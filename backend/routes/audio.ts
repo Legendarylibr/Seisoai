@@ -660,12 +660,16 @@ export function createAudioRoutes(deps: Dependencies) {
       // SECURITY FIX: Use execFile to prevent command injection
       // Check if FFmpeg is available
       try {
-        await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
-      } catch {
-        logger.error('FFmpeg not available for audio extraction');
+        const versionCheck = await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
+        logger.debug('FFmpeg version check passed', { 
+          stdout: (versionCheck.stdout as string)?.substring(0, 100) 
+        });
+      } catch (error) {
+        const err = error as Error;
+        logger.error('FFmpeg not available for audio extraction', { error: err.message });
         res.status(503).json({ 
           success: false, 
-          error: 'Audio extraction service unavailable. FFmpeg is not installed on this server.' 
+          error: 'Audio extraction service unavailable. FFmpeg is not installed on this server. Please ensure full ffmpeg package (not ffmpeg-headless) is installed.' 
         });
         return;
       }
@@ -753,10 +757,23 @@ export function createAudioRoutes(deps: Dependencies) {
         ];
         
         // SECURITY: Set timeout and maxBuffer to prevent DoS
-        await execFileAsync('ffmpeg', ffmpegArgs, {
-          timeout: 300000, // 5 minutes max
-          maxBuffer: 10 * 1024 * 1024 // 10MB max output
-        });
+        try {
+          await execFileAsync('ffmpeg', ffmpegArgs, {
+            timeout: 300000, // 5 minutes max
+            maxBuffer: 10 * 1024 * 1024 // 10MB max output
+          });
+        } catch (ffmpegExecError) {
+          const execErr = ffmpegExecError as Error;
+          // Provide more specific error messages
+          if (execErr.message.includes('codec') || execErr.message.includes('Unknown encoder')) {
+            logger.error('FFmpeg codec error during audio extraction', { 
+              error: execErr.message,
+              suggestion: 'Ensure full ffmpeg package with all codecs is installed'
+            });
+            throw new Error(`FFmpeg codec error: ${execErr.message}. Ensure full ffmpeg package is installed.`);
+          }
+          throw ffmpegExecError;
+        }
 
         // Read extracted audio
         const audioBuffer = await fs.readFile(tempOutput);
