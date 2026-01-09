@@ -60,6 +60,7 @@ export const sanitizeNumber = (num: unknown): number | null => {
 /**
  * Deep sanitize object to prevent NoSQL injection
  * Removes MongoDB operators ($gt, $ne, etc.) from nested objects
+ * NOTE: Does NOT truncate data URIs (base64 images/videos) to preserve file integrity
  */
 export const deepSanitize = (obj: unknown, depth: number = 0): unknown => {
   if (depth > 10) return obj;
@@ -83,6 +84,10 @@ export const deepSanitize = (obj: unknown, depth: number = 0): unknown => {
   }
   
   if (typeof obj === 'string') {
+    // Don't truncate data URIs (base64 images/videos) or fal.ai URLs - they need to be intact
+    if (obj.startsWith('data:') || obj.includes('fal.ai') || obj.includes('fal.media')) {
+      return obj.trim();
+    }
     return sanitizeString(obj);
   }
   
