@@ -1,18 +1,33 @@
 /**
  * Stripe routes
  * Payment intents, subscriptions, webhooks
+ * 
+ * NOTE: Email addresses are encrypted at rest. Uses findUserByIdentifier for lookups.
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import express from 'express';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import logger from '../utils/logger';
 import { getStripe, calculateCredits } from '../services/stripe';
 import { findUserByIdentifier } from '../services/user';
+import { createBlindIndex, isEncryptionConfigured } from '../utils/encryption';
 import config from '../config/env';
 import User, { type IUser } from '../models/User';
 import Payment from '../models/Payment';
 import type Stripe from 'stripe';
+
+/**
+ * Create email hash for lookups (matches model implementation)
+ */
+function createEmailHash(email: string): string {
+  const normalized = email.toLowerCase().trim();
+  if (isEncryptionConfigured()) {
+    return createBlindIndex(normalized);
+  }
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
 
 // Types
 interface Dependencies {
@@ -596,22 +611,18 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       let user: IUser | null = null;
       const User = mongoose.model<IUser>('User');
 
+      // Use findUserByIdentifier which handles encrypted emails via emailHash
       if (paymentIntent.metadata.userId) {
-        user = await User.findOne({ userId: paymentIntent.metadata.userId });
+        user = await findUserByIdentifier(null, null, paymentIntent.metadata.userId);
       } else if (paymentIntent.metadata.email) {
-        user = await User.findOne({ email: paymentIntent.metadata.email.toLowerCase() });
+        user = await findUserByIdentifier(null, paymentIntent.metadata.email, null);
       } else if (paymentIntent.metadata.walletAddress) {
-        user = await User.findOne({ walletAddress: paymentIntent.metadata.walletAddress.toLowerCase() });
+        user = await findUserByIdentifier(paymentIntent.metadata.walletAddress, null, null);
       }
 
       if (!user) {
-        if (userId) {
-          user = await User.findOne({ userId });
-        } else if (email) {
-          user = await User.findOne({ email: email.toLowerCase() });
-        } else if (walletAddress) {
-          user = await User.findOne({ walletAddress: walletAddress.toLowerCase() });
-        }
+        // Fallback to request body identifiers
+        user = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
       }
 
       if (!user) {
@@ -740,12 +751,13 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       let user: IUser | null = null;
       const metadata = session.metadata || {};
       
+      // Use findUserByIdentifier which handles encrypted emails via emailHash
       if (metadata.userId) {
-        user = await User.findOne({ userId: metadata.userId });
+        user = await findUserByIdentifier(null, null, metadata.userId);
       } else if (metadata.email) {
-        user = await User.findOne({ email: (metadata.email as string).toLowerCase() });
+        user = await findUserByIdentifier(null, metadata.email as string, null);
       } else if (userId) {
-        user = await User.findOne({ userId });
+        user = await findUserByIdentifier(null, null, userId);
       }
 
       if (!user) {

@@ -1,16 +1,32 @@
 /**
  * User service
  * Handles user lookup and creation
+ * 
+ * NOTE: Email addresses are encrypted at rest. Use emailHash for lookups.
  */
 import mongoose, { type Model } from 'mongoose';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
+import { createBlindIndex, isEncryptionConfigured } from '../utils/encryption';
+import crypto from 'crypto';
 
 /**
  * Get User model (lazy load to avoid circular deps)
  */
 function getUserModel(): Model<IUser> {
   return mongoose.model<IUser>('User');
+}
+
+/**
+ * Create email hash for lookups (same algorithm as model)
+ */
+function createEmailHash(email: string): string {
+  const normalized = email.toLowerCase().trim();
+  if (isEncryptionConfigured()) {
+    return createBlindIndex(normalized);
+  }
+  // Fallback when encryption not configured
+  return crypto.createHash('sha256').update(normalized).digest('hex');
 }
 
 /**
@@ -23,6 +39,7 @@ export function normalizeWalletAddress(address: unknown): string | null {
 
 /**
  * Find user by any identifier
+ * NOTE: Email lookups use emailHash (blind index) since emails are encrypted
  */
 export async function findUserByIdentifier(
   walletAddress: string | null = null, 
@@ -44,6 +61,10 @@ export async function findUserByIdentifier(
   }
 
   if (email) {
+    // Use emailHash for lookups since email is encrypted
+    const emailHash = createEmailHash(email);
+    query.$or!.push({ emailHash });
+    // Also try direct email match for backward compatibility with unencrypted emails
     query.$or!.push({ email: email.toLowerCase() });
   }
 
@@ -54,13 +75,11 @@ export async function findUserByIdentifier(
   if (query.$or!.length === 1) {
     return await User.findOne(query.$or![0])
       .select('-generationHistory -gallery -paymentHistory')
-      .lean()
       .maxTimeMS(5000) as IUser | null;
   }
 
   return await User.findOne(query)
     .select('-generationHistory -gallery -paymentHistory')
-    .lean()
     .maxTimeMS(5000) as IUser | null;
 }
 
@@ -110,20 +129,29 @@ export async function getOrCreateUser(
 
 /**
  * Get or create user by email
+ * NOTE: Uses emailHash for lookups, email will be encrypted on save
  */
 export async function getOrCreateUserByEmail(email: string): Promise<IUser> {
   const User = getUserModel();
-  const normalized = email.toLowerCase();
+  const normalized = email.toLowerCase().trim();
+  const emailHash = createEmailHash(normalized);
 
-  let user = await User.findOne({ email: normalized });
+  // First try to find by emailHash (encrypted emails)
+  let user = await User.findOne({ emailHash });
+  
+  // Fallback: try direct email match (backward compatibility)
+  if (!user) {
+    user = await User.findOne({ email: normalized });
+  }
   
   if (user) {
     return user;
   }
 
   // New email users get 2 free credits
+  // Email will be encrypted in pre-save hook
   user = new User({
-    email: normalized,
+    email: normalized,  // Will be encrypted on save
     credits: 2,
     totalCreditsEarned: 2,
     totalCreditsSpent: 0,
@@ -134,22 +162,27 @@ export async function getOrCreateUserByEmail(email: string): Promise<IUser> {
   });
 
   await user.save();
-  logger.info('New email user created with 2 credits', { email: normalized });
+  logger.info('New email user created with 2 credits', { emailHash: emailHash.substring(0, 8) + '...' });
   return user;
 }
 
 /**
  * Build update query for user
+ * NOTE: For email queries, uses emailHash since emails are encrypted
  */
-export function buildUserUpdateQuery(user: { walletAddress?: string; userId?: string; email?: string }): { walletAddress?: string; userId?: string; email?: string } | null {
+export function buildUserUpdateQuery(user: { walletAddress?: string; userId?: string; email?: string; emailHash?: string }): { walletAddress?: string; userId?: string; emailHash?: string } | null {
   if (user.walletAddress) {
     const normalized = normalizeWalletAddress(user.walletAddress);
     if (!normalized) return null;
     return { walletAddress: normalized };
   } else if (user.userId) {
     return { userId: user.userId };
+  } else if (user.emailHash) {
+    // Prefer emailHash if available
+    return { emailHash: user.emailHash };
   } else if (user.email) {
-    return { email: user.email.toLowerCase() };
+    // Create emailHash from email for lookup
+    return { emailHash: createEmailHash(user.email) };
   }
   return null;
 }

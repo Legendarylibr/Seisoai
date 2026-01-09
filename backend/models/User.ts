@@ -67,6 +67,7 @@ interface UserSettings {
 export interface IUser extends Document {
   walletAddress?: string;
   email?: string;
+  emailHash?: string;  // Blind index for searching encrypted emails
   password?: string;
   userId?: string;
   credits: number;
@@ -80,6 +81,8 @@ export interface IUser extends Document {
   lastActive: Date;
   createdAt: Date;
   expiresAt: Date;
+  // Virtual field to track if email was decrypted
+  _emailDecrypted?: boolean;
 }
 
 interface UserModel extends Model<IUser> {
@@ -107,14 +110,21 @@ const userSchema = new mongoose.Schema<IUser>({
     sparse: true,
     index: true
   },
+  // Email is stored encrypted - use emailHash for lookups
   email: {
+    type: String,
+    required: false,
+    sparse: true
+    // Note: No validation here - encrypted emails won't match patterns
+    // Validation happens before encryption in pre-save hook
+  },
+  // Blind index for searching by email (HMAC hash, not reversible)
+  emailHash: {
     type: String,
     required: false,
     unique: true,
     sparse: true,
-    lowercase: true,
-    index: true,
-    match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
+    index: true
   },
   password: {
     type: String,
@@ -217,22 +227,75 @@ const userSchema = new mongoose.Schema<IUser>({
 
 // Indexes for performance
 userSchema.index({ walletAddress: 1 });
-userSchema.index({ email: 1 });
+userSchema.index({ emailHash: 1 });  // Use emailHash for lookups, not email
 userSchema.index({ userId: 1 });
 userSchema.index({ createdAt: 1 });
 userSchema.index({ expiresAt: 1 });
 userSchema.index({ 'gallery.timestamp': 1 });
 userSchema.index({ 'gallery.expiresAt': 1 }); // For cleaning up expired 3D models
 
-// Generate unique userId for all users
+// Helper to check if a string is already encrypted (contains our format)
+function isEncrypted(value: string): boolean {
+  if (!value) return false;
+  const parts = value.split(':');
+  return parts.length === 3 && parts[0].length > 10;
+}
+
+// Helper to validate email format (before encryption)
+function isValidEmail(email: string): boolean {
+  return /^\S+@\S+\.\S+$/.test(email);
+}
+
+// Pre-save hook: Encrypt email and generate userId
 userSchema.pre('save', async function(next) {
-  if (this.isNew && !this.userId) {
-    try {
+  try {
+    // Handle email encryption
+    if (this.email && this.isModified('email')) {
+      const plainEmail = this.email;
+      
+      // Skip if already encrypted
+      if (!isEncrypted(plainEmail)) {
+        // Validate email format before encryption
+        if (!isValidEmail(plainEmail)) {
+          return next(new Error('Please enter a valid email address'));
+        }
+        
+        // Normalize email
+        const normalizedEmail = plainEmail.toLowerCase().trim();
+        
+        // Create blind index for searching (before encryption)
+        if (isEncryptionConfigured()) {
+          this.emailHash = createBlindIndex(normalizedEmail);
+          // Encrypt the email
+          this.email = encrypt(normalizedEmail);
+          logger.debug('Email encrypted for user', { 
+            emailHash: this.emailHash.substring(0, 8) + '...',
+            userId: this.userId 
+          });
+        } else {
+          // Encryption not configured - store plaintext but log warning
+          this.email = normalizedEmail;
+          this.emailHash = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+          logger.warn('Email stored without encryption - ENCRYPTION_KEY not configured');
+        }
+      }
+    }
+    
+    // Generate unique userId for new users
+    if (this.isNew && !this.userId) {
       let hash: string;
       let prefix: string;
       
-      if (this.email) {
-        hash = crypto.createHash('sha256').update(this.email.toLowerCase()).digest('hex').substring(0, 16);
+      // Use emailHash if available (for encrypted emails), otherwise decrypt or use raw
+      if (this.emailHash) {
+        hash = this.emailHash.substring(0, 16);
+        prefix = 'email_';
+      } else if (this.email) {
+        // Email might be encrypted or plain
+        const emailForHash = isEncrypted(this.email) 
+          ? decrypt(this.email) 
+          : this.email;
+        hash = crypto.createHash('sha256').update(emailForHash.toLowerCase()).digest('hex').substring(0, 16);
         prefix = 'email_';
       } else if (this.walletAddress) {
         const normalizedAddress = this.walletAddress.startsWith('0x') 
@@ -245,12 +308,43 @@ userSchema.pre('save', async function(next) {
       }
       
       this.userId = `${prefix}${hash}`;
+    }
+    
+    next();
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Error in user pre-save hook', { error: err.message });
+    next(err);
+  }
+});
+
+// Post-find hooks: Decrypt email when reading from database
+function decryptUserEmail(doc: IUser | null): void {
+  if (!doc || !doc.email) return;
+  
+  // Only decrypt if it looks encrypted and not already decrypted
+  if (isEncrypted(doc.email) && !doc._emailDecrypted) {
+    try {
+      doc.email = decrypt(doc.email);
+      doc._emailDecrypted = true;
     } catch (error) {
-      const err = error as Error;
-      logger.error('Error generating userId in pre-save hook', { error: err.message });
+      logger.error('Failed to decrypt user email', { userId: doc.userId });
     }
   }
-  next();
+}
+
+userSchema.post('findOne', function(doc: IUser | null) {
+  decryptUserEmail(doc);
+});
+
+userSchema.post('find', function(docs: IUser[]) {
+  if (Array.isArray(docs)) {
+    docs.forEach(decryptUserEmail);
+  }
+});
+
+userSchema.post('findOneAndUpdate', function(doc: IUser | null) {
+  decryptUserEmail(doc);
 });
 
 // Note: buildUserUpdateQuery is exported from services/user.ts to avoid circular dependencies

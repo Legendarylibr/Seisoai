@@ -1,15 +1,30 @@
 /**
  * Generation routes
  * Image, video, and music generation endpoints
+ * 
+ * NOTE: Email addresses are encrypted at rest. Uses emailHash for lookups.
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import logger from '../utils/logger';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed, normalizeStatus, FAL_STATUS } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
+import { createBlindIndex, isEncryptionConfigured } from '../utils/encryption';
 import type { IUser } from '../models/User';
 import { calculateVideoCredits, calculateMusicCredits, calculateUpscaleCredits, calculateVideoToAudioCredits } from '../utils/creditCalculations';
+
+/**
+ * Create email hash for lookups (matches model implementation)
+ */
+function createEmailHash(email: string): string {
+  const normalized = email.toLowerCase().trim();
+  if (isEncryptionConfigured()) {
+    return createBlindIndex(normalized);
+  }
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
 
 // Types
 interface Dependencies {
@@ -2610,7 +2625,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Find user
+      // Find user (use emailHash for encrypted email lookups)
       const User = mongoose.model<IUser>('User');
       let user: IUser | null = null;
       let updateQuery: Record<string, string> | null = null;
@@ -2624,8 +2639,17 @@ export function createGenerationRoutes(deps: Dependencies) {
         updateQuery = { userId };
         user = await User.findOne(updateQuery);
       } else if (email) {
-        updateQuery = { email: email.toLowerCase() };
+        // Use emailHash for lookups since email is encrypted
+        const emailHash = createEmailHash(email);
+        updateQuery = { emailHash };
         user = await User.findOne(updateQuery);
+        // Fallback: try direct email match for backward compatibility
+        if (!user) {
+          user = await User.findOne({ email: email.toLowerCase() });
+          if (user) {
+            updateQuery = { email: email.toLowerCase() };
+          }
+        }
       } else {
         res.status(400).json({
           success: false,

@@ -1,17 +1,32 @@
 /**
  * Authentication routes
  * Handles signup, signin, token refresh, logout
+ * 
+ * NOTE: Email addresses are encrypted at rest. Uses emailHash for lookups.
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import bcrypt from 'bcrypt';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import logger from '../utils/logger';
 import config from '../config/env';
 import { isDisposableEmail } from '../abusePrevention';
 import { blacklistToken } from '../middleware/auth';
+import { createBlindIndex, isEncryptionConfigured } from '../utils/encryption';
 import type { IUser } from '../models/User';
+
+/**
+ * Create email hash for lookups (matches model implementation)
+ */
+function createEmailHash(email: string): string {
+  const normalized = email.toLowerCase().trim();
+  if (isEncryptionConfigured()) {
+    return createBlindIndex(normalized);
+  }
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
 
 // Types
 interface Dependencies {
@@ -97,8 +112,14 @@ export function createAuthRoutes(deps: Dependencies = {}) {
 
       const User = mongoose.model<IUser>('User');
       
-      // Check existing user
-      const existing = await User.findOne({ email: email.toLowerCase() });
+      // Check existing user by emailHash (encrypted emails)
+      const emailHash = createEmailHash(email);
+      const existing = await User.findOne({ 
+        $or: [
+          { emailHash },
+          { email: email.toLowerCase() }  // Backward compatibility
+        ]
+      });
       if (existing) {
         res.status(400).json({
           success: false,
@@ -179,8 +200,14 @@ export function createAuthRoutes(deps: Dependencies = {}) {
       }
 
       const User = mongoose.model<IUser>('User');
-      const user = await User.findOne({ email: email.toLowerCase() })
-        .select('+password -generationHistory -gallery -paymentHistory');
+      // Look up by emailHash (encrypted emails) or direct email (backward compatibility)
+      const emailHash = createEmailHash(email);
+      const user = await User.findOne({ 
+        $or: [
+          { emailHash },
+          { email: email.toLowerCase() }  // Backward compatibility
+        ]
+      }).select('+password -generationHistory -gallery -paymentHistory');
 
       if (!user) {
         res.status(401).json({
