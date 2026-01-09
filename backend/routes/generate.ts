@@ -2466,14 +2466,16 @@ export function createGenerationRoutes(deps: Dependencies) {
   /**
    * Add generation to history
    * POST /api/generations/add
+   * SECURITY: Requires JWT authentication
    */
   router.post('/add', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
+      // SECURITY: Require JWT authentication, not body-based
       if (!user) {
         res.status(401).json({
           success: false,
-          error: 'Authentication required'
+          error: 'Authentication required. Please sign in with a valid token.'
         });
         return;
       }

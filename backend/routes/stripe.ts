@@ -99,9 +99,10 @@ export function createStripeRoutes(deps: Dependencies = {}) {
     } catch (error) {
       const err = error as Error;
       logger.error('Payment intent creation error:', { error: err.message });
+      // SECURITY: Don't expose internal error details
       res.status(500).json({
         success: false,
-        error: err.message
+        error: 'Failed to create payment. Please try again.'
       });
     }
   });
@@ -185,9 +186,10 @@ export function createStripeRoutes(deps: Dependencies = {}) {
     } catch (error) {
       const err = error as Error;
       logger.error('Subscription creation error:', { error: err.message });
+      // SECURITY: Don't expose internal error details
       res.status(500).json({
         success: false,
-        error: err.message
+        error: 'Failed to create subscription. Please try again.'
       });
     }
   });

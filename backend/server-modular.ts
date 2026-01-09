@@ -108,20 +108,28 @@ app.options('*', cors({
 // Compression
 app.use(compression());
 
-// CORS Configuration - Use allowed origins from env, fallback to permissive for in-app browsers
-// Parse allowed origins from environment variable
+// CORS Configuration - Use allowed origins from env
+// SECURITY: In production, ALLOWED_ORIGINS should be explicitly set
 const parseAllowedOrigins = (): string[] | true => {
   const originsEnv = config.ALLOWED_ORIGINS;
+  
+  // SECURITY WARNING: Permissive CORS in production is a security risk
+  if (config.isProduction && (!originsEnv || originsEnv.trim() === '' || originsEnv === '*')) {
+    logger.error('SECURITY WARNING: CORS is permissive in production! Set ALLOWED_ORIGINS environment variable.');
+    logger.error('Example: ALLOWED_ORIGINS=https://yourapp.com,https://www.yourapp.com');
+    // In production, still allow but log loudly - operators should fix this
+  }
+  
   if (!originsEnv || originsEnv.trim() === '' || originsEnv === '*') {
-    // Permissive mode for in-app browsers (Instagram, Twitter, etc.)
+    // Permissive mode - ONLY use in development or when in-app browsers are required
     return true;
   }
   return originsEnv.split(',').map(o => o.trim()).filter(o => o.length > 0);
 };
 
 const allowedOrigins = parseAllowedOrigins();
-const corsMode = allowedOrigins === true ? 'permissive - all origins allowed' : `restricted - ${(allowedOrigins as string[]).length} origins`;
-logger.info('CORS configuration', { mode: corsMode });
+const corsMode = allowedOrigins === true ? 'permissive - all origins allowed (SECURITY RISK in production)' : `restricted - ${(allowedOrigins as string[]).length} origins`;
+logger.info('CORS configuration', { mode: corsMode, isProduction: config.isProduction });
 
 app.use(cors({
   origin: allowedOrigins,

@@ -1,10 +1,12 @@
 /**
  * User Model - MongoDB Schema
  * Supports both wallet-based and email-based authentication
+ * Includes field-level encryption for database breach protection
  */
 import mongoose, { type Document, type Model } from 'mongoose';
 import crypto from 'crypto';
-import logger from '../utils/logger';
+import logger from '../utils/logger.js';
+import { encrypt, decrypt, createBlindIndex, isEncryptionConfigured } from '../utils/encryption.js';
 
 // Types
 interface NFTCollection {

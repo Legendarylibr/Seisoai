@@ -175,9 +175,10 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
     } catch (error) {
       const err = error as Error;
       logger.error('Payment verification error:', { error: err.message });
+      // SECURITY: Don't expose internal error messages
       res.status(500).json({
         success: false,
-        error: err.message
+        error: 'Payment verification failed. Please try again or contact support.'
       });
     }
   });
@@ -263,9 +264,20 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
   /**
    * Credit user after blockchain payment
    * POST /api/payments/credit
+   * 
+   * SECURITY: Requires JWT authentication and verifies wallet ownership
    */
   router.post('/credit', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // SECURITY: Require JWT authentication
+      if (!req.user || req.authType !== 'jwt') {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required. Please sign in with a valid token.'
+        });
+        return;
+      }
+
       const { txHash, walletAddress, tokenSymbol, amount, chainId, walletType } = req.body as {
         txHash?: string;
         walletAddress?: string;
@@ -282,8 +294,8 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
         amount,
         chainId,
         walletType,
-        authType: req.authType || 'none',
-        authenticatedUser: req.user?.userId || req.user?.email || 'wallet-only'
+        authType: req.authType,
+        authenticatedUser: req.user.userId || req.user.email
       });
 
       if (!txHash || !walletAddress || !amount) {
@@ -303,27 +315,34 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const User = mongoose.model<IUser>('User');
+      // SECURITY: Verify wallet ownership - wallet must belong to authenticated user
       const normalizedAddress = walletAddress.toLowerCase();
-
-      // Get or create user
-      let user = await User.findOne({ walletAddress: normalizedAddress });
-      if (!user) {
-        user = new User({
-          walletAddress: normalizedAddress,
-          credits: 0,
-          totalCreditsEarned: 0,
-          totalCreditsSpent: 0
+      const userWallet = req.user.walletAddress?.toLowerCase();
+      
+      if (userWallet && userWallet !== normalizedAddress) {
+        logger.warn('Wallet ownership verification failed', {
+          userId: req.user.userId,
+          requestedWallet: normalizedAddress.substring(0, 10) + '...',
+          userWallet: userWallet.substring(0, 10) + '...'
         });
-        await user.save();
+        res.status(403).json({
+          success: false,
+          error: 'Wallet address does not match authenticated user'
+        });
+        return;
       }
+
+      const User = mongoose.model<IUser>('User');
+
+      // Use authenticated user, not arbitrary wallet
+      const user = req.user;
 
       // Check if already processed
       const alreadyProcessed = user.paymentHistory?.some(
         (p: { txHash?: string }) => p.txHash === txHash
       );
       if (alreadyProcessed) {
-        logger.info('Payment already processed', { txHash, walletAddress });
+        logger.info('Payment already processed', { txHash, userId: user.userId });
         res.json({
           success: true,
           credits: 0,
@@ -338,9 +357,15 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
       const creditsPerUSDC = isNFTHolder ? NFT_HOLDER_CREDITS_PER_USDC : STANDARD_CREDITS_PER_USDC;
       const credits = Math.floor(amount * creditsPerUSDC);
 
-      // Add credits
+      // Add credits to authenticated user
+      const updateQuery = user.userId 
+        ? { userId: user.userId }
+        : user.email 
+          ? { email: user.email.toLowerCase() }
+          : { walletAddress: normalizedAddress };
+
       const updatedUser = await User.findOneAndUpdate(
-        { walletAddress: normalizedAddress },
+        updateQuery,
         {
           $inc: { credits, totalCreditsEarned: credits },
           $push: {
@@ -360,7 +385,7 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
 
       logger.info('Payment credited', {
         txHash,
-        walletAddress,
+        userId: user.userId,
         credits,
         isNFTHolder,
         totalCredits: updatedUser?.credits

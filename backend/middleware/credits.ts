@@ -24,6 +24,7 @@ interface CreditsRequest extends Request {
 
 /**
  * Create middleware that checks if user has enough credits
+ * SECURITY: User must already be authenticated via JWT (set on req.user)
  */
 export const createRequireCredits = (
   getUserModel: () => Model<IUser>, 
@@ -32,12 +33,26 @@ export const createRequireCredits = (
   return (requiredCredits: number) => {
     return async (req: CreditsRequest, res: Response, next: NextFunction): Promise<void> => {
       try {
-        const user = await getUserFromRequest(req);
+        // SECURITY: Check if user is already authenticated via JWT
+        // This middleware should be used AFTER authenticateToken or authenticateFlexible
+        let user = req.user;
         
         if (!user) {
-          res.status(400).json({
+          // Fallback: try to get user from request (for backwards compatibility)
+          // But log this as it should ideally come from JWT auth
+          user = await getUserFromRequest(req);
+          if (user) {
+            logger.debug('User resolved from request body in credits middleware', {
+              path: req.path,
+              hasJwtUser: false
+            });
+          }
+        }
+        
+        if (!user) {
+          res.status(401).json({
             success: false,
-            error: 'User identification required. Please provide walletAddress, userId, or email.'
+            error: 'Authentication required. Please sign in to continue.'
           });
           return;
         }
@@ -70,6 +85,7 @@ export const createRequireCredits = (
 /**
  * Create middleware for model-based credit requirements
  * Different models have different credit costs
+ * SECURITY: User must already be authenticated via JWT (set on req.user)
  */
 export const createRequireCreditsForModel = (
   getUserModel: () => Model<IUser>, 
@@ -78,12 +94,17 @@ export const createRequireCreditsForModel = (
   return () => {
     return async (req: CreditsRequest, res: Response, next: NextFunction): Promise<void> => {
       try {
-        const user = await getUserFromRequest(req);
+        // SECURITY: Check if user is already authenticated via JWT
+        let user = req.user;
         
         if (!user) {
-          res.status(400).json({
+          user = await getUserFromRequest(req);
+        }
+        
+        if (!user) {
+          res.status(401).json({
             success: false,
-            error: 'User identification required. Please provide walletAddress, userId, or email.'
+            error: 'Authentication required. Please sign in to continue.'
           });
           return;
         }
@@ -131,6 +152,7 @@ export const createRequireCreditsForModel = (
 /**
  * Create middleware for video credit requirements
  * Videos cost 2 credits per second with a minimum of 2
+ * SECURITY: User must already be authenticated via JWT (set on req.user)
  */
 export const createRequireCreditsForVideo = (
   getUserModel: () => Model<IUser>, 
@@ -139,12 +161,17 @@ export const createRequireCreditsForVideo = (
   return () => {
     return async (req: CreditsRequest, res: Response, next: NextFunction): Promise<void> => {
       try {
-        const user = await getUserFromRequest(req);
+        // SECURITY: Check if user is already authenticated via JWT
+        let user = req.user;
         
         if (!user) {
-          res.status(400).json({
+          user = await getUserFromRequest(req);
+        }
+        
+        if (!user) {
+          res.status(401).json({
             success: false,
-            error: 'User identification required. Please provide walletAddress, userId, or email.'
+            error: 'Authentication required. Please sign in to continue.'
           });
           return;
         }

@@ -15,7 +15,7 @@ const envPath = path.join(__dirname, '..', '..', 'backend.env');
 dotenv.config({ path: envPath });
 
 // Required environment variables
-const REQUIRED_VARS = ['JWT_SECRET'];
+const REQUIRED_VARS = ['JWT_SECRET', 'ENCRYPTION_KEY'];
 
 // Validate required vars - enforce in all environments for security
 const missingVars = REQUIRED_VARS.filter(v => !process.env[v]);
@@ -32,6 +32,15 @@ if (missingVars.length > 0) {
 // Validate JWT_SECRET minimum length
 if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
   console.error('SECURITY ERROR: JWT_SECRET must be at least 32 characters long');
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
+}
+
+// Validate ENCRYPTION_KEY format (64 hex characters = 256 bits)
+if (process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.length !== 64) {
+  console.error('SECURITY ERROR: ENCRYPTION_KEY must be exactly 64 hex characters (256 bits)');
+  console.error('Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
   if (process.env.NODE_ENV === 'production') {
     process.exit(1);
   }
@@ -58,6 +67,7 @@ export interface Config {
   JWT_SECRET?: string;
   JWT_REFRESH_SECRET?: string;
   SESSION_SECRET?: string;
+  ENCRYPTION_KEY?: string;
   FAL_API_KEY?: string;
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
@@ -91,6 +101,7 @@ export const config: Config = {
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 
     (process.env.JWT_SECRET ? crypto.createHash('sha256').update(process.env.JWT_SECRET + '_refresh_token_salt').digest('hex') : undefined),
   SESSION_SECRET: process.env.SESSION_SECRET,
+  ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
   
   // APIs
   FAL_API_KEY: process.env.FAL_API_KEY,

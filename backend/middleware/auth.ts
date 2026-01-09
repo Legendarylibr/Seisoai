@@ -125,7 +125,10 @@ export const createAuthenticateToken = (
 };
 
 /**
- * Create flexible authentication middleware (JWT or wallet address)
+ * Create flexible authentication middleware (JWT required, body-based DISABLED in production)
+ * 
+ * SECURITY FIX: Body-based authentication has been DISABLED as it allows impersonation.
+ * All authenticated endpoints now require JWT tokens.
  */
 export const createAuthenticateFlexible = (
   jwtSecret: string | undefined, 
@@ -137,6 +140,7 @@ export const createAuthenticateFlexible = (
       const authHeader = req.headers['authorization'];
       const token = authHeader && authHeader.split(' ')[1];
 
+      // JWT authentication (required)
       if (token && jwtSecret) {
         if (isTokenBlacklisted(token)) {
           res.status(401).json({
@@ -167,48 +171,43 @@ export const createAuthenticateFlexible = (
           }
         } catch (jwtError) {
           const err = jwtError as Error;
-          logger.debug('JWT authentication failed, trying wallet address', { error: err.message });
+          logger.debug('JWT authentication failed', { error: err.message });
+          res.status(403).json({
+            success: false,
+            error: 'Invalid or expired token'
+          });
+          return;
         }
       }
 
+      // SECURITY: Body-based authentication is DISABLED
+      // This was a critical vulnerability that allowed user impersonation
+      // by simply providing a wallet address, userId, or email in the request body.
+      // 
+      // If you need backwards compatibility for legacy clients, you must:
+      // 1. Implement cryptographic signature verification
+      // 2. Or require clients to migrate to JWT authentication
+      
       const { walletAddress, userId, email } = req.body as { walletAddress?: string; userId?: string; email?: string };
       
-      if (!walletAddress && !userId && !email) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required. Please provide a token or wallet address/userId/email.'
+      if (walletAddress || userId || email) {
+        // Log the attempt for security monitoring
+        logger.warn('SECURITY: Blocked body-based authentication attempt', { 
+          walletAddress: walletAddress ? walletAddress.substring(0, 10) + '...' : null,
+          userId: userId ? userId.substring(0, 10) + '...' : null,
+          email: email ? '***' : null,
+          path: req.path,
+          ip: req.ip,
+          userAgent: req.headers['user-agent']?.substring(0, 50)
         });
-        return;
       }
-      
-      // SECURITY WARNING: Body-based authentication is less secure than JWT
-      // This fallback allows legacy clients but should be phased out
-      // In production, consider requiring JWT for all authenticated endpoints
-      logger.warn('SECURITY: Body-based authentication used (less secure than JWT)', { 
-        walletAddress: walletAddress ? walletAddress.substring(0, 10) + '...' : null,
-        userId: userId ? userId.substring(0, 10) + '...' : null,
-        email: email ? '***' : null,
-        path: req.path,
-        ip: req.ip,
-        userAgent: req.headers['user-agent']?.substring(0, 50),
-        note: 'Consider migrating to JWT-only authentication'
+
+      res.status(401).json({
+        success: false,
+        error: 'Authentication required. Please provide a valid JWT token in the Authorization header.'
       });
-
-      const user = await getUserFromRequest(req);
-      
-      if (!user) {
-        res.status(401).json({
-          success: false,
-          error: 'User not found'
-        });
-        return;
-      }
-
-      req.user = user;
-      req.authType = 'body';
-      next();
     } catch (error) {
-      logger.error('Flexible authentication error:', error);
+      logger.error('Authentication error:', error);
       res.status(403).json({
         success: false,
         error: 'Authentication failed'
