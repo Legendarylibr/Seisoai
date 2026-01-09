@@ -87,12 +87,14 @@ export default defineConfig({
           }
           // Solana and its dependencies - keep together to avoid circular dep issues
           // Include common Solana sub-dependencies in the same chunk
+          // CRITICAL: base-x MUST be in the same chunk as bs58 to avoid circular import issues
           if (id.includes('@solana') || 
               id.includes('rpc-websockets') || 
               id.includes('superstruct') ||
               id.includes('bn.js') ||
               id.includes('borsh') ||
               id.includes('bs58') ||
+              id.includes('base-x') ||
               id.includes('jayson') ||
               id.includes('@noble/curves') ||
               id.includes('@noble/hashes')) {
