@@ -39,12 +39,40 @@ export async function getFFmpeg(): Promise<FFmpeg> {
     ffmpeg = new FFmpeg();
 
     // Load FFmpeg with CORS-enabled URLs from unpkg CDN
+    // Version matches @ffmpeg/ffmpeg package version (0.12.15)
     const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
     
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
+    const fallbackURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
+    let primaryError: Error | null = null;
+    
+    // Try primary CDN first (unpkg)
+    try {
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      });
+    } catch (loadError) {
+      primaryError = loadError instanceof Error ? loadError : new Error(String(loadError));
+      console.warn('Primary FFmpeg CDN (unpkg) failed, trying fallback (jsDelivr):', primaryError.message);
+      
+      // If primary CDN fails, try jsDelivr as fallback
+      try {
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${fallbackURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${fallbackURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+        console.info('FFmpeg loaded successfully from fallback CDN (jsDelivr)');
+      } catch (fallbackError) {
+        const fallbackErr = fallbackError instanceof Error ? fallbackError : new Error(String(fallbackError));
+        throw new Error(
+          `Failed to load FFmpeg from both CDNs. ` +
+          `Primary (unpkg): ${primaryError.message}. ` +
+          `Fallback (jsDelivr): ${fallbackErr.message}. ` +
+          `This may be due to network issues, CORS restrictions, or CDN unavailability. ` +
+          `Please check your internet connection and try again.`
+        );
+      }
+    }
 
     isLoaded = true;
     isLoading = false;
@@ -56,7 +84,9 @@ export async function getFFmpeg(): Promise<FFmpeg> {
     return ffmpeg;
   } catch (error) {
     isLoading = false;
-    const err = error instanceof Error ? error : new Error('Failed to load FFmpeg');
+    const err = error instanceof Error 
+      ? new Error(`Failed to load FFmpeg: ${error.message}. This may be due to network issues, CORS restrictions, or CDN unavailability.`)
+      : new Error('Failed to load FFmpeg: Unknown error');
     
     // Reject any waiting promises
     loadPromises.forEach(p => p.reject(err));

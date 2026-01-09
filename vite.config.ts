@@ -37,7 +37,11 @@ export default defineConfig(({ mode }) => {
         '@noble/curves',
         '@noble/hashes',
       ],
-      exclude: ['@walletconnect/ethereum-provider'],
+      exclude: [
+        '@walletconnect/ethereum-provider',
+        '@ffmpeg/ffmpeg',
+        '@ffmpeg/util',
+      ],
       esbuildOptions: {
         target: 'es2020',
       },
