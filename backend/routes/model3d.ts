@@ -83,11 +83,55 @@ export function createModel3dRoutes(deps: Dependencies) {
   const flexibleAuth = authenticateFlexible || ((req: Request, res: Response, next: () => void) => next());
 
   /**
+   * Dynamic credits middleware for 3D generation
+   * Checks credits based on generate_type from request body
+   */
+  const requireCreditsFor3d = async (req: AuthenticatedRequest, res: Response, next: () => void): Promise<void> => {
+    try {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required. Please sign in to continue.'
+        });
+        return;
+      }
+
+      // Determine credit cost based on generate_type
+      const generateType = req.body?.generate_type || 'Normal';
+      const creditsRequired = generateType === 'Geometry' 
+        ? CREDITS.MODEL_3D_GEOMETRY 
+        : generateType === 'LowPoly' 
+          ? CREDITS.MODEL_3D_LOWPOLY 
+          : CREDITS.MODEL_3D_NORMAL;
+
+      if ((user.credits || 0) < creditsRequired) {
+        res.status(402).json({
+          success: false,
+          error: `Insufficient credits. You have ${user.credits || 0} credits but need ${creditsRequired}.`,
+          creditsRequired,
+          creditsAvailable: user.credits || 0
+        });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Error in requireCreditsFor3d middleware:', err);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to check credits'
+      });
+    }
+  };
+
+  /**
    * Generate 3D model from image
    * POST /api/model3d/generate
    * Uses Hunyuan3D V3 Image-to-3D
    */
-  router.post('/generate', freeImageLimiter, flexibleAuth, requireCredits(CREDITS.MODEL_3D_GEOMETRY), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/generate', freeImageLimiter, flexibleAuth, requireCreditsFor3d, async (req: AuthenticatedRequest, res: Response) => {
     // Entry point logging - helps diagnose if requests reach this route
     logger.info('3D model generation request received', {
       hasUser: !!req.user,
@@ -334,7 +378,8 @@ export function createModel3dRoutes(deps: Dependencies) {
         // Check if model in status response (some FAL endpoints include result in status)
         // Per FAL docs: https://fal.ai/models/fal-ai/hunyuan3d-v3/image-to-3d/api
         // Output includes: model_glb (File), thumbnail (File), model_urls (ModelUrls)
-        const typedStatusResult = statusResult as {
+        // Also check rawStatusData directly in case data is at top level
+        const typedStatusResult = (statusResult || rawStatusData) as {
           model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
           glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string }; // fallback alias
           thumbnail?: { url?: string };
@@ -352,56 +397,33 @@ export function createModel3dRoutes(deps: Dependencies) {
             glbUrl: glbFromStatus?.url?.substring(0, 100),
             elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
           });
-          res.json({
-            success: true,
-            // Use model_glb directly as that's what FAL returns
-            model_glb: typedStatusResult.model_glb || typedStatusResult.glb,
-            thumbnail: typedStatusResult.thumbnail,
-            model_urls: typedStatusResult.model_urls,
-            remainingCredits: updateResult.credits,
-            creditsDeducted: creditsRequired
-          });
+          
+          // Ensure response hasn't been sent already
+          if (!res.headersSent) {
+            res.json({
+              success: true,
+              // Use model_glb directly as that's what FAL returns
+              model_glb: typedStatusResult.model_glb || typedStatusResult.glb,
+              thumbnail: typedStatusResult.thumbnail,
+              model_urls: typedStatusResult.model_urls,
+              remainingCredits: updateResult.credits,
+              creditsDeducted: creditsRequired
+            });
+          }
           return;
         }
 
         // Check for completion - handle various status formats from FAL
         if (isStatusCompleted(normalizedStatus)) {
-          // Use response_url if provided, otherwise construct the result endpoint
-          const resultUrl = rawStatusData.response_url || `https://queue.fal.run/${modelPath}/requests/${requestId}`;
-          
           logger.info('3D model status COMPLETED, fetching result', { 
             requestId, 
             normalizedStatus,
             hasResponseUrl: !!rawStatusData.response_url,
-            resultUrl: resultUrl.substring(0, 100),
             elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
           });
           
-          // Fetch the result
-          const resultResponse = await fetch(
-            resultUrl,
-            {
-              headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-            }
-          );
-
-          if (!resultResponse.ok) {
-            const errorText = await resultResponse.text().catch(() => 'Unknown error');
-            logger.error('Failed to fetch 3D result', { 
-              requestId, 
-              status: resultResponse.status,
-              error: errorText.substring(0, 500)
-            });
-            await refundCredits(user, creditsRequired, 'Failed to fetch 3D result');
-            res.status(500).json({
-              success: false,
-              error: 'Failed to fetch 3D model result',
-              creditsRefunded: creditsRequired
-            });
-            return;
-          }
-
-          const rawResult = await resultResponse.json() as {
+          // Use FAL service helper to fetch result, or use response_url if provided
+          let rawResult: {
             // FAL queue result may wrap response in various fields
             data?: {
               glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
@@ -412,19 +434,19 @@ export function createModel3dRoutes(deps: Dependencies) {
             };
             output?: {
               glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-              model_glb?: { url?: string };
+              model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
               thumbnail?: { url?: string };
               model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
             };
             result?: {
               glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-              model_glb?: { url?: string };
+              model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
               thumbnail?: { url?: string };
               model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
             };
             response?: {
               glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-              model_glb?: { url?: string };
+              model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
               thumbnail?: { url?: string };
               model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
             };
@@ -435,6 +457,36 @@ export function createModel3dRoutes(deps: Dependencies) {
             model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
             seed?: number;
           };
+
+          try {
+            // If response_url is provided, use it directly, otherwise use the FAL service helper
+            if (rawStatusData.response_url) {
+              const resultResponse = await fetch(rawStatusData.response_url, {
+                headers: { 'Authorization': `Key ${FAL_API_KEY}` }
+              });
+              if (!resultResponse.ok) {
+                throw new Error(`Failed to fetch from response_url: ${resultResponse.status}`);
+              }
+              rawResult = await resultResponse.json() as typeof rawResult;
+            } else {
+              // Use FAL service helper function
+              rawResult = await getQueueResult<typeof rawResult>(requestId, modelPath);
+            }
+          } catch (error) {
+            const err = error as Error;
+            logger.error('Failed to fetch 3D result', { 
+              requestId, 
+              error: err.message,
+              hasResponseUrl: !!rawStatusData.response_url
+            });
+            await refundCredits(user, creditsRequired, `Failed to fetch 3D result: ${err.message}`);
+            res.status(500).json({
+              success: false,
+              error: 'Failed to fetch 3D model result',
+              creditsRefunded: creditsRequired
+            });
+            return;
+          }
 
           // Handle all possible wrapper formats - FAL can return in data/output/result/response or unwrapped
           type ResultShape = {
@@ -475,16 +527,19 @@ export function createModel3dRoutes(deps: Dependencies) {
               elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
             });
             
-            res.json({
-              success: true,
-              // Return model_glb as per FAL docs
-              model_glb: resultData.model_glb || resultData.glb,
-              thumbnail: resultData.thumbnail,
-              model_urls: resultData.model_urls,
-              seed: resultData.seed,
-              remainingCredits: updateResult.credits,
-              creditsDeducted: creditsRequired
-            });
+            // Ensure response hasn't been sent already
+            if (!res.headersSent) {
+              res.json({
+                success: true,
+                // Return model_glb as per FAL docs
+                model_glb: resultData.model_glb || resultData.glb,
+                thumbnail: resultData.thumbnail,
+                model_urls: resultData.model_urls,
+                seed: resultData.seed,
+                remainingCredits: updateResult.credits,
+                creditsDeducted: creditsRequired
+              });
+            }
             return;
           }
 
