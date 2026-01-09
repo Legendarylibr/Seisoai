@@ -56,6 +56,9 @@ interface GalleryItem {
   fbxUrl?: string;
   thumbnailUrl?: string;
   expiresAt?: Date;
+  // Status tracking for async generations
+  status?: 'queued' | 'processing' | 'completed' | 'failed';
+  requestId?: string;
 }
 
 interface UserSettings {
@@ -217,7 +220,10 @@ const userSchema = new mongoose.Schema<IUser>({
       objUrl: String,
       fbxUrl: String,
       thumbnailUrl: String,
-      expiresAt: Date // For 3D models: expires 1 day after creation
+      expiresAt: Date, // For 3D models: expires 1 day after creation
+      // Status tracking for async generations
+      status: { type: String, enum: ['queued', 'processing', 'completed', 'failed'], default: 'completed' },
+      requestId: String
     }],
     validate: [arrayLimit50, 'Gallery exceeds limit of 50']
   },

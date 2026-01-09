@@ -11,6 +11,7 @@ import { checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isSt
 import { buildUserUpdateQuery } from '../services/user';
 import { CREDITS } from '../config/constants';
 import type { IUser } from '../models/User';
+import { encrypt, isEncryptionConfigured } from '../utils/encryption';
 
 // Types
 interface Dependencies {
@@ -22,6 +23,65 @@ interface Dependencies {
 interface AuthenticatedRequest extends Request {
   user?: IUser;
   creditsRequired?: number;
+}
+
+/**
+ * Update gallery item with 3D generation result
+ */
+async function updateGalleryItemWithResult(
+  updateQuery: { walletAddress?: string; userId?: string; emailHash?: string },
+  generationId: string,
+  result: {
+    model_glb?: { url?: string };
+    glb?: { url?: string };
+    thumbnail?: { url?: string };
+    model_urls?: { 
+      glb?: { url?: string }; 
+      obj?: { url?: string }; 
+      fbx?: { url?: string };
+      usdz?: { url?: string };
+    };
+  },
+  fallbackThumbnail?: string
+): Promise<void> {
+  try {
+    const User = mongoose.model<IUser>('User');
+    const glbUrl = result.model_glb?.url || result.glb?.url || result.model_urls?.glb?.url;
+    const objUrl = result.model_urls?.obj?.url;
+    const fbxUrl = result.model_urls?.fbx?.url;
+    const thumbnailUrl = result.thumbnail?.url || fallbackThumbnail;
+
+    if (glbUrl) {
+      await User.findOneAndUpdate(
+        {
+          ...updateQuery,
+          'gallery.id': generationId
+        },
+        {
+          $set: {
+            'gallery.$.glbUrl': glbUrl,
+            'gallery.$.objUrl': objUrl,
+            'gallery.$.fbxUrl': fbxUrl,
+            'gallery.$.thumbnailUrl': thumbnailUrl,
+            'gallery.$.imageUrl': thumbnailUrl, // Update imageUrl to thumbnail
+            'gallery.$.status': 'completed'
+          }
+        }
+      );
+      logger.info('3D gallery item updated with result', { 
+        generationId,
+        hasGlb: !!glbUrl,
+        hasObj: !!objUrl,
+        hasFbx: !!fbxUrl
+      });
+    }
+  } catch (updateError) {
+    const err = updateError as Error;
+    logger.error('Failed to update 3D gallery item', { 
+      error: err.message,
+      generationId 
+    });
+  }
 }
 
 /**
@@ -240,7 +300,10 @@ export function createModel3dRoutes(deps: Dependencies) {
         creditsRequired
       });
 
-      // Build request body for Hunyuan3D V3
+      // Build request body for Hunyuan3D V3 (fal-ai/hunyuan3d-v3/image-to-3d)
+      // NOTE: input_image_url should be optimized before reaching this endpoint
+      // The frontend ensures images are optimized via image-to-image generation
+      // before calling this route to ensure best results for 3D conversion
       const requestBody: Record<string, unknown> = {
         input_image_url,
         face_count: Math.max(40000, Math.min(1500000, face_count)),
@@ -301,6 +364,65 @@ export function createModel3dRoutes(deps: Dependencies) {
       }
 
       logger.info('3D model generation submitted', { requestId });
+
+      // Create gallery item immediately so user can access it even if they disconnect
+      const generationId = `3d-${requestId}-${Date.now()}`;
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+      
+      // Encrypt prompt if encryption is configured
+      let encryptedPrompt = input_image_url; // Use image URL as prompt placeholder, or could use a description
+      const promptText = `3D Model Generation - ${generate_type}`;
+      if (isEncryptionConfigured()) {
+        encryptedPrompt = encrypt(promptText);
+      } else {
+        encryptedPrompt = promptText;
+      }
+
+      const galleryItem = {
+        id: generationId,
+        imageUrl: input_image_url, // Use input image as thumbnail
+        prompt: encryptedPrompt,
+        style: `3D-${generate_type}`,
+        timestamp: new Date(),
+        modelType: '3d' as const,
+        glbUrl: undefined,
+        objUrl: undefined,
+        fbxUrl: undefined,
+        thumbnailUrl: input_image_url,
+        expiresAt: expiresAt,
+        status: 'processing' as const,
+        requestId: requestId,
+        creditsUsed: creditsRequired
+      };
+
+      // Save to gallery immediately
+      try {
+        const User = mongoose.model<IUser>('User');
+        await User.findOneAndUpdate(
+          updateQuery,
+          {
+            $push: {
+              gallery: {
+                $each: [galleryItem],
+                $slice: -100 // Keep last 100 items
+              }
+            }
+          }
+        );
+        logger.info('3D generation added to gallery', { 
+          userId: user.userId || user.email || user.walletAddress,
+          generationId,
+          requestId,
+          expiresAt 
+        });
+      } catch (galleryError) {
+        const err = galleryError as Error;
+        logger.error('Failed to add 3D generation to gallery', { 
+          error: err.message,
+          requestId 
+        });
+        // Don't fail the request if gallery save fails
+      }
 
       // Poll for completion
       const modelPath = 'fal-ai/hunyuan3d-v3/image-to-3d';
@@ -398,6 +520,9 @@ export function createModel3dRoutes(deps: Dependencies) {
             elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
           });
           
+          // Update gallery item with result
+          await updateGalleryItemWithResult(updateQuery, generationId, typedStatusResult, input_image_url);
+
           // Ensure response hasn't been sent already
           if (!res.headersSent) {
             res.json({
@@ -407,7 +532,8 @@ export function createModel3dRoutes(deps: Dependencies) {
               thumbnail: typedStatusResult.thumbnail,
               model_urls: typedStatusResult.model_urls,
               remainingCredits: updateResult.credits,
-              creditsDeducted: creditsRequired
+              creditsDeducted: creditsRequired,
+              generationId: generationId // Return generationId so frontend can find it in gallery
             });
           }
           return;
@@ -527,6 +653,9 @@ export function createModel3dRoutes(deps: Dependencies) {
               elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
             });
             
+            // Update gallery item with result
+            await updateGalleryItemWithResult(updateQuery, generationId, resultData, input_image_url);
+            
             // Ensure response hasn't been sent already
             if (!res.headersSent) {
               res.json({
@@ -537,7 +666,8 @@ export function createModel3dRoutes(deps: Dependencies) {
                 model_urls: resultData.model_urls,
                 seed: resultData.seed,
                 remainingCredits: updateResult.credits,
-                creditsDeducted: creditsRequired
+                creditsDeducted: creditsRequired,
+                generationId: generationId // Return generationId so frontend can find it in gallery
               });
             }
             return;
@@ -559,6 +689,28 @@ export function createModel3dRoutes(deps: Dependencies) {
 
         if (isStatusFailed(normalizedStatus)) {
           logger.error('3D model generation failed', { requestId, status: normalizedStatus });
+          
+          // Update gallery item status to failed
+          try {
+            const User = mongoose.model<IUser>('User');
+            await User.findOneAndUpdate(
+              {
+                ...updateQuery,
+                'gallery.id': generationId
+              },
+              {
+                $set: {
+                  'gallery.$.status': 'failed'
+                }
+              }
+            );
+          } catch (updateError) {
+            logger.error('Failed to update gallery item status to failed', { 
+              error: (updateError as Error).message,
+              generationId 
+            });
+          }
+          
           await refundCredits(user, creditsRequired, `3D generation failed: ${normalizedStatus}`);
           res.status(500).json({
             success: false,
@@ -569,13 +721,46 @@ export function createModel3dRoutes(deps: Dependencies) {
         }
       }
 
-      // Timeout
-      logger.error('3D model generation timeout', { requestId });
-      await refundCredits(user, creditsRequired, '3D generation timeout');
-      res.status(504).json({
+      // Timeout - but generation may still complete in background
+      // Gallery item is already created, so user can check back later
+      logger.warn('3D model generation polling timeout', { 
+        requestId,
+        message: 'Generation may still be processing. Check gallery later.'
+      });
+      
+      // Update gallery item to indicate it's still processing
+      // The status endpoint can be used to check completion
+      try {
+        const User = mongoose.model<IUser>('User');
+        await User.findOneAndUpdate(
+          {
+            ...updateQuery,
+            'gallery.id': generationId
+          },
+          {
+            $set: {
+              'gallery.$.status': 'processing',
+              'gallery.$.requestId': requestId // Keep requestId for status checks
+            }
+          }
+        );
+        logger.info('Gallery item kept for async completion check', { generationId, requestId });
+      } catch (updateError) {
+        logger.error('Failed to update gallery item on timeout', { 
+          error: (updateError as Error).message,
+          generationId 
+        });
+      }
+      
+      // Don't refund credits yet - generation may still complete
+      // User can check gallery or status endpoint
+      res.status(202).json({
         success: false,
-        error: '3D model generation timed out. Please try again.',
-        creditsRefunded: creditsRequired
+        error: '3D model generation is taking longer than expected. Check your gallery in a few minutes.',
+        generationId: generationId,
+        requestId: requestId,
+        statusEndpoint: `/api/model3d/status/${requestId}`,
+        message: 'Your generation is still processing. It will appear in your gallery when complete.'
       });
 
     } catch (error) {
@@ -603,8 +788,9 @@ export function createModel3dRoutes(deps: Dependencies) {
   /**
    * Get generation status
    * GET /api/model3d/status/:requestId
+   * Also updates gallery item if generation is complete
    */
-  router.get('/status/:requestId', async (req: Request, res: Response) => {
+  router.get('/status/:requestId', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { requestId } = req.params;
       const FAL_API_KEY = getFalApiKey();
@@ -630,8 +816,124 @@ export function createModel3dRoutes(deps: Dependencies) {
         return;
       }
 
-      const statusData = await statusResponse.json();
-      res.json({ success: true, ...statusData });
+      const rawStatusData = await statusResponse.json() as { 
+        status?: string;
+        response_url?: string;
+        data?: {
+          glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+          model_glb?: { url?: string };
+          thumbnail?: { url?: string };
+          model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+        };
+        glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+        model_glb?: { url?: string };
+        thumbnail?: { url?: string };
+        model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+      };
+
+      const normalizedStatus = (rawStatusData.status || '').toUpperCase();
+      
+      // If generation is complete and user is authenticated, try to update gallery
+      if (req.user && (isStatusCompleted(normalizedStatus) || rawStatusData.model_glb?.url || rawStatusData.glb?.url)) {
+        try {
+          const User = mongoose.model<IUser>('User');
+          const updateQuery = buildUserUpdateQuery(req.user);
+          
+          if (updateQuery) {
+            // Find gallery item with this requestId
+            const user = await User.findOne({
+              ...updateQuery,
+              'gallery.requestId': requestId
+            }).select('gallery');
+            
+            if (user) {
+              const galleryItem = user.gallery?.find((item: { requestId?: string }) => item.requestId === requestId);
+              
+              if (galleryItem && galleryItem.status !== 'completed') {
+                // Check if we have result data in status response
+                const statusResult = rawStatusData.data || rawStatusData;
+                const glbUrl = statusResult.model_glb?.url || statusResult.glb?.url || statusResult.model_urls?.glb?.url;
+                
+                if (glbUrl) {
+                  // Update gallery item
+                  await updateGalleryItemWithResult(
+                    updateQuery,
+                    galleryItem.id,
+                    statusResult,
+                    galleryItem.thumbnailUrl || galleryItem.imageUrl
+                  );
+                  logger.info('Gallery item updated from status check', { 
+                    requestId,
+                    generationId: galleryItem.id 
+                  });
+                } else if (isStatusCompleted(normalizedStatus)) {
+                  // Status says completed but no URL in status response, fetch result
+                  try {
+                    let rawResult: {
+                      data?: {
+                        glb?: { url?: string };
+                        model_glb?: { url?: string };
+                        thumbnail?: { url?: string };
+                        model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string } };
+                      };
+                      output?: {
+                        glb?: { url?: string };
+                        model_glb?: { url?: string };
+                        thumbnail?: { url?: string };
+                        model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string } };
+                      };
+                      glb?: { url?: string };
+                      model_glb?: { url?: string };
+                      thumbnail?: { url?: string };
+                      model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string } };
+                    };
+
+                    if (rawStatusData.response_url) {
+                      const resultResponse = await fetch(rawStatusData.response_url, {
+                        headers: { 'Authorization': `Key ${FAL_API_KEY}` }
+                      });
+                      if (resultResponse.ok) {
+                        rawResult = await resultResponse.json() as typeof rawResult;
+                      }
+                    } else {
+                      rawResult = await getQueueResult<typeof rawResult>(requestId, modelPath);
+                    }
+
+                    const resultData = rawResult.data || rawResult.output || rawResult;
+                    const glbUrl = resultData.model_glb?.url || resultData.glb?.url || resultData.model_urls?.glb?.url;
+                    
+                    if (glbUrl) {
+                      await updateGalleryItemWithResult(
+                        updateQuery,
+                        galleryItem.id,
+                        resultData,
+                        galleryItem.thumbnailUrl || galleryItem.imageUrl
+                      );
+                      logger.info('Gallery item updated from result fetch', { 
+                        requestId,
+                        generationId: galleryItem.id 
+                      });
+                    }
+                  } catch (fetchError) {
+                    logger.error('Failed to fetch result for gallery update', { 
+                      error: (fetchError as Error).message,
+                      requestId 
+                    });
+                  }
+                }
+              }
+            }
+          }
+        } catch (galleryUpdateError) {
+          logger.error('Failed to update gallery from status check', { 
+            error: (galleryUpdateError as Error).message,
+            requestId 
+          });
+          // Don't fail the status check if gallery update fails
+        }
+      }
+
+      res.json({ success: true, ...rawStatusData });
     } catch (error) {
       const err = error as Error;
       logger.error('3D status check error:', { error: err.message });
