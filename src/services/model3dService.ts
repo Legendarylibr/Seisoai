@@ -4,6 +4,7 @@
  */
 import { API_URL } from '../utils/apiConfig';
 import logger from '../utils/logger';
+import { getAuthToken } from './emailAuthService';
 
 export interface Model3dGenerationParams {
   input_image_url: string;
@@ -86,7 +87,7 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
     const timeoutId = setTimeout(() => controller.abort(), 8 * 60 * 1000);
 
     // Get JWT token for authentication
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+    const token = getAuthToken() || '';
 
     let response: Response;
     try {
@@ -149,7 +150,7 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
  */
 export async function check3dStatus(requestId: string): Promise<{ status: string; [key: string]: unknown }> {
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+    const token = getAuthToken() || '';
     const response = await fetch(`${API_URL}/api/model3d/status/${requestId}`, {
       headers: {
         'Authorization': `Bearer ${token}`

@@ -1,6 +1,7 @@
 // Gallery and generation history service
 import logger from '../utils/logger';
 import { API_URL } from '../utils/apiConfig';
+import { getAuthToken } from './emailAuthService';
 
 // Types
 export interface GenerationData {
@@ -92,7 +93,7 @@ export const addGeneration = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token') || ''}`
+        'Authorization': `Bearer ${getAuthToken() || ''}`
       },
       body: JSON.stringify({
         walletAddress: isWalletAddress ? normalizedIdentifier : undefined,
