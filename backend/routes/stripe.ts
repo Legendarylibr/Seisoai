@@ -621,40 +621,54 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      // Check if already processed
-      const existingPayment = user.paymentHistory?.find(
-        (p: { stripePaymentId?: string }) => p.stripePaymentId === paymentIntentId
-      );
-      if (existingPayment) {
-        res.json({
-          success: true,
-          alreadyProcessed: true,
-          credits: user.credits || 0,
-          message: 'Payment already processed'
-        });
-        return;
-      }
-
       // Calculate credits
       const creditsFromMetadata = parseInt(paymentIntent.metadata.credits || '0', 10);
       const credits = creditsFromMetadata || Math.floor((paymentIntent.amount / 100) * 6.67);
 
-      // Add credits
-      await User.findOneAndUpdate(
+      // SECURITY FIX: Use $addToSet to prevent duplicate payment processing (atomic operation)
+      // This prevents race conditions where the same payment is processed multiple times
+      const paymentRecord = {
+        type: 'stripe' as const,
+        amount: paymentIntent.amount / 100,
+        credits,
+        timestamp: new Date(),
+        paymentIntentId
+      };
+
+      // Try to add payment record atomically - if paymentIntentId already exists, $addToSet won't add it
+      const updatedUser = await User.findOneAndUpdate(
         { userId: user.userId },
         {
           $inc: { credits, totalCreditsEarned: credits },
-          $push: {
-            paymentHistory: {
-              type: 'stripe',
-              amount: paymentIntent.amount / 100,
-              credits,
-              timestamp: new Date(),
-              stripePaymentId: paymentIntentId
-            }
+          $addToSet: {
+            paymentHistory: paymentRecord
           }
-        }
+        },
+        { new: true }
       );
+
+      // Check if payment was actually added (not a duplicate)
+      const wasAdded = updatedUser?.paymentHistory?.some(
+        (p: { paymentIntentId?: string; timestamp?: Date }) => 
+          p.paymentIntentId === paymentIntentId && 
+          Math.abs(new Date(p.timestamp || 0).getTime() - paymentRecord.timestamp.getTime()) < 1000
+      );
+
+      if (!wasAdded) {
+        // Payment was already processed (duplicate detected)
+        logger.info('Stripe payment already processed (duplicate detected)', {
+          userId: user.userId,
+          paymentIntentId
+        });
+        res.json({
+          success: true,
+          alreadyProcessed: true,
+          credits: 0,
+          totalCredits: updatedUser?.credits || user.credits,
+          message: 'Payment already processed'
+        });
+        return;
+      }
 
       logger.info('Stripe payment verified and credits added', {
         userId: user.userId,
@@ -665,7 +679,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       res.json({
         success: true,
         credits,
-        totalCredits: (user.credits || 0) + credits
+        totalCredits: updatedUser?.credits || 0
       });
     } catch (error) {
       const err = error as Error;

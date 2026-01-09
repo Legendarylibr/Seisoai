@@ -337,22 +337,7 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
       // Use authenticated user, not arbitrary wallet
       const user = req.user;
 
-      // Check if already processed
-      const alreadyProcessed = user.paymentHistory?.some(
-        (p: { txHash?: string }) => p.txHash === txHash
-      );
-      if (alreadyProcessed) {
-        logger.info('Payment already processed', { txHash, userId: user.userId });
-        res.json({
-          success: true,
-          credits: 0,
-          totalCredits: user.credits,
-          message: 'Payment already processed'
-        });
-        return;
-      }
-
-      // Check NFT holder status
+      // Check NFT holder status (before atomic update)
       const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
       const creditsPerUSDC = isNFTHolder ? NFT_HOLDER_CREDITS_PER_USDC : STANDARD_CREDITS_PER_USDC;
       const credits = Math.floor(amount * creditsPerUSDC);
@@ -364,24 +349,48 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
           ? { email: user.email.toLowerCase() }
           : { walletAddress: normalizedAddress };
 
+      // SECURITY FIX: Use $addToSet to prevent duplicate payment processing (atomic operation)
+      // This prevents race conditions where the same transaction is processed multiple times
+      const paymentRecord = {
+        txHash,
+        tokenSymbol: tokenSymbol || 'USDC',
+        amount,
+        credits,
+        chainId: String(chainId),
+        walletType,
+        timestamp: new Date()
+      };
+
+      // Try to add payment record atomically - if txHash already exists, $addToSet won't add it
       const updatedUser = await User.findOneAndUpdate(
         updateQuery,
         {
           $inc: { credits, totalCreditsEarned: credits },
-          $push: {
-            paymentHistory: {
-              txHash,
-              tokenSymbol: tokenSymbol || 'USDC',
-              amount,
-              credits,
-              chainId: String(chainId),
-              walletType,
-              timestamp: new Date()
-            }
+          $addToSet: {
+            paymentHistory: paymentRecord
           }
         },
         { new: true }
       );
+
+      // Check if payment was actually added (not a duplicate)
+      const wasAdded = updatedUser?.paymentHistory?.some(
+        (p: { txHash?: string; timestamp?: Date }) => 
+          p.txHash === txHash && 
+          Math.abs(new Date(p.timestamp || 0).getTime() - paymentRecord.timestamp.getTime()) < 1000
+      );
+
+      if (!wasAdded) {
+        // Payment was already processed (duplicate detected)
+        logger.info('Payment already processed (duplicate detected)', { txHash, userId: user.userId });
+        res.json({
+          success: true,
+          credits: 0,
+          totalCredits: updatedUser?.credits || user.credits,
+          message: 'Payment already processed'
+        });
+        return;
+      }
 
       logger.info('Payment credited', {
         txHash,

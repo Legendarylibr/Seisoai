@@ -144,7 +144,12 @@ const userSchema = new mongoose.Schema<IUser>({
   credits: { 
     type: Number, 
     default: 0,
-    min: [0, 'Credits cannot be negative']
+    min: [0, 'Credits cannot be negative'],
+    // SECURITY: Add validation to ensure credits never go negative
+    validate: {
+      validator: function(v: number) { return v >= 0; },
+      message: 'Credits cannot be negative'
+    }
   },
   totalCreditsEarned: { 
     type: Number, 

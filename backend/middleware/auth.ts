@@ -141,12 +141,23 @@ export const createAuthenticateToken = (
       }
       
       const User = getUserModel();
-      const user = await User.findOne({
-        $or: [
-          { userId: decoded.userId },
-          { email: decoded.email }
-        ]
-      }).select('-password -generationHistory -gallery -paymentHistory').maxTimeMS(5000);
+      // SECURITY FIX: Prefer userId lookup (more reliable) over email
+      // userId is unique and doesn't have encryption/decryption complexity
+      let user = null;
+      if (decoded.userId) {
+        user = await User.findOne({ userId: decoded.userId })
+          .select('-password -generationHistory -gallery -paymentHistory')
+          .maxTimeMS(5000);
+      }
+      
+      // Fallback to emailHash lookup if userId not found and email provided
+      if (!user && decoded.email) {
+        const { createEmailHash } = await import('../utils/emailHash.js');
+        const emailHash = createEmailHash(decoded.email);
+        user = await User.findOne({ emailHash })
+          .select('-password -generationHistory -gallery -paymentHistory')
+          .maxTimeMS(5000);
+      }
 
       if (!user) {
         res.status(401).json({

@@ -30,8 +30,9 @@ export function createUserRoutes(deps: Dependencies = {}) {
   /**
    * Get user info
    * POST /api/user/info
+   * SECURITY FIX: Only returns public data unless authenticated user requests their own data
    */
-  router.post('/info', async (req: Request, res: Response) => {
+  router.post('/info', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { walletAddress, userId, email } = req.body as {
         walletAddress?: string;
@@ -39,9 +40,9 @@ export function createUserRoutes(deps: Dependencies = {}) {
         email?: string;
       };
       
-      const user = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
+      const requestedUser = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
       
-      if (!user) {
+      if (!requestedUser) {
         res.json({
           success: true,
           user: null
@@ -49,17 +50,35 @@ export function createUserRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      res.json({
-        success: true,
-        user: {
-          userId: user.userId,
-          email: user.email,
-          walletAddress: user.walletAddress,
-          credits: user.credits,
-          totalCreditsEarned: user.totalCreditsEarned,
-          totalCreditsSpent: user.totalCreditsSpent
-        }
-      });
+      // SECURITY: If authenticated, only return full data for own account
+      // Otherwise, return only public data
+      if (req.user && (req.user.userId === requestedUser.userId || 
+                       req.user.email === requestedUser.email ||
+                       (req.user.walletAddress && req.user.walletAddress.toLowerCase() === requestedUser.walletAddress?.toLowerCase()))) {
+        // Authenticated user requesting their own data - return full info
+        res.json({
+          success: true,
+          user: {
+            userId: requestedUser.userId,
+            email: requestedUser.email,
+            walletAddress: requestedUser.walletAddress,
+            credits: requestedUser.credits,
+            totalCreditsEarned: requestedUser.totalCreditsEarned,
+            totalCreditsSpent: requestedUser.totalCreditsSpent
+          }
+        });
+      } else {
+        // Public data only (no authentication or different user)
+        res.json({
+          success: true,
+          user: {
+            userId: requestedUser.userId,
+            walletAddress: requestedUser.walletAddress,
+            // DO NOT return: email, credits (sensitive data)
+            isNFTHolder: requestedUser.nftCollections && requestedUser.nftCollections.length > 0
+          }
+        });
+      }
     } catch (error) {
       const err = error as Error;
       logger.error('User info error:', { error: err.message });
@@ -158,27 +177,21 @@ export function createUserRoutes(deps: Dependencies = {}) {
   /**
    * Get user gallery
    * POST /api/user/gallery OR /api/gallery/get
+   * SECURITY FIX: Only returns gallery for authenticated user to prevent IDOR
    */
-  router.post('/gallery', authMiddleware, async (req: Request, res: Response) => {
+  router.post('/gallery', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { walletAddress, userId, email } = req.body as {
-        walletAddress?: string;
-        userId?: string;
-        email?: string;
-      };
-      
-      const user = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
-      
-      if (!user) {
-        res.json({
-          success: true,
-          gallery: []
+      // SECURITY: Only return gallery for authenticated user
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
         });
         return;
       }
 
       const User = mongoose.model<IUser>('User');
-      const userWithGallery = await User.findOne({ userId: user.userId })
+      const userWithGallery = await User.findOne({ userId: req.user.userId })
         .select('gallery')
         .lean();
 
@@ -199,13 +212,20 @@ export function createUserRoutes(deps: Dependencies = {}) {
   /**
    * Save to gallery
    * POST /api/user/gallery/save OR /api/gallery/save
+   * SECURITY FIX: Only allows saving to authenticated user's gallery
    */
-  router.post('/gallery/save', authMiddleware, async (req: Request, res: Response) => {
+  router.post('/gallery/save', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { walletAddress, userId, email, imageUrl, prompt, model } = req.body as {
-        walletAddress?: string;
-        userId?: string;
-        email?: string;
+      // SECURITY: Only allow saving to authenticated user's gallery
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const { imageUrl, prompt, model } = req.body as {
         imageUrl?: string;
         prompt?: string;
         model?: string;
@@ -219,19 +239,9 @@ export function createUserRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const user = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
-      
-      if (!user) {
-        res.status(404).json({
-          success: false,
-          error: 'User not found'
-        });
-        return;
-      }
-
       const User = mongoose.model<IUser>('User');
       await User.findOneAndUpdate(
-        { userId: user.userId },
+        { userId: req.user.userId },
         {
           $push: {
             gallery: {
