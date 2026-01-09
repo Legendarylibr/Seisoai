@@ -177,12 +177,14 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
 
   // Process the queue
   const processQueue = useCallback(async () => {
-    if (!prompt.trim()) {
-      return;
-    }
-
     const pendingItems = queue.filter(item => item.status === 'pending');
     if (pendingItems.length === 0) return;
+    
+    // Check if we have items with variation prompts or a base prompt
+    const hasVariationsToProcess = pendingItems.some(item => item.variationPrompt);
+    if (!prompt.trim() && !hasVariationsToProcess) {
+      return;
+    }
 
     setIsProcessing(true);
     setIsPaused(false);
@@ -286,6 +288,9 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
   const completedCount = queue.filter(i => i.status === 'completed').length;
   const failedCount = queue.filter(i => i.status === 'failed').length;
   const processingItem = queue.find(i => i.status === 'processing');
+  
+  // Check if any pending items have variation prompts (can start without main prompt)
+  const hasVariationItems = queue.some(i => i.status === 'pending' && i.variationPrompt);
 
   const isAuthenticated = isConnected || isEmailAuth;
 
@@ -476,15 +481,15 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
 
                 {/* Category Selection */}
                 <div>
-                  <label className="text-[9px] font-bold block mb-1" style={{ color: WIN95.text }}>
+                  <label className="text-[10px] font-bold block mb-1.5" style={{ color: WIN95.text }}>
                     Randomize these elements:
                   </label>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-1.5">
                     {VARIATION_CATEGORIES.map(category => (
                       <button
                         key={category.id}
                         onClick={() => toggleCategory(category.id)}
-                        className="px-1.5 py-0.5 text-[9px] flex items-center gap-1"
+                        className="px-2.5 py-1.5 text-[11px] flex items-center gap-1.5"
                         style={{
                           background: enabledCategories.includes(category.id) ? '#000080' : WIN95.bg,
                           color: enabledCategories.includes(category.id) ? '#ffffff' : WIN95.text,
@@ -495,7 +500,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                         }}
                         title={category.description}
                       >
-                        <span>{category.icon}</span>
+                        <span className="text-sm">{category.icon}</span>
                         <span>{category.name}</span>
                       </button>
                     ))}
@@ -578,7 +583,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                   <img 
                     src={item.resultUrl || item.imageDataUrl} 
                     alt={item.fileName}
-                    className="w-8 h-8 object-cover"
+                    className="w-10 h-10 object-cover flex-shrink-0"
                     style={{ 
                       boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
                     }}
@@ -593,13 +598,13 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                       {item.fileName}
                     </span>
                     {item.appliedVariations && Object.keys(item.appliedVariations).length > 0 && (
-                      <div className="flex flex-wrap gap-0.5 mt-0.5">
+                      <div className="flex flex-wrap gap-1 mt-0.5">
                         {Object.entries(item.appliedVariations).map(([catId, _variation]) => {
                           const cat = VARIATION_CATEGORIES.find(c => c.id === catId);
                           return cat ? (
                             <span 
                               key={catId}
-                              className="text-[7px] px-1 py-0"
+                              className="text-[9px] px-1.5 py-0.5"
                               style={{
                                 background: '#000080',
                                 color: '#ffffff',
@@ -676,9 +681,9 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
             {!isProcessing ? (
               <button
                 onClick={processQueue}
-                disabled={pendingCount === 0 || !prompt.trim() || !isAuthenticated || !hasEnoughCredits}
+                disabled={pendingCount === 0 || (!prompt.trim() && !hasVariationItems) || !isAuthenticated || !hasEnoughCredits}
                 className="flex items-center gap-1 px-3 py-1 text-[10px] font-bold"
-                style={(pendingCount === 0 || !prompt.trim() || !isAuthenticated || !hasEnoughCredits) ? BTN.disabled : {
+                style={(pendingCount === 0 || (!prompt.trim() && !hasVariationItems) || !isAuthenticated || !hasEnoughCredits) ? BTN.disabled : {
                   background: 'linear-gradient(180deg, #1084d0 0%, #000080 100%)',
                   color: '#ffffff',
                   border: 'none',
