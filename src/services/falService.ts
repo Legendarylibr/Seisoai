@@ -125,39 +125,7 @@ export const generateImage = async (
       numImages = 1
     } = advancedSettings;
 
-    // Build optimized prompt - avoid unnecessary concatenation
-    let basePrompt = '';
-    
-    // Determine if we have reference images
-    const hasRefImage = referenceImage && (
-      (Array.isArray(referenceImage) && referenceImage.length > 0) ||
-      (typeof referenceImage === 'string' && referenceImage.trim().length > 0)
-    );
-    
-    // If we have a custom prompt, use it as the base
-    const trimmedPrompt = customPrompt && typeof customPrompt === 'string' ? customPrompt.trim() : '';
-    if (trimmedPrompt.length > 0) {
-      basePrompt = trimmedPrompt;
-      
-      // Add style prompt only if we have a style and it adds value
-      if (style?.id) {
-        const stylePrompt = getStylePrompt(style.id);
-        if (stylePrompt && stylePrompt !== 'artistic colors and lighting') {
-          basePrompt = `${basePrompt}, ${stylePrompt}`;
-        }
-      }
-    } else if (hasRefImage) {
-      // For image-to-image with no prompt: create variations preserving pose and position
-      basePrompt = 'create variations of all features except pose and position';
-    } else if (style?.id) {
-      // If no custom prompt but we have a style, use the style prompt
-      basePrompt = getStylePrompt(style.id);
-    } else {
-      // If no prompt and no style, use a default
-      basePrompt = 'artistic image, high quality, detailed';
-    }
-    
-    // Determine image count and type for model selection
+    // Determine image count and type for model selection first (needed for prompt logic)
     // 0 images: text-to-image
     // 1 image: image-to-image (single)
     // 2+ images: multi-image
@@ -190,6 +158,32 @@ export const generateImage = async (
     
     // Choose the right endpoint based on image count
     const hasRefImage = imageCount > 0;
+    
+    // Build optimized prompt - avoid unnecessary concatenation
+    let basePrompt = '';
+    
+    // If we have a custom prompt, use it as the base
+    const trimmedPrompt = customPrompt && typeof customPrompt === 'string' ? customPrompt.trim() : '';
+    if (trimmedPrompt.length > 0) {
+      basePrompt = trimmedPrompt;
+      
+      // Add style prompt only if we have a style and it adds value
+      if (style?.id) {
+        const stylePrompt = getStylePrompt(style.id);
+        if (stylePrompt && stylePrompt !== 'artistic colors and lighting') {
+          basePrompt = `${basePrompt}, ${stylePrompt}`;
+        }
+      }
+    } else if (hasRefImage) {
+      // For image-to-image with no prompt: create variations preserving pose and position
+      basePrompt = 'create variations of all features except pose and position';
+    } else if (style?.id) {
+      // If no custom prompt but we have a style, use the style prompt
+      basePrompt = getStylePrompt(style.id);
+    } else {
+      // If no prompt and no style, use a default
+      basePrompt = 'artistic image, high quality, detailed';
+    }
     
     // Generate random seed each time
     const randomSeed = Math.floor(Math.random() * 2147483647);
