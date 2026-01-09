@@ -81,6 +81,9 @@ export interface IUser extends Document {
   lastActive: Date;
   createdAt: Date;
   expiresAt: Date;
+  // SECURITY: Account lockout fields for brute force protection
+  failedLoginAttempts?: number;
+  lockoutUntil?: Date;
   // Virtual field to track if email was decrypted
   _emailDecrypted?: boolean;
 }
@@ -220,7 +223,10 @@ const userSchema = new mongoose.Schema<IUser>({
   },
   lastActive: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now },
-  expiresAt: { type: Date, default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) }
+  expiresAt: { type: Date, default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+  // SECURITY: Account lockout fields for brute force protection
+  failedLoginAttempts: { type: Number, default: 0, min: 0 },
+  lockoutUntil: { type: Date, required: false }
 }, {
   timestamps: true
 });

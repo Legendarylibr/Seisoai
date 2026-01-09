@@ -142,15 +142,16 @@ app.use(compression());
 const parseAllowedOrigins = (): string[] | true => {
   const originsEnv = config.ALLOWED_ORIGINS;
   
-  // SECURITY WARNING: Permissive CORS in production is a CRITICAL security risk
-  // It allows any website to make authenticated requests to your API
+  // SECURITY FIX: Fail startup in production if ALLOWED_ORIGINS is not set
   if (config.isProduction && (!originsEnv || originsEnv.trim() === '' || originsEnv === '*')) {
-    logger.error('🚨 CRITICAL SECURITY WARNING: CORS is permissive in production!');
-    logger.error('🚨 This allows ANY website to make authenticated requests to your API!');
+    logger.error('🚨 CRITICAL SECURITY ERROR: ALLOWED_ORIGINS must be set in production!');
+    logger.error('🚨 Permissive CORS allows ANY website to make authenticated requests to your API!');
+    logger.error('🚨 This is a CRITICAL security vulnerability!');
     logger.error('🚨 Set ALLOWED_ORIGINS environment variable immediately!');
     logger.error('🚨 Example: ALLOWED_ORIGINS=https://seisoai.com,https://www.seisoai.com');
     logger.error('🚨 Current value:', { ALLOWED_ORIGINS: originsEnv || '(empty)' });
-    // In production, still allow but log loudly - operators MUST fix this
+    logger.error('🚨 Server will NOT start until this is fixed.');
+    process.exit(1); // Fail fast - do not start with insecure configuration
   }
   
   if (!originsEnv || originsEnv.trim() === '' || originsEnv === '*') {
@@ -180,8 +181,9 @@ app.use(cors({
 // Body parsing
 // Stripe webhook needs raw body
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
-// Audio routes need larger body limit for video uploads (100MB video = ~133MB base64)
-app.use('/api/audio', express.json({ limit: '150mb' }));
+// SECURITY FIX: Reduced from 150mb to 50mb to prevent DoS attacks
+// Audio routes need larger body limit for video uploads, but 50MB is sufficient
+app.use('/api/audio', express.json({ limit: '50mb' }));
 // Default limit for other routes
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

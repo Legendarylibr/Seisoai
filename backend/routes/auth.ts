@@ -205,6 +205,21 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         return;
       }
 
+      // SECURITY FIX: Check for account lockout (brute force protection)
+      const lockoutUntil = (user as { lockoutUntil?: Date }).lockoutUntil;
+      if (lockoutUntil && new Date(lockoutUntil) > new Date()) {
+        const minutesRemaining = Math.ceil((new Date(lockoutUntil).getTime() - Date.now()) / 60000);
+        logger.warn('Account locked - too many failed login attempts', {
+          emailHash: emailHash.substring(0, 8) + '...',
+          minutesRemaining
+        });
+        res.status(423).json({
+          success: false,
+          error: `Account temporarily locked due to too many failed login attempts. Please try again in ${minutesRemaining} minute(s).`
+        });
+        return;
+      }
+
       // Check if user has a password set (wallet-only users may not have one)
       if (!user.password) {
         res.status(401).json({
@@ -216,11 +231,58 @@ export function createAuthRoutes(deps: Dependencies = {}) {
 
       const isValid = await bcrypt.compare(password, user.password);
       if (!isValid) {
+        // SECURITY FIX: Track failed login attempts and lock account after 5 failures
+        const failedAttempts = ((user as { failedLoginAttempts?: number }).failedLoginAttempts || 0) + 1;
+        const MAX_FAILED_ATTEMPTS = 5;
+        const LOCKOUT_DURATION_MINUTES = 30;
+
+        if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
+          const lockoutUntil = new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000);
+          await User.updateOne(
+            { _id: user._id },
+            {
+              $set: {
+                failedLoginAttempts: failedAttempts,
+                lockoutUntil
+              }
+            }
+          );
+          logger.warn('Account locked due to too many failed login attempts', {
+            emailHash: emailHash.substring(0, 8) + '...',
+            failedAttempts,
+            lockoutUntil
+          });
+          res.status(423).json({
+            success: false,
+            error: `Too many failed login attempts. Account locked for ${LOCKOUT_DURATION_MINUTES} minutes.`
+          });
+          return;
+        } else {
+          // Increment failed attempts
+          await User.updateOne(
+            { _id: user._id },
+            { $inc: { failedLoginAttempts: 1 } }
+          );
+        }
+
         res.status(401).json({
           success: false,
           error: 'Invalid email or password'
         });
         return;
+      }
+
+      // SECURITY FIX: Reset failed login attempts on successful login
+      if ((user as { failedLoginAttempts?: number }).failedLoginAttempts || (user as { lockoutUntil?: Date }).lockoutUntil) {
+        await User.updateOne(
+          { _id: user._id },
+          {
+            $unset: {
+              failedLoginAttempts: '',
+              lockoutUntil: ''
+            }
+          }
+        );
       }
 
       // Generate tokens
@@ -319,7 +381,7 @@ export function createAuthRoutes(deps: Dependencies = {}) {
       if (accessToken && JWT_SECRET) {
         try {
           const decoded = jwt.verify(accessToken, JWT_SECRET) as JWTDecoded;
-          blacklistToken(accessToken, decoded.exp ? decoded.exp * 1000 : null);
+          await blacklistToken(accessToken, decoded.exp ? decoded.exp * 1000 : null);
           tokensRevoked++;
         } catch {
           // Token already invalid
@@ -329,7 +391,7 @@ export function createAuthRoutes(deps: Dependencies = {}) {
       if (refreshToken && JWT_REFRESH_SECRET) {
         try {
           const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as JWTDecoded;
-          blacklistToken(refreshToken, decoded.exp ? decoded.exp * 1000 : null);
+          await blacklistToken(refreshToken, decoded.exp ? decoded.exp * 1000 : null);
           tokensRevoked++;
         } catch {
           // Token already invalid
@@ -362,6 +424,16 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         res.status(400).json({
           success: false,
           error: 'Refresh token required'
+        });
+        return;
+      }
+
+      // SECURITY FIX: Check if refresh token is blacklisted
+      const { isTokenBlacklisted } = await import('../middleware/auth.js');
+      if (await isTokenBlacklisted(refreshToken)) {
+        res.status(401).json({
+          success: false,
+          error: 'Refresh token has been revoked. Please sign in again.'
         });
         return;
       }

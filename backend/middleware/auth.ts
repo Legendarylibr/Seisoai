@@ -29,24 +29,68 @@ interface AuthenticatedRequest extends Request {
 }
 
 // Token blacklist for logout/revocation
+// SECURITY FIX: Use Redis for persistent blacklist, fallback to in-memory cache
 const tokenBlacklist = new LRUCache<string, TokenBlacklistEntry>(CACHE.TOKEN_BLACKLIST_SIZE);
+
+// Lazy import Redis to avoid circular dependencies
+let redisService: typeof import('../services/redis.js') | null = null;
+async function getRedisService() {
+  if (!redisService) {
+    redisService = await import('../services/redis.js');
+  }
+  return redisService;
+}
 
 /**
  * Check if a token has been revoked/blacklisted
+ * SECURITY FIX: Checks Redis first (persistent), then in-memory cache (fallback)
  */
-export const isTokenBlacklisted = (token: string | undefined): boolean => {
+export const isTokenBlacklisted = async (token: string | undefined): Promise<boolean> => {
   if (!token) return false;
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex').substring(0, 32);
+  
+  // Check Redis first (persistent across restarts)
+  try {
+    const redis = await getRedisService();
+    if (redis && redis.isRedisConnected()) {
+      const blacklisted = await redis.cacheExists(`token:blacklist:${tokenHash}`, { prefix: '' });
+      if (blacklisted) {
+        return true;
+      }
+    }
+  } catch (error) {
+    logger.debug('Redis blacklist check failed, using in-memory cache', { error: (error as Error).message });
+  }
+  
+  // Fallback to in-memory cache
   return tokenBlacklist.has(tokenHash);
 };
 
 /**
  * Add a token to the blacklist (for logout/revocation)
+ * SECURITY FIX: Stores in Redis (persistent) and in-memory cache (fallback)
  */
-export const blacklistToken = (token: string | undefined, expiresAt: number | null = null): void => {
+export const blacklistToken = async (token: string | undefined, expiresAt: number | null = null): Promise<void> => {
   if (!token) return;
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex').substring(0, 32);
-  tokenBlacklist.set(tokenHash, { blacklistedAt: Date.now(), expiresAt });
+  const entry: TokenBlacklistEntry = { blacklistedAt: Date.now(), expiresAt };
+  
+  // Store in Redis (persistent across restarts)
+  try {
+    const redis = await getRedisService();
+    if (redis && redis.isRedisConnected()) {
+      const ttl = expiresAt ? Math.max(0, Math.floor((expiresAt - Date.now()) / 1000)) : 7 * 24 * 60 * 60; // 7 days default
+      await redis.cacheSet(`token:blacklist:${tokenHash}`, entry, { 
+        prefix: '', 
+        ttl: ttl > 0 ? ttl : 7 * 24 * 60 * 60 
+      });
+    }
+  } catch (error) {
+    logger.debug('Redis blacklist store failed, using in-memory cache only', { error: (error as Error).message });
+  }
+  
+  // Also store in in-memory cache (fast lookup fallback)
+  tokenBlacklist.set(tokenHash, entry);
   logger.debug('Token blacklisted', { tokenHash: tokenHash.substring(0, 8) + '...' });
 };
 
@@ -70,7 +114,7 @@ export const createAuthenticateToken = (
         return;
       }
 
-      if (isTokenBlacklisted(token)) {
+      if (await isTokenBlacklisted(token)) {
         res.status(401).json({
           success: false,
           error: 'Token has been revoked. Please sign in again.'
@@ -142,7 +186,7 @@ export const createAuthenticateFlexible = (
 
       // JWT authentication (required)
       if (token && jwtSecret) {
-        if (isTokenBlacklisted(token)) {
+        if (await isTokenBlacklisted(token)) {
           res.status(401).json({
             success: false,
             error: 'Token has been revoked. Please sign in again.'

@@ -23,13 +23,14 @@ interface UserQuery {
   userId?: string;
 }
 
-// Admin rate limiter - 10 requests per 15 minutes per IP
+// Admin rate limiter - 5 requests per 15 minutes per IP (tightened for security)
 const adminRateLimiter: RequestHandler = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 5, // SECURITY FIX: Reduced from 10 to 5 to prevent brute force attacks
   message: { success: false, error: 'Too many admin requests, please try again later.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skipSuccessfulRequests: false // Count all requests, not just failures
 });
 
 export function createAdminRoutes(deps: Dependencies = {}) {
@@ -48,16 +49,31 @@ export function createAdminRoutes(deps: Dependencies = {}) {
     }
     
     const authHeader = req.headers.authorization;
-    const isProduction = process.env.NODE_ENV === 'production';
     
-    // SECURITY: In production, only accept admin secret via Authorization header
-    // Request body secrets could be logged and pose a security risk
-    let providedSecret: string | undefined;
-    if (authHeader) {
-      providedSecret = authHeader.replace('Bearer ', '');
-    } else if (!isProduction) {
-      // Development only: allow secret in request body for convenience
-      providedSecret = (req.body as { adminSecret?: string }).adminSecret;
+    // SECURITY FIX: Only accept admin secret via Authorization header
+    // Request body secrets could be logged in proxies, load balancers, or application logs
+    // This is a critical security vulnerability - never accept secrets in request body
+    if (!authHeader) {
+      logger.warn('Failed admin authentication attempt - no Authorization header', { 
+        ip: req.ip,
+        path: req.path,
+        method: req.method
+      });
+      res.status(403).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+    
+    const providedSecret = authHeader.replace('Bearer ', '').trim();
+    
+    // SECURITY: Log attempts to use admin secret in request body (security monitoring)
+    const bodySecret = (req.body as { adminSecret?: string }).adminSecret;
+    if (bodySecret) {
+      logger.warn('SECURITY: Admin secret provided in request body - this is not allowed', {
+        ip: req.ip,
+        path: req.path,
+        method: req.method,
+        hasAuthHeader: !!authHeader
+      });
     }
     
     if (!providedSecret || providedSecret !== ADMIN_SECRET) {
@@ -65,8 +81,7 @@ export function createAdminRoutes(deps: Dependencies = {}) {
         ip: req.ip,
         path: req.path,
         method: req.method,
-        hasAuthHeader: !!authHeader,
-        isProduction
+        hasAuthHeader: !!authHeader
       });
       res.status(403).json({ success: false, error: 'Unauthorized' });
       return;
