@@ -39,9 +39,16 @@ export interface CreditPackage {
 // Initialize Stripe with error handling
 // Accepts live keys in production, test or live keys in development
 const getStripePublishableKey = (): string | null => {
-  const key = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-  if (!key || key.includes('your_stripe_publishable_key_here')) {
-    logger.warn('Stripe publishable key not configured');
+  const key = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
+  
+  // Debug: log key presence (not the actual key for security)
+  if (!key) {
+    logger.warn('Stripe publishable key not configured - VITE_STRIPE_PUBLISHABLE_KEY is empty or undefined');
+    return null;
+  }
+  
+  if (key.includes('your_stripe_publishable_key_here')) {
+    logger.warn('Stripe publishable key contains placeholder text');
     return null;
   }
   

@@ -22,7 +22,10 @@ cacheDirectories = ['node_modules', 'backend/node_modules', '.npm']
 # Build frontend with production optimizations
 cmds = [
     'rm -rf dist',
-    'echo "VITE_STRIPE_PUBLISHABLE_KEY is: ${VITE_STRIPE_PUBLISHABLE_KEY:0:20}..."',
+    'echo "=== Build Environment Check ==="',
+    'echo "VITE_STRIPE_PUBLISHABLE_KEY length: ${#VITE_STRIPE_PUBLISHABLE_KEY}"',
+    'echo "VITE_STRIPE_PUBLISHABLE_KEY prefix: ${VITE_STRIPE_PUBLISHABLE_KEY:0:8}..."',
+    'if [ -z "$VITE_STRIPE_PUBLISHABLE_KEY" ]; then echo "WARNING: VITE_STRIPE_PUBLISHABLE_KEY is NOT set!"; else echo "OK: VITE_STRIPE_PUBLISHABLE_KEY is set"; fi',
     'NODE_ENV=production npm run build',
     # Prune devDependencies after build to reduce image size
     'npm prune --omit=dev',

@@ -612,10 +612,14 @@ export function createGenerationRoutes(deps: Dependencies) {
         optimizePrompt?: boolean;
       };
 
-      if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+      // Prompt is required for text-to-image, optional for image-to-image
+      const hasImages = image_url || (image_urls && Array.isArray(image_urls) && image_urls.length > 0);
+      const trimmedPrompt = (prompt && typeof prompt === 'string') ? prompt.trim() : '';
+      
+      if (!hasImages && !trimmedPrompt) {
         res.status(400).json({
           success: false,
-          error: 'prompt is required and must be a non-empty string'
+          error: 'prompt is required for text-to-image generation'
         });
         return;
       }
@@ -623,34 +627,34 @@ export function createGenerationRoutes(deps: Dependencies) {
       // Determine image inputs first for optimization decision
       const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
       const isSingleImage = image_url || (image_urls && image_urls.length === 1);
-      const hasImages = isMultipleImages || isSingleImage;
       const isFlux2Model = model === 'flux-2';
       
       // Apply FLUX 2 prompt optimization if requested
-      let finalPrompt = prompt.trim();
+      // For image-to-image with no prompt, use a generic edit prompt
+      let finalPrompt = trimmedPrompt || (hasImages ? 'enhance and refine the image' : '');
       let promptOptimizationResult: ImageEditOptimizationResult | Flux2T2IOptimizationResult | null = null;
       
-      if (optimizePrompt && isFlux2Model) {
+      if (optimizePrompt && isFlux2Model && trimmedPrompt) {
         try {
           if (hasImages) {
             // Use edit-specific optimization for image editing
-            promptOptimizationResult = await optimizePromptForFlux2Edit(prompt.trim());
+            promptOptimizationResult = await optimizePromptForFlux2Edit(trimmedPrompt);
             
             if (promptOptimizationResult && !promptOptimizationResult.skipped && promptOptimizationResult.optimizedPrompt) {
               finalPrompt = promptOptimizationResult.optimizedPrompt;
               logger.debug('FLUX 2 prompt optimized for editing', { 
-                original: prompt.substring(0, 50),
+                original: trimmedPrompt.substring(0, 50),
                 optimized: finalPrompt.substring(0, 50)
               });
             }
           } else {
             // Use text-to-image optimization for generation
-            promptOptimizationResult = await optimizePromptForFlux2T2I(prompt.trim());
+            promptOptimizationResult = await optimizePromptForFlux2T2I(trimmedPrompt);
             
             if (promptOptimizationResult && !promptOptimizationResult.skipped && promptOptimizationResult.optimizedPrompt) {
               finalPrompt = promptOptimizationResult.optimizedPrompt;
               logger.debug('FLUX 2 prompt optimized for text-to-image', { 
-                original: prompt.substring(0, 50),
+                original: trimmedPrompt.substring(0, 50),
                 optimized: finalPrompt.substring(0, 50)
               });
             }
@@ -688,7 +692,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       
       if (isNanoBananaPro) {
         requestBody = {
-          prompt: prompt.trim(),
+          prompt: finalPrompt,
           resolution: '1K'
         };
         if (isMultipleImages) {
@@ -761,7 +765,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       } else {
         // FLUX Kontext API format
         requestBody = {
-          prompt: prompt.trim(),
+          prompt: finalPrompt,
           guidance_scale: guidanceScale,
           num_images: numImages,
           output_format: 'jpeg',
@@ -838,7 +842,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       // Include prompt optimization details if optimization was performed for FLUX 2
       if (promptOptimizationResult && !promptOptimizationResult.skipped) {
         responseData.promptOptimization = {
-          originalPrompt: prompt.trim(),
+          originalPrompt: trimmedPrompt,
           optimizedPrompt: promptOptimizationResult.optimizedPrompt,
           reasoning: promptOptimizationResult.reasoning
         };

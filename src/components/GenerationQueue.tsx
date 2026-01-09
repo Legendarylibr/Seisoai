@@ -180,11 +180,8 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
     const pendingItems = queue.filter(item => item.status === 'pending');
     if (pendingItems.length === 0) return;
     
-    // Check if we have items with variation prompts or a base prompt
-    const hasVariationsToProcess = pendingItems.some(item => item.variationPrompt);
-    if (!prompt.trim() && !hasVariationsToProcess) {
-      return;
-    }
+    // Images can now be processed without a prompt (image-to-image enhancement)
+    // Variation mode still requires a prompt since variations modify the prompt
 
     setIsProcessing(true);
     setIsPaused(false);
@@ -458,24 +455,30 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                   <label className="text-[9px] font-bold block mb-1" style={{ color: WIN95.text }}>
                     Variations per image:
                   </label>
-                  <div className="flex gap-1">
-                    {[2, 4, 6, 8].map(count => (
-                      <button
-                        key={count}
-                        onClick={() => setVariationCount(count)}
-                        className="px-2 py-0.5 text-[10px]"
-                        style={{
-                          background: variationCount === count ? '#000080' : WIN95.bg,
-                          color: variationCount === count ? '#ffffff' : WIN95.text,
-                          boxShadow: variationCount === count 
-                            ? `inset 1px 1px 0 #0000a0, inset -1px -1px 0 #000060`
-                            : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
-                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                        }}
-                      >
-                        {count}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={variationCount}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val) && val >= 1 && val <= 50) {
+                          setVariationCount(val);
+                        }
+                      }}
+                      className="w-16 px-2 py-0.5 text-[11px] text-center focus:outline-none"
+                      style={{
+                        background: WIN95.inputBg,
+                        boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`,
+                        border: 'none',
+                        color: WIN95.text,
+                        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                      }}
+                    />
+                    <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                      (1-50)
+                    </span>
                   </div>
                 </div>
 
@@ -681,9 +684,9 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
             {!isProcessing ? (
               <button
                 onClick={processQueue}
-                disabled={pendingCount === 0 || (!prompt.trim() && !hasVariationItems) || !isAuthenticated || !hasEnoughCredits}
+                disabled={pendingCount === 0 || (variationMode && enabledCategories.length > 0 && !prompt.trim()) || !isAuthenticated || !hasEnoughCredits}
                 className="flex items-center gap-1 px-3 py-1 text-[10px] font-bold"
-                style={(pendingCount === 0 || (!prompt.trim() && !hasVariationItems) || !isAuthenticated || !hasEnoughCredits) ? BTN.disabled : {
+                style={(pendingCount === 0 || (variationMode && enabledCategories.length > 0 && !prompt.trim()) || !isAuthenticated || !hasEnoughCredits) ? BTN.disabled : {
                   background: 'linear-gradient(180deg, #1084d0 0%, #000080 100%)',
                   color: '#ffffff',
                   border: 'none',
