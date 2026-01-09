@@ -705,9 +705,28 @@ const ImageOutput: React.FC = () => {
             </div>
           )}
           {hasMultipleImages ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2 w-full h-full" style={{ maxHeight: '100%' }}>
+            <div 
+              className="grid gap-2 p-2 w-full h-full overflow-y-auto" 
+              style={{ 
+                maxHeight: '100%',
+                gridTemplateColumns: imagesToDisplay.length <= 2 
+                  ? 'repeat(2, 1fr)' 
+                  : imagesToDisplay.length <= 4 
+                    ? 'repeat(2, 1fr)' 
+                    : imagesToDisplay.length <= 6
+                      ? 'repeat(3, 1fr)'
+                      : 'repeat(4, 1fr)'
+              }}
+            >
               {imagesToDisplay.map((url, i) => (
-                <div key={i} className="flex items-center justify-center overflow-hidden" style={{ maxHeight: '100%' }}>
+                <div 
+                  key={i} 
+                  className="flex items-center justify-center overflow-hidden" 
+                  style={{ 
+                    maxHeight: '100%',
+                    minHeight: '150px'
+                  }}
+                >
                   <img 
                     src={url} 
                     alt={`Generated ${i + 1}`} 

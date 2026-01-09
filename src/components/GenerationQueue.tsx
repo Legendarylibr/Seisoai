@@ -4,6 +4,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { generateImage } from '../services/smartImageService';
+import { addGeneration } from '../services/galleryService';
 import { WIN95, BTN, hoverHandlers } from '../utils/buttonStyles';
 import logger from '../utils/logger';
 
@@ -182,7 +183,18 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
           item.imageDataUrl
         );
 
-        const imageUrl = Array.isArray(result) ? result[0] : (result.imageUrl || result.images?.[0]);
+        // Extract all images from result
+        let imageUrls: string[] = [];
+        if (Array.isArray(result)) {
+          imageUrls = result;
+        } else if (result.images && Array.isArray(result.images)) {
+          imageUrls = result.images;
+        } else if (result.imageUrl) {
+          imageUrls = [result.imageUrl];
+        }
+        
+        // Get the first image for the queue item display
+        const imageUrl = imageUrls[0] || '';
         
         // Update credits
         if (result.remainingCredits !== undefined) {
@@ -199,15 +211,34 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
           i.id === item.id ? { ...i, status: 'completed' as const, resultUrl: imageUrl } : i
         ));
 
-        // Update the main image display with the latest result
-        setGeneratedImage(imageUrl);
+        // Update the main image display with all results (array if multiple, single if one)
+        setGeneratedImage(imageUrls.length > 1 ? imageUrls : imageUrls[0]);
         setCurrentGeneration({
           prompt: prompt.trim(),
           style: selectedStyle || undefined,
           timestamp: new Date().toISOString()
         });
 
-        logger.info('Queue item processed successfully', { itemId: item.id });
+        // Save all images to gallery (non-blocking)
+        const promptForDisplay = promptToUse || (selectedStyle?.prompt || 'No prompt');
+        const userIdentifier = isEmailAuth ? emailContext.userId : address || '';
+        const BATCH_PREMIUM = 0.15;
+        const baseCreditsPerImage = multiImageModel === 'nano-banana-pro' ? 1.25 : 0.6;
+        const creditsPerImage = baseCreditsPerImage * (1 + BATCH_PREMIUM);
+        
+        // Save each image to gallery
+        imageUrls.forEach((imgUrl) => {
+          addGeneration(userIdentifier, {
+            prompt: promptForDisplay,
+            style: selectedStyle?.name || 'No Style',
+            imageUrl: imgUrl,
+            creditsUsed: creditsPerImage,
+            userId: isEmailAuth ? emailContext.userId : undefined,
+            email: isEmailAuth ? emailContext.email : undefined
+          }).catch(e => logger.debug('Gallery save failed', { error: e instanceof Error ? e.message : 'Unknown error' }));
+        });
+
+        logger.info('Queue item processed successfully', { itemId: item.id, imageCount: imageUrls.length });
 
       } catch (error) {
         const err = error as Error;

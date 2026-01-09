@@ -134,16 +134,22 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
       setCurrentStep('Complete!');
       setProgress(100);
       
-      // Save to gallery (non-blocking)
+      // Save all images to gallery (non-blocking)
       const promptForDisplay = trimmedPrompt || (selectedStyle?.prompt || 'No prompt');
-      addGeneration(isEmailAuth ? emailContext.userId : address || '', {
-        prompt: promptForDisplay,
-        style: selectedStyle?.name || 'No Style',
-        imageUrl: imageUrls[0],
-        creditsUsed: getCreditsForModel(multiImageModel),
-        userId: isEmailAuth ? emailContext.userId : undefined,
-        email: isEmailAuth ? emailContext.email : undefined
-      }).catch(e => logger.debug('Gallery save failed', { error: e instanceof Error ? e.message : 'Unknown error' }));
+      const userIdentifier = isEmailAuth ? emailContext.userId : address || '';
+      const creditsPerImage = getCreditsForModel(multiImageModel);
+      
+      // Save each image to gallery
+      imageUrls.forEach((imgUrl) => {
+        addGeneration(userIdentifier, {
+          prompt: promptForDisplay,
+          style: selectedStyle?.name || 'No Style',
+          imageUrl: imgUrl,
+          creditsUsed: creditsPerImage,
+          userId: isEmailAuth ? emailContext.userId : undefined,
+          email: isEmailAuth ? emailContext.email : undefined
+        }).catch(e => logger.debug('Gallery save failed', { error: e instanceof Error ? e.message : 'Unknown error' }));
+      });
       
       requestAnimationFrame(() => {
         setGeneratedImage(imageUrls.length > 1 ? imageUrls : imageUrls[0]);
