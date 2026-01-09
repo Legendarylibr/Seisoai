@@ -33,7 +33,11 @@ export async function initializeStripe(): Promise<Stripe | null> {
 
   try {
     const StripeModule = (await import('stripe')).default;
-    stripe = new StripeModule(secretKey);
+    stripe = new StripeModule(secretKey, {
+      apiVersion: '2024-12-18.acacia',
+      maxNetworkRetries: 3,
+      timeout: 30000, // 30 seconds
+    });
     logger.info(`Stripe configured with ${isTestKey ? 'TEST' : 'LIVE'} key`);
     return stripe;
   } catch (error) {
