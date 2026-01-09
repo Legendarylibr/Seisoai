@@ -8,26 +8,14 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import express from 'express';
 import mongoose from 'mongoose';
-import crypto from 'crypto';
 import logger from '../utils/logger';
 import { getStripe, calculateCredits } from '../services/stripe';
 import { findUserByIdentifier } from '../services/user';
-import { createBlindIndex, isEncryptionConfigured } from '../utils/encryption';
+import { createEmailHash } from '../utils/emailHash';
 import config from '../config/env';
 import User, { type IUser } from '../models/User';
 import Payment from '../models/Payment';
 import type Stripe from 'stripe';
-
-/**
- * Create email hash for lookups (matches model implementation)
- */
-function createEmailHash(email: string): string {
-  const normalized = email.toLowerCase().trim();
-  if (isEncryptionConfigured()) {
-    return createBlindIndex(normalized);
-  }
-  return crypto.createHash('sha256').update(normalized).digest('hex');
-}
 
 // Types
 interface Dependencies {

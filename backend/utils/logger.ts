@@ -2,6 +2,7 @@ import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { sanitizeLogObject, sanitizeLogMessage } from './logSanitizer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,11 +31,23 @@ const colors = {
 // Tell winston that you want to link the colors
 winston.addColors(colors);
 
+// Custom format to sanitize sensitive data
+const sanitizeFormat = winston.format((info) => {
+  // Sanitize the message
+  if (typeof info.message === 'string') {
+    info.message = sanitizeLogMessage(info.message);
+  }
+  // Sanitize any additional metadata
+  const sanitized = sanitizeLogObject(info) as Record<string, unknown>;
+  return { ...info, ...sanitized };
+});
+
 // Define which transports the logger must use
 const transports: winston.transport[] = [
   // Console transport
   new winston.transports.Console({
     format: winston.format.combine(
+      sanitizeFormat(),
       winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
       winston.format.colorize({ all: true }),
       winston.format.printf(
@@ -50,6 +63,7 @@ const transports: winston.transport[] = [
     maxSize: '20m',
     maxFiles: '14d',
     format: winston.format.combine(
+      sanitizeFormat(),
       winston.format.timestamp(),
       winston.format.json()
     ),
@@ -61,6 +75,7 @@ const transports: winston.transport[] = [
     maxSize: '20m',
     maxFiles: '14d',
     format: winston.format.combine(
+      sanitizeFormat(),
       winston.format.timestamp(),
       winston.format.json()
     ),
@@ -84,4 +99,3 @@ export const loggerStream = {
 };
 
 export default logger;
-

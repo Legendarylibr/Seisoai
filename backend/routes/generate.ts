@@ -7,24 +7,12 @@
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
-import crypto from 'crypto';
 import logger from '../utils/logger';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed, normalizeStatus, FAL_STATUS } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
-import { createBlindIndex, isEncryptionConfigured } from '../utils/encryption';
+import { createEmailHash } from '../utils/emailHash';
 import type { IUser } from '../models/User';
 import { calculateVideoCredits, calculateMusicCredits, calculateUpscaleCredits, calculateVideoToAudioCredits } from '../utils/creditCalculations';
-
-/**
- * Create email hash for lookups (matches model implementation)
- */
-function createEmailHash(email: string): string {
-  const normalized = email.toLowerCase().trim();
-  if (isEncryptionConfigured()) {
-    return createBlindIndex(normalized);
-  }
-  return crypto.createHash('sha256').update(normalized).digest('hex');
-}
 
 // Types
 interface Dependencies {

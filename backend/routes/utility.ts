@@ -3,6 +3,7 @@
  * Health checks, robots.txt, CORS info, logging
  */
 import { Router, type Request, type Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import config from '../config/env';
@@ -11,6 +12,15 @@ import config from '../config/env';
 interface Dependencies {
   [key: string]: unknown;
 }
+
+// Rate limiter for client logging endpoint (prevent log flooding)
+const clientLogLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 logs per minute per IP
+  message: { error: 'Too many log requests, please slow down' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 interface HealthResponse {
   status: string;
@@ -87,8 +97,9 @@ export function createUtilityRoutes(_deps: Dependencies = {}) {
   /**
    * Client error logging
    * POST /api/logs
+   * Rate limited to prevent log flooding
    */
-  router.post('/logs', (req: Request, res: Response) => {
+  router.post('/logs', clientLogLimiter, (req: Request, res: Response) => {
     const { level, message, context } = req.body as { level?: string; message?: string; context?: unknown };
     
     if (!message) {
@@ -164,4 +175,3 @@ export function createUtilityRoutes(_deps: Dependencies = {}) {
 }
 
 export default createUtilityRoutes;
-

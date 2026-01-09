@@ -96,7 +96,3 @@ export function createStaticRoutes(deps: Dependencies = {}) {
 
 export default createStaticRoutes;
 
-
-
-
-

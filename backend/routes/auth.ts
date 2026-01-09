@@ -9,24 +9,12 @@ import type { RequestHandler } from 'express';
 import bcrypt from 'bcrypt';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import crypto from 'crypto';
 import logger from '../utils/logger';
 import config from '../config/env';
 import { isDisposableEmail } from '../abusePrevention';
 import { blacklistToken } from '../middleware/auth';
-import { createBlindIndex, isEncryptionConfigured } from '../utils/encryption';
+import { createEmailHash } from '../utils/emailHash';
 import type { IUser } from '../models/User';
-
-/**
- * Create email hash for lookups (matches model implementation)
- */
-function createEmailHash(email: string): string {
-  const normalized = email.toLowerCase().trim();
-  if (isEncryptionConfigured()) {
-    return createBlindIndex(normalized);
-  }
-  return crypto.createHash('sha256').update(normalized).digest('hex');
-}
 
 // Types
 interface Dependencies {

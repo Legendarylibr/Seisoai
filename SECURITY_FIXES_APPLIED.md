@@ -85,7 +85,7 @@ const safeMeta = sanitizeLogObject(metadata);
 const safeLogger = createSafeLogger(originalLogger);
 ```
 
-**Note:** This utility is available but not yet integrated into the main logger. Consider integrating it in a future update.
+**Status:** ✅ **INTEGRATED** (2026-01-09) - Log sanitizer is now automatically applied to all log output via Winston format.
 
 ---
 

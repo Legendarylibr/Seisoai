@@ -7,26 +7,13 @@
 import mongoose, { type Model } from 'mongoose';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
-import { createBlindIndex, isEncryptionConfigured } from '../utils/encryption';
-import crypto from 'crypto';
+import { createEmailHash } from '../utils/emailHash';
 
 /**
  * Get User model (lazy load to avoid circular deps)
  */
 function getUserModel(): Model<IUser> {
   return mongoose.model<IUser>('User');
-}
-
-/**
- * Create email hash for lookups (same algorithm as model)
- */
-function createEmailHash(email: string): string {
-  const normalized = email.toLowerCase().trim();
-  if (isEncryptionConfigured()) {
-    return createBlindIndex(normalized);
-  }
-  // Fallback when encryption not configured
-  return crypto.createHash('sha256').update(normalized).digest('hex');
 }
 
 /**
