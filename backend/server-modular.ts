@@ -69,6 +69,18 @@ const app: Express = express();
 app.set('trust proxy', 1);
 
 // Security middleware - Helmet (configured for compatibility with in-app browsers like Instagram, Twitter, etc.)
+// SECURITY: CSP configuration differs between development and production
+const isDevelopment = config.isDevelopment;
+const localhostSources = isDevelopment 
+  ? ["http://localhost:3001", "http://localhost:3000", "http://localhost:5173"]
+  : [];
+
+// SECURITY: In production, restrict frameAncestors to prevent clickjacking
+// Only allow embedding from same origin and trusted domains
+const frameAncestors = isDevelopment 
+  ? ["'self'", "https:", "http:"] // Development: allow all for testing
+  : ["'self'"]; // Production: only same origin (can be extended with specific domains if needed)
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -76,12 +88,29 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://js.stripe.com"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.stripe.com", "https://checkout.stripe.com", "https://hooks.stripe.com", "https://static.cloudflareinsights.com"],
       imgSrc: ["'self'", "data:", "https:", "blob:", "https://*.stripe.com"],
-      connectSrc: ["'self'", "http://localhost:3001", "http://localhost:3000", "http://localhost:5173", "https://api.fal.ai", "https://api.mainnet-beta.solana.com", "https://solana-api.projectserum.com", "https://rpc.ankr.com", "https://solana-mainnet.g.alchemy.com", "https://mainnet.helius-rpc.com", "https://api.devnet.solana.com", "https://js.stripe.com", "https://api.stripe.com", "https://hooks.stripe.com", "https://checkout.stripe.com", "https://static.cloudflareinsights.com", "https:", "wss:"],
+      connectSrc: [
+        "'self'",
+        ...localhostSources, // Only include localhost in development
+        "https://api.fal.ai",
+        "https://api.mainnet-beta.solana.com",
+        "https://solana-api.projectserum.com",
+        "https://rpc.ankr.com",
+        "https://solana-mainnet.g.alchemy.com",
+        "https://mainnet.helius-rpc.com",
+        "https://api.devnet.solana.com",
+        "https://js.stripe.com",
+        "https://api.stripe.com",
+        "https://hooks.stripe.com",
+        "https://checkout.stripe.com",
+        "https://static.cloudflareinsights.com",
+        "https:",
+        "wss:"
+      ],
       fontSrc: ["'self'", "data:", "https://fonts.gstatic.com", "https:"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'", "data:", "blob:", "https:"],
       frameSrc: ["'self'", "https://js.stripe.com", "https://checkout.stripe.com", "https://hooks.stripe.com"],
-      frameAncestors: ["'self'", "https:", "http:"], // Allow embedding from any origin
+      frameAncestors: frameAncestors, // SECURITY: Restricted in production
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -113,22 +142,29 @@ app.use(compression());
 const parseAllowedOrigins = (): string[] | true => {
   const originsEnv = config.ALLOWED_ORIGINS;
   
-  // SECURITY WARNING: Permissive CORS in production is a security risk
+  // SECURITY WARNING: Permissive CORS in production is a CRITICAL security risk
+  // It allows any website to make authenticated requests to your API
   if (config.isProduction && (!originsEnv || originsEnv.trim() === '' || originsEnv === '*')) {
-    logger.error('SECURITY WARNING: CORS is permissive in production! Set ALLOWED_ORIGINS environment variable.');
-    logger.error('Example: ALLOWED_ORIGINS=https://yourapp.com,https://www.yourapp.com');
-    // In production, still allow but log loudly - operators should fix this
+    logger.error('🚨 CRITICAL SECURITY WARNING: CORS is permissive in production!');
+    logger.error('🚨 This allows ANY website to make authenticated requests to your API!');
+    logger.error('🚨 Set ALLOWED_ORIGINS environment variable immediately!');
+    logger.error('🚨 Example: ALLOWED_ORIGINS=https://seisoai.com,https://www.seisoai.com');
+    logger.error('🚨 Current value:', { ALLOWED_ORIGINS: originsEnv || '(empty)' });
+    // In production, still allow but log loudly - operators MUST fix this
   }
   
   if (!originsEnv || originsEnv.trim() === '' || originsEnv === '*') {
     // Permissive mode - ONLY use in development or when in-app browsers are required
+    // SECURITY: This is dangerous in production!
     return true;
   }
   return originsEnv.split(',').map(o => o.trim()).filter(o => o.length > 0);
 };
 
 const allowedOrigins = parseAllowedOrigins();
-const corsMode = allowedOrigins === true ? 'permissive - all origins allowed (SECURITY RISK in production)' : `restricted - ${(allowedOrigins as string[]).length} origins`;
+const corsMode = allowedOrigins === true 
+  ? 'permissive - all origins allowed (🚨 CRITICAL SECURITY RISK in production!)' 
+  : `restricted - ${(allowedOrigins as string[]).length} origins`;
 logger.info('CORS configuration', { mode: corsMode, isProduction: config.isProduction });
 
 app.use(cors({

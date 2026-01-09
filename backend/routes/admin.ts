@@ -48,12 +48,25 @@ export function createAdminRoutes(deps: Dependencies = {}) {
     }
     
     const authHeader = req.headers.authorization;
-    const providedSecret = authHeader?.replace('Bearer ', '') || (req.body as { adminSecret?: string }).adminSecret;
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    // SECURITY: In production, only accept admin secret via Authorization header
+    // Request body secrets could be logged and pose a security risk
+    let providedSecret: string | undefined;
+    if (authHeader) {
+      providedSecret = authHeader.replace('Bearer ', '');
+    } else if (!isProduction) {
+      // Development only: allow secret in request body for convenience
+      providedSecret = (req.body as { adminSecret?: string }).adminSecret;
+    }
     
     if (!providedSecret || providedSecret !== ADMIN_SECRET) {
       logger.warn('Failed admin authentication attempt', { 
         ip: req.ip,
-        path: req.path 
+        path: req.path,
+        method: req.method,
+        hasAuthHeader: !!authHeader,
+        isProduction
       });
       res.status(403).json({ success: false, error: 'Unauthorized' });
       return;

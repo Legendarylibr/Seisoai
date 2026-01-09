@@ -19,6 +19,8 @@ const SENSITIVE_FIELDS = [
   'jwtSecret',
   'stripeSecret',
   'webhookSecret',
+  'adminSecret',
+  'admin_secret',
   'privateKey',
   'private_key',
   'creditCard',
