@@ -352,45 +352,51 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
           </div>
 
           {/* Number of Images Input - Only show when single image is in queue */}
-          {queue.length === 1 && (
-            <div 
-              className="p-2"
-              style={{
-                background: WIN95.bg,
-                boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
-              }}
-            >
-              <label className="text-[10px] font-bold block mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                Number of Images to Generate:
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                value={numImages}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value, 10);
-                  if (!isNaN(value) && value >= 1 && value <= 10) {
-                    setNumImages(value);
-                    // Update the item in queue with new numImages
-                    setQueue(prev => prev.map(item => ({ ...item, numImages: value })));
-                  }
+          {queue.length === 1 && (() => {
+            const singleItem = queue[0];
+            const currentNumImages = singleItem.numImages || numImages;
+            return (
+              <div 
+                className="p-2"
+                style={{
+                  background: WIN95.bg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
                 }}
-                className="w-full p-1.5 text-[11px] focus:outline-none"
-                style={{ 
-                  background: WIN95.inputBg,
-                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`,
-                  border: 'none',
-                  color: WIN95.text,
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                }}
-                disabled={isProcessing}
-              />
-              <p className="text-[9px] mt-1" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                Generate multiple variations from a single image (1-10)
-              </p>
-            </div>
-          )}
+              >
+                <label className="text-[10px] font-bold block mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                  Number of Images to Generate:
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={currentNumImages}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value, 10);
+                    if (!isNaN(value) && value >= 1 && value <= 10) {
+                      setNumImages(value);
+                      // Update the item in queue with new numImages
+                      setQueue(prev => prev.map(item => 
+                        item.id === singleItem.id ? { ...item, numImages: value } : item
+                      ));
+                    }
+                  }}
+                  className="w-full p-1.5 text-[11px] focus:outline-none"
+                  style={{ 
+                    background: WIN95.inputBg,
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`,
+                    border: 'none',
+                    color: WIN95.text,
+                    fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                  }}
+                  disabled={isProcessing}
+                />
+                <p className="text-[9px] mt-1" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                  Generate multiple variations from a single image (1-10)
+                </p>
+              </div>
+            );
+          })()}
           
           {/* Info about variation mode */}
           {queue.length > 0 && (
