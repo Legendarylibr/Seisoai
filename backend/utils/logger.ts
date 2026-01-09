@@ -98,4 +98,28 @@ export const loggerStream = {
   },
 };
 
+/**
+ * Create a logger instance with request context
+ * Useful for adding request ID and other context to all logs in a request
+ */
+export function createContextLogger(context: Record<string, unknown>) {
+  return {
+    error: (message: string, meta?: Record<string, unknown>) => {
+      logger.error(message, { ...context, ...meta });
+    },
+    warn: (message: string, meta?: Record<string, unknown>) => {
+      logger.warn(message, { ...context, ...meta });
+    },
+    info: (message: string, meta?: Record<string, unknown>) => {
+      logger.info(message, { ...context, ...meta });
+    },
+    http: (message: string, meta?: Record<string, unknown>) => {
+      logger.http(message, { ...context, ...meta });
+    },
+    debug: (message: string, meta?: Record<string, unknown>) => {
+      logger.debug(message, { ...context, ...meta });
+    },
+  };
+}
+
 export default logger;

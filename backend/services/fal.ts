@@ -40,6 +40,7 @@ export async function falRequest<T = unknown>(endpoint: string, options: Request
 
   if (!response.ok) {
     const error = await response.text();
+    logger.error('FAL API request failed', { endpoint, status: response.status, error: error.substring(0, 500) });
     throw new Error(`FAL API error: ${response.status} - ${error}`);
   }
 
@@ -63,6 +64,7 @@ export async function submitToQueue<T = unknown>(model: string, input: Record<st
 
   if (!response.ok) {
     const error = await response.text();
+    logger.error('FAL queue submission failed', { model, status: response.status, error: error.substring(0, 500) });
     throw new Error(`FAL queue error: ${response.status} - ${error}`);
   }
 
@@ -91,6 +93,7 @@ export async function checkQueueStatus<T = unknown>(requestId: string, model?: s
     try {
       errorBody = await response.text();
     } catch { /* ignore */ }
+    logger.error('FAL queue status check failed', { requestId, model, status: response.status, error: errorBody.substring(0, 500) });
     throw new Error(`Status check failed: ${response.status} ${response.statusText}${errorBody ? ` - ${errorBody.substring(0, 200)}` : ''}`);
   }
 
@@ -115,6 +118,7 @@ export async function getQueueResult<T = unknown>(requestId: string, model?: str
   });
 
   if (!response.ok) {
+    logger.error('FAL queue result fetch failed', { requestId, model, status: response.status });
     throw new Error(`Result fetch failed: ${response.status}`);
   }
 
@@ -216,6 +220,7 @@ export async function uploadToFal(buffer: Buffer, mimeType: string, filename: st
 
   if (!initiateResponse.ok) {
     const error = await initiateResponse.text();
+    logger.error('FAL upload initiation failed', { filename, status: initiateResponse.status, error: error.substring(0, 500) });
     throw new Error(`Upload initiate failed: ${initiateResponse.status} - ${error}`);
   }
 
@@ -239,6 +244,7 @@ export async function uploadToFal(buffer: Buffer, mimeType: string, filename: st
 
   if (!uploadResponse.ok) {
     const error = await uploadResponse.text();
+    logger.error('FAL file upload failed', { filename, status: uploadResponse.status, error: error.substring(0, 500) });
     throw new Error(`File upload failed: ${uploadResponse.status} - ${error}`);
   }
 

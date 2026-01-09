@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import logger from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,6 +18,7 @@ dotenv.config({ path: path.join(__dirname, '..', '..', 'backend.env') });
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
+  logger.error('MONGODB_URI not set');
   console.error('❌ MONGODB_URI not set');
   process.exit(1);
 }
@@ -112,6 +114,7 @@ async function checkEmails(): Promise<void> {
     }
 
   } catch (error: any) {
+    logger.error('Email encryption check failed', { error: error.message, stack: error.stack });
     console.error('❌ Check failed:', error.message);
     process.exit(1);
   } finally {

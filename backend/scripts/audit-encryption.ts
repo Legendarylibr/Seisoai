@@ -12,6 +12,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import logger from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +24,7 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
 if (!MONGODB_URI) {
+  logger.error('MONGODB_URI not set');
   console.error('❌ MONGODB_URI not set');
   process.exit(1);
 }
@@ -338,6 +340,7 @@ async function audit(): Promise<void> {
     console.log('='.repeat(70));
 
   } catch (error: any) {
+    logger.error('Encryption audit failed', { error: error.message, stack: error.stack });
     console.error('❌ Audit failed:', error.message);
     process.exit(1);
   } finally {
