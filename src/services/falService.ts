@@ -128,6 +128,12 @@ export const generateImage = async (
     // Build optimized prompt - avoid unnecessary concatenation
     let basePrompt = '';
     
+    // Determine if we have reference images
+    const hasRefImage = referenceImage && (
+      (Array.isArray(referenceImage) && referenceImage.length > 0) ||
+      (typeof referenceImage === 'string' && referenceImage.trim().length > 0)
+    );
+    
     // If we have a custom prompt, use it as the base
     const trimmedPrompt = customPrompt && typeof customPrompt === 'string' ? customPrompt.trim() : '';
     if (trimmedPrompt.length > 0) {
@@ -140,6 +146,9 @@ export const generateImage = async (
           basePrompt = `${basePrompt}, ${stylePrompt}`;
         }
       }
+    } else if (hasRefImage) {
+      // For image-to-image with no prompt: create variations preserving pose and position
+      basePrompt = 'create variations of all features except pose and position';
     } else if (style?.id) {
       // If no custom prompt but we have a style, use the style prompt
       basePrompt = getStylePrompt(style.id);

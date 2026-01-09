@@ -1,14 +1,11 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain, Move, Wand2 } from 'lucide-react';
+import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain, Wand2 } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { generateImage } from '../services/smartImageService';
 import { WIN95, BTN, hoverHandlers } from '../utils/buttonStyles';
 import logger from '../utils/logger';
-
-// Batch mode types - simplified to just Pose and Variate
-type BatchMode = 'pose' | 'variate';
 
 interface QueueItem {
   id: string;
@@ -17,7 +14,7 @@ interface QueueItem {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   resultUrl?: string;
   error?: string;
-  batchMode: BatchMode; // Track which mode was used for this item
+  numImages?: number; // Number of images to generate for this item (only for single image)
 }
 
 interface GenerationQueueProps {
@@ -34,11 +31,9 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
   const [isPaused, setIsPaused] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [isExpanded, setIsExpanded] = useState(true);
+  const [numImages, setNumImages] = useState<number>(1); // Default number of images to generate per single image
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
-  
-  // Simplified batch mode - just Pose or Variate
-  const [batchMode, setBatchMode] = useState<BatchMode>('variate');
 
   const { isConnected, address, credits, isNFTHolder, refreshCredits, setCreditsManually } = useSimpleWallet();
   const emailContext = useEmailAuth();
@@ -82,7 +77,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
             imageDataUrl: dataUrl,
             fileName: file.name,
             status: 'pending' as const,
-            batchMode: batchMode
+            numImages: numImages // Store numImages for single image items
           });
         };
         reader.onerror = () => resolve(null);
@@ -94,7 +89,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
       const validItems = items.filter((item): item is QueueItem => item !== null);
       setQueue(prev => [...prev, ...validItems]);
     });
-  }, [queue, batchMode]);
+  }, [queue, numImages]);
 
   // Handle drag and drop
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -143,11 +138,21 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
     setIsPaused(false);
     abortRef.current = false;
 
+    // Calculate credits per image (inside function to avoid stale closures)
+    const BATCH_PREMIUM = 0.15;
+    const baseCreditsPerImage = multiImageModel === 'nano-banana-pro' ? 1.25 : 0.6;
+    const creditsPerImageWithPremium = baseCreditsPerImage * (1 + BATCH_PREMIUM);
+
     for (const item of pendingItems) {
       if (abortRef.current || isPaused) break;
 
-      // Check credits (using batch premium pricing)
-      if (availableCredits < creditsPerImageWithPremium) {
+      // Determine numImages: use item's numImages if single image queue, otherwise 1
+      const isSingleImageQueue = queue.length === 1;
+      const imagesToGenerate = isSingleImageQueue && item.numImages ? item.numImages : 1;
+      
+      // Check credits for this specific item (accounting for numImages)
+      const itemCost = imagesToGenerate * creditsPerImageWithPremium;
+      if (availableCredits < itemCost) {
         setQueue(prev => prev.map(i => 
           i.id === item.id ? { ...i, status: 'failed' as const, error: 'Insufficient credits' } : i
         ));
@@ -160,10 +165,8 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
       ));
 
       try {
-        // Build prompt based on batch mode
-        const promptToUse = item.batchMode === 'pose' 
-          ? `${prompt.trim()}, maintain exact pose and position from reference image`
-          : prompt.trim(); // variate mode - just use prompt directly
+        // Use prompt if provided, otherwise empty string (will be handled by backend for variation)
+        const promptToUse = prompt.trim();
         
         const result = await generateImage(
           selectedStyle,
@@ -173,7 +176,8 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
             userId: isEmailAuth ? emailContext.userId : undefined,
             email: isEmailAuth ? emailContext.email : undefined,
             isNFTHolder: isNFTHolder || false,
-            multiImageModel: multiImageModel || 'flux'
+            multiImageModel: multiImageModel || 'flux',
+            numImages: imagesToGenerate
           },
           item.imageDataUrl
         );
@@ -250,7 +254,12 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
   const BATCH_PREMIUM = 0.15; // 15% premium for batch convenience
   const baseCreditsPerImage = multiImageModel === 'nano-banana-pro' ? 1.25 : 0.6;
   const creditsPerImageWithPremium = baseCreditsPerImage * (1 + BATCH_PREMIUM);
-  const totalBatchCost = pendingCount * creditsPerImageWithPremium;
+  
+  // Calculate total cost: for single image with numImages > 1, multiply by numImages
+  const totalImagesToGenerate = queue.length === 1 && queue[0]?.numImages 
+    ? queue[0].numImages 
+    : pendingCount;
+  const totalBatchCost = totalImagesToGenerate * creditsPerImageWithPremium;
   const hasEnoughCredits = availableCredits >= totalBatchCost;
 
   return (
@@ -342,66 +351,63 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
             </div>
           </div>
 
-          {/* Batch Mode Selection - Simple Pose vs Variate */}
-          <div 
-            className="p-2"
-            style={{
-              background: WIN95.bg,
-              boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
-            }}
-          >
-            <label className="text-[10px] font-bold block mb-2" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-              Batch Mode:
-            </label>
-            <div className="flex gap-2">
-              {/* Pose Mode Button */}
-              <button
-                onClick={() => setBatchMode('pose')}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-[11px] font-bold transition-all"
-                style={{
-                  background: batchMode === 'pose' 
-                    ? 'linear-gradient(180deg, #1084d0 0%, #000080 100%)' 
-                    : WIN95.bg,
-                  color: batchMode === 'pose' ? '#ffffff' : WIN95.text,
-                  boxShadow: batchMode === 'pose'
-                    ? `inset 1px 1px 0 #4090e0, inset -1px -1px 0 #000040`
-                    : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
+          {/* Number of Images Input - Only show when single image is in queue */}
+          {queue.length === 1 && (
+            <div 
+              className="p-2"
+              style={{
+                background: WIN95.bg,
+                boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
+              }}
+            >
+              <label className="text-[10px] font-bold block mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                Number of Images to Generate:
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                value={numImages}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10);
+                  if (!isNaN(value) && value >= 1 && value <= 10) {
+                    setNumImages(value);
+                    // Update the item in queue with new numImages
+                    setQueue(prev => prev.map(item => ({ ...item, numImages: value })));
+                  }
+                }}
+                className="w-full p-1.5 text-[11px] focus:outline-none"
+                style={{ 
+                  background: WIN95.inputBg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`,
+                  border: 'none',
+                  color: WIN95.text,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
-                title="Transfer pose from reference images to new generation"
-              >
-                <Move className="w-4 h-4" />
-                <span>🎭 Pose</span>
-              </button>
-              
-              {/* Variate Mode Button */}
-              <button
-                onClick={() => setBatchMode('variate')}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-[11px] font-bold transition-all"
-                style={{
-                  background: batchMode === 'variate' 
-                    ? 'linear-gradient(180deg, #2d8a2d 0%, #1a5c1a 100%)' 
-                    : WIN95.bg,
-                  color: batchMode === 'variate' ? '#ffffff' : WIN95.text,
-                  boxShadow: batchMode === 'variate'
-                    ? `inset 1px 1px 0 #4fb04f, inset -1px -1px 0 #0d3d0d`
-                    : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                }}
-                title="Create variations using your prompt with reference images"
-              >
-                <Wand2 className="w-4 h-4" />
-                <span>✨ Variate</span>
-              </button>
+                disabled={isProcessing}
+              />
+              <p className="text-[9px] mt-1" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                Generate multiple variations from a single image (1-10)
+              </p>
             </div>
-            
-            {/* Mode description */}
-            <p className="text-[9px] mt-2 text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-              {batchMode === 'pose' 
-                ? '🎭 Transfers exact pose & position from each reference image'
-                : '✨ Creates variations based on your prompt using reference images'}
-            </p>
-          </div>
+          )}
+          
+          {/* Info about variation mode */}
+          {queue.length > 0 && (
+            <div 
+              className="p-1.5 text-[9px]"
+              style={{
+                background: WIN95.bgLight,
+                boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+                color: WIN95.text
+              }}
+            >
+              <span className="font-bold">✨ Variation Mode:</span> {prompt.trim() 
+                ? 'Creates variations based on your prompt while preserving pose and position'
+                : 'Creates variations of all features except pose and position'}
+            </div>
+          )}
 
           {/* Drop Zone */}
           <div
@@ -464,7 +470,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                     }}
                   />
                   
-                  {/* File name and mode badge */}
+                  {/* File name and numImages badge */}
                   <div className="flex-1 min-w-0">
                     <span 
                       className="text-[10px] truncate block"
@@ -472,16 +478,18 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                     >
                       {item.fileName}
                     </span>
-                    <span 
-                      className="text-[8px] px-1 py-0.5 inline-block mt-0.5"
-                      style={{
-                        background: item.batchMode === 'pose' ? '#000080' : '#1a5c1a',
-                        color: '#ffffff',
-                        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                      }}
-                    >
-                      {item.batchMode === 'pose' ? '🎭 Pose' : '✨ Variate'}
-                    </span>
+                    {queue.length === 1 && item.numImages && item.numImages > 1 && (
+                      <span 
+                        className="text-[8px] px-1 py-0.5 inline-block mt-0.5"
+                        style={{
+                          background: '#1a5c1a',
+                          color: '#ffffff',
+                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                        }}
+                      >
+                        {item.numImages}x variations
+                      </span>
+                    )}
                   </div>
 
                   {/* Status icon */}
@@ -544,7 +552,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                 }}
               >
                 <Play className="w-3 h-3" />
-                Start ({pendingCount}) • {totalBatchCost.toFixed(1)} credits
+                Start ({totalImagesToGenerate} image{totalImagesToGenerate !== 1 ? 's' : ''}) • {totalBatchCost.toFixed(1)} credits
               </button>
             ) : (
               <button
@@ -609,7 +617,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                 color: WIN95.text
               }}
             >
-              <span className="font-bold">Batch pricing:</span> {creditsPerImageWithPremium.toFixed(2)} credits/image × {pendingCount} = <span className="font-bold">{totalBatchCost.toFixed(1)} total</span>
+              <span className="font-bold">Batch pricing:</span> {creditsPerImageWithPremium.toFixed(2)} credits/image × {totalImagesToGenerate} = <span className="font-bold">{totalBatchCost.toFixed(1)} total</span>
               <span className="ml-2 text-[8px]" style={{ color: WIN95.textDisabled }}>(includes 15% convenience fee)</span>
             </div>
           )}

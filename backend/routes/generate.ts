@@ -939,12 +939,6 @@ export function createGenerationRoutes(deps: Dependencies) {
         optimizePrompt?: boolean;
       };
 
-      if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
-        sendEvent('error', { error: 'prompt is required and must be a non-empty string' });
-        res.end();
-        return;
-      }
-
       // Build image_urls array
       const imageUrlsArray: string[] = [];
       if (image_urls && Array.isArray(image_urls)) {
@@ -955,12 +949,21 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       const hasImages = imageUrlsArray.length > 0;
       const isTextToImage = !hasImages;
+      
+      // Prompt is required for text-to-image, optional for image-to-image (variation mode)
+      const trimmedPrompt = (prompt && typeof prompt === 'string') ? prompt.trim() : '';
+      if (isTextToImage && !trimmedPrompt) {
+        sendEvent('error', { error: 'prompt is required for text-to-image generation' });
+        res.end();
+        return;
+      }
 
       // Apply FLUX 2 prompt optimization if requested
-      let finalPrompt = prompt.trim();
+      // For image-to-image with no prompt, use a default variation prompt that preserves pose/position
+      let finalPrompt = trimmedPrompt || (hasImages ? 'create variations of all features except pose and position' : '');
       let streamPromptOptimization: ImageEditOptimizationResult | Flux2T2IOptimizationResult | null = null;
       
-      if (optimizePrompt) {
+      if (optimizePrompt && trimmedPrompt) {
         sendEvent('status', { 
           message: isTextToImage ? 'Optimizing prompt for FLUX 2 generation...' : 'Optimizing prompt for FLUX 2 editing...', 
           progress: 5 
@@ -968,16 +971,16 @@ export function createGenerationRoutes(deps: Dependencies) {
         try {
           if (isTextToImage) {
             // Use text-to-image optimization
-            streamPromptOptimization = await optimizePromptForFlux2T2I(prompt.trim());
+            streamPromptOptimization = await optimizePromptForFlux2T2I(trimmedPrompt);
           } else {
             // Use edit-specific optimization
-            streamPromptOptimization = await optimizePromptForFlux2Edit(prompt.trim());
+            streamPromptOptimization = await optimizePromptForFlux2Edit(trimmedPrompt);
           }
           
           if (streamPromptOptimization && !streamPromptOptimization.skipped && streamPromptOptimization.optimizedPrompt) {
             finalPrompt = streamPromptOptimization.optimizedPrompt;
             sendEvent('promptOptimized', {
-              originalPrompt: prompt.trim(),
+              originalPrompt: trimmedPrompt,
               optimizedPrompt: finalPrompt,
               reasoning: streamPromptOptimization.reasoning
             });
