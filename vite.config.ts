@@ -85,9 +85,7 @@ export default defineConfig({
           if (id.includes('ethers')) {
             return 'vendor-ethers';
           }
-          // Solana and its dependencies - keep together to avoid circular dep issues
-          // Include common Solana sub-dependencies in the same chunk
-          // CRITICAL: base-x, safe-buffer MUST be in the same chunk to avoid circular import issues
+          // Solana and ALL its dependencies - must be in same chunk to avoid circular deps
           if (id.includes('@solana') || 
               id.includes('rpc-websockets') || 
               id.includes('superstruct') ||
@@ -96,6 +94,9 @@ export default defineConfig({
               id.includes('bs58') ||
               id.includes('base-x') ||
               id.includes('safe-buffer') ||
+              id.includes('buffer/') ||
+              id.includes('base64-js') ||
+              id.includes('ieee754') ||
               id.includes('jayson') ||
               id.includes('@noble/curves') ||
               id.includes('@noble/hashes')) {
