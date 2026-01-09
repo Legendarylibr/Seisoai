@@ -4,6 +4,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generate3dModel } from '../services/model3dService';
 import { addGeneration } from '../services/galleryService';
 import { API_URL } from '../utils/apiConfig';
+import { optimizeImage } from '../utils/imageOptimizer';
 import { 
   Box, Upload, Play, X, Download, AlertCircle, ChevronDown, 
   Sparkles, Image, Wand2, RotateCcw, Eye, Layers, Settings,
@@ -508,10 +509,35 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
     }
   }, [editPrompt, imageUrl, isConnected, walletContext, emailContext, isEmailAuth, startTimer, stopTimer]);
 
-  // Optimize uploaded image for 3D generation
+  // Optimize image for 3D generation using AI (fast optimized version)
   const optimizeImageFor3d = useCallback(async (inputImageUrl: string): Promise<string> => {
-    logger.info('Optimizing uploaded image for 3D generation');
+    // If already a URL (not data URI), it's already optimized/uploaded - return as-is
+    if (!inputImageUrl.startsWith('data:')) {
+      logger.info('Image already optimized (URL), skipping optimization');
+      return inputImageUrl;
+    }
+
+    logger.info('Optimizing image for 3D generation (AI-based, fast mode)');
     
+    // Pre-optimize large images: resize to max 1024x1024 before AI processing
+    // This reduces upload time and AI processing time significantly
+    let preprocessedUrl = inputImageUrl;
+    if (inputImageUrl.length > 500000) { // If larger than ~500KB, pre-resize
+      logger.info('Pre-resizing large image for faster processing');
+      const resizedDataUri = await optimizeImage(inputImageUrl, {
+        maxWidth: 1024,
+        maxHeight: 1024,
+        quality: 0.9,
+        format: 'jpeg'
+      });
+      preprocessedUrl = resizedDataUri;
+    }
+    
+    // Fast AI optimization: use nano-banana-pro with speed optimizations
+    // - 1K resolution (faster than higher res) - backend already uses this
+    // - Sync endpoint (no queue wait) - already using fal.run
+    // - Single image output
+    // - Pre-resized input for faster processing
     const optimizationPrompt = 'Clean isolated character on plain white background, centered, front-facing view, clear details, high contrast, suitable for 3D model conversion, no complex background, single subject';
     
     const response = await fetch(`${API_URL}/api/generate/image`, {
@@ -520,7 +546,7 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
       body: JSON.stringify({
         prompt: optimizationPrompt,
         model: 'nano-banana-pro',
-        image_urls: [inputImageUrl],
+        image_urls: [preprocessedUrl],
         num_images: 1,
         aspect_ratio: '1:1',
         walletAddress: walletContext.address,
@@ -555,25 +581,24 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
     let finalImageUrl = imageUrl;
 
     try {
-      // If image was uploaded (not generated), optimize it first for 3D
-      if (isUploadedImage) {
-        setIsOptimizing(true);
-        logger.info('Uploaded image detected - optimizing for 3D conversion');
+      // Optimize image before sending to 3D model (fal-ai/hunyuan3d-v3/image-to-3d)
+      // Uses AI-based optimization with speed optimizations (1K resolution, sync endpoint)
+      setIsOptimizing(true);
+      logger.info('Optimizing image for 3D conversion before sending to hunyuan3d-v3/image-to-3d');
+      
+      try {
+        finalImageUrl = await optimizeImageFor3d(imageUrl);
+        setImageUrl(finalImageUrl); // Update with optimized image
+        setIsUploadedImage(false); // Mark as processed
         
-        try {
-          finalImageUrl = await optimizeImageFor3d(imageUrl);
-          setImageUrl(finalImageUrl); // Update with optimized image
-          setIsUploadedImage(false); // Mark as processed
-          
-          // Refresh credits after optimization
-          if (isEmailAuth && emailContext.refreshCredits) {
-            emailContext.refreshCredits();
-          } else if (walletContext.fetchCredits && walletContext.address) {
-            walletContext.fetchCredits(walletContext.address, 3, true);
-          }
-        } finally {
-          setIsOptimizing(false);
+        // Refresh credits after optimization
+        if (isEmailAuth && emailContext.refreshCredits) {
+          emailContext.refreshCredits();
+        } else if (walletContext.fetchCredits && walletContext.address) {
+          walletContext.fetchCredits(walletContext.address, 3, true);
         }
+      } finally {
+        setIsOptimizing(false);
       }
       
       setIsGenerating3d(true);
@@ -594,8 +619,28 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
         hasModelGlb: !!result.model_glb?.url,
         hasModelUrlsGlb: !!result.model_urls?.glb?.url,
         hasThumbnail: !!result.thumbnail?.url,
-        error: result.error
+        error: result.error,
+        generationId: (result as { generationId?: string }).generationId,
+        requestId: (result as { requestId?: string }).requestId
       });
+
+      // Handle 202 Accepted - generation is still processing asynchronously
+      if (!result.success && (result as { generationId?: string; requestId?: string }).generationId) {
+        const asyncResult = result as { generationId?: string; requestId?: string; message?: string };
+        logger.info('3D generation accepted for async processing', {
+          generationId: asyncResult.generationId,
+          requestId: asyncResult.requestId
+        });
+        setError('3D generation is taking longer than expected. It will appear in your gallery when complete. You can continue using the app while it processes.');
+        setCurrentStep('preview');
+        // Refresh credits since they were already deducted
+        if (isEmailAuth && emailContext.refreshCredits) {
+          emailContext.refreshCredits();
+        } else if (walletContext.fetchCredits && walletContext.address) {
+          walletContext.fetchCredits(walletContext.address, 3, true);
+        }
+        return;
+      }
 
       if (result.success && (result.model_glb?.url || result.model_urls?.glb?.url)) {
         setModel3dResult(result);

@@ -70,9 +70,16 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
   }
 
   try {
+    // Validate API URL is configured
+    if (!API_URL) {
+      logger.error('API_URL is not configured');
+      throw new Error('API server URL is not configured. Please check your environment settings.');
+    }
+
     const apiEndpoint = `${API_URL}/api/model3d/generate`;
     logger.info('Starting 3D model generation', { 
       apiEndpoint,
+      API_URL,
       generate_type, 
       face_count,
       hasBackImage: !!back_image_url,
@@ -82,15 +89,38 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
       hasInputImage: !!input_image_url
     });
 
-    // Create abort controller with 8 minute timeout (3D gen can take 5+ mins)
+    // Create abort controller with 10 minute timeout (3D gen can take 5-7 mins + polling overhead)
+    // Backend polls for up to 7 minutes, so we need extra time for the response
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8 * 60 * 1000);
+    const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000);
 
     // Get JWT token for authentication
     const token = getAuthToken() || '';
+    const hasToken = !!token;
+    const tokenPreview = token ? `${token.substring(0, 20)}...` : '(empty)';
+
+    logger.info('3D generation request details', {
+      apiEndpoint,
+      hasToken,
+      tokenPreview,
+      requestBody: {
+        hasInputImage: !!input_image_url,
+        hasBackImage: !!back_image_url,
+        hasLeftImage: !!left_image_url,
+        hasRightImage: !!right_image_url,
+        enable_pbr,
+        face_count,
+        generate_type,
+        polygon_type,
+        hasWalletAddress: !!walletAddress,
+        hasUserId: !!userId,
+        hasEmail: !!email
+      }
+    });
 
     let response: Response;
     try {
+      logger.debug('Sending 3D generation request', { apiEndpoint, method: 'POST' });
       response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
@@ -112,11 +142,148 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
         }),
         signal: controller.signal
       });
+      
+      logger.info('3D generation response received', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        contentType: response.headers.get('content-type'),
+        headers: Object.fromEntries(response.headers.entries())
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      const err = fetchError as Error;
+      
+      // Check if this is an abort error (timeout or user cancellation)
+      if (err.name === 'AbortError' || err.message.includes('aborted')) {
+        logger.warn('3D generation request was aborted (likely timeout)', {
+          error: err.message,
+          errorName: err.name,
+          apiEndpoint
+        });
+        throw new Error('3D generation request timed out. The generation may still be processing in the background. Please check your gallery in a few minutes.');
+      }
+      
+      logger.error('3D generation fetch failed', {
+        error: err.message,
+        errorName: err.name,
+        apiEndpoint,
+        hasToken
+      });
+      throw err;
+    }
+
+    // Check if response is JSON before parsing
+    const contentType = response.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    let data: Model3dGenerationResult;
+    
+    logger.debug('Processing 3D generation response', {
+      status: response.status,
+      contentType,
+      isJson,
+      url: response.url,
+      redirected: response.redirected,
+      type: response.type
+    });
+    
+    // Always check the actual response body to detect HTML
+    let responseText: string;
+    try {
+      responseText = await response.text();
+    } catch (textError) {
+      clearTimeout(timeoutId);
+      const err = textError as Error;
+      logger.error('Failed to read response text', {
+        error: err.message,
+        errorName: err.name,
+        status: response.status
+      });
+      
+      if (err.name === 'AbortError' || err.message.includes('aborted')) {
+        throw new Error('3D generation request was interrupted. The generation may still be processing. Please check your gallery in a few minutes.');
+      }
+      throw new Error('Failed to read server response. Please try again.');
     } finally {
       clearTimeout(timeoutId);
     }
+    
+    const isHtml = responseText.trim().startsWith('<!DOCTYPE') || 
+                   responseText.trim().startsWith('<html') ||
+                   responseText.trim().startsWith('<!doctype');
+    
+    if (isHtml) {
+      // Response is HTML (likely SPA fallback or error page)
+      logger.error('3D generation API returned HTML instead of JSON', { 
+        status: response.status,
+        statusText: response.statusText,
+        contentType,
+        isHtml,
+        responseLength: responseText.length,
+        responsePreview: responseText.substring(0, 500),
+        url: response.url,
+        redirected: response.redirected,
+        apiEndpoint: `${API_URL}/api/model3d/generate`
+      });
+      
+      if (response.status === 404) {
+        throw new Error('3D model generation endpoint not found. The API route may not be configured correctly.');
+      } else if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication failed. Please sign in again.');
+      } else {
+        throw new Error('Server returned HTML instead of JSON. This usually means the API endpoint is not available or the request was routed incorrectly.');
+      }
+    }
+    
+    if (!isJson && response.status !== 202) {
+      // 202 is acceptable (async processing), but other non-JSON responses are errors
+      logger.error('3D generation API returned non-JSON response', {
+        status: response.status,
+        contentType,
+        responsePreview: responseText.substring(0, 500)
+      });
+      throw new Error(`Server returned an unexpected response (${response.status}). Please try again later.`);
+    }
 
-    const data = await response.json();
+    try {
+      logger.debug('Parsing JSON response');
+      // Parse from the text we already read
+      data = JSON.parse(responseText) as Model3dGenerationResult;
+      logger.debug('JSON parsed successfully', {
+        hasSuccess: 'success' in data,
+        hasError: 'error' in data,
+        keys: Object.keys(data)
+      });
+    } catch (parseError) {
+      logger.error('Failed to parse JSON response', { 
+        status: response.status,
+        statusText: response.statusText,
+        contentType,
+        isHtml,
+        responseLength: responseText.length,
+        responsePreview: responseText.substring(0, 500),
+        error: parseError instanceof Error ? parseError.message : 'Unknown error',
+        errorName: parseError instanceof Error ? parseError.name : 'Unknown',
+        url: response.url
+      });
+      
+      if (isHtml) {
+        throw new Error('Server returned HTML instead of JSON. The API endpoint may not be available.');
+      } else {
+        throw new Error(`Invalid JSON response from server: ${parseError instanceof Error ? parseError.message : 'Unknown error'}. Please try again.`);
+      }
+    }
+
+    // Handle 202 Accepted (async processing - generation still in progress)
+    if (response.status === 202) {
+      logger.info('3D generation accepted, processing asynchronously', {
+        generationId: (data as { generationId?: string }).generationId,
+        requestId: (data as { requestId?: string }).requestId,
+        message: (data as { message?: string }).message
+      });
+      // Return the response data which should include generationId and statusEndpoint
+      return data;
+    }
 
     if (!response.ok) {
       logger.error('3D generation API returned error', { 
@@ -140,7 +307,12 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
     return data as Model3dGenerationResult;
   } catch (error) {
     const err = error as Error;
-    logger.error('3D model generation error', { error: err.message });
+    logger.error('3D model generation error', { 
+      error: err.message,
+      errorName: err.name,
+      stack: err.stack,
+      apiEndpoint: `${API_URL}/api/model3d/generate`
+    });
     throw new Error(`Failed to generate 3D model: ${err.message}`);
   }
 }
@@ -151,21 +323,61 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
 export async function check3dStatus(requestId: string): Promise<{ status: string; [key: string]: unknown }> {
   try {
     const token = getAuthToken() || '';
-    const response = await fetch(`${API_URL}/api/model3d/status/${requestId}`, {
+    const apiEndpoint = `${API_URL}/api/model3d/status/${requestId}`;
+    
+    logger.debug('Checking 3D generation status', { requestId, apiEndpoint, hasToken: !!token });
+    
+    const response = await fetch(apiEndpoint, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
+    
+    logger.debug('3D status response received', {
+      status: response.status,
+      statusText: response.statusText,
+      contentType: response.headers.get('content-type'),
+      ok: response.ok
+    });
+    
+    // Check if response is JSON before parsing
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await response.text();
+      const isHtml = text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html');
+      
+      logger.error('3D status check returned non-JSON response', { 
+        status: response.status,
+        statusText: response.statusText,
+        contentType,
+        isHtml,
+        responseLength: text.length,
+        responsePreview: text.substring(0, 500),
+        url: response.url
+      });
+      throw new Error('Invalid response from server');
+    }
+    
     const data = await response.json();
     
     if (!response.ok) {
+      logger.error('3D status check failed', {
+        status: response.status,
+        error: data.error,
+        requestId
+      });
       throw new Error(data.error || 'Status check failed');
     }
     
+    logger.debug('3D status check successful', { requestId, status: data.status });
     return data;
   } catch (error) {
     const err = error as Error;
-    logger.error('3D status check error', { error: err.message });
+    logger.error('3D status check error', { 
+      error: err.message,
+      errorName: err.name,
+      requestId
+    });
     throw err;
   }
 }
