@@ -13,6 +13,7 @@ import { buildUserUpdateQuery } from '../services/user';
 import { createEmailHash } from '../utils/emailHash';
 import type { IUser } from '../models/User';
 import { calculateVideoCredits, calculateMusicCredits, calculateUpscaleCredits, calculateVideoToAudioCredits } from '../utils/creditCalculations';
+import { encrypt, isEncryptionConfigured } from '../utils/encryption';
 
 // Types
 interface Dependencies {
@@ -2536,10 +2537,20 @@ export function createGenerationRoutes(deps: Dependencies) {
       }
 
       // Create generation record
+      // Encrypt prompt if encryption is configured (findOneAndUpdate bypasses pre-save hooks)
+      let encryptedPrompt = prompt || 'No prompt';
+      if (encryptedPrompt && isEncryptionConfigured()) {
+        // Check if already encrypted (shouldn't be, but be safe)
+        const isEncrypted = encryptedPrompt.includes(':') && encryptedPrompt.split(':').length === 3;
+        if (!isEncrypted) {
+          encryptedPrompt = encrypt(encryptedPrompt);
+        }
+      }
+      
       const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const generation = {
         id: generationId,
-        prompt: prompt || 'No prompt',
+        prompt: encryptedPrompt,
         style: style || 'No Style',
         ...(imageUrl && { imageUrl }),
         ...(videoUrl && { videoUrl }),

@@ -8,6 +8,7 @@ import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { findUserByIdentifier } from '../services/user';
 import type { IUser } from '../models/User';
+import { encrypt, isEncryptionConfigured } from '../utils/encryption';
 
 // Types
 interface Dependencies {
@@ -221,10 +222,20 @@ export function createGalleryRoutes(deps: Dependencies) {
       }
 
       // Build gallery item
+      // Encrypt prompt if encryption is configured (findOneAndUpdate bypasses pre-save hooks)
+      let encryptedPrompt = prompt;
+      if (prompt && isEncryptionConfigured()) {
+        // Check if already encrypted (shouldn't be, but be safe)
+        const isEncrypted = prompt.includes(':') && prompt.split(':').length === 3;
+        if (!isEncrypted) {
+          encryptedPrompt = encrypt(prompt);
+        }
+      }
+      
       const galleryItem: Record<string, unknown> = {
         id: generationId || `gen-${Date.now()}`,
         imageUrl: imageUrl || thumbnailUrl,
-        prompt,
+        prompt: encryptedPrompt,
         style: model,
         timestamp: new Date(),
         modelType: modelType || 'image'
