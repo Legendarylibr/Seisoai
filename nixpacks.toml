@@ -22,6 +22,7 @@ cacheDirectories = ['node_modules', 'backend/node_modules', '.npm']
 # Build frontend with production optimizations
 cmds = [
     'rm -rf dist',
+    'echo "VITE_STRIPE_PUBLISHABLE_KEY is: ${VITE_STRIPE_PUBLISHABLE_KEY:0:20}..."',
     'NODE_ENV=production npm run build',
     # Prune devDependencies after build to reduce image size
     'npm prune --omit=dev',
