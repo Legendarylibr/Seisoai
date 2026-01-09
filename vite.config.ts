@@ -10,6 +10,8 @@ export default defineConfig({
   },
   define: {
     global: 'globalThis',
+    // Explicitly define Stripe key to ensure it's available at build time
+    'import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY': JSON.stringify(process.env.VITE_STRIPE_PUBLISHABLE_KEY || ''),
   },
   
   optimizeDeps: {
