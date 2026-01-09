@@ -14,6 +14,9 @@ export interface CreditsConfig {
   MUSIC_GENERATION_PER_MINUTE: number;
   VIDEO_TO_AUDIO: number;
   LAYER_EXTRACTION: number;
+  MODEL_3D_NORMAL: number;
+  MODEL_3D_LOWPOLY: number;
+  MODEL_3D_GEOMETRY: number;
 }
 
 export interface FreeImageLimits {
@@ -80,7 +83,10 @@ export const CREDITS: CreditsConfig = {
   VIDEO_GENERATION_MINIMUM: 2,
   MUSIC_GENERATION_PER_MINUTE: 0.25, // Music ($0.02/min API × 1.2 = $0.024/min)
   VIDEO_TO_AUDIO: 0.5,           // MMAudio V2 - Video to synced audio ($0.04 API × 1.2 ≈ $0.05)
-  LAYER_EXTRACTION: 0.3          // Same as Flux 2
+  LAYER_EXTRACTION: 0.3,         // Same as Flux 2
+  MODEL_3D_NORMAL: 3,            // Hunyuan3D V3 with full textures + PBR
+  MODEL_3D_LOWPOLY: 3,           // Hunyuan3D V3 with optimized mesh + textures
+  MODEL_3D_GEOMETRY: 2           // Hunyuan3D V3 geometry only (no textures)
 };
 
 // Free image limits

@@ -1,12 +1,14 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
-import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain, Shuffle, Sparkles, Copy } from 'lucide-react';
+import React, { useState, useCallback, useRef } from 'react';
+import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain, Move, Wand2 } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { generateImage } from '../services/smartImageService';
 import { WIN95, BTN, hoverHandlers } from '../utils/buttonStyles';
 import logger from '../utils/logger';
-import { VARIATION_CATEGORIES, generateBatchVariations, getVariationPreview } from '../utils/variationPrompts';
+
+// Batch mode types - simplified to just Pose and Variate
+type BatchMode = 'pose' | 'variate';
 
 interface QueueItem {
   id: string;
@@ -15,14 +17,16 @@ interface QueueItem {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   resultUrl?: string;
   error?: string;
-  variationPrompt?: string; // The specific variation prompt used for this item
-  appliedVariations?: Record<string, string>; // Track which variations were applied
+  batchMode: BatchMode; // Track which mode was used for this item
 }
 
 interface GenerationQueueProps {
   onShowTokenPayment?: () => void;
   onShowStripePayment?: () => void;
 }
+
+// Max images allowed in batch
+const MAX_BATCH_SIZE = 100;
 
 const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, onShowStripePayment }) => {
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -33,11 +37,8 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
   
-  // Variation mode state
-  const [variationMode, setVariationMode] = useState(false);
-  const [enabledCategories, setEnabledCategories] = useState<string[]>(['clothing', 'background']);
-  const [variationCount, setVariationCount] = useState(4); // How many variations per image
-  const [showVariationSettings, setShowVariationSettings] = useState(false);
+  // Simplified batch mode - just Pose or Variate
+  const [batchMode, setBatchMode] = useState<BatchMode>('variate');
 
   const { isConnected, address, credits, isNFTHolder, refreshCredits, setCreditsManually } = useSimpleWallet();
   const emailContext = useEmailAuth();
@@ -46,74 +47,54 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
   
   const { setGeneratedImage, setCurrentGeneration, selectedStyle, multiImageModel, optimizePrompt, setOptimizePrompt } = useImageGenerator();
 
-  // Generate variation preview text
-  const variationPreview = useMemo(() => {
-    if (!variationMode || enabledCategories.length === 0) return null;
-    return getVariationPreview(prompt || 'your prompt', enabledCategories);
-  }, [variationMode, enabledCategories, prompt]);
-
-  // Toggle a category on/off
-  const toggleCategory = useCallback((categoryId: string) => {
-    setEnabledCategories(prev => 
-      prev.includes(categoryId) 
-        ? prev.filter(id => id !== categoryId)
-        : [...prev, categoryId]
-    );
-  }, []);
-
-  // Handle file selection
+  // Handle file selection - now supports up to 100 images
   const handleFileSelect = useCallback((files: FileList | null) => {
     if (!files) return;
 
-    const processFile = (file: File): Promise<QueueItem[]> => {
+    // Check current queue size + new files
+    const currentPending = queue.filter(i => i.status === 'pending').length;
+    const remainingSlots = MAX_BATCH_SIZE - currentPending;
+    
+    if (remainingSlots <= 0) {
+      alert(`Queue is full! Maximum ${MAX_BATCH_SIZE} images allowed. Clear some items first.`);
+      return;
+    }
+
+    // Only process up to remaining slots
+    const filesToProcess = Array.from(files).slice(0, remainingSlots);
+    
+    if (files.length > remainingSlots) {
+      alert(`Only adding ${remainingSlots} of ${files.length} images. Queue limit is ${MAX_BATCH_SIZE}.`);
+    }
+
+    const processFile = (file: File): Promise<QueueItem | null> => {
       return new Promise((resolve) => {
         if (!file.type.startsWith('image/')) {
-          resolve([]);
+          resolve(null);
           return;
         }
 
         const reader = new FileReader();
         reader.onload = (e) => {
           const dataUrl = e.target?.result as string;
-          
-          // If variation mode is enabled, create multiple queue items per image
-          if (variationMode && enabledCategories.length > 0 && prompt.trim()) {
-            const variations = generateBatchVariations(
-              prompt.trim(),
-              enabledCategories,
-              variationCount
-            );
-            
-            const variationItems: QueueItem[] = variations.map((v, index) => ({
-              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-v${index}`,
-              imageDataUrl: dataUrl,
-              fileName: `${file.name} (Variation ${index + 1})`,
-              status: 'pending' as const,
-              variationPrompt: v.prompt,
-              appliedVariations: v.variations
-            }));
-            
-            resolve(variationItems);
-          } else {
-            // Standard single item per image
-            resolve([{
-              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              imageDataUrl: dataUrl,
-              fileName: file.name,
-              status: 'pending' as const
-            }]);
-          }
+          resolve({
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            imageDataUrl: dataUrl,
+            fileName: file.name,
+            status: 'pending' as const,
+            batchMode: batchMode
+          });
         };
-        reader.onerror = () => resolve([]);
+        reader.onerror = () => resolve(null);
         reader.readAsDataURL(file);
       });
     };
 
-    Promise.all(Array.from(files).map(processFile)).then((itemsArrays) => {
-      const validItems = itemsArrays.flat();
+    Promise.all(filesToProcess.map(processFile)).then((items) => {
+      const validItems = items.filter((item): item is QueueItem => item !== null);
       setQueue(prev => [...prev, ...validItems]);
     });
-  }, [variationMode, enabledCategories, variationCount, prompt]);
+  }, [queue, batchMode]);
 
   // Handle drag and drop
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -153,35 +134,10 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
     ));
   }, []);
 
-  // Generate variations from a single queue item
-  const generateVariationsFromItem = useCallback((sourceItem: QueueItem) => {
-    if (!prompt.trim() || enabledCategories.length === 0) return;
-    
-    const variations = generateBatchVariations(
-      prompt.trim(),
-      enabledCategories,
-      variationCount
-    );
-    
-    const newItems: QueueItem[] = variations.map((v, index) => ({
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-v${index}`,
-      imageDataUrl: sourceItem.imageDataUrl,
-      fileName: `${sourceItem.fileName.replace(/\s*\(Variation \d+\)/, '')} (Variation ${index + 1})`,
-      status: 'pending' as const,
-      variationPrompt: v.prompt,
-      appliedVariations: v.variations
-    }));
-    
-    setQueue(prev => [...prev, ...newItems]);
-  }, [prompt, enabledCategories, variationCount]);
-
   // Process the queue
   const processQueue = useCallback(async () => {
     const pendingItems = queue.filter(item => item.status === 'pending');
     if (pendingItems.length === 0) return;
-    
-    // Images can now be processed without a prompt (image-to-image enhancement)
-    // Variation mode still requires a prompt since variations modify the prompt
 
     setIsProcessing(true);
     setIsPaused(false);
@@ -204,8 +160,10 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
       ));
 
       try {
-        // Use variation prompt if available, otherwise use base prompt
-        const promptToUse = item.variationPrompt || prompt.trim();
+        // Build prompt based on batch mode
+        const promptToUse = item.batchMode === 'pose' 
+          ? `${prompt.trim()}, maintain exact pose and position from reference image`
+          : prompt.trim(); // variate mode - just use prompt directly
         
         const result = await generateImage(
           selectedStyle,
@@ -285,9 +243,6 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
   const completedCount = queue.filter(i => i.status === 'completed').length;
   const failedCount = queue.filter(i => i.status === 'failed').length;
   const processingItem = queue.find(i => i.status === 'processing');
-  
-  // Check if any pending items have variation prompts (can start without main prompt)
-  const hasVariationItems = queue.some(i => i.status === 'pending' && i.variationPrompt);
 
   const isAuthenticated = isConnected || isEmailAuth;
 
@@ -387,146 +342,65 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
             </div>
           </div>
 
-          {/* Variation Mode Toggle */}
+          {/* Batch Mode Selection - Simple Pose vs Variate */}
           <div 
             className="p-2"
             style={{
-              background: variationMode ? 'linear-gradient(180deg, #2d8a2d 0%, #1a5c1a 100%)' : WIN95.bg,
+              background: WIN95.bg,
               boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
             }}
           >
-            <div className="flex items-center justify-between">
-              <label 
-                onClick={() => setVariationMode(!variationMode)}
-                className="flex items-center gap-2 cursor-pointer select-none"
-                style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
-                title="Create multiple variations from one image"
+            <label className="text-[10px] font-bold block mb-2" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+              Batch Mode:
+            </label>
+            <div className="flex gap-2">
+              {/* Pose Mode Button */}
+              <button
+                onClick={() => setBatchMode('pose')}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-[11px] font-bold transition-all"
+                style={{
+                  background: batchMode === 'pose' 
+                    ? 'linear-gradient(180deg, #1084d0 0%, #000080 100%)' 
+                    : WIN95.bg,
+                  color: batchMode === 'pose' ? '#ffffff' : WIN95.text,
+                  boxShadow: batchMode === 'pose'
+                    ? `inset 1px 1px 0 #4090e0, inset -1px -1px 0 #000040`
+                    : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+                title="Transfer pose from reference images to new generation"
               >
-                <div 
-                  className="w-4 h-4 flex items-center justify-center"
-                  style={{
-                    background: WIN95.inputBg,
-                    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
-                  }}
-                >
-                  {variationMode && (
-                    <span className="text-[11px] font-bold" style={{ color: '#2d8a2d' }}>✓</span>
-                  )}
-                </div>
-                <Shuffle className="w-3.5 h-3.5" style={{ color: variationMode ? '#ffffff' : WIN95.text }} />
-                <span className="text-[11px] font-bold" style={{ color: variationMode ? '#ffffff' : WIN95.text }}>
-                  🎲 Variation Mode
-                </span>
-              </label>
+                <Move className="w-4 h-4" />
+                <span>🎭 Pose</span>
+              </button>
               
-              {variationMode && (
-                <button
-                  onClick={() => setShowVariationSettings(!showVariationSettings)}
-                  className="px-2 py-0.5 text-[9px]"
-                  style={{
-                    background: WIN95.bg,
-                    boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
-                    color: WIN95.text,
-                    fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                  }}
-                >
-                  {showVariationSettings ? '▲ Hide' : '▼ Settings'}
-                </button>
-              )}
+              {/* Variate Mode Button */}
+              <button
+                onClick={() => setBatchMode('variate')}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-[11px] font-bold transition-all"
+                style={{
+                  background: batchMode === 'variate' 
+                    ? 'linear-gradient(180deg, #2d8a2d 0%, #1a5c1a 100%)' 
+                    : WIN95.bg,
+                  color: batchMode === 'variate' ? '#ffffff' : WIN95.text,
+                  boxShadow: batchMode === 'variate'
+                    ? `inset 1px 1px 0 #4fb04f, inset -1px -1px 0 #0d3d0d`
+                    : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+                title="Create variations using your prompt with reference images"
+              >
+                <Wand2 className="w-4 h-4" />
+                <span>✨ Variate</span>
+              </button>
             </div>
             
-            {variationMode && (
-              <p className="text-[9px] mt-1" style={{ color: variationMode ? 'rgba(255,255,255,0.8)' : WIN95.textDisabled }}>
-                Upload one image → Generate {variationCount} random variations
-              </p>
-            )}
-            
-            {/* Variation Settings Panel */}
-            {variationMode && showVariationSettings && (
-              <div 
-                className="mt-2 p-2 space-y-2"
-                style={{
-                  background: WIN95.bg,
-                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
-                }}
-              >
-                {/* Variation Count */}
-                <div>
-                  <label className="text-[9px] font-bold block mb-1" style={{ color: WIN95.text }}>
-                    Variations per image:
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="1"
-                      max="50"
-                      value={variationCount}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
-                        if (!isNaN(val) && val >= 1 && val <= 50) {
-                          setVariationCount(val);
-                        }
-                      }}
-                      className="w-16 px-2 py-0.5 text-[11px] text-center focus:outline-none"
-                      style={{
-                        background: WIN95.inputBg,
-                        boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`,
-                        border: 'none',
-                        color: WIN95.text,
-                        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                      }}
-                    />
-                    <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>
-                      (1-50)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Category Selection */}
-                <div>
-                  <label className="text-[10px] font-bold block mb-1.5" style={{ color: WIN95.text }}>
-                    Randomize these elements:
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {VARIATION_CATEGORIES.map(category => (
-                      <button
-                        key={category.id}
-                        onClick={() => toggleCategory(category.id)}
-                        className="px-2.5 py-1.5 text-[11px] flex items-center gap-1.5"
-                        style={{
-                          background: enabledCategories.includes(category.id) ? '#000080' : WIN95.bg,
-                          color: enabledCategories.includes(category.id) ? '#ffffff' : WIN95.text,
-                          boxShadow: enabledCategories.includes(category.id)
-                            ? `inset 1px 1px 0 #0000a0, inset -1px -1px 0 #000060`
-                            : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
-                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                        }}
-                        title={category.description}
-                      >
-                        <span className="text-sm">{category.icon}</span>
-                        <span>{category.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Preview */}
-                {variationPreview && enabledCategories.length > 0 && (
-                  <div 
-                    className="p-1.5 text-[8px]"
-                    style={{
-                      background: WIN95.inputBg,
-                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
-                      color: WIN95.text,
-                      fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                    }}
-                  >
-                    <span className="font-bold">Preview: </span>
-                    {variationPreview}
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Mode description */}
+            <p className="text-[9px] mt-2 text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+              {batchMode === 'pose' 
+                ? '🎭 Transfers exact pose & position from each reference image'
+                : '✨ Creates variations based on your prompt using reference images'}
+            </p>
           </div>
 
           {/* Drop Zone */}
@@ -547,7 +421,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
               Drop images here or click to browse
             </p>
             <p className="text-[9px]" style={{ color: WIN95.textDisabled }}>
-              Multiple files supported
+              Up to {MAX_BATCH_SIZE} images supported ({pendingCount}/{MAX_BATCH_SIZE} in queue)
             </p>
           </div>
           <input
@@ -562,7 +436,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
           {/* Queue List */}
           {queue.length > 0 && (
             <div 
-              className="max-h-40 overflow-y-auto space-y-1"
+              className="max-h-48 overflow-y-auto space-y-1"
               style={{
                 background: WIN95.inputBg,
                 boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
@@ -576,11 +450,9 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                   style={{
                     background: item.status === 'processing' ? '#ffffcc' : 
                                item.status === 'completed' ? '#ccffcc' :
-                               item.status === 'failed' ? '#ffcccc' : 
-                               item.variationPrompt ? '#e8f4e8' : WIN95.bg,
+                               item.status === 'failed' ? '#ffcccc' : WIN95.bg,
                     boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
                   }}
-                  title={item.variationPrompt ? `Prompt: ${item.variationPrompt}` : undefined}
                 >
                   {/* Thumbnail */}
                   <img 
@@ -592,7 +464,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                     }}
                   />
                   
-                  {/* File name and variations */}
+                  {/* File name and mode badge */}
                   <div className="flex-1 min-w-0">
                     <span 
                       className="text-[10px] truncate block"
@@ -600,27 +472,16 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                     >
                       {item.fileName}
                     </span>
-                    {item.appliedVariations && Object.keys(item.appliedVariations).length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-0.5">
-                        {Object.entries(item.appliedVariations).map(([catId, _variation]) => {
-                          const cat = VARIATION_CATEGORIES.find(c => c.id === catId);
-                          return cat ? (
-                            <span 
-                              key={catId}
-                              className="text-[9px] px-1.5 py-0.5"
-                              style={{
-                                background: '#000080',
-                                color: '#ffffff',
-                                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                              }}
-                              title={_variation}
-                            >
-                              {cat.icon}
-                            </span>
-                          ) : null;
-                        })}
-                      </div>
-                    )}
+                    <span 
+                      className="text-[8px] px-1 py-0.5 inline-block mt-0.5"
+                      style={{
+                        background: item.batchMode === 'pose' ? '#000080' : '#1a5c1a',
+                        color: '#ffffff',
+                        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                      }}
+                    >
+                      {item.batchMode === 'pose' ? '🎭 Pose' : '✨ Variate'}
+                    </span>
                   </div>
 
                   {/* Status icon */}
@@ -648,19 +509,6 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                     </div>
                   )}
 
-                  {/* Duplicate with variations button */}
-                  {item.status !== 'processing' && !item.variationPrompt && variationMode && enabledCategories.length > 0 && prompt.trim() && (
-                    <button
-                      onClick={() => generateVariationsFromItem(item)}
-                      className="p-0.5"
-                      style={BTN.base}
-                      {...hoverHandlers}
-                      title={`Create ${variationCount} variations`}
-                    >
-                      <Copy className="w-3 h-3" />
-                    </button>
-                  )}
-
                   {/* Remove button */}
                   {item.status !== 'processing' && (
                     <button
@@ -684,9 +532,9 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
             {!isProcessing ? (
               <button
                 onClick={processQueue}
-                disabled={pendingCount === 0 || (variationMode && enabledCategories.length > 0 && !prompt.trim()) || !isAuthenticated || !hasEnoughCredits}
+                disabled={pendingCount === 0 || !isAuthenticated || !hasEnoughCredits}
                 className="flex items-center gap-1 px-3 py-1 text-[10px] font-bold"
-                style={(pendingCount === 0 || (variationMode && enabledCategories.length > 0 && !prompt.trim()) || !isAuthenticated || !hasEnoughCredits) ? BTN.disabled : {
+                style={(pendingCount === 0 || !isAuthenticated || !hasEnoughCredits) ? BTN.disabled : {
                   background: 'linear-gradient(180deg, #1084d0 0%, #000080 100%)',
                   color: '#ffffff',
                   border: 'none',
@@ -755,23 +603,14 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
             <div 
               className="p-1.5 text-[9px]"
               style={{
-                background: variationMode ? 'linear-gradient(90deg, #1a5c1a 0%, #2d8a2d 100%)' : WIN95.bgLight,
+                background: WIN95.bgLight,
                 boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
                 fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                color: variationMode ? '#ffffff' : WIN95.text
+                color: WIN95.text
               }}
             >
-              {variationMode && enabledCategories.length > 0 && (
-                <div className="flex items-center gap-1 mb-1">
-                  <Sparkles className="w-3 h-3" />
-                  <span className="font-bold">Variation Mode Active</span>
-                  <span className="text-[8px] opacity-80">
-                    ({enabledCategories.map(id => VARIATION_CATEGORIES.find(c => c.id === id)?.icon).join('')})
-                  </span>
-                </div>
-              )}
               <span className="font-bold">Batch pricing:</span> {creditsPerImageWithPremium.toFixed(2)} credits/image × {pendingCount} = <span className="font-bold">{totalBatchCost.toFixed(1)} total</span>
-              <span className="ml-2 text-[8px]" style={{ color: variationMode ? 'rgba(255,255,255,0.7)' : WIN95.textDisabled }}>(includes 15% convenience fee)</span>
+              <span className="ml-2 text-[8px]" style={{ color: WIN95.textDisabled }}>(includes 15% convenience fee)</span>
             </div>
           )}
 

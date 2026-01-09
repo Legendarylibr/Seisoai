@@ -9,6 +9,7 @@ import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
+import { CREDITS } from '../config/constants';
 import type { IUser } from '../models/User';
 
 // Types
@@ -86,7 +87,7 @@ export function createModel3dRoutes(deps: Dependencies) {
    * POST /api/model3d/generate
    * Uses Hunyuan3D V3 Image-to-3D
    */
-  router.post('/generate', freeImageLimiter, flexibleAuth, requireCredits(3), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/generate', freeImageLimiter, flexibleAuth, requireCredits(CREDITS.MODEL_3D_GEOMETRY), async (req: AuthenticatedRequest, res: Response) => {
     // Entry point logging - helps diagnose if requests reach this route
     logger.info('3D model generation request received', {
       hasUser: !!req.user,
@@ -144,9 +145,12 @@ export function createModel3dRoutes(deps: Dependencies) {
         return;
       }
 
-      // Credits based on settings
-      // Normal/LowPoly: 3 credits, Geometry (no texture): 2 credits
-      const creditsRequired = generate_type === 'Geometry' ? 2 : 3;
+      // Credits based on generate_type (from centralized constants)
+      const creditsRequired = generate_type === 'Geometry' 
+        ? CREDITS.MODEL_3D_GEOMETRY 
+        : generate_type === 'LowPoly' 
+          ? CREDITS.MODEL_3D_LOWPOLY 
+          : CREDITS.MODEL_3D_NORMAL;
 
       // Deduct credits atomically
       const User = mongoose.model<IUser>('User');
@@ -259,9 +263,12 @@ export function createModel3dRoutes(deps: Dependencies) {
       const maxWaitTime = 7 * 60 * 1000; // 7 minutes max (3D gen can take up to 5 mins)
       const pollInterval = 5000; // Poll every 5 seconds (reduce API calls)
       const startTime = Date.now();
+      let lastStatus = '';
+      let pollCount = 0;
 
       while (Date.now() - startTime < maxWaitTime) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
+        pollCount++;
 
         const statusResponse = await fetch(
           `https://queue.fal.run/${modelPath}/requests/${requestId}/status`,
@@ -312,20 +319,17 @@ export function createModel3dRoutes(deps: Dependencies) {
         const rawStatus = rawStatusData.status || '';
         const normalizedStatus = rawStatus.toUpperCase();
 
-        // Log every poll for debugging
-        logger.info('3D model polling status', { 
-          requestId, 
-          rawStatus,
-          normalizedStatus,
-          hasDataWrapper: !!rawStatusData.data,
-          hasOutputWrapper: !!rawStatusData.output,
-          hasResultWrapper: !!rawStatusData.result,
-          hasResponseUrl: !!rawStatusData.response_url,
-          hasGlb: !!(statusResult as { glb?: { url?: string } }).glb?.url,
-          hasModelGlb: !!(statusResult as { model_glb?: { url?: string } }).model_glb?.url,
-          statusKeys: Object.keys(rawStatusData).slice(0, 15),
-          elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
-        });
+        // Only log on status change or every 6th poll (~30s) to reduce log spam
+        const statusChanged = normalizedStatus !== lastStatus;
+        if (statusChanged || pollCount % 6 === 0) {
+          logger.info('3D model polling', { 
+            requestId, 
+            status: normalizedStatus,
+            pollCount,
+            elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
+          });
+          lastStatus = normalizedStatus;
+        }
 
         // Check if model in status response (some FAL endpoints include result in status)
         // Per FAL docs: https://fal.ai/models/fal-ai/hunyuan3d-v3/image-to-3d/api
@@ -523,7 +527,13 @@ export function createModel3dRoutes(deps: Dependencies) {
       const err = error as Error;
       logger.error('3D model generation error:', { error: err.message });
       const user = req.user;
-      const creditsToRefund = 3;
+      // Determine credits to refund based on generate_type from request
+      const genType = req.body?.generate_type || 'Normal';
+      const creditsToRefund = genType === 'Geometry' 
+        ? CREDITS.MODEL_3D_GEOMETRY 
+        : genType === 'LowPoly' 
+          ? CREDITS.MODEL_3D_LOWPOLY 
+          : CREDITS.MODEL_3D_NORMAL;
       if (user) {
         await refundCredits(user, creditsToRefund, `3D generation error: ${err.message}`);
       }
