@@ -13,21 +13,37 @@ export default defineConfig({
   },
   
   optimizeDeps: {
-    include: ['buffer', '@solana/web3.js', '@solana/spl-token'],
+    include: [
+      'buffer', 
+      '@solana/web3.js', 
+      '@solana/spl-token',
+      'bn.js',
+      'bs58',
+      'borsh',
+      'superstruct',
+      '@noble/curves',
+      '@noble/hashes',
+    ],
     exclude: ['@walletconnect/ethereum-provider'],
+    esbuildOptions: {
+      target: 'es2020',
+    },
   },
   
   build: {
     target: 'es2020',
-    minify: 'terser',
-    terserOptions: {
-      mangle: false,
-      keep_fnames: true,
-      keep_classnames: true,
-    },
+    // Use esbuild instead of terser - better handles CJS/ESM interop
+    minify: 'esbuild',
     chunkSizeWarningLimit: 1000,
+    commonjsOptions: {
+      // Critical: transform CommonJS modules properly to avoid require$$X errors
+      transformMixedEsModules: true,
+      // Include these patterns for proper CJS handling
+      include: [/node_modules/],
+    },
     rollupOptions: {
       output: {
+        // Disable manual chunking for Solana - let Rollup handle it to avoid circular dep issues
         manualChunks: (id: string) => {
           if (id.includes('react-dom') || id.includes('react/')) return 'vendor-react';
           if (id.includes('lucide-react')) return 'vendor-ui';
@@ -35,25 +51,14 @@ export default defineConfig({
           if (id.includes('ethers')) return 'vendor-ethers';
           if (id.includes('@stripe')) return 'vendor-stripe';
           
-          // Solana + all deps in one chunk to avoid circular import issues
-          if (id.includes('@solana') || 
-              id.includes('rpc-websockets') || 
-              id.includes('superstruct') ||
-              id.includes('bn.js') ||
-              id.includes('borsh') ||
-              id.includes('bs58') ||
-              id.includes('base-x') ||
-              id.includes('safe-buffer') ||
-              id.includes('buffer/') ||
-              id.includes('base64-js') ||
-              id.includes('ieee754') ||
-              id.includes('jayson') ||
-              id.includes('@noble/curves') ||
-              id.includes('@noble/hashes')) {
+          // Let Solana deps be bundled naturally - don't force them into a single chunk
+          // The circular dependency issue was caused by forcing them together incorrectly
+          if (id.includes('@solana')) {
             return 'vendor-solana';
           }
           
-          if (id.includes('node_modules')) return 'vendor-misc';
+          // Don't chunk other node_modules - let Rollup handle dependency order
+          return undefined;
         },
         chunkFileNames: 'assets/[name]-[hash:8].js',
         entryFileNames: 'assets/[name]-[hash:8].js',
