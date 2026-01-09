@@ -117,8 +117,12 @@ const PrivacyPolicy = memo(function PrivacyPolicy() {
       <h3 className="font-bold">Your Rights</h3>
       <p>You may request access, correction, or deletion of your data through our support.</p>
 
-      <h3 className="font-bold">Security</h3>
-      <p>HTTPS encryption, secure authentication, rate limiting, and regular audits.</p>
+      <h3 className="font-bold">Security & Encryption</h3>
+      <p>All connections use HTTPS. Sensitive data like your email is encrypted with AES-256-GCM (military-grade, same as banks) before storage. Each value gets a unique random component, so identical emails look completely different when stored. The encryption includes tamper detection.</p>
+      
+      <p className="mt-2">We use one-way hashes (HMAC-SHA256) for account lookups — these can't be reversed to reveal your email, even with database access. If breached, attackers would find only encrypted gibberish protected by 256-bit keys (billions of years to crack). Your plaintext never touches our database.</p>
+      
+      <p className="mt-2">Additional protections: rate limiting, input validation, automated log sanitization, and regular AI security audits.</p>
     </div>
   );
 });
