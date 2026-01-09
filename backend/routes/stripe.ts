@@ -519,7 +519,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const baseUrl = process.env.FRONTEND_URL || (config.isProduction ? 'https://seisoai.com' : 'http://localhost:5173');
 
       const customers = await stripe.customers.list({
         email: user.email,

@@ -7,21 +7,33 @@ console.log('🚀 Starting Seiso AI Server (Modular Backend)...');
 process.env.NODE_ENV = process.env.NODE_ENV || 'production';
 process.env.PORT = process.env.PORT || '3001';
 
-// Set MongoDB URI if not provided (for development)
-if (!process.env.MONGODB_URI) {
-  console.log('⚠️ MONGODB_URI not set - using localhost MongoDB');
-  process.env.MONGODB_URI = 'mongodb://localhost:27017/seiso-ai';
-}
+const isProduction = process.env.NODE_ENV === 'production';
 
-// Set required environment variables for backend
-if (!process.env.JWT_SECRET) {
-  process.env.JWT_SECRET = 'your-super-secret-jwt-key-here-32-chars-minimum';
-  console.log('⚠️ JWT_SECRET not set - using default (NOT SECURE FOR PRODUCTION)');
-}
-
-if (!process.env.SESSION_SECRET) {
-  process.env.SESSION_SECRET = 'your-session-secret-here-32-chars-minimum';
-  console.log('⚠️ SESSION_SECRET not set - using default (NOT SECURE FOR PRODUCTION)');
+// Validate required environment variables in production
+if (isProduction) {
+  const requiredVars = ['MONGODB_URI', 'JWT_SECRET', 'ENCRYPTION_KEY'];
+  const missing = requiredVars.filter(v => !process.env[v]);
+  if (missing.length > 0) {
+    console.error('❌ FATAL: Missing required environment variables in production:', missing.join(', '));
+    console.error('Please set these in your Railway/deployment platform.');
+    process.exit(1);
+  }
+} else {
+  // Development fallbacks only
+  if (!process.env.MONGODB_URI) {
+    console.log('⚠️ MONGODB_URI not set - using localhost MongoDB (dev only)');
+    process.env.MONGODB_URI = 'mongodb://localhost:27017/seiso-ai';
+  }
+  
+  if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = 'dev-only-insecure-jwt-secret-do-not-use-in-prod';
+    console.log('⚠️ JWT_SECRET not set - using insecure default (dev only)');
+  }
+  
+  if (!process.env.SESSION_SECRET) {
+    process.env.SESSION_SECRET = 'dev-only-insecure-session-secret-do-not-use';
+    console.log('⚠️ SESSION_SECRET not set - using insecure default (dev only)');
+  }
 }
 
 console.log('Environment variables:');
