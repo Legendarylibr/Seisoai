@@ -318,12 +318,12 @@ userSchema.pre('save', async function(next) {
   }
 });
 
-// Post-find hooks: Decrypt email when reading from database
-function decryptUserEmail(doc: IUser | null): void {
-  if (!doc || !doc.email) return;
+// Post-find hooks: Decrypt email and embedded prompts when reading from database
+function decryptUserData(doc: IUser | null): void {
+  if (!doc) return;
   
-  // Only decrypt if it looks encrypted and not already decrypted
-  if (isEncrypted(doc.email) && !doc._emailDecrypted) {
+  // Decrypt email if it looks encrypted and not already decrypted
+  if (doc.email && isEncrypted(doc.email) && !doc._emailDecrypted) {
     try {
       doc.email = decrypt(doc.email);
       doc._emailDecrypted = true;
@@ -331,20 +331,48 @@ function decryptUserEmail(doc: IUser | null): void {
       logger.error('Failed to decrypt user email', { userId: doc.userId });
     }
   }
+  
+  // Decrypt embedded gallery prompts
+  const gallery = (doc as any).gallery;
+  if (Array.isArray(gallery)) {
+    for (const item of gallery) {
+      if (item?.prompt && isEncrypted(item.prompt)) {
+        try {
+          item.prompt = decrypt(item.prompt);
+        } catch (error) {
+          logger.error('Failed to decrypt gallery prompt', { userId: doc.userId });
+        }
+      }
+    }
+  }
+  
+  // Decrypt embedded generationHistory prompts
+  const genHistory = (doc as any).generationHistory;
+  if (Array.isArray(genHistory)) {
+    for (const gen of genHistory) {
+      if (gen?.prompt && isEncrypted(gen.prompt)) {
+        try {
+          gen.prompt = decrypt(gen.prompt);
+        } catch (error) {
+          logger.error('Failed to decrypt generation prompt', { userId: doc.userId });
+        }
+      }
+    }
+  }
 }
 
 userSchema.post('findOne', function(doc: IUser | null) {
-  decryptUserEmail(doc);
+  decryptUserData(doc);
 });
 
 userSchema.post('find', function(docs: IUser[]) {
   if (Array.isArray(docs)) {
-    docs.forEach(decryptUserEmail);
+    docs.forEach(decryptUserData);
   }
 });
 
 userSchema.post('findOneAndUpdate', function(doc: IUser | null) {
-  decryptUserEmail(doc);
+  decryptUserData(doc);
 });
 
 // Note: buildUserUpdateQuery is exported from services/user.ts to avoid circular dependencies
