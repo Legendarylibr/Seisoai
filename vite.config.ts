@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
-// Build: 2026-01-06
+// Build: 2026-01-09
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
@@ -39,8 +39,23 @@ export default defineConfig({
   build: {
     // Production build optimizations
     target: 'es2020',
-    // Use esbuild for minification - faster and handles Solana/crypto libs better than terser
-    minify: 'esbuild',
+    // Use terser for minification to properly handle Solana library exports
+    // esbuild aggressively mangles function names which breaks @solana/web3.js internal calls
+    minify: 'terser',
+    terserOptions: {
+      // Keep function names to prevent "Ix is not a function" errors in Solana
+      keep_fnames: true,
+      mangle: {
+        // Don't mangle top-level names
+        toplevel: false,
+        // Reserved names that shouldn't be mangled (Solana internal functions)
+        reserved: ['Ix', 'TransactionInstruction', 'Connection', 'PublicKey', 'Transaction']
+      },
+      compress: {
+        // Don't inline functions - important for Solana library internals
+        inline: 1,
+      }
+    },
     sourcemap: false, // Disable sourcemaps in production for smaller bundles
     cssCodeSplit: true, // Enable CSS code splitting
     cssMinify: true, // Minify CSS
