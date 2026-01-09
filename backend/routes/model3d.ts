@@ -14,6 +14,7 @@ import type { IUser } from '../models/User';
 // Types
 interface Dependencies {
   freeImageRateLimiter?: RequestHandler;
+  authenticateFlexible?: RequestHandler;
   requireCredits: (credits: number) => RequestHandler;
 }
 
@@ -73,17 +74,19 @@ export function createModel3dRoutes(deps: Dependencies) {
   const router = Router();
   const { 
     freeImageRateLimiter,
+    authenticateFlexible,
     requireCredits
   } = deps;
 
   const freeImageLimiter = freeImageRateLimiter || ((req: Request, res: Response, next: () => void) => next());
+  const flexibleAuth = authenticateFlexible || ((req: Request, res: Response, next: () => void) => next());
 
   /**
    * Generate 3D model from image
    * POST /api/model3d/generate
    * Uses Hunyuan3D V3 Image-to-3D
    */
-  router.post('/generate', freeImageLimiter, requireCredits(3), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/generate', freeImageLimiter, flexibleAuth, requireCredits(3), async (req: AuthenticatedRequest, res: Response) => {
     // Entry point logging - helps diagnose if requests reach this route
     logger.info('3D model generation request received', {
       hasUser: !!req.user,

@@ -85,12 +85,16 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8 * 60 * 1000);
 
+    // Get JWT token for authentication
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+
     let response: Response;
     try {
       response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           input_image_url,
@@ -145,7 +149,12 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
  */
 export async function check3dStatus(requestId: string): Promise<{ status: string; [key: string]: unknown }> {
   try {
-    const response = await fetch(`${API_URL}/api/model3d/status/${requestId}`);
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+    const response = await fetch(`${API_URL}/api/model3d/status/${requestId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
     const data = await response.json();
     
     if (!response.ok) {
