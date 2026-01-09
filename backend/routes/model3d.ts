@@ -480,6 +480,23 @@ export function createModel3dRoutes(deps: Dependencies) {
           };
         };
         
+        // Log the raw status response structure for debugging
+        if (statusChanged || pollCount % 6 === 0) {
+          logger.info('3D polling status response', {
+            requestId,
+            status: rawStatusData.status,
+            hasResponseUrl: !!rawStatusData.response_url,
+            hasData: !!rawStatusData.data,
+            hasOutput: !!rawStatusData.output,
+            hasResult: !!rawStatusData.result,
+            hasGlb: !!rawStatusData.glb,
+            hasModelGlb: !!rawStatusData.model_glb,
+            hasModelUrls: !!rawStatusData.model_urls,
+            topLevelKeys: Object.keys(rawStatusData).slice(0, 20),
+            rawResponsePreview: JSON.stringify(rawStatusData).substring(0, 1000)
+          });
+        }
+        
         // Handle wrapped or unwrapped data
         const statusResult = rawStatusData.data || rawStatusData.output || rawStatusData.result || rawStatusData;
         const rawStatus = rawStatusData.status || '';
@@ -525,7 +542,7 @@ export function createModel3dRoutes(deps: Dependencies) {
 
           // Ensure response hasn't been sent already
           if (!res.headersSent) {
-            res.json({
+            const responsePayload = {
               success: true,
               // Use model_glb directly as that's what FAL returns
               model_glb: typedStatusResult.model_glb || typedStatusResult.glb,
@@ -534,7 +551,15 @@ export function createModel3dRoutes(deps: Dependencies) {
               remainingCredits: updateResult.credits,
               creditsDeducted: creditsRequired,
               generationId: generationId // Return generationId so frontend can find it in gallery
+            };
+            logger.info('3D polling returning success response (from status)', {
+              requestId,
+              hasModelGlb: !!responsePayload.model_glb,
+              hasThumbnail: !!responsePayload.thumbnail,
+              hasModelUrls: !!responsePayload.model_urls,
+              responsePreview: JSON.stringify(responsePayload).substring(0, 1000)
             });
+            res.json(responsePayload);
           }
           return;
         }
@@ -626,6 +651,7 @@ export function createModel3dRoutes(deps: Dependencies) {
           
           // Log the full raw response for debugging (truncated)
           logger.info('3D result response structure', {
+            requestId,
             hasDataWrapper: !!rawResult.data,
             hasOutputWrapper: !!rawResult.output,
             hasResultWrapper: !!rawResult.result,
@@ -633,9 +659,10 @@ export function createModel3dRoutes(deps: Dependencies) {
             hasGlb: !!resultData.glb?.url,
             hasModelGlb: !!resultData.model_glb?.url,
             hasModelUrls: !!resultData.model_urls,
-            keys: Object.keys(rawResult).slice(0, 15),
-            resultDataKeys: Object.keys(resultData).slice(0, 15),
-            fullResponse: JSON.stringify(rawResult).substring(0, 800)
+            keys: Object.keys(rawResult).slice(0, 20),
+            resultDataKeys: Object.keys(resultData).slice(0, 20),
+            fullResponse: JSON.stringify(rawResult).substring(0, 2000),
+            resultDataPreview: JSON.stringify(resultData).substring(0, 1000)
           });
 
           // Per FAL docs: output has model_glb (File), model_urls (ModelUrls with glb, obj, etc)
@@ -656,27 +683,37 @@ export function createModel3dRoutes(deps: Dependencies) {
             // Update gallery item with result
             await updateGalleryItemWithResult(updateQuery, generationId, resultData, input_image_url);
             
-            // Ensure response hasn't been sent already
-            if (!res.headersSent) {
-              res.json({
-                success: true,
-                // Return model_glb as per FAL docs
-                model_glb: resultData.model_glb || resultData.glb,
-                thumbnail: resultData.thumbnail,
-                model_urls: resultData.model_urls,
-                seed: resultData.seed,
-                remainingCredits: updateResult.credits,
-                creditsDeducted: creditsRequired,
-                generationId: generationId // Return generationId so frontend can find it in gallery
-              });
-            }
-            return;
+          // Ensure response hasn't been sent already
+          if (!res.headersSent) {
+            const responsePayload = {
+              success: true,
+              // Return model_glb as per FAL docs
+              model_glb: resultData.model_glb || resultData.glb,
+              thumbnail: resultData.thumbnail,
+              model_urls: resultData.model_urls,
+              seed: resultData.seed,
+              remainingCredits: updateResult.credits,
+              creditsDeducted: creditsRequired,
+              generationId: generationId // Return generationId so frontend can find it in gallery
+            };
+            logger.info('3D polling returning success response', {
+              requestId,
+              hasModelGlb: !!responsePayload.model_glb,
+              hasThumbnail: !!responsePayload.thumbnail,
+              hasModelUrls: !!responsePayload.model_urls,
+              responsePreview: JSON.stringify(responsePayload).substring(0, 1000)
+            });
+            res.json(responsePayload);
+          }
+          return;
           }
 
           logger.error('No model URL in 3D result', { 
-            rawResultKeys: Object.keys(rawResult).slice(0, 15),
-            resultDataKeys: Object.keys(resultData).slice(0, 15),
-            resultData: JSON.stringify(resultData).substring(0, 1000)
+            requestId,
+            rawResultKeys: Object.keys(rawResult).slice(0, 20),
+            resultDataKeys: Object.keys(resultData).slice(0, 20),
+            rawResultFull: JSON.stringify(rawResult).substring(0, 2000),
+            resultDataFull: JSON.stringify(resultData).substring(0, 2000)
           });
           await refundCredits(user, creditsRequired, 'No model in 3D result');
           res.status(500).json({
