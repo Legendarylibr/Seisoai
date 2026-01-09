@@ -39,21 +39,24 @@ export default defineConfig({
   build: {
     // Production build optimizations
     target: 'es2020',
-    // Use terser for minification to properly handle Solana library exports
-    // esbuild aggressively mangles function names which breaks @solana/web3.js internal calls
+    // Use terser for minification with NO mangling to fix @solana/web3.js internal reference errors
+    // The Solana library has internal dependencies that break when identifiers are renamed
     minify: 'terser',
     terserOptions: {
-      // Keep function names to prevent "Ix is not a function" errors in Solana
+      // Completely disable mangling - Solana web3.js breaks when any identifiers are renamed
+      mangle: false,
+      // Keep all function and class names
       keep_fnames: true,
-      mangle: {
-        // Don't mangle top-level names
-        toplevel: false,
-        // Reserved names that shouldn't be mangled (Solana internal functions)
-        reserved: ['Ix', 'TransactionInstruction', 'Connection', 'PublicKey', 'Transaction']
-      },
+      keep_classnames: true,
       compress: {
-        // Don't inline functions - important for Solana library internals
-        inline: 1,
+        // Disable optimizations that can break Solana library internals
+        inline: false,
+        reduce_funcs: false,
+        reduce_vars: false,
+      },
+      format: {
+        // Preserve some readability for debugging
+        comments: false,
       }
     },
     sourcemap: false, // Disable sourcemaps in production for smaller bundles
