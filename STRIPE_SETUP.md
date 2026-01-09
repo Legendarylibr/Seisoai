@@ -1,18 +1,21 @@
-# Stripe Setup - Production Configuration
+# Stripe Setup
 
 ## ✅ Configuration
 
 ### Frontend Environment Variable
 - `VITE_STRIPE_PUBLISHABLE_KEY`: Set in Railway/deployment platform
-- Used by: src/services/stripeService.js
-- **MUST be a LIVE key** (`pk_live_...`)
-- **Test keys are not supported** - the application only accepts live keys
+- Used by: src/services/stripeService.ts
+- **Production**: Must be a LIVE key (`pk_live_...`)
+- **Development**: Test keys (`pk_test_...`) are accepted
 
 ### Backend Environment Variable
-- `STRIPE_SECRET_KEY`: Set in Railway/deployment platform
-- **MUST be a LIVE key** (`sk_live_...`)
-- **Test keys are not supported** - the application will fail to start with test keys
+- `STRIPE_SECRET_KEY`: Set in Railway/deployment platform or `backend.env`
+- **Production**: Must be a LIVE key (`sk_live_...`)
+- **Development**: Test keys (`sk_test_...`) are accepted
 - `STRIPE_WEBHOOK_SECRET`: Webhook signing secret for payment verification
+
+### ⚠️ Common Issue: Placeholder Keys
+If you see errors like "connection to Stripe failed" or "Request was retried", check that you're using a **real** Stripe API key, not a placeholder like `sk_test_your_stripe_secret_key_here`.
 
 ## 🚀 Getting Your Stripe Keys
 
@@ -53,9 +56,10 @@ Update your `.env` files:
 ## ⚠️ Important Notes
 
 1. **LIVE MODE = REAL MONEY**: Live keys will process actual payments and charge real credit cards
-2. **Test keys are not supported**: The application will reject test keys (`pk_test_...` and `sk_test_...`)
-3. **Webhook Setup**: Make sure your webhook endpoint is configured in Stripe dashboard for production
-4. **Domain Verification**: Stripe may require domain verification for live mode
+2. **Test keys in development**: Test keys (`pk_test_...` and `sk_test_...`) work in development mode
+3. **Test keys in production**: Test keys are automatically rejected in production for safety
+4. **Webhook Setup**: Make sure your webhook endpoint is configured in Stripe dashboard for production
+5. **Domain Verification**: Stripe may require domain verification for live mode
 
 ## 🚀 Next Steps
 

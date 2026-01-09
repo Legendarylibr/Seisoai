@@ -10,9 +10,14 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables from backend.env
-const envPath = path.join(__dirname, '..', '..', 'backend.env');
-dotenv.config({ path: envPath });
+// Load environment variables from backend.env (local development only)
+// In production, env vars should be set directly by the deployment platform (Railway, etc.)
+// dotenv.config() does NOT override existing env vars, but we skip it entirely in production
+// to avoid any confusion and ensure we only use platform-provided values
+if (process.env.NODE_ENV !== 'production') {
+  const envPath = path.join(__dirname, '..', '..', 'backend.env');
+  dotenv.config({ path: envPath });
+}
 
 // Required environment variables
 const REQUIRED_VARS = ['JWT_SECRET', 'ENCRYPTION_KEY'];
@@ -21,10 +26,11 @@ const REQUIRED_VARS = ['JWT_SECRET', 'ENCRYPTION_KEY'];
 const missingVars = REQUIRED_VARS.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('SECURITY ERROR: Missing required environment variables:', missingVars);
-  console.error('Please set these variables in your backend.env file');
   if (process.env.NODE_ENV === 'production') {
+    console.error('Please set these variables in your deployment platform (Railway, etc.)');
     process.exit(1);
   } else {
+    console.error('Please set these variables in your backend.env file');
     console.warn('WARNING: Running without proper security configuration. This is not safe for production.');
   }
 }
