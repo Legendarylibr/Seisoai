@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { Mail, LogOut, Coins, RefreshCw, User, MessageCircle, Check, X, Loader2 } from 'lucide-react';
 import { WIN95, BTN, PANEL, TEXT } from '../utils/buttonStyles';
-import { apiBaseUrl } from '../services/apiConfig';
+import { API_URL } from '../utils/apiConfig';
 
 interface DiscordStatus {
   linked: boolean;
@@ -33,7 +33,7 @@ const EmailUserInfo: React.FC = () => {
     if (!token) return;
     try {
       setLoadingDiscord(true);
-      const response = await fetch(`${apiBaseUrl}/api/auth/discord/status`, {
+      const response = await fetch(`${API_URL}/api/auth/discord/status`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -51,14 +51,14 @@ const EmailUserInfo: React.FC = () => {
   
   const handleConnectDiscord = () => {
     // Redirect to Discord OAuth - the backend will handle the rest
-    window.location.href = `${apiBaseUrl}/api/auth/discord`;
+    window.location.href = `${API_URL}/api/auth/discord`;
   };
   
   const handleUnlinkDiscord = async () => {
     if (!token) return;
     try {
       setUnlinkingDiscord(true);
-      const response = await fetch(`${apiBaseUrl}/api/auth/discord`, {
+      const response = await fetch(`${API_URL}/api/auth/discord`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
