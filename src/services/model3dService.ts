@@ -40,6 +40,11 @@ export interface Model3dGenerationResult {
   seed?: number;
   remainingCredits?: number;
   creditsDeducted?: number;
+  creditsRefunded?: number;
+  generationId?: string;
+  requestId?: string;
+  statusEndpoint?: string;
+  message?: string;
   error?: string;
 }
 

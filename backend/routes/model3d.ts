@@ -484,23 +484,6 @@ export function createModel3dRoutes(deps: Dependencies) {
           };
         };
         
-        // Log the raw status response structure for debugging
-        if (statusChanged || pollCount % 6 === 0) {
-          logger.info('3D polling status response', {
-            requestId,
-            status: rawStatusData.status,
-            hasResponseUrl: !!rawStatusData.response_url,
-            hasData: !!rawStatusData.data,
-            hasOutput: !!rawStatusData.output,
-            hasResult: !!rawStatusData.result,
-            hasGlb: !!rawStatusData.glb,
-            hasModelGlb: !!rawStatusData.model_glb,
-            hasModelUrls: !!rawStatusData.model_urls,
-            topLevelKeys: Object.keys(rawStatusData).slice(0, 20),
-            rawResponsePreview: JSON.stringify(rawStatusData).substring(0, 1000)
-          });
-        }
-        
         // Handle wrapped or unwrapped data
         const statusResult = rawStatusData.data || rawStatusData.output || rawStatusData.result || rawStatusData;
         const rawStatus = rawStatusData.status || '';
@@ -514,6 +497,20 @@ export function createModel3dRoutes(deps: Dependencies) {
             status: normalizedStatus,
             pollCount,
             elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
+          });
+          // Log the raw status response structure for debugging
+          logger.info('3D polling status response', {
+            requestId,
+            status: rawStatusData.status,
+            hasResponseUrl: !!rawStatusData.response_url,
+            hasData: !!rawStatusData.data,
+            hasOutput: !!rawStatusData.output,
+            hasResult: !!rawStatusData.result,
+            hasGlb: !!rawStatusData.glb,
+            hasModelGlb: !!rawStatusData.model_glb,
+            hasModelUrls: !!rawStatusData.model_urls,
+            topLevelKeys: Object.keys(rawStatusData).slice(0, 20),
+            rawResponsePreview: JSON.stringify(rawStatusData).substring(0, 1000)
           });
           lastStatus = normalizedStatus;
         }

@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain, Wand2 } from 'lucide-react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
+import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain, Sparkles, Grid3X3, Image, Zap } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
@@ -23,8 +23,13 @@ interface GenerationQueueProps {
   onShowStripePayment?: () => void;
 }
 
-// Max images allowed in batch
+// Max images allowed from a single source image
+const MAX_VARIATIONS = 100;
+// Max source images in queue
 const MAX_BATCH_SIZE = 100;
+
+// Preset options for quick selection
+const VARIATION_PRESETS = [1, 4, 10, 25, 50, 100];
 
 const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, onShowStripePayment }) => {
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -33,6 +38,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
   const [prompt, setPrompt] = useState('');
   const [isExpanded, setIsExpanded] = useState(true);
   const [numImages, setNumImages] = useState<number>(1); // Default number of images to generate per single image
+  const [progressCount, setProgressCount] = useState(0); // Track completed images in current batch
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
 
