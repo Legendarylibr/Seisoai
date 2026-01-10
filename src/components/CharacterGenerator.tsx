@@ -642,8 +642,12 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
         return;
       }
 
-      if (result.success && (result.model_glb?.url || result.model_urls?.glb?.url)) {
-        setModel3dResult(result);
+      // Check for model URL - treat as success if model exists even if success flag is missing
+      const hasModelUrl = result.model_glb?.url || result.model_urls?.glb?.url;
+      if (hasModelUrl) {
+        // Ensure success is set for downstream code
+        const successResult = { ...result, success: true };
+        setModel3dResult(successResult);
         setCurrentStep('result');
         
         // Refresh credits
