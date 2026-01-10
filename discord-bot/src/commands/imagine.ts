@@ -9,12 +9,13 @@ import {
   StringSelectMenuBuilder,
   TextChannel,
   ThreadChannel,
-  AttachmentBuilder
+  AttachmentBuilder,
+  GuildMember
 } from 'discord.js';
 import { v4 as uuidv4 } from 'uuid';
 import DiscordUser from '../database/models/DiscordUser.js';
 import { generateImage, uploadToFal } from '../services/fal.js';
-import { createGenerationThread, sendGenerationResult } from '../services/channels.js';
+import { getOrCreatePrivateChannel, createGenerationThread, sendGenerationResult } from '../services/channels.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 
@@ -84,7 +85,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply();
+  await interaction.deferReply({ ephemeral: true });
 
   try {
     const prompt = interaction.options.getString('prompt', true);
@@ -101,6 +102,31 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       discriminator: interaction.user.discriminator,
       avatar: interaction.user.avatar || undefined
     });
+
+    // Get or create private channel for the user
+    if (!interaction.guild || !interaction.member) {
+      const embed = new EmbedBuilder()
+        .setColor(0xE74C3C)
+        .setTitle('❌ Server Required')
+        .setDescription('This command must be used in a server, not in DMs.');
+      await interaction.editReply({ embeds: [embed] });
+      return;
+    }
+
+    const privateChannel = await getOrCreatePrivateChannel(
+      interaction.client,
+      interaction.guild,
+      interaction.member as GuildMember
+    );
+
+    if (!privateChannel) {
+      const embed = new EmbedBuilder()
+        .setColor(0xE74C3C)
+        .setTitle('❌ Channel Error')
+        .setDescription('Could not create your private generation channel. Please contact an admin.');
+      await interaction.editReply({ embeds: [embed] });
+      return;
+    }
 
     // Calculate credits
     const creditsRequired = count * config.credits.image;
@@ -147,7 +173,19 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       }
     }
 
-    // Show processing message
+    // Notify user and redirect to private channel
+    const redirectEmbed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle('🔒 Generating in Private Channel')
+      .setDescription(`Your image is being generated in your private channel!`)
+      .addFields({
+        name: '📍 Go to your channel',
+        value: `<#${privateChannel.id}>`
+      });
+
+    await interaction.editReply({ embeds: [redirectEmbed] });
+
+    // Show processing message in private channel
     const processingEmbed = new EmbedBuilder()
       .setColor(0x3498DB)
       .setTitle('⚙️ Generating Image...')
@@ -160,7 +198,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       )
       .setFooter({ text: 'This may take 10-30 seconds...' });
 
-    await interaction.editReply({ embeds: [processingEmbed] });
+    const processingMessage = await privateChannel.send({ embeds: [processingEmbed] });
 
     // Generate images
     const result = await generateImage({
@@ -226,7 +264,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       }
     }
 
-    await interaction.editReply({ embeds });
+    // Update the processing message in private channel with results
+    await processingMessage.edit({ embeds });
 
     logger.info('Image generated via Discord', {
       userId: interaction.user.id,
@@ -249,6 +288,23 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         value: 'Try again with a different prompt or contact support if the issue persists.'
       });
 
+    // Try to update the private channel message, fallback to interaction reply
+    try {
+      if (interaction.guild && interaction.member) {
+        const privateChannel = await getOrCreatePrivateChannel(
+          interaction.client,
+          interaction.guild,
+          interaction.member as GuildMember
+        );
+        if (privateChannel) {
+          await privateChannel.send({ embeds: [errorEmbed] });
+          return;
+        }
+      }
+    } catch {
+      // Fallback to interaction reply
+    }
+    
     await interaction.editReply({ embeds: [errorEmbed] });
   }
 }
