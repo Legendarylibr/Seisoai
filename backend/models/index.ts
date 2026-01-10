@@ -10,7 +10,8 @@ import GalleryItem from './GalleryItem';
 import Payment from './Payment';
 
 export { User, IPFreeImage, GlobalFreeImage, Generation, GalleryItem, Payment };
-export { buildUserUpdateQuery } from './User';
+// buildUserUpdateQuery is now in services/user.ts to avoid circular dependencies
+export { buildUserUpdateQuery } from '../services/user';
 export default { User, IPFreeImage, GlobalFreeImage, Generation, GalleryItem, Payment };
 
 

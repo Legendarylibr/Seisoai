@@ -75,11 +75,8 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
   }
 
   try {
-    // Validate API URL is configured
-    if (!API_URL) {
-      logger.error('API_URL is not configured');
-      throw new Error('API server URL is not configured. Please check your environment settings.');
-    }
+    // Note: API_URL can be empty string for same-origin production deployments
+    // This is intentional - empty string means requests go to relative URLs like /api/model3d/generate
 
     const apiEndpoint = `${API_URL}/api/model3d/generate`;
     logger.info('Starting 3D model generation', { 

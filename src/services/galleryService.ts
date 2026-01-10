@@ -67,9 +67,7 @@ export const addGeneration = async (
   generationData: GenerationData
 ): Promise<AddGenerationResult> => {
   try {
-    if (!API_URL) {
-      throw new Error('API URL not configured');
-    }
+    // Note: API_URL can be empty string for same-origin production deployments
 
     // Check if identifier is a wallet address or userId
     const isWalletAddress = identifier?.startsWith('0x') || 
@@ -172,10 +170,7 @@ export const getGallery = async (
   email: string | null = null
 ): Promise<GalleryResponse> => {
   try {
-    if (!API_URL && API_URL !== '') {
-      // Empty string is valid (same origin), but undefined/null is not
-      throw new Error('API URL not configured');
-    }
+    // Note: API_URL can be empty string for same-origin production deployments
 
     if (!identifier) {
       throw new Error('Identifier is required');
@@ -227,9 +222,7 @@ export const deleteGeneration = async (
   generationId: string
 ): Promise<{ success: boolean }> => {
   try {
-    if (!API_URL) {
-      throw new Error('API URL not configured');
-    }
+    // Note: API_URL can be empty string for same-origin production deployments
 
     const response = await fetch(`${API_URL}/api/gallery/${walletAddress}/${generationId}`, {
       method: 'DELETE'
@@ -253,9 +246,7 @@ export const deleteGeneration = async (
  */
 export const getGalleryStats = async (walletAddress: string): Promise<GalleryStats> => {
   try {
-    if (!API_URL) {
-      throw new Error('API URL not configured');
-    }
+    // Note: API_URL can be empty string for same-origin production deployments
 
     const response = await fetch(`${API_URL}/api/gallery/${walletAddress}/stats`);
 
@@ -280,9 +271,7 @@ export const updateSettings = async (
   settings: Record<string, unknown>
 ): Promise<{ success: boolean }> => {
   try {
-    if (!API_URL) {
-      throw new Error('API URL not configured');
-    }
+    // Note: API_URL can be empty string for same-origin production deployments
 
     const response = await fetch(`${API_URL}/api/users/${walletAddress}/settings`, {
       method: 'PUT',

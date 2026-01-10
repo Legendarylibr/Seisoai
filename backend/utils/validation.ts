@@ -222,7 +222,7 @@ export function isValidFalUrl(url: unknown): boolean {
  * Create input validation middleware
  */
 export function createValidateInput() {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
     if (req.query) {
       req.query = deepSanitize(req.query) as typeof req.query;
     }

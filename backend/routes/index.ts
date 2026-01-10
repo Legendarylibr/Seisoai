@@ -1,6 +1,10 @@
 /**
  * API Routes Index
  * Central router for all API endpoints
+ * 
+ * Route Organization:
+ * - Primary routes use the canonical path
+ * - Legacy aliases are documented for backward compatibility
  */
 import { Router, type Request, type Response } from 'express';
 import createAuthRoutes from './auth';
@@ -32,84 +36,75 @@ interface Dependencies {
 export function createApiRoutes(deps: Dependencies) {
   const router = Router();
 
-  // Static routes (robots.txt, favicon, metrics, home)
-  const staticRouter = createStaticRoutes(deps);
-  router.use('/', staticRouter);
-  
-  // Utility routes (health, cors-info, logging, safety)
-  const utilityRoutes = createUtilityRoutes(deps);
-  router.use('/', utilityRoutes);
-  router.use('/safety', utilityRoutes);
-  
+  // ============================================
+  // Static & Utility Routes (mounted at root)
+  // ============================================
+  router.use('/', createStaticRoutes(deps));
+  router.use('/', createUtilityRoutes(deps));
+  router.use('/', createExtractRoutes(deps));
+  router.use('/', createRpcRoutes(deps));
+
+  // ============================================
   // Authentication
+  // ============================================
   router.use('/auth', createAuthRoutes(deps));
-  
-  // Discord OAuth (nested under /auth/discord)
   router.use('/auth/discord', createDiscordRoutes(deps));
-  
-  // User management
+
+  // ============================================
+  // User Management
+  // Primary: /user, Aliases: /credits, /nft, /users
+  // ============================================
   const userRoutes = createUserRoutes(deps);
   router.use('/user', userRoutes);
+  // Legacy aliases for backward compatibility
   router.use('/credits', userRoutes);
-  
-  // Gallery
-  const galleryRoutes = createGalleryRoutes(deps);
-  router.use('/gallery', galleryRoutes);
-  
-  // NFT routes (reuse user routes)
   router.use('/nft', userRoutes);
-  
-  // Users lookup (GET /api/users/:walletAddress)
   router.use('/users', userRoutes);
-  
-  // Generation
+
+  // ============================================
+  // Content Generation
+  // Primary: /generate, Alias: /generations
+  // ============================================
   const generationRoutes = createGenerationRoutes(deps);
   router.use('/generate', generationRoutes);
-  
-  // Generations history (POST /api/generations/add)
   router.use('/generations', generationRoutes);
-  
-  // Extract layers
-  router.use('/', createExtractRoutes(deps));
-  
-  // WAN Animate
-  router.use('/wan-animate', createWanAnimateRoutes(deps));
-  
-  // Audio routes (voice clone, TTS, lip sync, audio separation, SFX)
+
+  // ============================================
+  // Media & Content Routes
+  // ============================================
+  router.use('/gallery', createGalleryRoutes(deps));
   router.use('/audio', createAudioRoutes(deps));
-  
-  // Image tools (face swap, inpaint, describe)
   router.use('/image-tools', createImageToolsRoutes(deps));
-  
-  // Multi-step workflows (AI Influencer, Music Video, Avatar Creator, Remix Visualizer)
   router.use('/workflows', createWorkflowRoutes(deps));
-  
-  // 3D Model Generation (Hunyuan3D V3)
   router.use('/model3d', createModel3dRoutes(deps));
-  
+  router.use('/wan-animate', createWanAnimateRoutes(deps));
+
+  // ============================================
   // Payments
+  // Primary: /payments, Alias: /payment
+  // ============================================
   const paymentRoutes = createPaymentRoutes(deps);
   router.use('/payments', paymentRoutes);
   router.use('/payment', paymentRoutes);
-  
-  // Stripe
+
+  // Stripe payments & subscriptions
   const stripeRoutes = createStripeRoutes(deps);
   router.use('/stripe', stripeRoutes);
   
-  // Subscription routes (alias for stripe subscription-verify)
+  // Subscription verification alias
   router.post('/subscription/verify', (req, res, next) => {
-    // Forward to stripe subscription-verify
     req.url = '/subscription-verify';
     stripeRoutes(req, res, next);
   });
-  
-  // RPC routes
-  router.use('/', createRpcRoutes(deps));
-  
-  // Admin routes
+
+  // ============================================
+  // Admin
+  // ============================================
   router.use('/admin', createAdminRoutes(deps));
 
-  // 404 handler for API routes
+  // ============================================
+  // 404 Handler
+  // ============================================
   router.use('*', (_req: Request, res: Response) => {
     res.status(404).json({
       success: false,
@@ -121,4 +116,3 @@ export function createApiRoutes(deps: Dependencies) {
 }
 
 export default createApiRoutes;
-
