@@ -91,10 +91,10 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
       hasInputImage: !!input_image_url
     });
 
-    // Create abort controller with 10 minute timeout (3D gen can take 5-7 mins + polling overhead)
-    // Backend polls for up to 7 minutes, so we need extra time for the response
+    // Create abort controller with 15 minute timeout (3D gen can take 5-10 mins + polling overhead)
+    // Backend polls for up to 12 minutes, so we need extra time for the response
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000);
+    const timeoutId = setTimeout(() => controller.abort(), 15 * 60 * 1000);
 
     // Get JWT token for authentication
     const token = getAuthToken() || '';

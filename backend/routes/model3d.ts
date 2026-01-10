@@ -430,7 +430,7 @@ export function createModel3dRoutes(deps: Dependencies) {
 
       // Poll for completion
       const modelPath = 'fal-ai/hunyuan3d-v3/image-to-3d';
-      const maxWaitTime = 7 * 60 * 1000; // 7 minutes max (3D gen can take up to 5 mins)
+      const maxWaitTime = 12 * 60 * 1000; // 12 minutes max (3D gen can take 5-10 mins)
       const pollInterval = 5000; // Poll every 5 seconds (reduce API calls)
       const startTime = Date.now();
       let lastStatus = '';
