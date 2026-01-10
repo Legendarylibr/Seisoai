@@ -23,6 +23,8 @@ interface IMainUser {
   userId?: string;
   email?: string;
   walletAddress?: string;
+  discordId?: string;
+  discordUsername?: string;
   credits: number;
   totalCreditsEarned: number;
   totalCreditsSpent: number;
@@ -31,6 +33,11 @@ interface IMainUser {
 export const data = new SlashCommandBuilder()
   .setName('link')
   .setDescription('Link your Discord account to SeisoAI')
+  .addSubcommand(subcommand =>
+    subcommand
+      .setName('auto')
+      .setDescription('Auto-detect if your account is already linked via the website')
+  )
   .addSubcommand(subcommand =>
     subcommand
       .setName('email')
@@ -55,6 +62,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
+  if (subcommand === 'auto') {
+    await handleAutoLink(interaction);
+    return;
+  }
+
   // Show modal for email or wallet input
   const modal = new ModalBuilder()
     .setCustomId(`link_${subcommand}_modal`)
@@ -75,11 +87,117 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   await interaction.showModal(modal);
 }
 
+/**
+ * Auto-detect if user's Discord is already linked via OAuth on the website
+ */
+async function handleAutoLink(interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    const discordId = interaction.user.id;
+
+    // Check if already linked in our Discord database
+    let discordUser = await DiscordUser.findOne({ discordId });
+
+    // Check main SeisoAI database for OAuth-linked accounts
+    const User = mongoose.model<IMainUser>('User');
+    const mainUser = await User.findOne({ discordId });
+
+    if (mainUser) {
+      // Found! Link the accounts
+      if (!discordUser) {
+        discordUser = await DiscordUser.findOrCreate({
+          id: interaction.user.id,
+          username: interaction.user.username,
+          discriminator: interaction.user.discriminator,
+          avatar: interaction.user.avatar || undefined
+        });
+      }
+
+      // Sync data from main account
+      discordUser.seisoUserId = mainUser.userId;
+      if (mainUser.email) discordUser.email = mainUser.email;
+      if (mainUser.walletAddress) discordUser.walletAddress = mainUser.walletAddress;
+      discordUser.credits = mainUser.credits;
+      discordUser.totalCreditsEarned = mainUser.totalCreditsEarned;
+      discordUser.totalCreditsSpent = mainUser.totalCreditsSpent;
+      await discordUser.save();
+
+      const embed = new EmbedBuilder()
+        .setColor(0x2ECC71)
+        .setTitle('✅ Account Found & Linked!')
+        .setDescription('Your Discord was already connected via the SeisoAI website. Credits synced!')
+        .addFields(
+          { name: '💰 Credits', value: `${discordUser.credits}`, inline: true },
+          { name: '📊 Total Earned', value: `${discordUser.totalCreditsEarned}`, inline: true }
+        )
+        .setFooter({ text: 'You\'re all set! Start generating with /imagine' });
+
+      await interaction.editReply({ embeds: [embed] });
+
+      logger.info('Auto-linked Discord account from OAuth', {
+        discordId,
+        seisoUserId: mainUser.userId
+      });
+    } else {
+      // No OAuth link found
+      const embed = new EmbedBuilder()
+        .setColor(0xFFA500)
+        .setTitle('🔍 No Linked Account Found')
+        .setDescription('Your Discord isn\'t connected to a SeisoAI account yet.')
+        .addFields(
+          {
+            name: '🌐 Option 1: Link via Website (Recommended)',
+            value: `1. Go to [SeisoAI](${config.urls.website})\n2. Log in to your account\n3. Click "Connect Discord" in settings\n4. Authorize the connection\n5. Run \`/link auto\` again!`
+          },
+          {
+            name: '📧 Option 2: Link Manually',
+            value: '`/link email` - Link with your SeisoAI email\n`/link wallet` - Link with your wallet address'
+          }
+        );
+
+      const row = new ActionRowBuilder<ButtonBuilder>()
+        .addComponents(
+          new ButtonBuilder()
+            .setLabel('Open SeisoAI')
+            .setStyle(ButtonStyle.Link)
+            .setURL(config.urls.website)
+            .setEmoji('🌐')
+        );
+
+      await interaction.editReply({ embeds: [embed], components: [row] });
+    }
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Auto-link error', { error: err.message, userId: interaction.user.id });
+
+    const errorEmbed = new EmbedBuilder()
+      .setColor(0xE74C3C)
+      .setTitle('❌ Error')
+      .setDescription('Failed to check for linked account.');
+
+    await interaction.editReply({ embeds: [errorEmbed] });
+  }
+}
+
 async function handleStatus(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   try {
-    const discordUser = await DiscordUser.findOne({ discordId: interaction.user.id });
+    // First try auto-detection from main database
+    const User = mongoose.model<IMainUser>('User');
+    const mainUser = await User.findOne({ discordId: interaction.user.id });
+    
+    let discordUser = await DiscordUser.findOne({ discordId: interaction.user.id });
+
+    // If found in main DB but not synced locally, sync it
+    if (mainUser && discordUser && !discordUser.seisoUserId) {
+      discordUser.seisoUserId = mainUser.userId;
+      discordUser.credits = mainUser.credits;
+      discordUser.totalCreditsEarned = mainUser.totalCreditsEarned;
+      discordUser.totalCreditsSpent = mainUser.totalCreditsSpent;
+      await discordUser.save();
+    }
 
     if (!discordUser) {
       const embed = new EmbedBuilder()
@@ -88,7 +206,7 @@ async function handleStatus(interaction: ChatInputCommandInteraction): Promise<v
         .setDescription('You haven\'t linked any accounts yet.')
         .addFields({
           name: '🔗 How to Link',
-          value: '`/link email` - Link with your SeisoAI email\n`/link wallet` - Link with your wallet address'
+          value: '`/link auto` - Auto-detect if linked via website\n`/link email` - Link with your SeisoAI email\n`/link wallet` - Link with your wallet address'
         });
 
       await interaction.editReply({ embeds: [embed] });

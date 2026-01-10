@@ -229,6 +229,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       messageId: interaction.id,
       timestamp: new Date()
     });
+    discordUser.lastGeneration = new Date();
 
     // Keep only last 50 generations
     if (discordUser.generations.length > 50) {

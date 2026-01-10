@@ -8,20 +8,16 @@ import mongoose, { type Model } from 'mongoose';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
 import { createEmailHash } from '../utils/emailHash';
+import { normalizeWalletAddress } from '../utils/validation';
+
+// Re-export for backwards compatibility
+export { normalizeWalletAddress };
 
 /**
  * Get User model (lazy load to avoid circular deps)
  */
 function getUserModel(): Model<IUser> {
   return mongoose.model<IUser>('User');
-}
-
-/**
- * Normalize wallet address
- */
-export function normalizeWalletAddress(address: unknown): string | null {
-  if (!address || typeof address !== 'string') return null;
-  return address.startsWith('0x') ? address.toLowerCase() : address;
 }
 
 /**

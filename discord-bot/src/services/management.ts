@@ -270,31 +270,51 @@ export async function validatePrivateChannel(
 
 /**
  * Sync credits from main SeisoAI user to Discord user
+ * Also checks for OAuth-linked accounts
  */
 export async function syncCreditsFromMain(discordId: string): Promise<boolean> {
   try {
-    const discordUser = await DiscordUser.findOne({ discordId });
-    if (!discordUser?.seisoUserId && !discordUser?.email && !discordUser?.walletAddress) {
-      return false;
-    }
-
+    let discordUser = await DiscordUser.findOne({ discordId });
+    
     // Import mongoose to query main User model
     const mongoose = await import('mongoose');
-    
-    // Build query based on what's linked
-    const query: Record<string, unknown> = {};
-    if (discordUser.seisoUserId) query.userId = discordUser.seisoUserId;
-    else if (discordUser.email) query.email = discordUser.email;
-    else if (discordUser.walletAddress) query.walletAddress = discordUser.walletAddress;
-
-    // Try to find main user
     const User = mongoose.default.models.User;
     if (!User) return false;
 
-    const mainUser = await User.findOne(query);
+    // First, check if there's an OAuth-linked account (by discordId in main User)
+    let mainUser = await User.findOne({ discordId });
+    
+    // If not OAuth-linked, try other identifiers
+    if (!mainUser && discordUser) {
+      const query: Record<string, unknown> = {};
+      if (discordUser.seisoUserId) query.userId = discordUser.seisoUserId;
+      else if (discordUser.email) query.email = discordUser.email;
+      else if (discordUser.walletAddress) query.walletAddress = discordUser.walletAddress;
+      
+      if (Object.keys(query).length > 0) {
+        mainUser = await User.findOne(query);
+      }
+    }
+
     if (!mainUser) return false;
 
-    // Sync credits
+    // Create Discord user if doesn't exist
+    if (!discordUser) {
+      discordUser = new DiscordUser({
+        discordId,
+        discordUsername: 'Unknown',
+        credits: 0,
+        totalCreditsEarned: 0,
+        totalCreditsSpent: 0,
+        generations: [],
+        settings: { notifyOnComplete: true, autoThread: true }
+      });
+    }
+
+    // Sync from main account
+    discordUser.seisoUserId = mainUser.userId;
+    if (mainUser.email) discordUser.email = mainUser.email;
+    if (mainUser.walletAddress) discordUser.walletAddress = mainUser.walletAddress;
     discordUser.credits = mainUser.credits;
     discordUser.totalCreditsEarned = mainUser.totalCreditsEarned || discordUser.totalCreditsEarned;
     discordUser.totalCreditsSpent = mainUser.totalCreditsSpent || discordUser.totalCreditsSpent;
@@ -302,7 +322,8 @@ export async function syncCreditsFromMain(discordId: string): Promise<boolean> {
 
     logger.debug('Synced credits from main account', {
       discordId,
-      credits: discordUser.credits
+      credits: discordUser.credits,
+      wasOAuthLinked: !!mainUser.discordId
     });
 
     return true;
@@ -312,6 +333,33 @@ export async function syncCreditsFromMain(discordId: string): Promise<boolean> {
       error: (error as Error).message 
     });
     return false;
+  }
+}
+
+/**
+ * Auto-detect and sync OAuth-linked account before generation
+ * Returns the Discord user with synced credits
+ */
+export async function ensureUserSynced(discordId: string, username: string): Promise<typeof DiscordUser.prototype | null> {
+  try {
+    // Try to sync from main database first
+    await syncCreditsFromMain(discordId);
+    
+    // Get or create the Discord user
+    const discordUser = await DiscordUser.findOrCreate({
+      id: discordId,
+      username,
+      discriminator: '0',
+      avatar: undefined
+    });
+    
+    return discordUser;
+  } catch (error) {
+    logger.error('Failed to ensure user synced', {
+      discordId,
+      error: (error as Error).message
+    });
+    return null;
   }
 }
 
@@ -435,6 +483,7 @@ export default {
   cleanupInactiveChannels,
   validatePrivateChannel,
   syncCreditsFromMain,
+  ensureUserSynced,
   createRateLimitEmbed,
   createCooldownEmbed,
   createConcurrentLimitEmbed,

@@ -310,6 +310,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       messageId: interaction.id,
       timestamp: new Date()
     });
+    discordUser.lastGeneration = new Date();
 
     if (discordUser.generations.length > 50) {
       discordUser.generations = discordUser.generations.slice(-50);

@@ -15,8 +15,12 @@ import config, { validateConfig } from './config/index.js';
 import { connectDatabase } from './database/index.js';
 import commands, { handleLinkModal, handleHelpSelect } from './commands/index.js';
 import { getOrCreatePrivateChannel } from './services/channels.js';
+import management from './services/management.js';
 import DiscordUser from './database/models/DiscordUser.js';
 import logger from './utils/logger.js';
+
+// Generation commands that need rate limiting
+const GENERATION_COMMANDS = ['imagine', 'video', 'music', '3d'];
 
 // Validate configuration before starting
 if (!validateConfig()) {
@@ -63,6 +67,22 @@ client.once(Events.ClientReady, async (readyClient) => {
   } catch (error) {
     logger.error('Failed to connect to database', { error: (error as Error).message });
   }
+
+  // Check permissions in all guilds
+  for (const guild of readyClient.guilds.cache.values()) {
+    const permCheck = management.checkBotPermissions(guild);
+    if (!permCheck.hasAll) {
+      logger.warn(`Missing permissions in ${guild.name}`, { 
+        guildId: guild.id, 
+        missing: permCheck.missing,
+        critical: permCheck.critical
+      });
+    }
+  }
+
+  // Start maintenance tasks
+  management.startMaintenanceTasks(client);
+  logger.info('🔧 Maintenance tasks started');
 });
 
 // Slash command handler
@@ -77,13 +97,64 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     try {
-      logger.debug(`Command executed: /${interaction.commandName}`, {
-        userId: interaction.user.id,
+      const userId = interaction.user.id;
+      const commandName = interaction.commandName;
+      const isGenerationCommand = GENERATION_COMMANDS.includes(commandName);
+
+      // Check bot permissions in guild
+      if (interaction.guild) {
+        const permCheck = management.checkBotPermissions(interaction.guild);
+        if (permCheck.critical) {
+          const embed = management.createMissingPermissionsEmbed(permCheck.missing);
+          await interaction.reply({ embeds: [embed], ephemeral: true });
+          return;
+        }
+      }
+
+      // For generation commands, check rate limits and cooldowns
+      if (isGenerationCommand) {
+        // Check rate limit
+        const rateLimit = management.checkRateLimit(userId);
+        if (!rateLimit.allowed) {
+          const embed = management.createRateLimitEmbed(rateLimit.resetIn);
+          await interaction.reply({ embeds: [embed], ephemeral: true });
+          return;
+        }
+
+        // Check cooldown
+        const cooldown = management.checkCooldown(userId, commandName);
+        if (cooldown.onCooldown) {
+          const embed = management.createCooldownEmbed(commandName, cooldown.remainingMs);
+          await interaction.reply({ embeds: [embed], ephemeral: true });
+          return;
+        }
+
+        // Check concurrent generation limit
+        if (!management.canStartGeneration(userId)) {
+          const active = management.getActiveGenerations(userId);
+          const embed = management.createConcurrentLimitEmbed(active);
+          await interaction.reply({ embeds: [embed], ephemeral: true });
+          return;
+        }
+
+        // Track generation start
+        management.startGeneration(userId);
+      }
+
+      logger.debug(`Command executed: /${commandName}`, {
+        userId,
         guildId: interaction.guildId,
         channelId: interaction.channelId
       });
 
-      await command.execute(interaction);
+      try {
+        await command.execute(interaction);
+      } finally {
+        // Track generation end
+        if (isGenerationCommand) {
+          management.endGeneration(userId);
+        }
+      }
 
     } catch (error) {
       const err = error as Error;
@@ -91,6 +162,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         error: err.message,
         userId: interaction.user.id
       });
+
+      // End generation tracking on error
+      if (GENERATION_COMMANDS.includes(interaction.commandName)) {
+        management.endGeneration(interaction.user.id);
+      }
 
       const errorEmbed = new EmbedBuilder()
         .setColor(0xE74C3C)
@@ -150,7 +226,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-// Guild member join - offer private channel
+// Guild member join - create profile
 client.on(Events.GuildMemberAdd, async (member) => {
   try {
     // Create or get the user's Discord profile
@@ -169,6 +245,88 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
   } catch (error) {
     logger.error('Error handling new member', { error: (error as Error).message });
+  }
+});
+
+// Bot joins a new guild - check permissions
+client.on(Events.GuildCreate, async (guild) => {
+  logger.info('Bot joined new guild', { 
+    guildId: guild.id, 
+    guildName: guild.name,
+    memberCount: guild.memberCount 
+  });
+
+  // Check permissions
+  const permCheck = management.checkBotPermissions(guild);
+  if (!permCheck.hasAll) {
+    logger.warn(`Missing permissions in new guild ${guild.name}`, {
+      guildId: guild.id,
+      missing: permCheck.missing,
+      critical: permCheck.critical
+    });
+
+    // Try to notify guild owner if critical permissions missing
+    if (permCheck.critical && guild.ownerId) {
+      try {
+        const owner = await guild.members.fetch(guild.ownerId);
+        const embed = management.createMissingPermissionsEmbed(permCheck.missing);
+        embed.setTitle('⚠️ SeisoAI Bot Setup Required');
+        embed.setDescription(`Thanks for adding me to **${guild.name}**! I'm missing some permissions needed to work properly.`);
+        await owner.send({ embeds: [embed] });
+      } catch {
+        // Can't DM owner, that's okay
+      }
+    }
+  }
+});
+
+// Bot leaves a guild - log it
+client.on(Events.GuildDelete, async (guild) => {
+  logger.info('Bot left guild', { 
+    guildId: guild.id, 
+    guildName: guild.name 
+  });
+});
+
+// Channel deleted - clean up private channel references
+client.on(Events.ChannelDelete, async (channel) => {
+  if (channel.type !== ChannelType.GuildText) return;
+
+  try {
+    // Check if this was someone's private channel
+    const user = await DiscordUser.findOne({ privateChannelId: channel.id });
+    if (user) {
+      user.privateChannelId = undefined;
+      await user.save();
+      logger.info('Cleaned up deleted private channel reference', {
+        userId: user.discordId,
+        channelId: channel.id
+      });
+    }
+  } catch (error) {
+    logger.error('Error cleaning up deleted channel', { error: (error as Error).message });
+  }
+});
+
+// Guild member leave - optionally clean up their private channel
+client.on(Events.GuildMemberRemove, async (member) => {
+  try {
+    const user = await DiscordUser.findOne({ discordId: member.id });
+    if (user?.privateChannelId) {
+      // Delete their private channel in this guild
+      const channel = member.guild.channels.cache.get(user.privateChannelId);
+      if (channel) {
+        await channel.delete('User left the server');
+        user.privateChannelId = undefined;
+        await user.save();
+        logger.info('Deleted private channel for departed member', {
+          userId: member.id,
+          channelId: user.privateChannelId
+        });
+      }
+    }
+  } catch (error) {
+    logger.error('Error handling member leave', { error: (error as Error).message });
   }
 });
 

@@ -1,11 +1,89 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
-import { Mail, LogOut, Coins, RefreshCw, User } from 'lucide-react';
+import { Mail, LogOut, Coins, RefreshCw, User, MessageCircle, Check, X, Loader2 } from 'lucide-react';
 import { WIN95, BTN, PANEL, TEXT } from '../utils/buttonStyles';
+import { apiBaseUrl } from '../services/apiConfig';
+
+interface DiscordStatus {
+  linked: boolean;
+  discord: {
+    id: string;
+    username: string;
+    avatar: string | null;
+    linkedAt: string;
+  } | null;
+}
 
 const EmailUserInfo: React.FC = () => {
-  const { email, credits, refreshCredits, signOut, isLoading } = useEmailAuth();
+  const { email, credits, refreshCredits, signOut, isLoading, token } = useEmailAuth();
   const displayCredits = isLoading ? '...' : Math.max(0, Math.floor(credits) || 0);
+  
+  const [discordStatus, setDiscordStatus] = useState<DiscordStatus | null>(null);
+  const [loadingDiscord, setLoadingDiscord] = useState(false);
+  const [unlinkingDiscord, setUnlinkingDiscord] = useState(false);
+  
+  // Check Discord link status on mount
+  useEffect(() => {
+    if (token) {
+      checkDiscordStatus();
+    }
+  }, [token]);
+  
+  const checkDiscordStatus = async () => {
+    if (!token) return;
+    try {
+      setLoadingDiscord(true);
+      const response = await fetch(`${apiBaseUrl}/api/auth/discord/status`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setDiscordStatus(data);
+      }
+    } catch (error) {
+      console.error('Failed to check Discord status:', error);
+    } finally {
+      setLoadingDiscord(false);
+    }
+  };
+  
+  const handleConnectDiscord = () => {
+    // Redirect to Discord OAuth - the backend will handle the rest
+    window.location.href = `${apiBaseUrl}/api/auth/discord`;
+  };
+  
+  const handleUnlinkDiscord = async () => {
+    if (!token) return;
+    try {
+      setUnlinkingDiscord(true);
+      const response = await fetch(`${apiBaseUrl}/api/auth/discord`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        setDiscordStatus({ linked: false, discord: null });
+      }
+    } catch (error) {
+      console.error('Failed to unlink Discord:', error);
+    } finally {
+      setUnlinkingDiscord(false);
+    }
+  };
+  
+  // Check URL params for Discord OAuth result
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const discordResult = params.get('discord');
+    if (discordResult === 'success') {
+      checkDiscordStatus();
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   return (
     <div 
@@ -88,6 +166,68 @@ const EmailUserInfo: React.FC = () => {
             >
               <RefreshCw className="w-3 h-3" style={{ color: WIN95.text }} />
             </button>
+          </div>
+        </div>
+        
+        {/* Discord connection row */}
+        <div 
+          className="flex items-center justify-between p-1.5"
+          style={{
+            background: WIN95.inputBg,
+            boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`
+          }}
+        >
+          <div className="flex items-center gap-1.5">
+            <MessageCircle className="w-4 h-4" style={{ color: '#5865F2' }} />
+            <span className="text-[10px] font-bold" style={{ color: WIN95.text }}>Discord:</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {loadingDiscord ? (
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: WIN95.text }} />
+            ) : discordStatus?.linked && discordStatus.discord ? (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <Check className="w-3 h-3" style={{ color: '#008000' }} />
+                  <span 
+                    className="text-[10px] px-1.5 py-0.5" 
+                    style={{ 
+                      color: WIN95.text,
+                      background: WIN95.bg,
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                    }}
+                  >
+                    {discordStatus.discord.username}
+                  </span>
+                </div>
+                <button 
+                  onClick={handleUnlinkDiscord}
+                  disabled={unlinkingDiscord}
+                  className="p-1"
+                  style={BTN.base}
+                  title="Disconnect Discord"
+                >
+                  {unlinkingDiscord ? (
+                    <Loader2 className="w-3 h-3 animate-spin" style={{ color: WIN95.text }} />
+                  ) : (
+                    <X className="w-3 h-3" style={{ color: '#800000' }} />
+                  )}
+                </button>
+              </>
+            ) : (
+              <button 
+                onClick={handleConnectDiscord}
+                className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold"
+                style={{
+                  ...BTN.base,
+                  background: '#5865F2',
+                  color: '#ffffff'
+                }}
+                title="Connect Discord to use the bot"
+              >
+                <MessageCircle className="w-3 h-3" />
+                <span>Connect</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

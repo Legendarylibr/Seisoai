@@ -87,6 +87,10 @@ export interface Config {
   SOLANA_RPC_URL?: string;
   EVM_PAYMENT_WALLET?: string;
   SOLANA_PAYMENT_WALLET?: string;
+  // Discord OAuth
+  DISCORD_CLIENT_ID?: string;
+  DISCORD_CLIENT_SECRET?: string;
+  DISCORD_REDIRECT_URI?: string;
   isProduction: boolean;
   isDevelopment: boolean;
 }
@@ -133,6 +137,14 @@ export const config: Config = {
                       process.env.POLYGON_PAYMENT_WALLET,
   SOLANA_PAYMENT_WALLET: process.env.SOLANA_PAYMENT_WALLET_ADDRESS ||
                          process.env.SOLANA_PAYMENT_WALLET,
+  
+  // Discord OAuth
+  DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
+  DISCORD_CLIENT_SECRET: process.env.DISCORD_CLIENT_SECRET,
+  DISCORD_REDIRECT_URI: process.env.DISCORD_REDIRECT_URI || 
+    (process.env.NODE_ENV === 'production' 
+      ? 'https://seisoai.com/api/auth/discord/callback'
+      : 'http://localhost:3001/api/auth/discord/callback'),
   
   // Flags
   isProduction: process.env.NODE_ENV === 'production',

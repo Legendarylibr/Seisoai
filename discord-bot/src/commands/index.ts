@@ -11,6 +11,7 @@ import * as model3d from './3d.js';
 import * as credits from './credits.js';
 import * as link from './link.js';
 import * as help from './help.js';
+import * as admin from './admin.js';
 
 export interface Command {
   data: SlashCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">;
@@ -28,7 +29,8 @@ const commandModules: Command[] = [
   model3d,
   credits,
   link,
-  help
+  help,
+  admin
 ];
 
 for (const command of commandModules) {

@@ -5,6 +5,11 @@
 import logger from '../utils/logger';
 import config from '../config/env';
 import type Stripe from 'stripe';
+// Import calculateCredits from centralized location
+import { calculateCredits } from '../utils/credits';
+
+// Re-export for backwards compatibility
+export { calculateCredits };
 
 let stripe: Stripe | null = null;
 
@@ -100,27 +105,6 @@ export async function initializeStripe(): Promise<Stripe | null> {
  */
 export function getStripe(): Stripe | null {
   return stripe;
-}
-
-/**
- * Calculate credits from USD amount
- */
-export function calculateCredits(amountInDollars: number, isNFTHolder: boolean = false): { credits: number; scalingMultiplier: number; nftMultiplier: number } {
-  const baseRate = 5; // 5 credits per dollar
-  
-  let scalingMultiplier = 1.0;
-  if (amountInDollars >= 80) {
-    scalingMultiplier = 1.3;
-  } else if (amountInDollars >= 40) {
-    scalingMultiplier = 1.2;
-  } else if (amountInDollars >= 20) {
-    scalingMultiplier = 1.1;
-  }
-  
-  const nftMultiplier = isNFTHolder ? 1.2 : 1;
-  const credits = Math.floor(amountInDollars * baseRate * scalingMultiplier * nftMultiplier);
-  
-  return { credits, scalingMultiplier, nftMultiplier };
 }
 
 export default { initializeStripe, getStripe, calculateCredits };

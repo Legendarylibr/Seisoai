@@ -84,6 +84,11 @@ export interface IUser extends Document {
   lastActive: Date;
   createdAt: Date;
   expiresAt: Date;
+  // Discord OAuth fields
+  discordId?: string;
+  discordUsername?: string;
+  discordAvatar?: string;
+  discordLinkedAt?: Date;
   // SECURITY: Account lockout fields for brute force protection
   failedLoginAttempts?: number;
   lockoutUntil?: Date;
@@ -235,6 +240,16 @@ const userSchema = new mongoose.Schema<IUser>({
   lastActive: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+  // Discord OAuth fields
+  discordId: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true
+  },
+  discordUsername: String,
+  discordAvatar: String,
+  discordLinkedAt: Date,
   // SECURITY: Account lockout fields for brute force protection
   failedLoginAttempts: { type: Number, default: 0, min: 0 },
   lockoutUntil: { type: Date, required: false }
