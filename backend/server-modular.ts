@@ -22,6 +22,7 @@ import { TTLCache } from './services/cache.js';
 import { initializeRedis, closeRedis } from './services/redis.js';
 import { initializeQueues, closeAll as closeQueues } from './services/jobQueue.js';
 import { getAllCircuitStats } from './services/circuitBreaker.js';
+import { metricsMiddleware, metricsHandler } from './services/metrics.js';
 
 // Middleware
 import {
@@ -281,6 +282,13 @@ if (config.isProduction) {
 // Initialize caches
 const processedTransactions = new TTLCache<string, unknown>(7 * 24 * 60 * 60 * 1000); // 7 days TTL
 
+// Memory optimization: Periodic cleanup of expired TTL cache entries
+// Runs every hour to prevent stale entries from accumulating
+setInterval(() => {
+  processedTransactions.cleanup();
+  logger.debug('TTL cache cleanup completed');
+}, 60 * 60 * 1000);
+
 // Create rate limiters
 const authRateLimiter = createAuthLimiter();
 const generalRateLimiter = createGeneralLimiter();
@@ -293,6 +301,9 @@ const blockchainRpcLimiter = createBlockchainRpcLimiter();
 
 // Request ID middleware for tracing
 app.use(requestIdMiddleware);
+
+// Metrics middleware for Prometheus (before routes to capture all requests)
+app.use(metricsMiddleware);
 
 // Apply input validation globally to prevent NoSQL injection and sanitize inputs
 // This must come before routes but after body parsing
@@ -365,11 +376,32 @@ if (fs.existsSync(openapiPath)) {
 // API Routes (versioned: /api/v1/* and /api/*)
 app.use('/api', createVersionedRoutes(routeDeps));
 
+// Prometheus metrics endpoint
+app.get('/api/metrics', metricsHandler);
+
 // Circuit breaker stats endpoint
 app.get('/api/circuit-stats', (req: Request, res: Response) => {
   res.json({
     success: true,
     circuits: getAllCircuitStats()
+  });
+});
+
+// Health check with memory stats
+app.get('/api/health', (req: Request, res: Response) => {
+  const memUsage = process.memoryUsage();
+  res.json({
+    success: true,
+    status: 'ok',
+    uptime: Math.round(process.uptime()),
+    timestamp: new Date().toISOString(),
+    memory: {
+      heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+      rss: Math.round(memUsage.rss / 1024 / 1024),
+      external: Math.round(memUsage.external / 1024 / 1024),
+      unit: 'MB'
+    }
   });
 });
 

@@ -10,8 +10,10 @@ healthcheckPath = "/api/health"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
-# Number of replicas for high availability (optional)
-numReplicas = 1
+# Number of replicas for high availability
+numReplicas = 2
+# Graceful shutdown timeout (seconds)
+sleepApplication = true
 
 [project]
 id = "ee55e7fa-b010-4946-a87b-013e15e329a8"

@@ -698,12 +698,13 @@ export function createAudioRoutes(deps: Dependencies) {
         return;
       }
       
-      const buffer = Buffer.from(base64Data, 'base64');
+      let buffer: Buffer | null = Buffer.from(base64Data, 'base64');
       const mimeMatch = videoDataUri.match(/data:([^;]+)/);
       const mimeType = mimeMatch ? mimeMatch[1] : 'video/mp4';
       
       // Check if it's actually a video file
       if (!mimeType.startsWith('video/')) {
+        buffer = null; // Memory optimization: release buffer early
         res.status(400).json({ success: false, error: 'File must be a video' });
         return;
       }
@@ -742,6 +743,9 @@ export function createAudioRoutes(deps: Dependencies) {
           writeStream.on('finish', resolve);
           writeStream.on('error', reject);
         });
+        
+        // Memory optimization: release large buffer after writing to disk
+        buffer = null;
 
         // SECURITY FIX: Use execFile with array arguments instead of exec with string
         // This prevents shell interpretation and command injection
@@ -859,7 +863,7 @@ export function createAudioRoutes(deps: Dependencies) {
         return;
       }
       
-      const buffer = Buffer.from(base64Data, 'base64');
+      let buffer: Buffer | null = Buffer.from(base64Data, 'base64');
       const mimeMatch = audioDataUri.match(/data:([^;]+)/);
       const mimeType = mimeMatch ? mimeMatch[1] : 'audio/wav';
       
@@ -871,6 +875,9 @@ export function createAudioRoutes(deps: Dependencies) {
       else if (mimeType.includes('m4a')) extension = 'm4a';
       
       const audioUrl = await uploadToFal(buffer, mimeType, `audio.${extension}`);
+      
+      // Memory optimization: release buffer after upload
+      buffer = null;
       
       if (!audioUrl) {
         res.status(500).json({ success: false, error: 'No audio URL returned from upload' });
