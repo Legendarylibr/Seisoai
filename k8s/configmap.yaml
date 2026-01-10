@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seisoai-config
+  namespace: seisoai
+  labels:
+    app: seisoai
+data:
+  NODE_ENV: "production"
+  PORT: "3001"
+  API_VERSION: "v1"
+  LOG_LEVEL: "info"
+  
+  # CORS - update with your domain
+  ALLOWED_ORIGINS: "https://seisoai.com,https://www.seisoai.com"
+  
+  # MongoDB connection (use managed MongoDB Atlas in production)
+  # MONGODB_URI should be in secrets, this is just the options
+  MONGODB_OPTIONS: "retryWrites=true&w=majority&readPreference=secondaryPreferred"
+  
+  # Node.js optimizations
+  NODE_OPTIONS: "--max-old-space-size=1536 --enable-source-maps"
+  UV_THREADPOOL_SIZE: "16"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: seisoai-secrets
+  namespace: seisoai
+  labels:
+    app: seisoai
+type: Opaque
+stringData:
+  # Database
+  MONGODB_URI: "mongodb+srv://user:password@cluster.mongodb.net/seisoai?retryWrites=true&w=majority"
+  
+  # Redis
+  REDIS_URL: "redis://:password@redis-host:6379"
+  
+  # JWT
+  JWT_SECRET: "your-jwt-secret-here"
+  JWT_REFRESH_SECRET: "your-jwt-refresh-secret-here"
+  
+  # API Keys
+  FAL_API_KEY: "your-fal-api-key"
+  
+  # Stripe
+  STRIPE_SECRET_KEY: "sk_live_xxx"
+  STRIPE_WEBHOOK_SECRET: "whsec_xxx"
+  
+  # Payment Wallets
+  ETH_PAYMENT_WALLET: "0x..."
+  POLYGON_PAYMENT_WALLET: "0x..."
+  ARBITRUM_PAYMENT_WALLET: "0x..."
+  OPTIMISM_PAYMENT_WALLET: "0x..."
+  BASE_PAYMENT_WALLET: "0x..."
+  SOLANA_PAYMENT_WALLET: "..."
+  
+  # RPC URLs
+  ETH_RPC_URL: "https://eth-mainnet.g.alchemy.com/v2/xxx"
+  POLYGON_RPC_URL: "https://polygon-mainnet.g.alchemy.com/v2/xxx"
+  ARBITRUM_RPC_URL: "https://arb-mainnet.g.alchemy.com/v2/xxx"
+  OPTIMISM_RPC_URL: "https://opt-mainnet.g.alchemy.com/v2/xxx"
+  BASE_RPC_URL: "https://base-mainnet.g.alchemy.com/v2/xxx"
+

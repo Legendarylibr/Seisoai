@@ -1,0 +1,201 @@
+groups:
+  - name: seisoai-alerts
+    rules:
+      # ============================================================================
+      # Application Health
+      # ============================================================================
+      - alert: AppDown
+        expr: up{job="seisoai-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SeisoAI application is down"
+          description: "Application instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(seisoai_http_requests_total{status_code=~"5.."}[5m])) 
+          / sum(rate(seisoai_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: CriticalErrorRate
+        expr: |
+          sum(rate(seisoai_http_requests_total{status_code=~"5.."}[5m])) 
+          / sum(rate(seisoai_http_requests_total[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: HighResponseTime
+        expr: |
+          histogram_quantile(0.95, sum(rate(seisoai_http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time"
+          description: "95th percentile response time is {{ $value }}s."
+
+      # ============================================================================
+      # Memory & CPU
+      # ============================================================================
+      - alert: HighMemoryUsage
+        expr: |
+          (seisoai_nodejs_heap_size_used_bytes / seisoai_nodejs_heap_size_total_bytes) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}."
+
+      - alert: CriticalMemoryUsage
+        expr: |
+          (seisoai_nodejs_heap_size_used_bytes / seisoai_nodejs_heap_size_total_bytes) > 0.95
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}. OOM kill imminent."
+
+      - alert: EventLoopLag
+        expr: seisoai_nodejs_eventloop_lag_seconds > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High event loop lag"
+          description: "Event loop lag is {{ $value }}s on {{ $labels.instance }}."
+
+      # ============================================================================
+      # Circuit Breakers
+      # ============================================================================
+      - alert: CircuitBreakerOpen
+        expr: seisoai_circuit_breaker_state == 2
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit breaker is open"
+          description: "Circuit breaker {{ $labels.name }} is open, blocking requests."
+
+      - alert: CircuitBreakerHalfOpen
+        expr: seisoai_circuit_breaker_state == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker in half-open state"
+          description: "Circuit breaker {{ $labels.name }} has been half-open for 5 minutes."
+
+      # ============================================================================
+      # Database
+      # ============================================================================
+      - alert: MongoDBDown
+        expr: mongodb_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MongoDB is down"
+          description: "MongoDB instance {{ $labels.instance }} is not responding."
+
+      - alert: MongoDBHighConnections
+        expr: mongodb_connections{state="current"} > 800
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High MongoDB connections"
+          description: "MongoDB has {{ $value }} active connections."
+
+      - alert: MongoDBReplicationLag
+        expr: mongodb_mongod_replset_member_replication_lag > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MongoDB replication lag"
+          description: "Replication lag is {{ $value }}s on {{ $labels.member }}."
+
+      # ============================================================================
+      # Redis
+      # ============================================================================
+      - alert: RedisDown
+        expr: seisoai_redis_connected == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis connection is lost."
+
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis memory usage is {{ $value | humanizePercentage }}."
+
+      # ============================================================================
+      # Rate Limiting
+      # ============================================================================
+      - alert: HighRateLimitHits
+        expr: increase(seisoai_rate_limit_hits_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate limit hits"
+          description: "{{ $value }} rate limit hits in the last 5 minutes for {{ $labels.limiter }}."
+
+      # ============================================================================
+      # Payments
+      # ============================================================================
+      - alert: PaymentFailureRate
+        expr: |
+          sum(rate(seisoai_payments_total{status="failure"}[15m])) 
+          / sum(rate(seisoai_payments_total[15m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High payment failure rate"
+          description: "Payment failure rate is {{ $value | humanizePercentage }}."
+
+      # ============================================================================
+      # Image Generation
+      # ============================================================================
+      - alert: ImageGenerationSlowdown
+        expr: |
+          histogram_quantile(0.95, sum(rate(seisoai_image_generation_duration_seconds_bucket[10m])) by (le)) > 120
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Image generation slowdown"
+          description: "95th percentile generation time is {{ $value }}s."
+
+      - alert: HighImageGenerationFailures
+        expr: |
+          sum(rate(seisoai_image_generations_total{status="failure"}[10m])) 
+          / sum(rate(seisoai_image_generations_total[10m])) > 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High image generation failure rate"
+          description: "Image generation failure rate is {{ $value | humanizePercentage }}."
+

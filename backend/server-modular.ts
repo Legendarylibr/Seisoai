@@ -47,6 +47,7 @@ import {
 } from './middleware/credits.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { createValidateInput } from './middleware/validation.js';
+import { cdnCacheMiddleware, cdnSecurityMiddleware } from './middleware/cdn.js';
 
 // Routes
 import { createVersionedRoutes } from './routes/versioned.js';
@@ -263,6 +264,10 @@ if (config.isProduction) {
     }
     next();
   });
+  
+  // CDN-optimized cache headers
+  app.use(cdnCacheMiddleware);
+  app.use(cdnSecurityMiddleware);
   
   app.use(express.static(distPath, {
     maxAge: '1d',
