@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain, Sparkles, Grid3X3, Image, Zap } from 'lucide-react';
+import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain, Sparkles, Grid, Image, Zap } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
@@ -681,7 +681,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                       </div>
                     </div>
                   </div>
-                  <Grid3X3 className="w-5 h-5" style={{ color: WIN95.textDisabled }} />
+                  <Grid className="w-5 h-5" style={{ color: WIN95.textDisabled }} />
                 </div>
               </div>
             );
