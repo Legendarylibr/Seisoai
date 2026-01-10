@@ -215,25 +215,38 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
                    responseText.trim().startsWith('<!doctype');
     
     if (isHtml) {
-      // Response is HTML (likely SPA fallback or error page)
+      // Response is HTML (likely SPA fallback, Cloudflare error, or CDN issue)
+      // Log detailed info for debugging
+      const htmlTitle = responseText.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || 'No title';
+      const isCloudflare = responseText.includes('cloudflare') || responseText.includes('cf-');
+      const isRailway = responseText.includes('railway') || responseText.includes('Application not found');
+      
       logger.error('3D generation API returned HTML instead of JSON', { 
         status: response.status,
         statusText: response.statusText,
         contentType,
-        isHtml,
+        htmlTitle,
+        isCloudflare,
+        isRailway,
         responseLength: responseText.length,
-        responsePreview: responseText.substring(0, 500),
+        responsePreview: responseText.substring(0, 800),
         url: response.url,
         redirected: response.redirected,
-        apiEndpoint: `${API_URL}/api/model3d/generate`
+        apiEndpoint: `${API_URL}/api/model3d/generate`,
+        apiUrlValue: API_URL,
+        windowLocation: typeof window !== 'undefined' ? window.location.href : 'N/A'
       });
       
       if (response.status === 404) {
         throw new Error('3D model generation endpoint not found. The API route may not be configured correctly.');
       } else if (response.status === 401 || response.status === 403) {
         throw new Error('Authentication failed. Please sign in again.');
+      } else if (isCloudflare) {
+        throw new Error('Request blocked by Cloudflare. Please try again or disable VPN/proxy if using one.');
+      } else if (isRailway) {
+        throw new Error('Server not found. The application may be restarting. Please wait a moment and try again.');
       } else {
-        throw new Error('Server returned HTML instead of JSON. This usually means the API endpoint is not available or the request was routed incorrectly.');
+        throw new Error(`Server returned HTML instead of JSON (${htmlTitle}). Try: 1) Hard refresh (Ctrl+Shift+R), 2) Clear browser cache, 3) Try incognito mode.`);
       }
     }
     
