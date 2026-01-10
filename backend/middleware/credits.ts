@@ -19,8 +19,13 @@ interface CreditsRequest extends Request {
     walletAddress?: string;
     userId?: string;
     email?: string;
+    numImages?: number;
+    num_images?: number;
   };
 }
+
+// Batch processing premium (15% convenience fee for batch mode)
+const BATCH_PREMIUM = 0.15;
 
 /**
  * Create middleware that checks if user has enough credits
@@ -105,6 +110,7 @@ export const createRequireCredits = (
 /**
  * Create middleware for model-based credit requirements
  * Different models have different credit costs
+ * Supports batch generation with numImages parameter
  * SECURITY: User must already be authenticated via JWT (set on req.user)
  */
 export const createRequireCreditsForModel = (
@@ -133,17 +139,29 @@ export const createRequireCreditsForModel = (
 
         // Determine credit cost based on model
         // Uses centralized constants from config/constants.ts
-        const { model } = req.body;
-        let requiredCredits = CREDITS.IMAGE_GENERATION; // Default: Flux Pro
+        const { model, numImages, num_images } = req.body;
+        let baseCreditsPerImage = CREDITS.IMAGE_GENERATION; // Default: Flux Pro
 
         if (model === 'flux-2') {
-          requiredCredits = CREDITS.IMAGE_GENERATION_FLUX_2;
+          baseCreditsPerImage = CREDITS.IMAGE_GENERATION_FLUX_2;
         } else if (model === 'nano-banana-pro') {
-          requiredCredits = CREDITS.IMAGE_GENERATION_NANO;
+          baseCreditsPerImage = CREDITS.IMAGE_GENERATION_NANO;
         } else if (model === 'qwen-image-layered') {
-          requiredCredits = CREDITS.LAYER_EXTRACTION;
+          baseCreditsPerImage = CREDITS.LAYER_EXTRACTION;
         }
         // Default: flux, flux-multi = CREDITS.IMAGE_GENERATION
+
+        // Get number of images to generate (support both naming conventions)
+        const imageCount = numImages || num_images || 1;
+        // Clamp to valid range (1-100)
+        const validImageCount = Math.min(100, Math.max(1, Math.floor(imageCount)));
+        
+        // Apply batch premium for multiple images
+        const premiumMultiplier = validImageCount > 1 ? (1 + BATCH_PREMIUM) : 1;
+        const creditsPerImage = baseCreditsPerImage * premiumMultiplier;
+        
+        // Calculate total credits required
+        const requiredCredits = Math.ceil(creditsPerImage * validImageCount * 10) / 10; // Round to 1 decimal
 
         if ((user.credits || 0) < requiredCredits) {
           res.status(402).json({

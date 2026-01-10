@@ -107,6 +107,8 @@ server {
     # brotli_types text/plain text/css application/json application/javascript text/javascript;
 
     # SPA routing - serve index.html for all routes
+    # NOTE: API requests should be handled by a separate backend service
+    # If using this frontend-only container, set VITE_API_URL to your backend URL
     location / {
         try_files $uri $uri/ /index.html;
     }

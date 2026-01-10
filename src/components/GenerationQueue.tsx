@@ -332,7 +332,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
             {queue.length > 0 && (
               <span className="text-[9px] opacity-80">
                 {queue.length === 1 && queue[0]?.numImages && queue[0].numImages > 1
-                  ? `${queue[0].numImages} variations from 1 image`
+                  ? `${queue[0].numImages} output images from 1 source`
                   : `${pendingCount} pending, ${completedCount} done${failedCount > 0 ? `, ${failedCount} failed` : ''}`
                 }
               </span>
@@ -443,10 +443,10 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                   </div>
                   <div>
                     <span className="text-[11px] font-bold block" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                      Variation Generator
+                      # of Output Images
                     </span>
                     <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>
-                      Create up to {MAX_VARIATIONS} unique variations
+                      Generate up to {MAX_VARIATIONS} output images
                     </span>
                   </div>
                 </div>
@@ -518,7 +518,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                         )}
                       </div>
                       <div className="text-[10px] font-bold mt-1" style={{ color: WIN95.highlight }}>
-                        {currentNumImages} variation{currentNumImages !== 1 ? 's' : ''}
+                        {currentNumImages} output image{currentNumImages !== 1 ? 's' : ''}
                       </div>
                     </div>
                   </div>
@@ -753,7 +753,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
             </p>
             <p className="text-[9px] mt-1" style={{ color: WIN95.textDisabled }}>
               {queue.length === 0 
-                ? 'Upload a single image to generate up to 100 variations'
+                ? 'Upload an image to generate up to 100 output images'
                 : `${pendingCount}/${MAX_BATCH_SIZE} in queue`
               }
             </p>
@@ -852,7 +852,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                           }}
                         >
                           <Sparkles className="w-2 h-2" />
-                          {item.numImages}x variations
+                          {item.numImages}x outputs
                         </span>
                         {item.status === 'processing' && progressCount > 0 && (
                           <span 
@@ -1053,7 +1053,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                   </span>
                   {queue.length === 1 && processingItem.numImages && processingItem.numImages > 1 && (
                     <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>
-                      Creating {processingItem.numImages} variations...
+                      Generating {processingItem.numImages} output images...
                     </span>
                   )}
                 </div>

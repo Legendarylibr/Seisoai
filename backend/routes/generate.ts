@@ -693,7 +693,8 @@ export function createGenerationRoutes(deps: Dependencies) {
         if (aspect_ratio) {
           requestBody.aspect_ratio = aspect_ratio;
         }
-        if (!hasImages && numImages) {
+        // Support batch output from single source or text-to-image
+        if (numImages && numImages > 1) {
           requestBody.num_images = numImages;
         }
       } else if (isFlux2 && hasImages) {
