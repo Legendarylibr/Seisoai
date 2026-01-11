@@ -152,9 +152,11 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
     }
   }, [isEmailAuth, emailContext, walletContext]);
 
+  // Unified payment - Stripe handles both cards and stablecoins
   const handleBuyCredits = useCallback(() => {
-    isEmailAuth && onShowStripePayment ? onShowStripePayment() : onShowTokenPayment?.();
-  }, [isEmailAuth, onShowStripePayment, onShowTokenPayment]);
+    // Both handlers point to the same Stripe modal now
+    onShowStripePayment?.() || onShowTokenPayment?.();
+  }, [onShowStripePayment, onShowTokenPayment]);
 
   return (
     <header className="sticky top-0 z-40" style={{ 

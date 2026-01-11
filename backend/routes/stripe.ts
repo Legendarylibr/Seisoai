@@ -81,10 +81,17 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       // Calculate credits
       const { credits } = calculateCredits(amount, isNFTHolder);
 
-      // Create payment intent
+      // Create payment intent with automatic payment methods (includes card + stablecoins if enabled)
       const paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(amount * 100), // Convert to cents
         currency,
+        // Enable automatic payment methods - includes card and crypto/stablecoins
+        // Stablecoins (USDC on Ethereum, Solana, Polygon, Base) are automatically available
+        // if enabled in Stripe Dashboard > Settings > Payment methods > Crypto
+        automatic_payment_methods: {
+          enabled: true,
+          allow_redirects: 'never' // Stablecoin payments don't require redirects
+        },
         metadata: {
           userId: userId || 'unknown',
           walletAddress: walletAddress || 'none',

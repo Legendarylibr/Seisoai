@@ -131,7 +131,7 @@ const PrivacyPolicy = memo(function PrivacyPolicy() {
           <li>PCI-DSS compliant via Stripe's secure infrastructure</li>
         </ul>
       </div>
-      <p className="mt-2">For cryptocurrency payments, only your wallet address and transaction hash are recorded for verification. Private keys never leave your wallet.</p>
+      <p className="mt-2">For stablecoin payments (USDC), Stripe handles the entire transaction. Your wallet connects directly to Stripe - we never access your private keys or wallet credentials.</p>
 
       <h3 className="font-bold">Data Retention & Deletion</h3>
       <ul className="list-disc list-inside ml-2">

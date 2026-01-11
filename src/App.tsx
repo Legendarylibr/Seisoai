@@ -21,7 +21,7 @@ import logger from './utils/logger';
 import { API_URL } from './utils/apiConfig';
 
 // PERFORMANCE: Lazy load heavy modals and gallery - not needed on initial render
-const TokenPaymentModal = lazy(() => import('./components/TokenPaymentModal'));
+// StripePaymentModal handles both card and stablecoin payments (USDC on Ethereum, Solana, Polygon, Base)
 const StripePaymentModal = lazy(() => import('./components/StripePaymentModal'));
 const PaymentSuccessModal = lazy(() => import('./components/PaymentSuccessModal'));
 const ImageGallery = lazy(() => import('./components/ImageGallery'));
@@ -106,8 +106,8 @@ interface AppWithCreditsCheckProps {
 
 function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCheckProps): JSX.Element {
   const { isAuthenticated, userId, refreshCredits } = useEmailAuth();
-  const [showTokenPaymentModal, setShowTokenPaymentModal] = useState(false);
-  const [showStripePaymentModal, setShowStripePaymentModal] = useState(false);
+  // Unified payment modal - Stripe handles both cards and stablecoins (USDC)
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [subscriptionSuccess, setSubscriptionSuccess] = useState<SubscriptionSuccess | null>(null);
   const [userPrompt, setUserPrompt] = useState('');
   const [showTermsModal, setShowTermsModal] = useState(false);
@@ -188,13 +188,14 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
     }
   }, [userId, refreshCredits]);
 
-  const handleShowTokenPayment = useCallback((): void => {
-    setShowTokenPaymentModal(true);
+  // Unified payment handler - Stripe handles both cards and stablecoins (USDC on Ethereum, Solana, Polygon, Base)
+  const handleShowPayment = useCallback((): void => {
+    setShowPaymentModal(true);
   }, []);
 
-  const handleShowStripePayment = useCallback((): void => {
-    setShowStripePaymentModal(true);
-  }, []);
+  // Keep legacy handlers pointing to the unified modal for backwards compatibility
+  const handleShowTokenPayment = handleShowPayment;
+  const handleShowStripePayment = handleShowPayment;
 
   const handleOpenTerms = useCallback((page: LegalPage = 'terms'): void => {
     setTermsPage(page);
@@ -306,21 +307,12 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
       </div>
 
-      {/* Payment Modals */}
-      {showTokenPaymentModal && (
-        <Suspense fallback={null}>
-          <TokenPaymentModal 
-            isOpen={showTokenPaymentModal}
-            onClose={() => setShowTokenPaymentModal(false)}
-          />
-        </Suspense>
-      )}
-      
-      {showStripePaymentModal && (
+      {/* Unified Payment Modal - Stripe handles cards + stablecoins (USDC) */}
+      {showPaymentModal && (
         <Suspense fallback={null}>
           <StripePaymentModal 
-            isOpen={showStripePaymentModal}
-            onClose={() => setShowStripePaymentModal(false)}
+            isOpen={showPaymentModal}
+            onClose={() => setShowPaymentModal(false)}
           />
         </Suspense>
       )}

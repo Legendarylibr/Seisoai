@@ -610,13 +610,13 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
           >
             <div className="flex items-center gap-2 mb-2">
               <Zap className="w-4 h-4" style={{ color: '#000000' }} />
-              <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Privacy-First Payment</span>
+              <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Pay with Card or Stablecoins</span>
             </div>
             <div className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-              <p className="mb-1">• Card details go directly to Stripe - never touch our servers</p>
-              <p className="mb-1">• No payment data is stored or logged by us</p>
-              <p className="mb-1">• We only receive a confirmation ID for credit delivery</p>
-              <p>• PCI-DSS compliant via Stripe's secure infrastructure</p>
+              <p className="mb-1">• <strong>Cards:</strong> Visa, Mastercard, Amex and more</p>
+              <p className="mb-1">• <strong>Stablecoins:</strong> USDC on Ethereum, Solana, Polygon, Base</p>
+              <p className="mb-1">• All payments processed securely by Stripe</p>
+              <p>• No payment data stored on our servers</p>
             </div>
           </div>
 
