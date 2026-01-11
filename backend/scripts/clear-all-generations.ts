@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /*
-  Clear all generation history from the database
+  Clear all generation/gallery data from the database
   
   This script removes ALL generation data from:
-  - Generation collection (generation history)
-  - GalleryItem collection (saved gallery items)
+  - Generation collection
+  - GalleryItem collection
   - Embedded gallery arrays in User documents
   - Embedded generationHistory arrays in User documents
   
@@ -104,13 +104,13 @@ async function main(): Promise<void> {
   const usersCollection = mongoose.connection.db.collection('users');
   const pipeline = [
     { $project: { 
-      galleryCount: { $size: { $ifNull: ['$gallery', []] } }, 
-      historyCount: { $size: { $ifNull: ['$generationHistory', []] } } 
+      galleryCount: { $size: { $ifNull: ['$gallery', []] } },
+      historyCount: { $size: { $ifNull: ['$generationHistory', []] } }
     }},
     { $group: { 
       _id: null, 
-      totalGallery: { $sum: '$galleryCount' }, 
-      totalHistory: { $sum: '$historyCount' } 
+      totalGallery: { $sum: '$galleryCount' },
+      totalHistory: { $sum: '$historyCount' }
     }}
   ];
   const totals = await usersCollection.aggregate(pipeline).toArray();
@@ -121,7 +121,7 @@ async function main(): Promise<void> {
   console.log(`   Generations collection: ${generationCount}`);
   console.log(`   GalleryItems collection: ${galleryCount}`);
   console.log(`   Embedded gallery items in users: ${embeddedGallery}`);
-  console.log(`   Embedded generation history in users: ${embeddedHistory}`);
+  console.log(`   Embedded generationHistory in users: ${embeddedHistory}`);
 
   const totalItems = generationCount + galleryCount + embeddedGallery + embeddedHistory;
   if (totalItems === 0) {

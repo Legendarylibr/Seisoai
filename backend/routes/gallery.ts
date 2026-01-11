@@ -153,15 +153,14 @@ export function createGalleryRoutes(deps: Dependencies) {
       
       const User = mongoose.model<IUser>('User');
       const user = await User.findOne({ userId: req.user.userId })
-        .select('gallery generationHistory')
+        .select('gallery')
         .lean();
 
       if (!user) {
         res.json({
           success: true,
           stats: {
-            galleryCount: 0,
-            generationCount: 0
+            galleryCount: 0
           }
         });
         return;
@@ -170,8 +169,7 @@ export function createGalleryRoutes(deps: Dependencies) {
       res.json({
         success: true,
         stats: {
-          galleryCount: user.gallery?.length || 0,
-          generationCount: user.generationHistory?.length || 0
+          galleryCount: user.gallery?.length || 0
         }
       });
     } catch (error) {

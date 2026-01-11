@@ -99,7 +99,7 @@ interface UserModel extends Model<IUser> {
   buildUserUpdateQuery(user: { walletAddress?: string; userId?: string; email?: string }): { walletAddress?: string; userId?: string; email?: string } | null;
 }
 
-// DATA MINIMIZATION: Reduced array limits to store less user data
+// Array size limits for embedded documents
 function arrayLimit10(val: unknown[]): boolean {
   return val.length <= 10;
 }
@@ -191,12 +191,11 @@ const userSchema = new mongoose.Schema<IUser>({
     }],
     validate: [arrayLimit30, 'Payment history exceeds limit of 30']
   },
-  // NOTE: Full generation history stored in separate Generation collection
-  // DATA MINIMIZATION: Reduced from 20 to 10 - minimal recent history
+  // Generation history for internal tracking (not exposed to users)
   generationHistory: {
     type: [{
       id: String,
-      prompt: { type: String, maxlength: 500 }, // Limit prompt length
+      prompt: { type: String, maxlength: 500 },
       style: String,
       imageUrl: String,
       videoUrl: String,
@@ -207,7 +206,7 @@ const userSchema = new mongoose.Schema<IUser>({
     }],
     validate: [arrayLimit10, 'Generation history exceeds limit of 10']
   },
-  // NOTE: Full gallery stored in separate GalleryItem collection
+  // Gallery stores user's generated images/videos (shown to users)
   // DATA MINIMIZATION: Reduced from 50 to 20 - minimal recent items
   gallery: {
     type: [{

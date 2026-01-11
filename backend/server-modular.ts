@@ -24,6 +24,8 @@ import { initializeRedis, closeRedis } from './services/redis.js';
 import { initializeQueues, closeAll as closeQueues } from './services/jobQueue.js';
 import { getAllCircuitStats } from './services/circuitBreaker.js';
 import { metricsMiddleware, metricsHandler } from './services/metrics.js';
+import { initializeAuditLog } from './services/auditLog.js';
+import { initializeKeyRotation, scheduleKeyRotation, getKeyRotationStatus } from './services/keyRotation.js';
 
 // Middleware
 import {
@@ -405,6 +407,33 @@ app.get('/api/circuit-stats', (req: Request, res: Response) => {
   });
 });
 
+// ENTERPRISE: Key rotation status endpoint (for monitoring)
+app.get('/api/key-rotation-status', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    keyRotation: getKeyRotationStatus()
+  });
+});
+
+// ENTERPRISE: Security.txt (RFC 9116)
+app.get('/.well-known/security.txt', (req: Request, res: Response) => {
+  res.type('text/plain');
+  res.send(`# SeisoAI Security Policy
+# https://securitytxt.org/
+
+Contact: mailto:security@seisoai.com
+Contact: https://github.com/Legendarylibr/Seisoai/security/advisories
+Policy: https://seisoai.com/security-policy
+Preferred-Languages: en
+Canonical: https://seisoai.com/.well-known/security.txt
+Expires: 2027-01-11T00:00:00.000Z
+`);
+});
+
+app.get('/security.txt', (req: Request, res: Response) => {
+  res.redirect(301, '/.well-known/security.txt');
+});
+
 // Health check with memory stats
 app.get('/api/health', (req: Request, res: Response) => {
   const memUsage = process.memoryUsage();
@@ -488,6 +517,17 @@ async function startServer(): Promise<void> {
 
     // Initialize Stripe
     await initializeStripe();
+
+    // ENTERPRISE: Initialize audit logging
+    await initializeAuditLog();
+    logger.info('Audit logging service initialized');
+
+    // ENTERPRISE: Initialize JWT key rotation
+    initializeKeyRotation();
+    if (config.isProduction) {
+      scheduleKeyRotation();
+      logger.info('JWT key rotation scheduled');
+    }
 
     // Log FAL configuration
     if (config.FAL_API_KEY) {

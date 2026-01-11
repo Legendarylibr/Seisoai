@@ -24,6 +24,7 @@ import createAudioRoutes from './audio';
 import createImageToolsRoutes from './image-tools';
 import createWorkflowRoutes from './workflows';
 import createModel3dRoutes from './model3d';
+import createGDPRRoutes from './gdpr';
 
 // Types
 interface Dependencies {
@@ -101,6 +102,12 @@ export function createApiRoutes(deps: Dependencies) {
   // Admin
   // ============================================
   router.use('/admin', createAdminRoutes(deps));
+
+  // ============================================
+  // GDPR Compliance (Enterprise)
+  // Data export, deletion, rectification
+  // ============================================
+  router.use('/gdpr', createGDPRRoutes(deps));
 
   // ============================================
   // 404 Handler

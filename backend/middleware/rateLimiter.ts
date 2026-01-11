@@ -59,6 +59,7 @@ function createLimiter(options: Partial<Options> & { storePrefix?: string }): Ra
 
 /**
  * Create the general API rate limiter
+ * ENTERPRISE: Includes proper Retry-After headers for RFC compliance
  */
 export const createGeneralLimiter = (): RateLimitRequestHandler => createLimiter({
   storePrefix: 'general',
@@ -68,11 +69,24 @@ export const createGeneralLimiter = (): RateLimitRequestHandler => createLimiter
     error: 'Too many requests from this IP, please try again later.',
     retryAfter: '15 minutes'
   },
-  skip: (req) => req.path === '/api/health'
+  skip: (req) => req.path === '/api/health',
+  // ENTERPRISE: Custom handler to include Retry-After header
+  handler: (req, res, next, options) => {
+    const retryAfterSeconds = Math.ceil(options.windowMs / 1000);
+    res.setHeader('Retry-After', retryAfterSeconds);
+    res.setHeader('X-RateLimit-Reset', new Date(Date.now() + options.windowMs).toISOString());
+    res.status(429).json({
+      success: false,
+      error: 'Too many requests from this IP, please try again later.',
+      retryAfter: retryAfterSeconds,
+      retryAfterDate: new Date(Date.now() + options.windowMs).toISOString(),
+    });
+  }
 });
 
 /**
  * Create authentication rate limiter (prevent brute force)
+ * ENTERPRISE: Includes proper Retry-After headers
  */
 export const createAuthLimiter = (): RateLimitRequestHandler => createLimiter({
   storePrefix: 'auth',
@@ -82,7 +96,16 @@ export const createAuthLimiter = (): RateLimitRequestHandler => createLimiter({
     error: 'Too many authentication attempts. Please try again later.',
     retryAfter: '15 minutes'
   },
-  skipSuccessfulRequests: false
+  skipSuccessfulRequests: false,
+  handler: (req, res, next, options) => {
+    const retryAfterSeconds = Math.ceil(options.windowMs / 1000);
+    res.setHeader('Retry-After', retryAfterSeconds);
+    res.status(429).json({
+      success: false,
+      error: 'Too many authentication attempts. Please try again later.',
+      retryAfter: retryAfterSeconds,
+    });
+  }
 });
 
 /**
