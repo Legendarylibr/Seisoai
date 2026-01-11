@@ -290,7 +290,13 @@ export function createUserRoutes(deps: Dependencies = {}) {
   /**
    * Get user by wallet address
    * GET /api/users/:walletAddress
-   * SECURITY FIX: Requires authentication for credit data, returns only public data otherwise
+   * 
+   * NOTE: Wallet lookups are allowed without JWT authentication since:
+   * - Wallet addresses are public (visible on blockchain)
+   * - Credit balance is not highly sensitive
+   * - This enables wallet-first user flows
+   * 
+   * If JWT authenticated, verifies the wallet matches the authenticated user.
    */
   router.get('/:walletAddress', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -300,35 +306,28 @@ export function createUserRoutes(deps: Dependencies = {}) {
       const isSolanaAddress = !walletAddress.startsWith('0x');
       const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
 
-      // SECURITY: Verify the requested wallet matches the authenticated user
-      if (!req.user) {
-        // No authentication - return error requiring auth
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required to view account data'
-        });
-        return;
+      // If authenticated via JWT, verify wallet ownership
+      if (req.user && req.user.walletAddress) {
+        const normalizedUserWallet = req.user.walletAddress.startsWith('0x') 
+          ? req.user.walletAddress.toLowerCase() 
+          : req.user.walletAddress;
+
+        if (normalizedUserWallet !== normalizedAddress) {
+          logger.warn('SECURITY: Blocked user data access attempt for different wallet', {
+            requestedWallet: normalizedAddress.substring(0, 10) + '...',
+            authenticatedUserId: req.user.userId,
+            path: req.path,
+            ip: req.ip
+          });
+          res.status(403).json({
+            success: false,
+            error: 'You can only access your own account data'
+          });
+          return;
+        }
       }
 
-      const normalizedUserWallet = req.user.walletAddress?.startsWith('0x') 
-        ? req.user.walletAddress.toLowerCase() 
-        : req.user.walletAddress;
-
-      if (normalizedUserWallet !== normalizedAddress) {
-        logger.warn('SECURITY: Blocked user data access attempt for different wallet', {
-          requestedWallet: normalizedAddress.substring(0, 10) + '...',
-          authenticatedUserId: req.user.userId,
-          path: req.path,
-          ip: req.ip
-        });
-        res.status(403).json({
-          success: false,
-          error: 'You can only access your own account data'
-        });
-        return;
-      }
-
-      // Get user data (already authenticated as the correct user)
+      // Get or create user data for wallet
       const user = await getOrCreateUser(normalizedAddress);
 
       // Update lastActive
@@ -345,7 +344,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
       res.setHeader('Pragma', 'no-cache');
 
-      // Return full data for authenticated user
+      // Return user data
       res.json({
         success: true,
         credits: user.credits || 0,

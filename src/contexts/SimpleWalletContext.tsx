@@ -172,11 +172,18 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
       });
       if (!response.ok) return 0;
       const data = await response.json();
-      if (data.success && data.user) {
-        const c = Math.max(0, Math.floor(Number(data.user.credits) || 0));
+      if (data.success) {
+        // Handle both response formats:
+        // - Old format: data.user.credits
+        // - New format: data.credits directly
+        const credits = data.user?.credits ?? data.credits ?? 0;
+        const earned = data.user?.totalCreditsEarned ?? data.totalCreditsEarned ?? 0;
+        const spent = data.user?.totalCreditsSpent ?? data.totalCreditsSpent ?? 0;
+        
+        const c = Math.max(0, Math.floor(Number(credits) || 0));
         setCredits(c);
-        setTotalCreditsEarned(Math.max(0, Math.floor(Number(data.user.totalCreditsEarned) || 0)));
-        setTotalCreditsSpent(Math.max(0, Math.floor(Number(data.user.totalCreditsSpent) || 0)));
+        setTotalCreditsEarned(Math.max(0, Math.floor(Number(earned) || 0)));
+        setTotalCreditsSpent(Math.max(0, Math.floor(Number(spent) || 0)));
         return c;
       }
       return 0;
