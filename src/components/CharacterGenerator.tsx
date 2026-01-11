@@ -3,7 +3,8 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generate3dModel } from '../services/model3dService';
 import { addGeneration } from '../services/galleryService';
-import { API_URL } from '../utils/apiConfig';
+import { getAuthToken } from '../services/emailAuthService';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import { optimizeImage } from '../utils/imageOptimizer';
 import { 
   Box, Upload, Play, X, Download, AlertCircle, ChevronDown, 
@@ -416,9 +417,18 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
     startTimer();
 
     try {
+      // Get CSRF token and auth token for secure API call
+      const csrfToken = await ensureCSRFToken();
+      const authToken = getAuthToken();
+      
       const response = await fetch(`${API_URL}/api/generate/image`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+          ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+        },
+        credentials: 'include',
         body: JSON.stringify({
           prompt: prompt.trim(),
           model: 'nano-banana-pro',
@@ -468,9 +478,18 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
     startTimer();
 
     try {
+      // Get CSRF token and auth token for secure API call
+      const csrfToken = await ensureCSRFToken();
+      const authToken = getAuthToken();
+      
       const response = await fetch(`${API_URL}/api/generate/image`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+          ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+        },
+        credentials: 'include',
         body: JSON.stringify({
           prompt: editPrompt.trim(),
           model: 'nano-banana-pro',
@@ -542,9 +561,18 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
     // - Pre-resized input for faster processing
     const optimizationPrompt = 'Clean isolated character on plain white background, centered, front-facing view, clear details, high contrast, suitable for 3D model conversion, no complex background, single subject';
     
+    // Get CSRF token and auth token for secure API call
+    const csrfToken = await ensureCSRFToken();
+    const authToken = getAuthToken();
+    
     const response = await fetch(`${API_URL}/api/generate/image`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+      },
+      credentials: 'include',
       body: JSON.stringify({
         prompt: optimizationPrompt,
         model: 'nano-banana-pro',
