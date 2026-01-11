@@ -70,7 +70,9 @@ interface UserSettings {
 export interface IUser extends Document {
   walletAddress?: string;
   email?: string;
-  emailHash?: string;  // Blind index for searching encrypted emails
+  emailHash?: string;       // Blind index for searching encrypted emails (HMAC)
+  emailHashPlain?: string;  // Plain SHA-256 hash for cross-environment compatibility
+  emailLookup?: string;     // Plain email for fallback lookup
   password?: string;
   userId?: string;
   credits: number;
@@ -137,6 +139,20 @@ const userSchema = new mongoose.Schema<IUser>({
     type: String,
     required: false,
     unique: true,
+    sparse: true,
+    index: true
+  },
+  // Plain SHA-256 hash for cross-environment compatibility (no encryption key needed)
+  emailHashPlain: {
+    type: String,
+    required: false,
+    sparse: true,
+    index: true
+  },
+  // Plain email for fallback lookup (normalized lowercase)
+  emailLookup: {
+    type: String,
+    required: false,
     sparse: true,
     index: true
   },
@@ -309,6 +325,10 @@ userSchema.pre('save', async function(next) {
         
         // Normalize email
         const normalizedEmail = plainEmail.toLowerCase().trim();
+        
+        // Always set fallback lookup fields for cross-environment compatibility
+        this.emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+        this.emailLookup = normalizedEmail;
         
         // Create blind index for searching (before encryption)
         if (isEncryptionConfigured()) {

@@ -580,10 +580,12 @@ export function createGenerationRoutes(deps: Dependencies) {
       }
 
       // Extract request parameters
+      // Support both numImages (camelCase) and num_images (snake_case) for compatibility
       const {
         prompt,
         guidanceScale = 7.5,
-        numImages = 1,
+        numImages: numImagesParam,
+        num_images: numImagesSnake,
         image_url,
         image_urls,
         aspect_ratio,
@@ -594,6 +596,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         prompt?: string;
         guidanceScale?: number;
         numImages?: number;
+        num_images?: number;
         image_url?: string;
         image_urls?: string[];
         aspect_ratio?: string;
@@ -601,6 +604,9 @@ export function createGenerationRoutes(deps: Dependencies) {
         model?: string;
         optimizePrompt?: boolean;
       };
+      
+      // Use either naming convention, defaulting to 1
+      const numImages = numImagesParam || numImagesSnake || 1;
 
       // Prompt is required for text-to-image, optional for image-to-image
       const hasImages = image_url || (image_urls && Array.isArray(image_urls) && image_urls.length > 0);

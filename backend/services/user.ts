@@ -3,12 +3,31 @@
  * Handles user lookup and creation
  * 
  * NOTE: Email addresses are encrypted at rest. Use emailHash for lookups.
+ * Uses multiple fallback methods for cross-environment compatibility.
  */
 import mongoose, { type Model } from 'mongoose';
+import crypto from 'crypto';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
 import { createEmailHash } from '../utils/emailHash';
 import { normalizeWalletAddress } from '../utils/validation';
+
+/**
+ * Build robust email lookup query with multiple fallback methods
+ * This ensures users can be found regardless of ENCRYPTION_KEY configuration
+ */
+function buildEmailLookupConditions(email: string): Array<Record<string, string>> {
+  const normalized = email.toLowerCase().trim();
+  const emailHash = createEmailHash(normalized);
+  const emailHashPlain = crypto.createHash('sha256').update(normalized).digest('hex');
+  
+  return [
+    { emailHash },                    // Primary: HMAC hash (with encryption key)
+    { emailHashPlain },               // Fallback: plain SHA-256 hash
+    { emailLookup: normalized },      // Fallback: plain email lookup field
+    { email: normalized }             // Legacy: direct email match
+  ];
+}
 
 // Re-export for backwards compatibility
 export { normalizeWalletAddress };
@@ -65,11 +84,9 @@ export async function findUserByIdentifier(
   }
 
   if (email) {
-    // Use emailHash for lookups since email is encrypted
-    const emailHash = createEmailHash(email);
-    query.$or!.push({ emailHash });
-    // Also try direct email match for backward compatibility with unencrypted emails
-    query.$or!.push({ email: email.toLowerCase() });
+    // Use robust email lookup with multiple fallback methods
+    const emailConditions = buildEmailLookupConditions(email);
+    query.$or!.push(...emailConditions);
   }
 
   if (userId) {
@@ -141,14 +158,11 @@ export async function getOrCreateUserByEmail(email: string): Promise<IUser> {
   const User = getUserModel();
   const normalized = email.toLowerCase().trim();
   const emailHash = createEmailHash(normalized);
+  const emailHashPlain = crypto.createHash('sha256').update(normalized).digest('hex');
 
-  // First try to find by emailHash (encrypted emails)
-  let user = await User.findOne({ emailHash });
-  
-  // Fallback: try direct email match (backward compatibility)
-  if (!user) {
-    user = await User.findOne({ email: normalized });
-  }
+  // Use robust lookup with multiple fallback methods
+  const emailConditions = buildEmailLookupConditions(normalized);
+  let user = await User.findOne({ $or: emailConditions });
   
   if (user) {
     // DATA MINIMIZATION: Extend expiry on activity
@@ -158,8 +172,12 @@ export async function getOrCreateUserByEmail(email: string): Promise<IUser> {
 
   // New email users get 2 free credits
   // Email will be encrypted in pre-save hook
+  // Store multiple lookup fields for cross-environment compatibility
   user = new User({
-    email: normalized,  // Will be encrypted on save
+    email: normalized,           // Will be encrypted on save
+    emailHash: emailHash,        // HMAC hash (set explicitly for safety)
+    emailHashPlain: emailHashPlain, // Plain SHA-256 for cross-env compatibility
+    emailLookup: normalized,     // Plain email for fallback lookup
     credits: 2,
     totalCreditsEarned: 2,
     totalCreditsSpent: 0,

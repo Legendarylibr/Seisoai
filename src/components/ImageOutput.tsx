@@ -706,38 +706,90 @@ const ImageOutput: React.FC = () => {
           )}
           {hasMultipleImages ? (
             <div 
-              className="grid gap-2 p-2 w-full h-full overflow-y-auto" 
-              style={{ 
-                maxHeight: '100%',
-                gridTemplateColumns: imagesToDisplay.length <= 2 
-                  ? 'repeat(2, 1fr)' 
-                  : imagesToDisplay.length <= 4 
-                    ? 'repeat(2, 1fr)' 
-                    : imagesToDisplay.length <= 6
-                      ? 'repeat(3, 1fr)'
-                      : 'repeat(4, 1fr)'
-              }}
+              className="w-full h-full overflow-y-auto p-1" 
+              style={{ maxHeight: '100%' }}
             >
-              {imagesToDisplay.map((url, i) => (
+              {/* Collage header for batch results */}
+              {imagesToDisplay.length > 6 && (
                 <div 
-                  key={i} 
-                  className="flex items-center justify-center overflow-hidden" 
-                  style={{ 
-                    maxHeight: '100%',
-                    minHeight: '150px'
+                  className="mb-1 px-2 py-1 flex items-center justify-between"
+                  style={{
+                    background: WIN95.bg,
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
                   }}
                 >
-                  <img 
-                    src={url} 
-                    alt={`Generated ${i + 1}`} 
-                    className="object-contain"
-                    style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' }}
-                    decoding="async"
-                    fetchpriority={i === 0 ? "high" : "low"}
-                    onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { (e.target as HTMLImageElement).style.display = 'none'; }} 
-                  />
+                  <span className="text-[10px] font-bold" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                    Batch Result: {imagesToDisplay.length} images
+                  </span>
+                  <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                    Click to download individual images
+                  </span>
                 </div>
-              ))}
+              )}
+              <div 
+                className="grid gap-1"
+                style={{ 
+                  // Dynamic grid columns based on image count for optimal collage display
+                  gridTemplateColumns: imagesToDisplay.length <= 2 
+                    ? 'repeat(2, 1fr)' 
+                    : imagesToDisplay.length <= 4 
+                      ? 'repeat(2, 1fr)' 
+                      : imagesToDisplay.length <= 9
+                        ? 'repeat(3, 1fr)'
+                        : imagesToDisplay.length <= 16
+                          ? 'repeat(4, 1fr)'
+                          : imagesToDisplay.length <= 36
+                            ? 'repeat(6, 1fr)'
+                            : imagesToDisplay.length <= 64
+                              ? 'repeat(8, 1fr)'
+                              : 'repeat(10, 1fr)' // For up to 100 images
+                }}
+              >
+                {imagesToDisplay.map((url, i) => (
+                  <div 
+                    key={i} 
+                    className="relative aspect-square overflow-hidden cursor-pointer group"
+                    onClick={() => handleDownload(url)}
+                    title={`Image ${i + 1} - Click to download`}
+                    style={{ 
+                      boxShadow: `1px 1px 0 ${WIN95.border.darker}`,
+                      minWidth: imagesToDisplay.length > 16 ? '40px' : '60px',
+                      minHeight: imagesToDisplay.length > 16 ? '40px' : '60px'
+                    }}
+                  >
+                    <img 
+                      src={url} 
+                      alt={`Generated ${i + 1}`} 
+                      className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                      decoding="async"
+                      loading={i < 20 ? "eager" : "lazy"}
+                      fetchpriority={i === 0 ? "high" : "low"}
+                      onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { (e.target as HTMLImageElement).style.display = 'none'; }} 
+                    />
+                    {/* Hover overlay with image number */}
+                    <div 
+                      className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ background: 'rgba(0,0,128,0.7)' }}
+                    >
+                      <span className="text-[10px] font-bold text-white" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                        #{i + 1}
+                      </span>
+                    </div>
+                    {/* Small index badge for large collections */}
+                    {imagesToDisplay.length > 9 && (
+                      <div 
+                        className="absolute bottom-0 right-0 px-1 text-[7px] font-bold"
+                        style={{
+                          background: 'rgba(0,0,0,0.6)',
+                          color: '#fff'
+                        }}
+                      >
+                        {i + 1}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <img 

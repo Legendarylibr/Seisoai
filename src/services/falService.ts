@@ -189,6 +189,7 @@ export const generateImage = async (
     const randomSeed = Math.floor(Math.random() * 2147483647);
     
     // Build request body according to the official API schema
+    // Send both num_images (snake_case for FAL API) and numImages (camelCase for backend)
     const requestBody: RequestBody = {
       prompt: basePrompt,
       guidance_scale: guidanceScale,
@@ -199,6 +200,9 @@ export const generateImage = async (
       enhance_prompt: true,
       seed: randomSeed // Randomized seed every time
     };
+    
+    // Also set numImages for backend compatibility
+    (requestBody as Record<string, unknown>).numImages = numImages;
 
     // Add reference image(s) if provided based on image count
     // OPTIMIZATION: Streamlined image processing with single-pass optimization check

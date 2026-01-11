@@ -101,12 +101,17 @@ export function createAuthRoutes(deps: Dependencies = {}) {
 
       const User = mongoose.model<IUser>('User');
       
-      // Check existing user by emailHash (encrypted emails)
-      const emailHash = createEmailHash(email);
+      // Check existing user with robust lookup (multiple fallback methods)
+      const normalizedEmail = email.toLowerCase().trim();
+      const emailHash = createEmailHash(normalizedEmail);
+      const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+      
       const existing = await User.findOne({ 
         $or: [
-          { emailHash },
-          { email: email.toLowerCase() }  // Backward compatibility
+          { emailHash },                    // Primary: HMAC hash
+          { emailHashPlain },               // Fallback: plain SHA-256
+          { emailLookup: normalizedEmail }, // Fallback: plain email field
+          { email: normalizedEmail }        // Legacy: direct match
         ]
       });
       if (existing) {

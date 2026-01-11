@@ -241,16 +241,21 @@ async function main(): Promise<void> {
         }
       }
       
-      // Generate emailHash for email users (required for lookups)
+      // Generate emailHash and fallback fields for robust email lookups
       // Uses createEmailHash which handles encryption config (HMAC vs SHA256)
       const emailHash = normalizedEmail 
         ? createEmailHash(normalizedEmail)
+        : null;
+      const emailHashPlain = normalizedEmail
+        ? crypto.createHash('sha256').update(normalizedEmail).digest('hex')
         : null;
       
       user = new User({
         ...(normalizedAddress && { walletAddress: normalizedAddress }),
         ...(normalizedEmail && { email: normalizedEmail }),
         ...(emailHash && { emailHash: emailHash }),
+        ...(emailHashPlain && { emailHashPlain: emailHashPlain }),
+        ...(normalizedEmail && { emailLookup: normalizedEmail }),
         ...(userId && { userId: userId }),
         credits: 0, // Start with 0, will add credits below
         totalCreditsEarned: 0,
