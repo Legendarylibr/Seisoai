@@ -25,6 +25,9 @@ import createImageToolsRoutes from './image-tools';
 import createWorkflowRoutes from './workflows';
 import createModel3dRoutes from './model3d';
 import createGDPRRoutes from './gdpr';
+import createSessionRoutes from './sessions';
+import createAuditRoutes from './audit';
+import { adminIPAllowlist } from '../middleware/ipAllowlist';
 
 // Types
 interface Dependencies {
@@ -99,15 +102,27 @@ export function createApiRoutes(deps: Dependencies) {
   });
 
   // ============================================
-  // Admin
+  // Admin (with IP allowlist)
   // ============================================
-  router.use('/admin', createAdminRoutes(deps));
+  router.use('/admin', adminIPAllowlist, createAdminRoutes(deps));
 
   // ============================================
   // GDPR Compliance (Enterprise)
   // Data export, deletion, rectification
   // ============================================
   router.use('/gdpr', createGDPRRoutes(deps));
+
+  // ============================================
+  // Session Management (Enterprise)
+  // View/revoke active sessions
+  // ============================================
+  router.use('/sessions', createSessionRoutes(deps));
+
+  // ============================================
+  // Audit Logs (Enterprise - Admin only with IP allowlist)
+  // Query, export, verify audit logs
+  // ============================================
+  router.use('/audit', adminIPAllowlist, createAuditRoutes(deps));
 
   // ============================================
   // 404 Handler

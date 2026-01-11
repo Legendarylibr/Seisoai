@@ -26,6 +26,12 @@ import { getAllCircuitStats } from './services/circuitBreaker.js';
 import { metricsMiddleware, metricsHandler } from './services/metrics.js';
 import { initializeAuditLog } from './services/auditLog.js';
 import { initializeKeyRotation, scheduleKeyRotation, getKeyRotationStatus } from './services/keyRotation.js';
+import { createOpenApiRoutes } from './services/openapi.js';
+import { deepHealthCheck, livenessCheck, readinessCheck } from './services/healthCheck.js';
+import { setupGracefulShutdown, requestTrackingMiddleware, getInFlightCount } from './services/gracefulShutdown.js';
+import correlationIdMiddleware from './middleware/correlationId.js';
+import { adminIPAllowlist, getIPAllowlistConfig } from './middleware/ipAllowlist.js';
+import { tieredGeneralLimiter, tieredGenerationLimiter } from './middleware/tieredRateLimiter.js';
 
 // Middleware
 import {
@@ -315,6 +321,12 @@ const blockchainRpcLimiter = createBlockchainRpcLimiter();
 // Request ID middleware for tracing
 app.use(requestIdMiddleware);
 
+// ENTERPRISE: Correlation ID middleware for distributed tracing
+app.use(correlationIdMiddleware);
+
+// ENTERPRISE: Request tracking for graceful shutdown
+app.use(requestTrackingMiddleware());
+
 // Metrics middleware for Prometheus (before routes to capture all requests)
 app.use(metricsMiddleware);
 
@@ -434,7 +446,48 @@ app.get('/security.txt', (req: Request, res: Response) => {
   res.redirect(301, '/.well-known/security.txt');
 });
 
-// Health check with memory stats
+// ENTERPRISE: OpenAPI/Swagger documentation
+app.use('/api', createOpenApiRoutes());
+
+// ENTERPRISE: Deep health check (verifies all dependencies)
+app.get('/api/health/deep', async (req: Request, res: Response) => {
+  try {
+    const health = await deepHealthCheck();
+    const statusCode = health.status === 'healthy' ? 200 : 
+                       health.status === 'degraded' ? 200 : 503;
+    res.status(statusCode).json({
+      success: health.status !== 'unhealthy',
+      ...health,
+      inFlightRequests: getInFlightCount(),
+    });
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      status: 'unhealthy',
+      error: (error as Error).message,
+    });
+  }
+});
+
+// Kubernetes-style liveness probe
+app.get('/api/health/live', (req: Request, res: Response) => {
+  const liveness = livenessCheck();
+  res.json({
+    success: true,
+    ...liveness,
+  });
+});
+
+// Kubernetes-style readiness probe
+app.get('/api/health/ready', async (req: Request, res: Response) => {
+  const readiness = await readinessCheck();
+  res.status(readiness.ready ? 200 : 503).json({
+    success: readiness.ready,
+    ...readiness,
+  });
+});
+
+// Simple health check with memory stats
 app.get('/api/health', (req: Request, res: Response) => {
   const memUsage = process.memoryUsage();
   res.json({
@@ -442,6 +495,7 @@ app.get('/api/health', (req: Request, res: Response) => {
     status: 'ok',
     uptime: Math.round(process.uptime()),
     timestamp: new Date().toISOString(),
+    inFlightRequests: getInFlightCount(),
     memory: {
       heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
       heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
@@ -557,12 +611,23 @@ async function startServer(): Promise<void> {
 
     logger.info('Starting server...', { host: HOST, port: PORT, apiVersion: config.API_VERSION });
 
-    app.listen(PORT, HOST, () => {
+    const server = app.listen(PORT, HOST, () => {
       logger.info(`AI Image Generator API running on port ${PORT}`);
       logger.info(`Environment: ${config.NODE_ENV}`);
       logger.info(`API Version: ${config.API_VERSION}`);
       logger.info('Server started successfully');
+      
+      // ENTERPRISE: Log IP allowlist configuration
+      const ipConfig = getIPAllowlistConfig();
+      if (ipConfig.enabled) {
+        logger.info('Admin IP allowlist enabled', { 
+          allowedIPs: ipConfig.allowlist.length 
+        });
+      }
     });
+
+    // ENTERPRISE: Setup graceful shutdown with HTTP server
+    setupGracefulShutdown(server);
   } catch (error) {
     const err = error as Error;
     logger.error('Failed to start server:', { error: err.message });

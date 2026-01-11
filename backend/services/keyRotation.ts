@@ -9,7 +9,7 @@
  * - Key versioning
  */
 import crypto from 'crypto';
-import jwt, { type JwtPayload, type Secret } from 'jsonwebtoken';
+import jwt, { type JwtPayload } from 'jsonwebtoken';
 import logger from '../utils/logger.js';
 import config from '../config/env.js';
 
@@ -181,13 +181,13 @@ export function signToken(
 ): string {
   const { keyId, secret } = getCurrentSigningKey();
   
-  return jwt.sign(payload, secret, {
+  // Create options with key ID in header
+  const signOptions: jwt.SignOptions = {
     ...options,
-    header: {
-      ...options?.header,
-      kid: keyId, // Key ID for verification
-    },
-  });
+    keyid: keyId, // Key ID for verification (standard JWT header field)
+  };
+  
+  return jwt.sign(payload, secret, signOptions);
 }
 
 /**
@@ -244,7 +244,7 @@ export function getKeyRotationStatus(): {
   if (validKeys.length === 0) {
     return {
       activeKeys: 0,
-      currentVersion,
+      currentVersion: currentKeyVersion,
       oldestKeyAge: 0,
       newestKeyAge: 0,
       nextRotationRecommended: true,
@@ -256,7 +256,7 @@ export function getKeyRotationStatus(): {
   
   return {
     activeKeys: validKeys.length,
-    currentVersion,
+    currentVersion: currentKeyVersion,
     oldestKeyAge: oldestAge,
     newestKeyAge: newestAge,
     nextRotationRecommended: newestAge >= KEY_ROTATION_INTERVAL_DAYS,

@@ -13,7 +13,7 @@ import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger.js';
 import type { IUser } from '../models/User.js';
-import { decrypt } from '../utils/encryption.js';
+// Note: decryption is handled automatically by mongoose hooks
 import { logAuditEvent, AuditEventType, AuditSeverity } from '../services/auditLog.js';
 
 // Types
@@ -31,7 +31,7 @@ export function createGDPRRoutes(deps: Dependencies) {
   const router = Router();
   const { authenticateToken, authRateLimiter } = deps;
   
-  const limiter = authRateLimiter || ((req: Request, res: Response, next: () => void) => next());
+  const limiter = authRateLimiter || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Request data export (GDPR Article 15 & 20)
@@ -343,7 +343,7 @@ export function createGDPRRoutes(deps: Dependencies) {
    * 
    * Returns information about how we process user data
    */
-  router.get('/info', (req: Request, res: Response) => {
+  router.get('/info', (_req: Request, res: Response) => {
     res.json({
       success: true,
       dataController: {
