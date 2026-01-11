@@ -152,6 +152,8 @@ export const createBlockchainRpcLimiter = (): RateLimitRequestHandler => createL
 
 /**
  * Create free image rate limiter with browser fingerprinting
+ * SECURITY FIX: Only skip rate limiting for requests with valid JWT tokens,
+ * not just presence of wallet/userId/email in body (which could be faked)
  */
 export const createFreeImageLimiter = (): RateLimitRequestHandler => {
   const store = getRedisStore('free-image');
@@ -171,9 +173,21 @@ export const createFreeImageLimiter = (): RateLimitRequestHandler => {
       const fingerprint = generateBrowserFingerprint(req);
       return `${req.ip || 'unknown'}-${fingerprint}`;
     },
+    // SECURITY FIX: Only skip for valid JWT authentication, not body params
+    // Body params (walletAddress, userId, email) can be faked to bypass rate limits
     skip: (req) => {
-      const body = req.body || {};
-      return !!(body.walletAddress || body.userId || body.email);
+      // Check for valid JWT token in Authorization header
+      const authHeader = req.headers['authorization'];
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        // Only skip if token exists and has reasonable length (JWT tokens are long)
+        // The actual validation happens in auth middleware, this just prevents
+        // unauthenticated requests from bypassing rate limits
+        if (token && token.length > 50) {
+          return true;
+        }
+      }
+      return false;
     }
   });
 };

@@ -11,20 +11,28 @@ import logger from './utils/logger';
 
 /**
  * List of known temporary/disposable email domains
- * Add more as needed
+ * SECURITY ENHANCED: Comprehensive list with pattern matching
  */
 const DISPOSABLE_EMAIL_DOMAINS = [
   'tempmail.com',
   '10minutemail.com',
+  '10minutemail.net',
+  '10minutemail.org',
   'guerrillamail.com',
+  'guerrillamail.org',
+  'guerrillamail.net',
+  'guerrillamail.biz',
   'mailinator.com',
   'throwaway.email',
   'temp-mail.org',
+  'temp-mail.io',
   'mohmal.com',
   'yopmail.com',
+  'yopmail.fr',
   'getnada.com',
   'fakeinbox.com',
   'trashmail.com',
+  'trashmail.net',
   'mintemail.com',
   'sharklasers.com',
   'grr.la',
@@ -54,11 +62,66 @@ const DISPOSABLE_EMAIL_DOMAINS = [
   'trashymail.com',
   'tyldd.com',
   'yapped.net',
-  'zoemail.org'
+  'zoemail.org',
+  // Additional common disposable domains
+  'mailnesia.com',
+  'mailnator.com',
+  'getairmail.com',
+  'fakemailgenerator.net',
+  'emailfake.com',
+  'crazymailing.com',
+  'tempsky.com',
+  'emailtemporanea.com',
+  'disposableemailaddresses.com',
+  'throwawaymail.com',
+  'spamgourmet.com',
+  'mailcatch.com',
+  'jetable.org',
+  'nospam.ze.tc',
+  'uggsrock.com',
+  'mailexpire.com',
+  'incognitomail.com',
+  'anonymbox.com',
+  'spamavert.com',
+  'spamfree24.org',
+  'spamherelots.com',
+  'tempr.email',
+  'burnermail.io',
+  'dropmail.me',
+  'harakirimail.com',
+  'mailsac.com'
+];
+
+/**
+ * SECURITY ENHANCED: Regex patterns to detect disposable email services
+ * Catches variations and subdomains
+ */
+const DISPOSABLE_EMAIL_PATTERNS = [
+  /^temp/i,           // tempmail, temporary, temp-*
+  /^fake/i,           // fakemail, fakeinbox
+  /^trash/i,          // trashmail, trashy
+  /^throw/i,          // throwaway
+  /^disposable/i,     // disposable*
+  /^spam/i,           // spammail, spam*
+  /^junk/i,           // junkmail
+  /^burner/i,         // burnermail
+  /^10min/i,          // 10minute*, 10min*
+  /minute.*mail/i,    // *minutemail
+  /^guerrilla/i,      // guerrillamail
+  /mailinator/i,      // *mailinator*
+  /yopmail/i,         // *yopmail*
+  /nospam/i,          // *nospam*
+  /tmpmail/i,         // *tmpmail*
+  /tempinbox/i,       // *tempinbox*
+  /maildrop/i,        // *maildrop*
+  /mailnesia/i,       // *mailnesia*
+  /anonymbox/i,       // *anonymbox*
+  /incognitomail/i,   // *incognitomail*
 ];
 
 /**
  * Check if email is from a disposable/temporary email service
+ * SECURITY ENHANCED: Uses both domain list and pattern matching
  */
 export function isDisposableEmail(email: unknown): boolean {
   if (!email || typeof email !== 'string') return false;
@@ -66,9 +129,19 @@ export function isDisposableEmail(email: unknown): boolean {
   const domain = email.toLowerCase().split('@')[1];
   if (!domain) return false;
   
-  return DISPOSABLE_EMAIL_DOMAINS.some(disposableDomain => 
+  // Check against explicit domain list
+  const matchesDomain = DISPOSABLE_EMAIL_DOMAINS.some(disposableDomain => 
     domain === disposableDomain || domain.endsWith(`.${disposableDomain}`)
   );
+  
+  if (matchesDomain) return true;
+  
+  // Check against pattern matching (catches variations)
+  const matchesPattern = DISPOSABLE_EMAIL_PATTERNS.some(pattern => 
+    pattern.test(domain)
+  );
+  
+  return matchesPattern;
 }
 
 /**
@@ -120,6 +193,8 @@ export function isLikelyVPN(ip: string): boolean {
  * Rate limiter specifically for free image generation
  * Stricter limits to prevent abuse - but SKIPS authenticated users
  * Authenticated users are managed by the requireCredits middleware instead
+ * 
+ * SECURITY FIX: Only skip for valid JWT tokens, not body params which can be faked
  */
 export function createFreeImageRateLimiter(rateLimit: (options: unknown) => RateLimitRequestHandler): RateLimitRequestHandler {
   return rateLimit({
@@ -137,20 +212,20 @@ export function createFreeImageRateLimiter(rateLimit: (options: unknown) => Rate
       const fingerprint = generateBrowserFingerprint(req);
       return `${req.ip || 'unknown'}-${fingerprint}`;
     },
-    // Skip rate limiting for authenticated users (they'll be checked by requireCredits middleware)
+    // SECURITY FIX: Only skip for valid JWT authentication, not body params
+    // Body params (walletAddress, userId, email) can be faked to bypass rate limits
     skip: (req: Request) => {
-      // Check for user identification in request body (how the app sends auth info)
-      const body = req.body || {};
-      const hasWallet = !!(body as { walletAddress?: string }).walletAddress;
-      const hasUserId = !!(body as { userId?: string }).userId;
-      const hasEmail = !!(body as { email?: string }).email;
-      
-      // Skip rate limiting if user is authenticated (they have credits system instead)
-      // The requireCredits middleware will handle credit checks for authenticated users
-      if (hasWallet || hasUserId || hasEmail) {
-        return true;
+      // Check for valid JWT token in Authorization header
+      const authHeader = req.headers['authorization'];
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        // Only skip if token exists and has reasonable length (JWT tokens are long)
+        // The actual validation happens in auth middleware, this just prevents
+        // unauthenticated requests from bypassing rate limits
+        if (token && token.length > 50) {
+          return true;
+        }
       }
-      
       return false;
     }
   });

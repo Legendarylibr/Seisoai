@@ -20,7 +20,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Required environment variables
-const REQUIRED_VARS = ['JWT_SECRET', 'ENCRYPTION_KEY'];
+const REQUIRED_VARS = ['JWT_SECRET', 'ENCRYPTION_KEY', 'ADMIN_SECRET'];
 
 // Validate required vars - enforce in all environments for security
 const missingVars = REQUIRED_VARS.filter(v => !process.env[v]);
@@ -46,6 +46,15 @@ if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
 // Validate ENCRYPTION_KEY format (64 hex characters = 256 bits)
 if (process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.length !== 64) {
   console.error('SECURITY ERROR: ENCRYPTION_KEY must be exactly 64 hex characters (256 bits)');
+  console.error('Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
+}
+
+// SECURITY FIX: Validate ADMIN_SECRET minimum length (32 characters)
+if (process.env.ADMIN_SECRET && process.env.ADMIN_SECRET.length < 32) {
+  console.error('SECURITY ERROR: ADMIN_SECRET must be at least 32 characters long');
   console.error('Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
   if (process.env.NODE_ENV === 'production') {
     process.exit(1);

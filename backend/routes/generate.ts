@@ -1970,10 +1970,30 @@ export function createGenerationRoutes(deps: Dependencies) {
   /**
    * Check generation status
    * GET /api/generate/status/:requestId
+   * SECURITY FIX: Now requires authentication to prevent information disclosure
    */
-  router.get('/status/:requestId', async (req: Request, res: Response) => {
+  router.get('/status/:requestId', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // SECURITY: Require authentication
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required to check generation status'
+        });
+        return;
+      }
+
       const { requestId } = req.params;
+      
+      // SECURITY: Validate requestId format to prevent injection
+      if (!requestId || !/^[a-zA-Z0-9._-]+$/.test(requestId) || requestId.length > 200) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid request ID format'
+        });
+        return;
+      }
+
       const status = await checkQueueStatus<{ status?: string; [key: string]: unknown }>(requestId);
       
       res.json({
@@ -1986,7 +2006,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       logger.error('Status check error:', { error: err.message });
       res.status(500).json({
         success: false,
-        error: err.message
+        error: 'Failed to check status'
       });
     }
   });
@@ -1994,10 +2014,30 @@ export function createGenerationRoutes(deps: Dependencies) {
   /**
    * Get generation result
    * GET /api/generate/result/:requestId
+   * SECURITY FIX: Now requires authentication to prevent information disclosure
    */
-  router.get('/result/:requestId', async (req: Request, res: Response) => {
+  router.get('/result/:requestId', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // SECURITY: Require authentication
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required to get generation result'
+        });
+        return;
+      }
+
       const { requestId } = req.params;
+      
+      // SECURITY: Validate requestId format to prevent injection
+      if (!requestId || !/^[a-zA-Z0-9._-]+$/.test(requestId) || requestId.length > 200) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid request ID format'
+        });
+        return;
+      }
+
       const result = await getQueueResult<Record<string, unknown>>(requestId);
       
       res.json({
@@ -2009,7 +2049,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       logger.error('Result fetch error:', { error: err.message });
       res.status(500).json({
         success: false,
-        error: err.message
+        error: 'Failed to fetch result'
       });
     }
   });
@@ -2552,7 +2592,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       }
       
       const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const generation = {
+      const generationItem = {
         id: generationId,
         prompt: encryptedPrompt,
         style: style || 'No Style',
@@ -2564,20 +2604,21 @@ export function createGenerationRoutes(deps: Dependencies) {
         timestamp: new Date()
       };
 
-      // Add to user's generation history
+      // Add to generationHistory for internal tracking (not shown to users)
+      // Gallery is populated separately via frontend localStorage
       await User.findOneAndUpdate(
         updateQuery,
         {
           $push: {
             generationHistory: {
-              $each: [generation],
-              $slice: -100 // Keep last 100 generations
+              $each: [generationItem],
+              $slice: -10 // Keep last 10 for tracking
             }
           }
         }
       );
 
-      logger.info('Generation added to history', {
+      logger.info('Generation tracked', {
         userId: user.userId,
         generationId,
         hasImage: !!imageUrl,
@@ -2649,8 +2690,8 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Fetch user to get generation history
-      const userWithHistory = await User.findOne(updateQuery).select('generationHistory gallery');
+      // Fetch user to verify ownership
+      const userWithHistory = await User.findOne(updateQuery).select('generationHistory');
       
       if (!userWithHistory) {
         res.status(404).json({
@@ -2661,8 +2702,8 @@ export function createGenerationRoutes(deps: Dependencies) {
       }
 
       // SECURITY: Verify the generation belongs to this user
-      const generation = userWithHistory.generationHistory?.find(gen => gen.id === generationId);
-      if (!generation) {
+      const existingGen = userWithHistory.generationHistory?.find(gen => gen.id === generationId);
+      if (!existingGen) {
         logger.warn('SECURITY: Blocked generation update attempt for non-owned generation', {
           requestedGenerationId: generationId,
           authenticatedUserId: user.userId,
@@ -2676,7 +2717,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Build update object
+      // Build update object for generationHistory (internal tracking)
       const updateFields: Record<string, string> = {};
       if (videoUrl) updateFields['generationHistory.$.videoUrl'] = videoUrl;
       if (imageUrl) updateFields['generationHistory.$.imageUrl'] = imageUrl;
@@ -2687,37 +2728,6 @@ export function createGenerationRoutes(deps: Dependencies) {
         { ...updateQuery, 'generationHistory.id': generationId },
         { $set: updateFields }
       );
-
-      // If completed and has videoUrl/imageUrl, add to gallery
-      if ((status === 'completed' || !status) && (videoUrl || imageUrl)) {
-        const galleryItem = {
-          id: generationId,
-          prompt: generation.prompt,
-          style: generation.style,
-          ...(imageUrl && { imageUrl }),
-          ...(videoUrl && { videoUrl }),
-          creditsUsed: generation.creditsUsed,
-          timestamp: generation.timestamp || new Date()
-        };
-
-        // Check if already in gallery
-        const inGallery = userWithHistory.gallery?.some(item => item.id === generationId);
-        if (!inGallery) {
-          await User.updateOne(
-            updateQuery,
-            { $push: { gallery: { $each: [galleryItem], $slice: -100 } } }
-          );
-        } else {
-          // Update existing gallery item
-          const galleryUpdateFields: Record<string, string> = {};
-          if (videoUrl) galleryUpdateFields['gallery.$.videoUrl'] = videoUrl;
-          if (imageUrl) galleryUpdateFields['gallery.$.imageUrl'] = imageUrl;
-          await User.updateOne(
-            { ...updateQuery, 'gallery.id': generationId },
-            { $set: galleryUpdateFields }
-          );
-        }
-      }
 
       logger.info('Generation updated', { 
         generationId, 

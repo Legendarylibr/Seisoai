@@ -719,8 +719,9 @@ export function createStripeRoutes(deps: Dependencies = {}) {
   /**
    * Verify subscription checkout session
    * POST /api/subscription/verify (mounted at /api/stripe but also needs /api route)
+   * SECURITY FIX: Now requires authentication and verifies session belongs to user
    */
-  router.post('/subscription-verify', limiter, async (req: Request, res: Response) => {
+  router.post('/subscription-verify', limiter, authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const stripe = getStripe();
       if (!stripe) {
@@ -731,7 +732,16 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const { sessionId, userId } = req.body as { sessionId?: string; userId?: string };
+      // SECURITY: Require authentication
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required to verify subscription'
+        });
+        return;
+      }
+
+      const { sessionId } = req.body as { sessionId?: string };
       if (!sessionId) {
         res.status(400).json({
           success: false,
@@ -774,47 +784,83 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-      const User = mongoose.model<IUser>('User');
-
-      // Find user
-      let user: IUser | null = null;
+      // SECURITY: Verify the session belongs to the authenticated user
       const metadata = session.metadata || {};
+      const metaUserId = metadata.userId;
+      const metaEmail = metadata.email;
+      const metaWallet = metadata.walletAddress;
       
-      // Use findUserByIdentifier which handles encrypted emails via emailHash
-      if (metadata.userId) {
-        user = await findUserByIdentifier(null, null, metadata.userId);
-      } else if (metadata.email) {
-        user = await findUserByIdentifier(null, metadata.email as string, null);
-      } else if (userId) {
-        user = await findUserByIdentifier(null, null, userId);
-      }
+      const isOwner = (
+        (metaUserId && metaUserId === req.user.userId) ||
+        (metaEmail && req.user.email && metaEmail.toLowerCase() === req.user.email.toLowerCase()) ||
+        (metaWallet && req.user.walletAddress && metaWallet.toLowerCase() === req.user.walletAddress.toLowerCase())
+      );
 
-      if (!user) {
-        res.status(404).json({
+      if (!isOwner) {
+        logger.warn('SECURITY: Subscription verification attempt for non-owned session', {
+          sessionId,
+          authenticatedUserId: req.user.userId,
+          metaUserId,
+          ip: req.ip
+        });
+        res.status(403).json({
           success: false,
-          error: 'User not found'
+          error: 'This subscription session does not belong to your account'
         });
         return;
       }
 
-      // Add subscription credits
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const User = mongoose.model<IUser>('User');
+
+      // SECURITY: Use authenticated user, not metadata
+      const user = req.user;
+
+      // Add subscription credits with duplicate prevention
       const monthlyCredits = parseInt(subscription.metadata?.monthlyCredits || '100', 10);
       
-      await User.findOneAndUpdate(
+      // SECURITY: Use $addToSet to prevent duplicate credit additions
+      const paymentRecord = {
+        type: 'subscription' as const,
+        subscriptionId,
+        credits: monthlyCredits,
+        timestamp: new Date()
+      };
+
+      const updatedUser = await User.findOneAndUpdate(
         { userId: user.userId },
         {
           $inc: { credits: monthlyCredits, totalCreditsEarned: monthlyCredits },
-          $push: {
-            paymentHistory: {
-              type: 'subscription',
-              subscriptionId,
-              credits: monthlyCredits,
-              timestamp: new Date()
-            }
+          $addToSet: {
+            paymentHistory: paymentRecord
           }
-        }
+        },
+        { new: true }
       );
+
+      // Check if payment was actually added (not a duplicate)
+      const wasAdded = updatedUser?.paymentHistory?.some(
+        (p: { subscriptionId?: string; timestamp?: Date }) => 
+          p.subscriptionId === subscriptionId && 
+          Math.abs(new Date(p.timestamp || 0).getTime() - paymentRecord.timestamp.getTime()) < 1000
+      );
+
+      if (!wasAdded) {
+        logger.info('Subscription already verified (duplicate detected)', {
+          userId: user.userId,
+          subscriptionId
+        });
+        res.json({
+          success: true,
+          alreadyProcessed: true,
+          credits: 0,
+          subscription: {
+            id: subscriptionId,
+            status: subscription.status
+          }
+        });
+        return;
+      }
 
       logger.info('Subscription verified', {
         userId: user.userId,

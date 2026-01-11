@@ -6,6 +6,7 @@ import express, { type Express, type Request, type Response, type NextFunction, 
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import swaggerUi from 'swagger-ui-express';
@@ -48,6 +49,7 @@ import {
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { createValidateInput } from './middleware/validation.js';
 import { cdnCacheMiddleware, cdnSecurityMiddleware } from './middleware/cdn.js';
+import { csrfProtection, setCSRFToken } from './middleware/csrf.js';
 
 // Routes
 import { createVersionedRoutes } from './routes/versioned.js';
@@ -150,13 +152,16 @@ app.options('*', cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Stripe-Signature', 'Cache-Control', 'Pragma', 'Accept', 'Origin', 'X-CSRF-Token'],
-  exposedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
   maxAge: 86400,
   optionsSuccessStatus: 200
 }));
 
 // Compression
 app.use(compression());
+
+// Cookie parser (required for CSRF protection)
+app.use(cookieParser());
 
 // CORS Configuration - Use allowed origins from env
 // SECURITY ENHANCED: Strict validation of allowed origins
@@ -237,7 +242,7 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Stripe-Signature', 'Cache-Control', 'Pragma', 'Accept', 'Origin', 'X-CSRF-Token'],
-  exposedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'], // SECURITY: Expose CSRF token header
   maxAge: 86400, // Cache preflight for 24 hours
   optionsSuccessStatus: 200
 }));
@@ -315,6 +320,13 @@ app.use(metricsMiddleware);
 // This must come before routes but after body parsing
 const validateInput = createValidateInput();
 app.use('/api/', validateInput);
+
+// SECURITY FIX: Apply CSRF protection globally
+// Sets CSRF token cookie on GET requests
+app.use('/api/', setCSRFToken);
+// Validates CSRF token on state-changing requests (POST, PUT, DELETE, PATCH)
+// Skips webhooks (they use signature verification) and health endpoints
+app.use('/api/', csrfProtection);
 
 // Apply general rate limiting to all API routes
 app.use('/api/', generalRateLimiter);
@@ -461,7 +473,15 @@ async function startServer(): Promise<void> {
     await connectDatabase();
 
     // Initialize Redis (optional - falls back to in-memory cache)
-    await initializeRedis();
+    const redisInitialized = await initializeRedis();
+    
+    // SECURITY: Warn if Redis unavailable in production (token blacklist won't persist)
+    if (!redisInitialized && config.isProduction) {
+      logger.warn('🚨 SECURITY WARNING: Redis not available in production!');
+      logger.warn('🚨 Token blacklist will not persist across server restarts.');
+      logger.warn('🚨 Rate limiting will not be shared across server instances.');
+      logger.warn('🚨 Set REDIS_URL environment variable for proper security.');
+    }
 
     // Initialize job queues (requires Redis)
     initializeQueues();
