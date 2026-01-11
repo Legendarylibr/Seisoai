@@ -155,7 +155,18 @@ export const createAuthenticateToken = (
       if (!user && decoded.email) {
         const { createEmailHash } = await import('../utils/emailHash.js');
         const emailHash = createEmailHash(decoded.email);
-        user = await User.findOne({ emailHash })
+        const normalizedEmail = decoded.email.toLowerCase().trim();
+        // Plain SHA-256 hash for cross-environment compatibility
+        const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+        
+        user = await User.findOne({ 
+          $or: [
+            { emailHash },                    // Primary: HMAC hash
+            { emailHashPlain },               // Fallback: plain SHA-256
+            { emailLookup: normalizedEmail }, // Fallback: plain email field
+            { email: normalizedEmail }        // Legacy: direct match
+          ]
+        })
           .select('-password -generationHistory -gallery -paymentHistory')
           .maxTimeMS(5000);
       }
@@ -205,12 +216,26 @@ export const createAuthenticateFlexible = (
           
           if (decoded.type !== 'refresh') {
             const User = getUserModel();
-            const user = await User.findOne({
-              $or: [
-                { userId: decoded.userId },
-                { email: decoded.email }
-              ]
-            }).select('-password');
+            
+            // Build query with multiple fallback lookup methods
+            const queryConditions: Record<string, unknown>[] = [];
+            if (decoded.userId) {
+              queryConditions.push({ userId: decoded.userId });
+            }
+            if (decoded.email) {
+              const { createEmailHash } = await import('../utils/emailHash.js');
+              const emailHash = createEmailHash(decoded.email);
+              const normalizedEmail = decoded.email.toLowerCase().trim();
+              const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+              
+              queryConditions.push({ emailHash });
+              queryConditions.push({ emailHashPlain });
+              queryConditions.push({ emailLookup: normalizedEmail });
+            }
+            
+            const user = queryConditions.length > 0 
+              ? await User.findOne({ $or: queryConditions }).select('-password')
+              : null;
 
             if (user) {
               req.user = user;

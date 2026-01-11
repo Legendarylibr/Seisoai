@@ -7,6 +7,7 @@
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
@@ -188,12 +189,18 @@ export function createAuthRoutes(deps: Dependencies = {}) {
       }
 
       const User = mongoose.model<IUser>('User');
-      // Look up by emailHash (encrypted emails) or direct email (backward compatibility)
+      // Look up by emailHash (encrypted emails) or fallback methods
       const emailHash = createEmailHash(email);
+      const normalizedEmail = email.toLowerCase().trim();
+      // Plain SHA-256 hash for cross-environment compatibility
+      const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+      
       let user = await User.findOne({ 
         $or: [
-          { emailHash },
-          { email: email.toLowerCase() }  // Backward compatibility
+          { emailHash },                    // Primary: HMAC hash (with encryption key)
+          { emailHashPlain },               // Fallback: plain SHA-256 hash
+          { emailLookup: normalizedEmail }, // Fallback: plain email lookup field
+          { email: normalizedEmail }        // Legacy: direct email match
         ]
       }).select('+password -generationHistory -gallery -paymentHistory');
 
