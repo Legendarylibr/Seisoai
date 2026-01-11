@@ -14,6 +14,7 @@ import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 import { calculateVideoCredits, calculateMusicCredits, calculateUpscaleCredits, calculateVideoToAudioCredits } from '../utils/creditCalculations';
 import { encrypt, isEncryptionConfigured } from '../utils/encryption';
+import { withRetry } from '../utils/mongoRetry';
 
 // Types
 interface Dependencies {
@@ -2580,6 +2581,28 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
+      // Deduplication: Check if this requestId already exists in history
+      // This prevents duplicate entries when client retries on network errors
+      if (requestId) {
+        const existingUser = await User.findOne({
+          ...updateQuery,
+          'generationHistory.requestId': requestId
+        }).select('_id').lean();
+        
+        if (existingUser) {
+          logger.debug('Generation already tracked (dedup)', { requestId });
+          res.json({
+            success: true,
+            generationId: `existing_${requestId}`,
+            deduplicated: true,
+            credits: user.credits,
+            totalCreditsEarned: user.totalCreditsEarned,
+            totalCreditsSpent: user.totalCreditsSpent
+          });
+          return;
+        }
+      }
+
       // Create generation record
       // Encrypt prompt if encryption is configured (findOneAndUpdate bypasses pre-save hooks)
       let encryptedPrompt = prompt || 'No prompt';
@@ -2606,16 +2629,20 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Add to generationHistory for internal tracking (not shown to users)
       // Gallery is populated separately via frontend localStorage
-      await User.findOneAndUpdate(
-        updateQuery,
-        {
-          $push: {
-            generationHistory: {
-              $each: [generationItem],
-              $slice: -10 // Keep last 10 for tracking
+      // Use retry logic to handle concurrent write conflicts (Plan executor errors)
+      await withRetry(
+        () => User.findOneAndUpdate(
+          updateQuery,
+          {
+            $push: {
+              generationHistory: {
+                $each: [generationItem],
+                $slice: -10 // Keep last 10 for tracking
+              }
             }
           }
-        }
+        ),
+        { operation: 'Add generation to history', maxRetries: 3 }
       );
 
       logger.info('Generation tracked', {

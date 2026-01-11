@@ -15,7 +15,7 @@ export {
   isValidEmail,
   getSafeErrorMessage,
   deepSanitize,
-  isValidFalUrl,
+  // Note: isValidFalUrl is exported from ./upload, not here (avoid duplicate)
   createValidateInput
 } from './validation';
 export {
@@ -34,6 +34,7 @@ export {
   stripVideoMetadataFromUrl,
   isVideoMetadataCleaningAvailable
 } from './videoMetadata';
+export { withRetry, isRetryableError } from './mongoRetry';
 
 
 
