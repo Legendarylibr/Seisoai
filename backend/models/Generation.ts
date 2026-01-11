@@ -39,8 +39,7 @@ const generationSchema = new mongoose.Schema<IGeneration>({
   generationId: {
     type: String,
     required: true,
-    unique: true,
-    index: true
+    unique: true  // unique: true already creates an index
   },
   prompt: {
     type: String,
@@ -50,7 +49,11 @@ const generationSchema = new mongoose.Schema<IGeneration>({
   model: String,
   imageUrl: String,
   videoUrl: String,
-  requestId: String,
+  requestId: {
+    type: String,
+    index: true,  // Index for deduplication lookups
+    sparse: true
+  },
   status: {
     type: String,
     enum: ['queued', 'processing', 'completed', 'failed'],
@@ -65,20 +68,19 @@ const generationSchema = new mongoose.Schema<IGeneration>({
     seed: Number,
     guidanceScale: Number,
     numImages: Number
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-    index: true
   }
+  // createdAt is auto-managed by timestamps: true below
 }, {
   timestamps: true
 });
 
-// Compound index for efficient user queries
+// Compound index for efficient user queries (sorted by newest first)
 generationSchema.index({ userId: 1, createdAt: -1 });
 
-// DATA MINIMIZATION: Auto-delete generations after 30 days (reduced from 90)
+// Index on createdAt for TTL and time-based queries
+generationSchema.index({ createdAt: 1 });
+
+// DATA MINIMIZATION: Auto-delete generations after 30 days
 // Minimum needed for dispute resolution, then automatically purged
 generationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 

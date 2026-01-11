@@ -37,8 +37,7 @@ const galleryItemSchema = new mongoose.Schema<IGalleryItem>({
   itemId: {
     type: String,
     required: true,
-    unique: true,
-    index: true
+    unique: true  // unique: true already creates an index
   },
   imageUrl: {
     type: String,
@@ -57,18 +56,17 @@ const galleryItemSchema = new mongoose.Schema<IGalleryItem>({
     seed: Number,
     width: Number,
     height: Number
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-    index: true
   }
+  // createdAt is auto-managed by timestamps: true below
 }, {
   timestamps: true
 });
 
-// Compound index for efficient user queries
+// Compound index for efficient user queries (sorted by newest first)
 galleryItemSchema.index({ userId: 1, createdAt: -1 });
+
+// Index on createdAt for TTL and time-based queries
+galleryItemSchema.index({ createdAt: 1 });
 
 // DATA MINIMIZATION: Auto-delete gallery items after 30 days
 // Users are notified items expire - they can download before expiry

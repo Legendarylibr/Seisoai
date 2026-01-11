@@ -80,9 +80,10 @@ const paymentSchema = new mongoose.Schema<IPayment>({
     bonusCredits: Number,
     promoCode: String
   },
+  // createdAt is auto-managed by timestamps: true
+  // We define it here only to add the index
   createdAt: {
     type: Date,
-    default: Date.now,
     index: true
   }
 }, {
@@ -92,8 +93,11 @@ const paymentSchema = new mongoose.Schema<IPayment>({
 // Compound index for efficient user queries
 paymentSchema.index({ userId: 1, createdAt: -1 });
 
-// Index for looking up by transaction hash
-paymentSchema.index({ txHash: 1 });
+// NOTE: txHash already has index: true in field definition, no duplicate needed
+
+// DATA RETENTION: Payment records are kept indefinitely (no TTL index)
+// This is intentional for financial/legal compliance and dispute resolution
+// Unlike Generation/GalleryItem which expire after 30 days
 
 const Payment = mongoose.model<IPayment>('Payment', paymentSchema);
 

@@ -36,7 +36,7 @@ const ipFreeImageSchema = new mongoose.Schema<IIPFreeImage>({
   timestamps: true
 });
 
-ipFreeImageSchema.index({ ipAddress: 1 });
+// NOTE: ipAddress already has index: true in field definition, no duplicate needed
 ipFreeImageSchema.index({ lastUsed: 1 });
 
 // DATA MINIMIZATION: Auto-delete IP records after 7 days

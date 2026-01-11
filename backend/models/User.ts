@@ -104,12 +104,16 @@ function arrayLimit10(val: unknown[]): boolean {
   return val.length <= 10;
 }
 
-function arrayLimit100(val: unknown[]): boolean {
-  return val.length <= 100;
-}
-
 function arrayLimit30(val: unknown[]): boolean {
   return val.length <= 30;
+}
+
+function arrayLimit50(val: unknown[]): boolean {
+  return val.length <= 50;
+}
+
+function arrayLimit100(val: unknown[]): boolean {
+  return val.length <= 100;
 }
 
 const userSchema = new mongoose.Schema<IUser>({
@@ -168,12 +172,17 @@ const userSchema = new mongoose.Schema<IUser>({
     default: 0,
     min: [0, 'Total credits spent cannot be negative']
   },
-  nftCollections: [{
-    contractAddress: String,
-    chainId: String,
-    tokenIds: [String],
-    lastChecked: { type: Date, default: Date.now }
-  }],
+  // NFT collections for bonus credits verification
+  // Limited to prevent document bloat
+  nftCollections: {
+    type: [{
+      contractAddress: String,
+      chainId: String,
+      tokenIds: { type: [String], validate: [arrayLimit100, 'Token IDs exceed limit of 100'] },
+      lastChecked: { type: Date, default: Date.now }
+    }],
+    validate: [arrayLimit10, 'NFT collections exceed limit of 10']
+  },
   // NOTE: Full payment history stored in separate Payment collection
   // DATA MINIMIZATION: Reduced from 100 to 30 - only recent transactions needed
   paymentHistory: {
@@ -207,7 +216,7 @@ const userSchema = new mongoose.Schema<IUser>({
     validate: [arrayLimit10, 'Generation history exceeds limit of 10']
   },
   // Gallery stores user's generated images/videos (shown to users)
-  // DATA MINIMIZATION: Reduced from 50 to 20 - minimal recent items
+  // Limited to 50 items to balance user experience with document size
   gallery: {
     type: [{
       id: String,
@@ -228,7 +237,7 @@ const userSchema = new mongoose.Schema<IUser>({
       status: { type: String, enum: ['queued', 'processing', 'completed', 'failed'], default: 'completed' },
       requestId: String
     }],
-    validate: [arrayLimit100, 'Gallery exceeds limit of 100']
+    validate: [arrayLimit50, 'Gallery exceeds limit of 50']
   },
   settings: {
     preferredStyle: String,
@@ -259,12 +268,13 @@ const userSchema = new mongoose.Schema<IUser>({
 });
 
 // Indexes for performance
-userSchema.index({ walletAddress: 1 });
-userSchema.index({ emailHash: 1 });  // Use emailHash for lookups, not email
-userSchema.index({ userId: 1 });
+// NOTE: walletAddress, emailHash, userId, discordId already have indexes via field definitions
+// Only define additional compound/special indexes here to avoid duplicates
 userSchema.index({ createdAt: 1 });
+userSchema.index({ lastActive: 1 }); // For querying inactive users
 userSchema.index({ 'gallery.timestamp': 1 });
 userSchema.index({ 'gallery.expiresAt': 1 }); // For cleaning up expired 3D models
+userSchema.index({ 'generationHistory.requestId': 1 }); // For deduplication checks
 
 // DATA MINIMIZATION: Auto-delete inactive accounts with 0 credits
 // TTL index on expiresAt - MongoDB will auto-delete when expiresAt < now
