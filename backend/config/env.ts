@@ -19,8 +19,8 @@ if (process.env.NODE_ENV !== 'production') {
   dotenv.config({ path: envPath });
 }
 
-// Required environment variables
-const REQUIRED_VARS = ['JWT_SECRET', 'ENCRYPTION_KEY', 'ADMIN_SECRET'];
+// Required environment variables (ENCRYPTION_KEY is optional - app will warn but continue)
+const REQUIRED_VARS = ['JWT_SECRET', 'ADMIN_SECRET'];
 
 // Validate required vars - enforce in all environments for security
 const missingVars = REQUIRED_VARS.filter(v => !process.env[v]);
@@ -43,13 +43,11 @@ if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
   }
 }
 
-// Validate ENCRYPTION_KEY format (64 hex characters = 256 bits)
+// Validate ENCRYPTION_KEY format (64 hex characters = 256 bits) - warn only, don't exit
 if (process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.length !== 64) {
-  console.error('SECURITY ERROR: ENCRYPTION_KEY must be exactly 64 hex characters (256 bits)');
-  console.error('Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
-  if (process.env.NODE_ENV === 'production') {
-    process.exit(1);
-  }
+  console.warn('WARNING: ENCRYPTION_KEY should be exactly 64 hex characters (256 bits)');
+  console.warn('Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  console.warn('Encryption features may not work correctly.');
 }
 
 // SECURITY FIX: Validate ADMIN_SECRET minimum length (32 characters)

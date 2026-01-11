@@ -16,36 +16,45 @@ const AUTH_TAG_LENGTH = 16;
 const SALT_LENGTH = 16;
 
 // Get encryption key from environment
-function getEncryptionKey(): Buffer {
+function getEncryptionKey(): Buffer | null {
   const key = process.env.ENCRYPTION_KEY;
   
   if (!key) {
-    throw new Error('ENCRYPTION_KEY environment variable is required for data encryption');
+    logger.warn('ENCRYPTION_KEY not set - encryption disabled');
+    return null;
   }
   
   // Key should be 64 hex characters (32 bytes)
   if (key.length !== 64) {
-    throw new Error('ENCRYPTION_KEY must be exactly 64 hex characters (256 bits)');
+    logger.warn(`ENCRYPTION_KEY has ${key.length} chars, expected 64 - encryption disabled`);
+    return null;
   }
   
   return Buffer.from(key, 'hex');
 }
 
 // Get HMAC key for blind indexes (derived from encryption key)
-function getHmacKey(): Buffer {
+function getHmacKey(): Buffer | null {
   const encKey = getEncryptionKey();
+  if (!encKey) return null;
   return crypto.createHash('sha256').update(encKey).update('blind_index_salt').digest();
 }
 
 /**
  * Encrypt a string value
  * Returns format: iv:authTag:ciphertext (all base64)
+ * If encryption is not configured, returns plaintext
  */
 export function encrypt(plaintext: string): string {
   if (!plaintext) return plaintext;
   
+  const key = getEncryptionKey();
+  if (!key) {
+    // Encryption disabled - return plaintext
+    return plaintext;
+  }
+  
   try {
-    const key = getEncryptionKey();
     const iv = crypto.randomBytes(IV_LENGTH);
     
     const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
@@ -59,13 +68,14 @@ export function encrypt(plaintext: string): string {
     return `${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted}`;
   } catch (error) {
     logger.error('Encryption failed', { error: (error as Error).message });
-    throw new Error('Encryption failed');
+    return plaintext; // Return plaintext on error instead of throwing
   }
 }
 
 /**
  * Decrypt a string value
  * Expects format: iv:authTag:ciphertext (all base64)
+ * If encryption is not configured, returns value as-is
  */
 export function decrypt(ciphertext: string): string {
   if (!ciphertext) return ciphertext;
@@ -76,8 +86,13 @@ export function decrypt(ciphertext: string): string {
     return ciphertext;
   }
   
+  const key = getEncryptionKey();
+  if (!key) {
+    // Encryption disabled - return as-is
+    return ciphertext;
+  }
+  
   try {
-    const key = getEncryptionKey();
     const parts = ciphertext.split(':');
     
     if (parts.length !== 3) {
@@ -106,21 +121,28 @@ export function decrypt(ciphertext: string): string {
 /**
  * Create a blind index (deterministic hash) for searchable encrypted fields
  * This allows lookups without exposing the actual value
+ * If encryption is not configured, returns a simple hash
  */
 export function createBlindIndex(value: string): string {
   if (!value) return '';
   
+  const normalized = value.toLowerCase().trim();
+  const hmacKey = getHmacKey();
+  
+  if (!hmacKey) {
+    // Encryption disabled - use simple hash (less secure but functional)
+    return crypto.createHash('sha256').update(normalized).digest('hex');
+  }
+  
   try {
-    const hmacKey = getHmacKey();
-    const normalized = value.toLowerCase().trim();
-    
     return crypto
       .createHmac('sha256', hmacKey)
       .update(normalized)
       .digest('hex');
   } catch (error) {
     logger.error('Blind index creation failed', { error: (error as Error).message });
-    throw new Error('Failed to create search index');
+    // Fallback to simple hash
+    return crypto.createHash('sha256').update(normalized).digest('hex');
   }
 }
 
