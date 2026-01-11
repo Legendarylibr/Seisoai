@@ -240,9 +240,15 @@ async function main(): Promise<void> {
         }
       }
       
+      // Generate emailHash for email users (required for lookups)
+      const emailHash = normalizedEmail 
+        ? crypto.createHash('sha256').update(normalizedEmail).digest('hex')
+        : null;
+      
       user = new User({
         ...(normalizedAddress && { walletAddress: normalizedAddress }),
         ...(normalizedEmail && { email: normalizedEmail }),
+        ...(emailHash && { emailHash: emailHash }),
         ...(userId && { userId: userId }),
         credits: 0, // Start with 0, will add credits below
         totalCreditsEarned: 0,
