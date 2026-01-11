@@ -12,8 +12,8 @@ import logger from './logger.js';
 // Encryption algorithm
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // GCM recommended IV length
-const AUTH_TAG_LENGTH = 16;
-const SALT_LENGTH = 16;
+// AUTH_TAG_LENGTH = 16 (used implicitly by crypto.createCipheriv)
+// SALT_LENGTH = 16 (reserved for future key derivation)
 
 // Get encryption key from environment
 function getEncryptionKey(): Buffer {

@@ -200,7 +200,7 @@ export const createAuthenticateToken = (
 export const createAuthenticateFlexible = (
   jwtSecret: string | undefined, 
   getUserModel: () => Model<IUser>,
-  getUserFromRequest: (req: Request) => Promise<IUser | null>
+  _getUserFromRequest: (req: Request) => Promise<IUser | null> // Reserved for future use
 ) => {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {

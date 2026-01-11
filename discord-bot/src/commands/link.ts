@@ -1,5 +1,8 @@
 /**
  * /link command - Link Discord account to SeisoAI
+ * 
+ * NOTE: Email lookups use encryption-aware methods to support 
+ * encrypted email fields in the database.
  */
 import {
   SlashCommandBuilder,
@@ -17,6 +20,7 @@ import mongoose from 'mongoose';
 import DiscordUser from '../database/models/DiscordUser.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
+import { buildEmailLookupConditions } from '../utils/encryption.js';
 
 // Interface for main User model
 interface IMainUser {
@@ -309,11 +313,17 @@ export async function handleLinkModal(interaction: ModalSubmitInteraction): Prom
 
     // Try to find existing SeisoAI user
     const User = mongoose.model<IMainUser>('User');
-    const query = isEmail 
-      ? { email: inputValue.toLowerCase() }
-      : { walletAddress: inputValue.startsWith('0x') ? inputValue.toLowerCase() : inputValue };
+    let mainUser: IMainUser | null = null;
 
-    const mainUser = await User.findOne(query);
+    if (isEmail) {
+      // Use encryption-aware email lookup with multiple fallback methods
+      const emailConditions = buildEmailLookupConditions(inputValue);
+      mainUser = await User.findOne({ $or: emailConditions }) as IMainUser | null;
+    } else {
+      // Wallet lookup (no encryption needed)
+      const walletQuery = { walletAddress: inputValue.startsWith('0x') ? inputValue.toLowerCase() : inputValue };
+      mainUser = await User.findOne(walletQuery) as IMainUser | null;
+    }
 
     // Get or create Discord user
     const discordUser = await DiscordUser.findOrCreate({

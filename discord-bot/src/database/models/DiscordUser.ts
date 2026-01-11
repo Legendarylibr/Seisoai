@@ -1,8 +1,11 @@
 /**
  * Discord User Model
  * Links Discord accounts to SeisoAI accounts
+ * Includes field-level encryption for prompts (sensitive user content)
  */
 import mongoose, { Document, Schema } from 'mongoose';
+import { encrypt, decrypt, isEncryptionConfigured, isEncrypted } from '../../utils/encryption.js';
+import logger from '../../utils/logger.js';
 
 export interface IDiscordUser extends Document {
   discordId: string;
@@ -136,6 +139,56 @@ discordUserSchema.index({ 'generations.status': 1 });
 
 // DATA MINIMIZATION: Auto-delete inactive Discord users after 90 days
 discordUserSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
+
+// Pre-save hook: Encrypt prompts in generations array
+discordUserSchema.pre('save', function(next) {
+  try {
+    if (this.isModified('generations') && isEncryptionConfigured()) {
+      for (const gen of this.generations) {
+        if (gen.prompt && !isEncrypted(gen.prompt)) {
+          gen.prompt = encrypt(gen.prompt);
+        }
+      }
+    }
+    next();
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Error in DiscordUser pre-save hook', { error: err.message });
+    next(err);
+  }
+});
+
+// Post-find hooks: Decrypt prompts when reading from database
+function decryptGenerationPrompts(doc: IDiscordUser | null): void {
+  if (!doc || !doc.generations) return;
+  
+  for (const gen of doc.generations) {
+    if (gen.prompt && isEncrypted(gen.prompt)) {
+      try {
+        gen.prompt = decrypt(gen.prompt);
+      } catch (error) {
+        logger.error('Failed to decrypt generation prompt', { 
+          discordId: doc.discordId,
+          generationId: gen.id 
+        });
+      }
+    }
+  }
+}
+
+discordUserSchema.post('findOne', function(doc: IDiscordUser | null) {
+  decryptGenerationPrompts(doc);
+});
+
+discordUserSchema.post('find', function(docs: IDiscordUser[]) {
+  if (Array.isArray(docs)) {
+    docs.forEach(decryptGenerationPrompts);
+  }
+});
+
+discordUserSchema.post('findOneAndUpdate', function(doc: IDiscordUser | null) {
+  decryptGenerationPrompts(doc);
+});
 
 // Methods
 discordUserSchema.methods.hasEnoughCredits = function(amount: number): boolean {

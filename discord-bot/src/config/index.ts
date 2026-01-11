@@ -25,6 +25,11 @@ export const config = {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/seisoai',
   },
   
+  // Encryption
+  encryption: {
+    key: process.env.ENCRYPTION_KEY || '', // 64 hex chars (256 bits)
+  },
+  
   // FAL.ai
   fal: {
     apiKey: process.env.FAL_API_KEY || '',

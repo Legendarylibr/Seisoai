@@ -1,6 +1,9 @@
 /**
  * Bot Management Service
  * Handles permissions, rate limiting, cleanup, and health checks
+ * 
+ * NOTE: Email lookups use encryption-aware methods to support 
+ * encrypted email fields in the database.
  */
 import {
   Client,
@@ -14,6 +17,7 @@ import {
 import DiscordUser from '../database/models/DiscordUser.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
+import { buildEmailLookupConditions } from '../utils/encryption.js';
 
 // Rate limit tracking
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
@@ -286,13 +290,16 @@ export async function syncCreditsFromMain(discordId: string): Promise<boolean> {
     
     // If not OAuth-linked, try other identifiers
     if (!mainUser && discordUser) {
-      const query: Record<string, unknown> = {};
-      if (discordUser.seisoUserId) query.userId = discordUser.seisoUserId;
-      else if (discordUser.email) query.email = discordUser.email;
-      else if (discordUser.walletAddress) query.walletAddress = discordUser.walletAddress;
-      
-      if (Object.keys(query).length > 0) {
-        mainUser = await User.findOne(query);
+      if (discordUser.seisoUserId) {
+        // Direct userId lookup
+        mainUser = await User.findOne({ userId: discordUser.seisoUserId });
+      } else if (discordUser.email) {
+        // Use encryption-aware email lookup with multiple fallback methods
+        const emailConditions = buildEmailLookupConditions(discordUser.email);
+        mainUser = await User.findOne({ $or: emailConditions });
+      } else if (discordUser.walletAddress) {
+        // Direct wallet lookup (no encryption needed)
+        mainUser = await User.findOne({ walletAddress: discordUser.walletAddress });
       }
     }
 

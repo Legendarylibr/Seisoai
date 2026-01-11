@@ -508,11 +508,29 @@ export function createAuthRoutes(deps: Dependencies = {}) {
   router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const User = mongoose.model<IUser>('User');
+      
+      // Build query with encryption-aware email lookup
+      const orConditions: Array<Record<string, string>> = [];
+      
+      if (req.user?.userId) {
+        orConditions.push({ userId: req.user.userId });
+      }
+      
+      if (req.user?.email) {
+        // Use encryption-aware email lookup with multiple fallback methods
+        const normalizedEmail = req.user.email.toLowerCase().trim();
+        const emailHash = createEmailHash(normalizedEmail);
+        const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+        orConditions.push(
+          { emailHash },
+          { emailHashPlain },
+          { emailLookup: normalizedEmail },
+          { email: normalizedEmail }
+        );
+      }
+      
       const user = await User.findOne({
-        $or: [
-          { userId: req.user?.userId },
-          { email: req.user?.email }
-        ]
+        $or: orConditions
       }).select('-password -generationHistory -gallery -paymentHistory').maxTimeMS(5000);
       
       if (!user) {

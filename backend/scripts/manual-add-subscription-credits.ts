@@ -4,12 +4,15 @@
   Usage: tsx manual-add-subscription-credits.ts <checkout_session_id> [userId]
   
   Example: tsx manual-add-subscription-credits.ts cs_live_xxxxx
+  
+  NOTE: Uses encryption-aware email lookup to support encrypted email fields.
 */
 
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import Stripe from 'stripe';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -39,6 +42,41 @@ const mongoUri = process.env.MONGODB_URI;
 await mongoose.connect(mongoUri);
 const User = mongoose.models.User || mongoose.model('User', new mongoose.Schema({}, { strict: false }));
 
+/**
+ * Build robust email lookup query with multiple fallback methods
+ * This ensures users can be found regardless of ENCRYPTION_KEY configuration
+ */
+function buildEmailLookupConditions(email: string): Array<Record<string, string>> {
+  const normalized = email.toLowerCase().trim();
+  
+  // Try to create HMAC hash if encryption key is available
+  let emailHash: string;
+  const encryptionKey = process.env.ENCRYPTION_KEY;
+  if (encryptionKey && encryptionKey.length === 64) {
+    const key = Buffer.from(encryptionKey, 'hex');
+    emailHash = crypto.createHmac('sha256', key).update(normalized).digest('hex');
+  } else {
+    emailHash = crypto.createHash('sha256').update(normalized).digest('hex');
+  }
+  
+  const emailHashPlain = crypto.createHash('sha256').update(normalized).digest('hex');
+  
+  return [
+    { emailHash },                    // Primary: HMAC hash (with encryption key)
+    { emailHashPlain },               // Fallback: plain SHA-256 hash
+    { emailLookup: normalized },      // Fallback: plain email lookup field
+    { email: normalized }             // Legacy: direct email match
+  ];
+}
+
+/**
+ * Find user by email with encryption-aware lookup
+ */
+async function findUserByEmail(email: string): Promise<any> {
+  const emailConditions = buildEmailLookupConditions(email);
+  return await User.findOne({ $or: emailConditions });
+}
+
 async function addCreditsForSession(sessionId: string, userId: string | null = null): Promise<void> {
   try {
     // Retrieve checkout session
@@ -58,16 +96,18 @@ async function addCreditsForSession(sessionId: string, userId: string | null = n
       return;
     }
 
-    // Get user
+    // Get user with encryption-aware email lookup
     let user: any;
     if (userId) {
       user = await User.findById(userId);
     } else if (session.metadata?.userId) {
       user = await User.findById(session.metadata.userId);
     } else if (session.metadata?.email) {
-      user = await User.findOne({ email: (session.metadata.email as string).toLowerCase() });
+      // Use encryption-aware email lookup
+      user = await findUserByEmail(session.metadata.email as string);
     } else if (session.customer_email) {
-      user = await User.findOne({ email: session.customer_email.toLowerCase() });
+      // Use encryption-aware email lookup
+      user = await findUserByEmail(session.customer_email);
     }
 
     if (!user) {
