@@ -28,6 +28,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
+import { createEmailHash } from '../utils/emailHash.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -241,8 +242,9 @@ async function main(): Promise<void> {
       }
       
       // Generate emailHash for email users (required for lookups)
+      // Uses createEmailHash which handles encryption config (HMAC vs SHA256)
       const emailHash = normalizedEmail 
-        ? crypto.createHash('sha256').update(normalizedEmail).digest('hex')
+        ? createEmailHash(normalizedEmail)
         : null;
       
       user = new User({
