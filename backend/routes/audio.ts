@@ -645,7 +645,17 @@ export function createAudioRoutes(deps: Dependencies) {
    * Extract audio from video file
    * POST /api/audio/extract-audio
    */
-  router.post('/extract-audio', async (req: Request, res: Response) => {
+  /**
+   * Extract audio from video file
+   * POST /api/audio/extract-audio
+   * SECURITY: Requires authentication to prevent abuse
+   */
+  router.post('/extract-audio', limiter, requireCredits(0.5), async (req: AuthenticatedRequest, res: Response) => {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
+    }
     try {
       // Import utilities at the start
       const { execFile } = await import('child_process');
@@ -833,7 +843,18 @@ export function createAudioRoutes(deps: Dependencies) {
    * Upload audio file
    * POST /api/audio/upload
    */
-  router.post('/upload', async (req: Request, res: Response) => {
+  /**
+   * Upload audio file
+   * POST /api/audio/upload
+   * SECURITY: Requires authentication to prevent abuse
+   */
+  router.post('/upload', limiter, requireCredits(0), async (req: AuthenticatedRequest, res: Response) => {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
+    }
+
     try {
       const FAL_API_KEY = getFalApiKey();
       if (!FAL_API_KEY) {

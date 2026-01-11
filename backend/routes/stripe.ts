@@ -575,8 +575,9 @@ export function createStripeRoutes(deps: Dependencies = {}) {
   /**
    * Verify Stripe payment and award credits
    * POST /api/stripe/verify-payment
+   * SECURITY FIX: Now requires authentication - users can only verify their own payments
    */
-  router.post('/verify-payment', limiter, async (req: Request, res: Response) => {
+  router.post('/verify-payment', limiter, authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const stripe = getStripe();
       if (!stripe) {
@@ -587,11 +588,17 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const { paymentIntentId, walletAddress, userId, email } = req.body as {
+      // SECURITY: Require authentication
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required to verify payment'
+        });
+        return;
+      }
+
+      const { paymentIntentId } = req.body as {
         paymentIntentId?: string;
-        walletAddress?: string;
-        userId?: string;
-        email?: string;
       };
 
       if (!paymentIntentId) {
@@ -612,28 +619,31 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      // Find user from metadata or request body
-      let user: IUser | null = null;
+      // SECURITY: Use authenticated user, don't trust request body identifiers
+      const user = req.user;
       const User = mongoose.model<IUser>('User');
 
-      // Use findUserByIdentifier which handles encrypted emails via emailHash
-      if (paymentIntent.metadata.userId) {
-        user = await findUserByIdentifier(null, null, paymentIntent.metadata.userId);
-      } else if (paymentIntent.metadata.email) {
-        user = await findUserByIdentifier(null, paymentIntent.metadata.email, null);
-      } else if (paymentIntent.metadata.walletAddress) {
-        user = await findUserByIdentifier(paymentIntent.metadata.walletAddress, null, null);
-      }
+      // SECURITY: Verify the payment belongs to the authenticated user
+      const metaUserId = paymentIntent.metadata.userId;
+      const metaEmail = paymentIntent.metadata.email;
+      const metaWallet = paymentIntent.metadata.walletAddress;
 
-      if (!user) {
-        // Fallback to request body identifiers
-        user = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
-      }
+      const isOwner = (
+        (metaUserId && metaUserId === user.userId) ||
+        (metaEmail && user.email && metaEmail.toLowerCase() === user.email.toLowerCase()) ||
+        (metaWallet && user.walletAddress && metaWallet.toLowerCase() === user.walletAddress.toLowerCase())
+      );
 
-      if (!user) {
-        res.status(404).json({
+      if (!isOwner) {
+        logger.warn('SECURITY: Payment verification attempt for non-owned payment', {
+          paymentIntentId,
+          authenticatedUserId: user.userId,
+          metaUserId,
+          ip: req.ip
+        });
+        res.status(403).json({
           success: false,
-          error: 'User not found'
+          error: 'This payment does not belong to your account'
         });
         return;
       }
@@ -653,6 +663,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       };
 
       // Try to add payment record atomically - if paymentIntentId already exists, $addToSet won't add it
+      // SECURITY: Use authenticated user's userId, not from untrusted sources
       const updatedUser = await User.findOneAndUpdate(
         { userId: user.userId },
         {

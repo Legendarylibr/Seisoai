@@ -127,13 +127,32 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
         txInfo = await verifyEVMTransaction(txHash, expectedTo, amount, chainId);
       }
 
+      // SECURITY FIX: Verify that the walletAddress being credited matches the transaction sender
+      // This prevents attackers from claiming credits for payments made by others
+      const normalizedWallet = walletAddress.toLowerCase();
+      const normalizedSender = txInfo.from.toLowerCase();
+      
+      if (normalizedWallet !== normalizedSender) {
+        logger.warn('SECURITY: Payment verification wallet mismatch', {
+          txHash,
+          claimedWallet: normalizedWallet.substring(0, 10) + '...',
+          actualSender: normalizedSender.substring(0, 10) + '...',
+          ip: req.ip
+        });
+        res.status(403).json({
+          success: false,
+          error: 'Wallet address does not match transaction sender'
+        });
+        return;
+      }
+
       // Calculate credits (1 credit per dollar equivalent)
       const credits = Math.floor(amount * 5); // 5 credits per dollar
 
-      // Add credits to user
+      // Add credits to user (using verified sender address)
       const User = mongoose.model<IUser>('User');
       const user = await User.findOneAndUpdate(
-        { walletAddress: walletAddress.toLowerCase() },
+        { walletAddress: normalizedSender },
         {
           $inc: { credits, totalCreditsEarned: credits },
           $push: {
