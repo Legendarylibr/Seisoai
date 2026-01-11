@@ -300,8 +300,10 @@ async function pollForCompletion(
       const timeoutId = setTimeout(() => controller.abort(), 15000);
 
       const response = await fetch(statusEndpoint, {
+        method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         },
         credentials: 'include',
         signal: controller.signal
@@ -310,9 +312,24 @@ async function pollForCompletion(
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        logger.warn('Status poll returned error', { status: response.status, elapsed });
-        // Continue polling on server errors (5xx) - might be transient
-        if (response.status >= 500) {
+        // Log detailed error info for debugging
+        const contentType = response.headers.get('content-type') || '';
+        const responseText = await response.text();
+        const isHtml = responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html');
+        const isCloudflare = responseText.includes('cloudflare') || responseText.includes('cf-ray');
+        
+        logger.warn('Status poll returned error', { 
+          status: response.status, 
+          statusText: response.statusText,
+          elapsed,
+          contentType,
+          isHtml,
+          isCloudflare,
+          responsePreview: responseText.substring(0, 200)
+        });
+        
+        // Continue polling on server errors (5xx) or 405 (might be transient/Cloudflare)
+        if (response.status >= 500 || response.status === 405) {
           await new Promise(resolve => setTimeout(resolve, pollInterval));
           continue;
         }
@@ -325,7 +342,7 @@ async function pollForCompletion(
         }
         // For other client errors (4xx), try to parse error and throw
         try {
-          const errorData = await response.json();
+          const errorData = JSON.parse(responseText);
           throw new Error(errorData.error || `Poll failed: ${response.status}`);
         } catch {
           throw new Error(`Poll failed with status ${response.status}`);
