@@ -97,6 +97,22 @@ const PrivacyPolicy = memo(function PrivacyPolicy() {
       <h3 className="font-bold">Data Sharing</h3>
       <p>We share data with FAL.ai (generation) and Stripe (payments). We don't sell your data.</p>
 
+      <h3 className="font-bold">Payment Privacy</h3>
+      <div 
+        className="p-3 mt-1"
+        style={{ background: '#e8f5e9', boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}` }}
+      >
+        <p className="font-bold mb-2" style={{ color: '#2e7d32' }}>Your card details never touch our servers.</p>
+        <ul className="list-disc list-inside ml-2" style={{ color: '#1b5e20' }}>
+          <li>Payment forms are hosted directly by Stripe</li>
+          <li>Card numbers, CVV, and expiry go straight to Stripe</li>
+          <li>We only receive a confirmation ID after successful payment</li>
+          <li>No payment card data is stored or logged by us</li>
+          <li>PCI-DSS compliant via Stripe's secure infrastructure</li>
+        </ul>
+      </div>
+      <p className="mt-2">For cryptocurrency payments, only your wallet address and transaction hash are recorded for verification. Private keys never leave your wallet.</p>
+
       <h3 className="font-bold">Data Retention & Deletion</h3>
       <ul className="list-disc list-inside ml-2">
         <li>Account data retained while active</li>
