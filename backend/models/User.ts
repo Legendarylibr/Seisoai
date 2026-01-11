@@ -104,8 +104,8 @@ function arrayLimit10(val: unknown[]): boolean {
   return val.length <= 10;
 }
 
-function arrayLimit20(val: unknown[]): boolean {
-  return val.length <= 20;
+function arrayLimit100(val: unknown[]): boolean {
+  return val.length <= 100;
 }
 
 function arrayLimit30(val: unknown[]): boolean {
@@ -229,7 +229,7 @@ const userSchema = new mongoose.Schema<IUser>({
       status: { type: String, enum: ['queued', 'processing', 'completed', 'failed'], default: 'completed' },
       requestId: String
     }],
-    validate: [arrayLimit20, 'Gallery exceeds limit of 20']
+    validate: [arrayLimit100, 'Gallery exceeds limit of 100']
   },
   settings: {
     preferredStyle: String,
