@@ -72,24 +72,25 @@ export function isDisposableEmail(email: unknown): boolean {
 }
 
 /**
- * Generate a simple browser fingerprint from request headers
- * This helps identify unique devices/browsers even if IP changes
+ * Generate a privacy-preserving browser fingerprint from request headers
+ * DATA MINIMIZATION: Only creates a one-way hash - original data is never stored
+ * Uses minimal headers to reduce uniqueness while still preventing abuse
  */
 export function generateBrowserFingerprint(req: Request): string {
   const headers = req.headers;
-  const fingerprint = {
-    userAgent: headers['user-agent'] || 'unknown',
-    acceptLanguage: headers['accept-language'] || 'unknown',
-    acceptEncoding: headers['accept-encoding'] || 'unknown',
-    accept: headers['accept'] || 'unknown',
-    connection: headers['connection'] || 'unknown',
-    dnt: headers['dnt'] || 'unknown',
-    upgradeInsecureRequests: headers['upgrade-insecure-requests'] || 'unknown'
-  };
+  // DATA MINIMIZATION: Only use essential headers for abuse detection
+  // Deliberately avoid detailed fingerprinting (no screen size, fonts, plugins)
+  const fingerprintData = [
+    // Broad browser family only (not full user-agent)
+    (headers['user-agent'] || '').split('/')[0] || 'unknown',
+    // Language preference (2 chars only)
+    (headers['accept-language'] || 'en').substring(0, 2),
+    // DNT preference
+    headers['dnt'] || '0'
+  ].join('|');
   
-  // Create a hash of the fingerprint
-  const fingerprintString = JSON.stringify(fingerprint);
-  return crypto.createHash('sha256').update(fingerprintString).digest('hex').substring(0, 16);
+  // One-way hash - cannot be reversed to identify user
+  return crypto.createHash('sha256').update(fingerprintData).digest('hex').substring(0, 16);
 }
 
 /**

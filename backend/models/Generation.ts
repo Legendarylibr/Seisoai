@@ -78,8 +78,9 @@ const generationSchema = new mongoose.Schema<IGeneration>({
 // Compound index for efficient user queries
 generationSchema.index({ userId: 1, createdAt: -1 });
 
-// TTL index - auto-delete generations older than 90 days (storage optimization)
-generationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
+// DATA MINIMIZATION: Auto-delete generations after 30 days (reduced from 90)
+// Minimum needed for dispute resolution, then automatically purged
+generationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 
 // Helper to check if a string is already encrypted (contains our format)
 function isEncrypted(value: string): boolean {

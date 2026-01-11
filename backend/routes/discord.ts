@@ -203,13 +203,13 @@ export function createDiscordRoutes(deps: Dependencies = {}) {
       }
 
       // Link Discord to user account
+      // DATA MINIMIZATION: Only store ID and username, not avatar
       const user = await User.findOneAndUpdate(
         { userId: stateData.userId },
         {
           $set: {
             discordId: discordUser.id,
             discordUsername: discordUser.global_name || discordUser.username,
-            discordAvatar: discordUser.avatar,
             discordLinkedAt: new Date()
           }
         },
@@ -258,7 +258,6 @@ export function createDiscordRoutes(deps: Dependencies = {}) {
           $unset: {
             discordId: '',
             discordUsername: '',
-            discordAvatar: '',
             discordLinkedAt: ''
           }
         },
@@ -304,8 +303,9 @@ export function createDiscordRoutes(deps: Dependencies = {}) {
       }
 
       const User = mongoose.model<IUser>('User');
+      // DATA MINIMIZATION: Only return essential Discord info
       const user = await User.findOne({ userId: req.user.userId })
-        .select('discordId discordUsername discordAvatar discordLinkedAt');
+        .select('discordId discordUsername discordLinkedAt');
 
       if (!user) {
         res.status(404).json({
@@ -321,7 +321,6 @@ export function createDiscordRoutes(deps: Dependencies = {}) {
         discord: user.discordId ? {
           id: user.discordId,
           username: user.discordUsername,
-          avatar: user.discordAvatar,
           linkedAt: user.discordLinkedAt
         } : null
       });

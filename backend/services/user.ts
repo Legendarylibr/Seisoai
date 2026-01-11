@@ -21,6 +21,27 @@ function getUserModel(): Model<IUser> {
 }
 
 /**
+ * DATA MINIMIZATION: Extend user expiry on activity
+ * Keeps active users while allowing inactive accounts to auto-delete
+ * Called on login, generation, or payment
+ */
+export async function extendUserExpiry(user: IUser): Promise<void> {
+  const User = getUserModel();
+  // Extend expiry to 90 days from now for active users
+  const newExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+  
+  await User.updateOne(
+    { _id: user._id },
+    { 
+      $set: { 
+        lastActive: new Date(),
+        expiresAt: newExpiry 
+      } 
+    }
+  );
+}
+
+/**
  * Find user by any identifier
  * NOTE: Email lookups use emailHash (blind index) since emails are encrypted
  */
@@ -89,6 +110,8 @@ export async function getOrCreateUser(
       user.email = email.toLowerCase();
       await user.save();
     }
+    // DATA MINIMIZATION: Extend expiry on activity
+    await extendUserExpiry(user);
     return user;
   }
 
@@ -128,6 +151,8 @@ export async function getOrCreateUserByEmail(email: string): Promise<IUser> {
   }
   
   if (user) {
+    // DATA MINIMIZATION: Extend expiry on activity
+    await extendUserExpiry(user);
     return user;
   }
 
@@ -200,7 +225,8 @@ export default {
   getOrCreateUser,
   getOrCreateUserByEmail,
   buildUserUpdateQuery,
-  getUserFromRequest
+  getUserFromRequest,
+  extendUserExpiry
 };
 
 

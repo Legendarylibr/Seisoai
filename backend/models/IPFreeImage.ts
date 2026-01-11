@@ -39,6 +39,10 @@ const ipFreeImageSchema = new mongoose.Schema<IIPFreeImage>({
 ipFreeImageSchema.index({ ipAddress: 1 });
 ipFreeImageSchema.index({ lastUsed: 1 });
 
+// DATA MINIMIZATION: Auto-delete IP records after 7 days
+// Only needed for short-term abuse prevention, not long-term storage
+ipFreeImageSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
+
 const IPFreeImage = mongoose.model<IIPFreeImage>('IPFreeImage', ipFreeImageSchema);
 
 export default IPFreeImage;

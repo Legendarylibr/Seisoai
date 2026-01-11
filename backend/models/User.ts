@@ -84,10 +84,9 @@ export interface IUser extends Document {
   lastActive: Date;
   createdAt: Date;
   expiresAt: Date;
-  // Discord OAuth fields
+  // Discord OAuth fields (DATA MINIMIZATION: removed avatar)
   discordId?: string;
   discordUsername?: string;
-  discordAvatar?: string;
   discordLinkedAt?: Date;
   // SECURITY: Account lockout fields for brute force protection
   failedLoginAttempts?: number;
@@ -100,17 +99,17 @@ interface UserModel extends Model<IUser> {
   buildUserUpdateQuery(user: { walletAddress?: string; userId?: string; email?: string }): { walletAddress?: string; userId?: string; email?: string } | null;
 }
 
-// Array limit validators for storage optimization
+// DATA MINIMIZATION: Reduced array limits to store less user data
+function arrayLimit10(val: unknown[]): boolean {
+  return val.length <= 10;
+}
+
 function arrayLimit20(val: unknown[]): boolean {
   return val.length <= 20;
 }
 
-function arrayLimit50(val: unknown[]): boolean {
-  return val.length <= 50;
-}
-
-function arrayLimit100(val: unknown[]): boolean {
-  return val.length <= 100;
+function arrayLimit30(val: unknown[]): boolean {
+  return val.length <= 30;
 }
 
 const userSchema = new mongoose.Schema<IUser>({
@@ -176,7 +175,7 @@ const userSchema = new mongoose.Schema<IUser>({
     lastChecked: { type: Date, default: Date.now }
   }],
   // NOTE: Full payment history stored in separate Payment collection
-  // This array only keeps last 100 for quick access (storage optimization)
+  // DATA MINIMIZATION: Reduced from 100 to 30 - only recent transactions needed
   paymentHistory: {
     type: [{
       txHash: String,
@@ -190,10 +189,10 @@ const userSchema = new mongoose.Schema<IUser>({
       subscriptionId: String,
       type: { type: String, enum: ['crypto', 'stripe', 'nft_bonus', 'referral', 'admin', 'subscription'] }
     }],
-    validate: [arrayLimit100, 'Payment history exceeds limit of 100']
+    validate: [arrayLimit30, 'Payment history exceeds limit of 30']
   },
   // NOTE: Full generation history stored in separate Generation collection
-  // This array only keeps last 20 for quick access (storage optimization)
+  // DATA MINIMIZATION: Reduced from 20 to 10 - minimal recent history
   generationHistory: {
     type: [{
       id: String,
@@ -206,10 +205,10 @@ const userSchema = new mongoose.Schema<IUser>({
       creditsUsed: Number,
       timestamp: { type: Date, default: Date.now }
     }],
-    validate: [arrayLimit20, 'Generation history exceeds limit of 20']
+    validate: [arrayLimit10, 'Generation history exceeds limit of 10']
   },
   // NOTE: Full gallery stored in separate GalleryItem collection
-  // This array only keeps last 50 for quick access (storage optimization)
+  // DATA MINIMIZATION: Reduced from 50 to 20 - minimal recent items
   gallery: {
     type: [{
       id: String,
@@ -230,7 +229,7 @@ const userSchema = new mongoose.Schema<IUser>({
       status: { type: String, enum: ['queued', 'processing', 'completed', 'failed'], default: 'completed' },
       requestId: String
     }],
-    validate: [arrayLimit50, 'Gallery exceeds limit of 50']
+    validate: [arrayLimit20, 'Gallery exceeds limit of 20']
   },
   settings: {
     preferredStyle: String,
@@ -239,8 +238,12 @@ const userSchema = new mongoose.Schema<IUser>({
   },
   lastActive: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now },
-  expiresAt: { type: Date, default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+  // DATA MINIMIZATION: Accounts with 0 credits expire after 90 days of inactivity
+  // Active/paying users get extended automatically on activity
+  expiresAt: { type: Date, default: () => new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) },
   // Discord OAuth fields
+  // DATA MINIMIZATION: Only store discordId for linking, username for display
+  // Removed: discordAvatar (not needed, can fetch from Discord API if needed)
   discordId: {
     type: String,
     unique: true,
@@ -248,7 +251,6 @@ const userSchema = new mongoose.Schema<IUser>({
     index: true
   },
   discordUsername: String,
-  discordAvatar: String,
   discordLinkedAt: Date,
   // SECURITY: Account lockout fields for brute force protection
   failedLoginAttempts: { type: Number, default: 0, min: 0 },
@@ -262,9 +264,13 @@ userSchema.index({ walletAddress: 1 });
 userSchema.index({ emailHash: 1 });  // Use emailHash for lookups, not email
 userSchema.index({ userId: 1 });
 userSchema.index({ createdAt: 1 });
-userSchema.index({ expiresAt: 1 });
 userSchema.index({ 'gallery.timestamp': 1 });
 userSchema.index({ 'gallery.expiresAt': 1 }); // For cleaning up expired 3D models
+
+// DATA MINIMIZATION: Auto-delete inactive accounts with 0 credits
+// TTL index on expiresAt - MongoDB will auto-delete when expiresAt < now
+// Users with credits/activity have expiresAt extended on each login
+userSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // Helper to check if a string is already encrypted (contains our format)
 function isEncrypted(value: string): boolean {

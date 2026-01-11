@@ -7,12 +7,11 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IDiscordUser extends Document {
   discordId: string;
   discordUsername: string;
-  discordDiscriminator?: string;
-  discordAvatar?: string;
+  // DATA MINIMIZATION: Removed discordDiscriminator and discordAvatar
   
   // Linked SeisoAI account
   seisoUserId?: string;
-  email?: string;
+  // DATA MINIMIZATION: Removed email - use seisoUserId for linking
   walletAddress?: string;
   
   // Credits (mirrored from main user for quick access)
@@ -25,7 +24,7 @@ export interface IDiscordUser extends Document {
   activeGenerations: number;
   lastGeneration?: Date;
   
-  // Generation history (last 50)
+  // Generation history (last 20, reduced from 50)
   generations: Array<{
     id: string;
     type: 'image' | 'video' | 'music' | '3d';
@@ -60,19 +59,12 @@ const discordUserSchema = new Schema<IDiscordUser>({
     type: String,
     required: true
   },
-  discordDiscriminator: String,
-  discordAvatar: String,
+  // DATA MINIMIZATION: Removed discordDiscriminator, discordAvatar, email
   
   // Linked accounts
   seisoUserId: {
     type: String,
     sparse: true,
-    index: true
-  },
-  email: {
-    type: String,
-    sparse: true,
-    lowercase: true,
     index: true
   },
   walletAddress: {
@@ -142,6 +134,9 @@ const discordUserSchema = new Schema<IDiscordUser>({
 discordUserSchema.index({ 'generations.id': 1 });
 discordUserSchema.index({ 'generations.status': 1 });
 
+// DATA MINIMIZATION: Auto-delete inactive Discord users after 90 days
+discordUserSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
+
 // Methods
 discordUserSchema.methods.hasEnoughCredits = function(amount: number): boolean {
   return this.credits >= amount;
@@ -167,11 +162,10 @@ discordUserSchema.statics.findByDiscordId = function(discordId: string) {
   return this.findOne({ discordId });
 };
 
+// DATA MINIMIZATION: Only store essential Discord info
 discordUserSchema.statics.findOrCreate = async function(discordUser: {
   id: string;
   username: string;
-  discriminator?: string;
-  avatar?: string;
 }) {
   let user = await this.findOne({ discordId: discordUser.id });
   
@@ -179,8 +173,6 @@ discordUserSchema.statics.findOrCreate = async function(discordUser: {
     user = await this.create({
       discordId: discordUser.id,
       discordUsername: discordUser.username,
-      discordDiscriminator: discordUser.discriminator,
-      discordAvatar: discordUser.avatar,
       credits: 0,
       generations: [],
       settings: {
@@ -189,9 +181,8 @@ discordUserSchema.statics.findOrCreate = async function(discordUser: {
       }
     });
   } else {
-    // Update username/avatar if changed
+    // Update username if changed
     user.discordUsername = discordUser.username;
-    user.discordAvatar = discordUser.avatar;
     await user.save();
   }
   

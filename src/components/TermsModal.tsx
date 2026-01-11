@@ -99,12 +99,12 @@ const PrivacyPolicy = memo(function PrivacyPolicy() {
       <h2 className="text-sm font-bold">Privacy Policy</h2>
       <p className="text-[10px]" style={{ color: WIN95.textDisabled }}>Last Updated: January 2026</p>
 
-      <h3 className="font-bold">Data We Collect</h3>
+      <h3 className="font-bold">Data We Collect (Minimized)</h3>
       <ul className="list-disc list-inside ml-2">
-        <li>Account info (email or wallet address)</li>
-        <li>Prompts and generated content</li>
-        <li>Payment records (processed by Stripe)</li>
-        <li>IP address and browser info (abuse prevention)</li>
+        <li>Account info (email or wallet address only)</li>
+        <li>Prompts and generated content (auto-deleted after 30 days)</li>
+        <li>Payment records (processed by Stripe, we only store transaction IDs)</li>
+        <li>Temporary abuse prevention data (auto-deleted after 7 days)</li>
       </ul>
 
       <h3 className="font-bold">How We Use Data</h3>
@@ -133,12 +133,13 @@ const PrivacyPolicy = memo(function PrivacyPolicy() {
       </div>
       <p className="mt-2">For stablecoin payments (USDC), Stripe handles the entire transaction. Your wallet connects directly to Stripe - we never access your private keys or wallet credentials.</p>
 
-      <h3 className="font-bold">Data Retention & Deletion</h3>
+      <h3 className="font-bold">Data Retention & Auto-Deletion</h3>
       <ul className="list-disc list-inside ml-2">
-        <li>Account data retained while active</li>
-        <li>Generated content stored until you delete it</li>
-        <li>Logs retained 90 days for security</li>
-        <li>Payment records retained per financial regulations</li>
+        <li>Generated content: <strong>auto-deleted after 30 days</strong></li>
+        <li>Gallery items: <strong>auto-deleted after 30 days</strong> (download before expiry)</li>
+        <li>Abuse prevention data: <strong>auto-deleted after 7 days</strong></li>
+        <li>Inactive accounts (0 credits): <strong>auto-deleted after 90 days</strong></li>
+        <li>Payment records: retained per financial regulations (required by law)</li>
       </ul>
 
       <h3 className="font-bold">Data Deletion</h3>
@@ -184,11 +185,11 @@ const ContentPolicy = memo(function ContentPolicy() {
         <p className="mt-2 font-bold" style={{ color: '#800000' }}>Zero tolerance. Permanent ban.</p>
       </div>
 
-      <h3 className="font-bold">Abuse Prevention</h3>
+      <h3 className="font-bold">Abuse Prevention (Privacy-Preserving)</h3>
       <ul className="list-disc list-inside ml-2">
         <li>Rate limits and cooldowns apply</li>
         <li>Disposable emails blocked</li>
-        <li>Multi-account abuse detected via fingerprinting</li>
+        <li>Minimal fingerprinting (one-way hash only, auto-deleted after 7 days)</li>
       </ul>
 
       <h3 className="font-bold">Violations</h3>

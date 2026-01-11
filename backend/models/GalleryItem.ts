@@ -70,6 +70,10 @@ const galleryItemSchema = new mongoose.Schema<IGalleryItem>({
 // Compound index for efficient user queries
 galleryItemSchema.index({ userId: 1, createdAt: -1 });
 
+// DATA MINIMIZATION: Auto-delete gallery items after 30 days
+// Users are notified items expire - they can download before expiry
+galleryItemSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+
 // Helper to check if a string is already encrypted (contains our format)
 function isEncrypted(value: string): boolean {
   if (!value) return false;
