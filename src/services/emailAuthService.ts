@@ -315,7 +315,8 @@ export const signOut = async (): Promise<void> => {
   // Try to revoke tokens on server (best effort - don't block on failure)
   if (token || refreshToken) {
     try {
-      const csrfToken = getCSRFToken();
+      // Use ensureCSRFToken to guarantee token is available before logout
+      const csrfToken = await ensureCSRFToken();
       await fetch(`${API_URL}/api/auth/logout`, {
         method: 'POST',
         headers: {

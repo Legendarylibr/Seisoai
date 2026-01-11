@@ -409,6 +409,9 @@ export const generateImageStreaming = async (
     throw new Error('User identification required');
   }
 
+  // Ensure CSRF token is available before making the request
+  const csrfToken = await ensureCSRFToken();
+
   return new Promise((resolve, reject) => {
     const requestBody = {
       prompt,
@@ -419,9 +422,6 @@ export const generateImageStreaming = async (
       email,
       optimizePrompt // Pass optimization flag to backend
     };
-
-    // Ensure CSRF token is available before making the request
-    const csrfToken = getCSRFToken();
     
     // Use fetch with EventSource polyfill approach for POST SSE
     fetch(`${API_URL}/api/generate/image-stream`, {

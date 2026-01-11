@@ -53,15 +53,14 @@ export const getCSRFToken = (): string | null => {
   return null;
 };
 
+// Cache the token from the last successful fetch to avoid cookie timing issues
+let cachedCSRFToken: string | null = null;
+
 /**
- * Fetch CSRF token from server if not already set
+ * Fetch a fresh CSRF token from server (always fetches, ignores cache)
  */
-export const ensureCSRFToken = async (): Promise<string | null> => {
-  let token = getCSRFToken();
-  if (token) return token;
-  
+export const refreshCSRFToken = async (): Promise<string | null> => {
   try {
-    // Make a GET request to get the CSRF token cookie set
     const response = await fetch(`${API_URL}/api/csrf-token`, {
       method: 'GET',
       credentials: 'include'
@@ -69,13 +68,33 @@ export const ensureCSRFToken = async (): Promise<string | null> => {
     
     if (response.ok) {
       const data = await response.json();
-      return data.token || getCSRFToken();
+      // Cache the token from the response body (more reliable than reading cookie immediately)
+      cachedCSRFToken = data.token || null;
+      return cachedCSRFToken;
     }
   } catch {
-    // Silent fail - token might be set by another request
+    // Silent fail - will try to use existing token
   }
   
   return getCSRFToken();
+};
+
+/**
+ * Fetch CSRF token from server if not already set
+ */
+export const ensureCSRFToken = async (): Promise<string | null> => {
+  // First check cached token (most reliable)
+  if (cachedCSRFToken) return cachedCSRFToken;
+  
+  // Then check cookie
+  let token = getCSRFToken();
+  if (token) {
+    cachedCSRFToken = token;
+    return token;
+  }
+  
+  // Finally, fetch from server
+  return refreshCSRFToken();
 };
 
 /**
@@ -103,10 +122,12 @@ export const getApiHeaders = (
 
 /**
  * Enhanced fetch wrapper that automatically handles CSRF tokens
+ * Automatically retries once with a fresh token on CSRF validation errors
  */
 export const apiFetch = async (
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retryOnCSRFError: boolean = true
 ): Promise<Response> => {
   const method = (options.method || 'GET').toUpperCase();
   
@@ -117,11 +138,32 @@ export const apiFetch = async (
   
   const headers = getApiHeaders(method, options.headers as Record<string, string> || {});
   
-  return fetch(url, {
+  const response = await fetch(url, {
     ...options,
     headers,
     credentials: 'include'
   });
+  
+  // If we get a 403 with CSRF error, try refreshing the token and retrying once
+  if (response.status === 403 && retryOnCSRFError && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    try {
+      const clonedResponse = response.clone();
+      const errorData = await clonedResponse.json();
+      
+      if (errorData.error && errorData.error.toLowerCase().includes('csrf')) {
+        // Clear cached token and fetch a fresh one
+        cachedCSRFToken = null;
+        await refreshCSRFToken();
+        
+        // Retry the request with the new token (don't retry again to avoid infinite loop)
+        return apiFetch(url, options, false);
+      }
+    } catch {
+      // If we can't parse the response, just return the original response
+    }
+  }
+  
+  return response;
 };
 
 export default API_URL;

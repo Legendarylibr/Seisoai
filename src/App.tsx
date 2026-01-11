@@ -18,7 +18,7 @@ import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
 import { Grid, Sparkles, Film, Music, Layers, Box, type LucideIcon } from 'lucide-react';
 import logger from './utils/logger';
-import { API_URL } from './utils/apiConfig';
+import { API_URL, ensureCSRFToken } from './utils/apiConfig';
 
 // PERFORMANCE: Lazy load heavy modals and gallery - not needed on initial render
 // StripePaymentModal handles both card and stablecoin payments (USDC on Ethereum, Solana, Polygon, Base)
@@ -113,6 +113,13 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsPage, setTermsPage] = useState<LegalPage>('terms');
 
+  // Initialize CSRF token on app mount to ensure it's available for POST requests
+  useEffect(() => {
+    ensureCSRFToken().catch(() => {
+      // Silent fail - token will be fetched on first POST request if needed
+    });
+  }, []);
+
   // Handle subscription verification from Stripe checkout redirect
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -131,7 +138,13 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
             body.userId = userId;
           }
 
-          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          // Ensure CSRF token is available before making POST request
+          const csrfToken = await ensureCSRFToken();
+          
+          const headers: Record<string, string> = { 
+            'Content-Type': 'application/json',
+            ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+          };
           const token = localStorage.getItem('authToken');
           if (token) {
             headers['Authorization'] = `Bearer ${token}`;
@@ -140,6 +153,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           const response = await fetch(`${API_URL}/api/subscription/verify`, {
             method: 'POST',
             headers,
+            credentials: 'include',
             body: JSON.stringify(body)
           });
 
