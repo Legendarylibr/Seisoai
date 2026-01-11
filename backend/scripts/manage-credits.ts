@@ -191,24 +191,38 @@ async function main(): Promise<void> {
   if (walletAddress) {
     const isSolanaAddress = !walletAddress.startsWith('0x');
     const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
-    // Try wallet first, then email or userId if provided
-    query = {
-      $or: [
-        { walletAddress: normalizedAddress },
-        ...(email ? [{ email: email.toLowerCase() }] : []),
-        ...(userId ? [{ userId: userId }] : [])
-      ]
-    };
+    // Try wallet first, then userId if provided
+    const orConditions: Array<Record<string, unknown>> = [
+      { walletAddress: normalizedAddress }
+    ];
+    if (email) {
+      // Use encryption-aware email lookup
+      const normalizedEmail = email.toLowerCase().trim();
+      const emailHash = createEmailHash(normalizedEmail);
+      const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+      orConditions.push({ emailHash }, { emailHashPlain }, { emailLookup: normalizedEmail }, { email: normalizedEmail });
+    }
+    if (userId) {
+      orConditions.push({ userId });
+    }
+    query = { $or: orConditions };
     user = await User.findOne(query);
     identifier = `wallet ${walletAddress}`;
   } else if (email) {
-    const normalizedEmail = email.toLowerCase();
-    query = {
-      $or: [
-        { email: normalizedEmail },
-        ...(userId ? [{ userId: userId }] : [])
-      ]
-    };
+    // Use encryption-aware email lookup with multiple fallbacks
+    const normalizedEmail = email.toLowerCase().trim();
+    const emailHash = createEmailHash(normalizedEmail);
+    const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+    const orConditions: Array<Record<string, unknown>> = [
+      { emailHash },
+      { emailHashPlain },
+      { emailLookup: normalizedEmail },
+      { email: normalizedEmail }
+    ];
+    if (userId) {
+      orConditions.push({ userId });
+    }
+    query = { $or: orConditions };
     user = await User.findOne(query);
     identifier = `email ${email}`;
   } else if (userId) {

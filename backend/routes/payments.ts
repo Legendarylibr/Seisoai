@@ -1,12 +1,16 @@
 /**
  * Payment routes
  * Blockchain payment verification and credit addition
+ * 
+ * NOTE: Uses encryption-aware lookups for user queries.
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import logger from '../utils/logger';
 import { verifyEVMTransaction, verifySolanaTransaction } from '../services/blockchain';
+import { createEmailHash } from '../utils/emailHash';
 import config from '../config/env';
 import type { IUser } from '../models/User';
 import type { LRUCache } from '../services/cache';
@@ -380,11 +384,26 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
       }
 
       // Add credits to authenticated user
-      const updateQuery = user.userId 
-        ? { userId: user.userId }
-        : user.email 
-          ? { email: user.email.toLowerCase() }
-          : { walletAddress: normalizedAddress };
+      // NOTE: Use userId or emailHash for encryption-aware lookups
+      let updateQuery: Record<string, unknown>;
+      if (user.userId) {
+        updateQuery = { userId: user.userId };
+      } else if (user.email) {
+        // Use encryption-aware email lookup with multiple fallbacks
+        const normalizedEmail = user.email.toLowerCase().trim();
+        const emailHash = createEmailHash(normalizedEmail);
+        const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+        updateQuery = { 
+          $or: [
+            { emailHash },
+            { emailHashPlain },
+            { emailLookup: normalizedEmail },
+            { email: normalizedEmail }
+          ]
+        };
+      } else {
+        updateQuery = { walletAddress: normalizedAddress };
+      }
 
       // SECURITY ENHANCED: Use Redis distributed lock + $addToSet for duplicate prevention
       // Check Redis first for transaction deduplication (if available)

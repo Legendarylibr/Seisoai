@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 /*
   Check user details by email
+  
+  NOTE: Uses encryption-aware email lookup for proper database queries.
 */
 
 import dotenv from 'dotenv';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 
@@ -26,6 +29,19 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
+/**
+ * Create email hash for lookups (matches backend implementation)
+ */
+function createEmailHash(email: string): string {
+  const normalized = email.toLowerCase().trim();
+  const encryptionKey = process.env.ENCRYPTION_KEY;
+  if (encryptionKey && encryptionKey.length === 64) {
+    const key = Buffer.from(encryptionKey, 'hex');
+    return crypto.createHmac('sha256', key).update(normalized).digest('hex');
+  }
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+
 const userSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
@@ -36,8 +52,19 @@ async function main(): Promise<void> {
   });
   console.log('✅ Connected to MongoDB\n');
 
-  const normalizedEmail = email.toLowerCase();
-  const users = await User.find({ email: normalizedEmail });
+  // Use encryption-aware email lookup with multiple fallback methods
+  const normalizedEmail = email.toLowerCase().trim();
+  const emailHash = createEmailHash(normalizedEmail);
+  const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+  
+  const users = await User.find({ 
+    $or: [
+      { emailHash },
+      { emailHashPlain },
+      { emailLookup: normalizedEmail },
+      { email: normalizedEmail }
+    ]
+  });
   
   console.log(`Found ${users.length} user(s) with email: ${email}\n`);
   

@@ -4,11 +4,14 @@
   Usage: 
     tsx grant-single-wallet.ts <walletAddress> [credits]
     tsx grant-single-wallet.ts --email <email> [credits]
+  
+  NOTE: Uses encryption-aware email lookup for proper database queries.
 */
 
 import path from 'path';
 import fs from 'fs';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 
@@ -79,6 +82,35 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
+/**
+ * Create email hash for lookups (matches backend implementation)
+ */
+function createEmailHash(email: string): string {
+  const normalized = email.toLowerCase().trim();
+  const encryptionKey = process.env.ENCRYPTION_KEY;
+  if (encryptionKey && encryptionKey.length === 64) {
+    const key = Buffer.from(encryptionKey, 'hex');
+    return crypto.createHmac('sha256', key).update(normalized).digest('hex');
+  }
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+
+/**
+ * Build encryption-aware email lookup query
+ */
+function buildEmailLookupConditions(email: string): Array<Record<string, string>> {
+  const normalized = email.toLowerCase().trim();
+  const emailHash = createEmailHash(normalized);
+  const emailHashPlain = crypto.createHash('sha256').update(normalized).digest('hex');
+  
+  return [
+    { emailHash },
+    { emailHashPlain },
+    { emailLookup: normalized },
+    { email: normalized }
+  ];
+}
+
 async function main(): Promise<void> {
   let query: any = {};
   let identifier = '';
@@ -91,8 +123,9 @@ async function main(): Promise<void> {
     identifier = walletAddress;
     normalizedIdentifier = normalizedAddress;
   } else if (email) {
-    const normalizedEmail = email.toLowerCase();
-    query.email = normalizedEmail;
+    const normalizedEmail = email.toLowerCase().trim();
+    // Use encryption-aware email lookup
+    query = { $or: buildEmailLookupConditions(normalizedEmail) };
     identifier = email;
     normalizedIdentifier = normalizedEmail;
   }
@@ -121,7 +154,15 @@ async function main(): Promise<void> {
     const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
     updateFields.$setOnInsert = { walletAddress: normalizedAddress };
   } else if (email) {
-    updateFields.$setOnInsert = { email: email.toLowerCase() };
+    const normalizedEmail = email.toLowerCase().trim();
+    const emailHash = createEmailHash(normalizedEmail);
+    const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+    updateFields.$setOnInsert = { 
+      email: normalizedEmail,
+      emailHash,
+      emailHashPlain,
+      emailLookup: normalizedEmail
+    };
   }
 
   // Grant credits
