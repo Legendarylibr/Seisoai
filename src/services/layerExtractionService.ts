@@ -1,7 +1,7 @@
 // Layer Extraction Service using Qwen Image Layered
 // SECURITY: All API calls route through backend to ensure credit checks
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import { stripImagesMetadataToDataUri } from '../utils/imageOptimizer';
 
 // Types
@@ -74,11 +74,16 @@ export const extractLayers = async (
       hasPrompt: !!requestBody.prompt
     });
 
+    // Ensure CSRF token is available
+    const csrfToken = await ensureCSRFToken();
+
     const response = await fetch(`${API_URL}/api/extract-layers`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
       },
+      credentials: 'include',
       body: JSON.stringify(requestBody)
     });
 

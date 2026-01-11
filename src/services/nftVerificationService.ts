@@ -1,7 +1,7 @@
 // NFT Verification Service
 // Checks if a wallet holds qualifying NFTs for discounts/free access
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 
 // Types
 export interface NFTCollection {
@@ -47,11 +47,17 @@ export const checkNFTHoldings = async (walletAddress: string): Promise<NFTHoldin
     try {
       const apiEndpoint = `${API_URL}/api/nft/check-holdings`;
       logger.debug('Calling NFT endpoint');
+      
+      // Ensure CSRF token is available
+      const csrfToken = await ensureCSRFToken();
+      
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken })
         },
+        credentials: 'include',
         body: JSON.stringify({ 
           walletAddress: normalizedAddress
         }),

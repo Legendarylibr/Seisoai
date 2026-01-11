@@ -1,11 +1,12 @@
 // Email authentication service
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, getCSRFToken, ensureCSRFToken } from '../utils/apiConfig';
 
 // Constants
 const REQUEST_TIMEOUT = 30000; // 30 seconds
 const MAX_RETRIES = 2;
 const RETRY_DELAY = 1000; // 1 second
+const CSRF_TOKEN_HEADER = 'X-CSRF-Token';
 
 // Types
 export interface AuthUser {
@@ -191,11 +192,16 @@ export const signUp = async (email: string, password: string): Promise<AuthRespo
   const trimmedEmail = email.trim().toLowerCase();
   
   try {
+    // Ensure CSRF token is available
+    const csrfToken = await ensureCSRFToken();
+    
     const response = await fetchWithRetry(`${API_URL}/api/auth/signup`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(csrfToken && { [CSRF_TOKEN_HEADER]: csrfToken })
       },
+      credentials: 'include',
       body: JSON.stringify({ email: trimmedEmail, password })
     });
 
@@ -247,11 +253,16 @@ export const signIn = async (email: string, password: string): Promise<AuthRespo
   const trimmedEmail = email.trim().toLowerCase();
 
   try {
+    // Ensure CSRF token is available
+    const csrfToken = await ensureCSRFToken();
+    
     const response = await fetchWithRetry(`${API_URL}/api/auth/signin`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(csrfToken && { [CSRF_TOKEN_HEADER]: csrfToken })
       },
+      credentials: 'include',
       body: JSON.stringify({ email: trimmedEmail, password })
     });
 
@@ -304,12 +315,15 @@ export const signOut = async (): Promise<void> => {
   // Try to revoke tokens on server (best effort - don't block on failure)
   if (token || refreshToken) {
     try {
+      const csrfToken = getCSRFToken();
       await fetch(`${API_URL}/api/auth/logout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` })
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+          ...(csrfToken && { [CSRF_TOKEN_HEADER]: csrfToken })
         },
+        credentials: 'include',
         body: JSON.stringify({ refreshToken })
       });
     } catch (e) {
@@ -363,7 +377,8 @@ export const verifyToken = async (): Promise<VerifyResponse | null> => {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
-      }
+      },
+      credentials: 'include'
     }, 1); // Only 1 retry for verification
 
     let data: { user?: AuthUser };

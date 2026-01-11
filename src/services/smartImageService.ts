@@ -4,7 +4,7 @@
 import { generateImage as generateWithFAL, ImageGenerationResult } from './falService';
 import { extractLayers } from './layerExtractionService';
 import type { VisualStyle } from '../types';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
 // Types
@@ -24,9 +24,16 @@ const faceSwap = async (
   targetImage: string,
   advancedSettings: AdvancedSettings
 ): Promise<ImageGenerationResult> => {
+  // Ensure CSRF token is available
+  const csrfToken = await ensureCSRFToken();
+  
   const response = await fetch(`${API_URL}/api/image-tools/face-swap`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+    },
+    credentials: 'include',
     body: JSON.stringify({
       source_image_url: sourceImage,
       target_image_url: targetImage,

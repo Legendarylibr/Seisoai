@@ -133,6 +133,18 @@ class Logger {
     }
   }
 
+  // Get CSRF token from cookie
+  private getCSRFToken(): string | null {
+    const cookies = document.cookie.split(';');
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=');
+      if (name === 'XSRF-TOKEN') {
+        return value;
+      }
+    }
+    return null;
+  }
+
   // Send logs to backend logging endpoint in production
   private async sendToLoggingService(level: LogLevel, message: string, data: LogData | null): Promise<void> {
     try {
@@ -143,11 +155,16 @@ class Logger {
       // SECURITY: Sanitize data before sending to backend to prevent info leaks
       const sanitizedData = this.sanitizeData(data);
       
+      // Get CSRF token for POST request
+      const csrfToken = this.getCSRFToken();
+      
       await fetch(`${apiUrl}/api/logs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken })
         },
+        credentials: 'include',
         body: JSON.stringify({
           level,
           message,

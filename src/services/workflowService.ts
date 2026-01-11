@@ -2,7 +2,7 @@
  * Workflow Service
  * Manages multi-step AI generation pipelines
  */
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, getCSRFToken, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
 // Types
@@ -28,10 +28,31 @@ export interface WorkflowStepResult {
   [key: string]: unknown;
 }
 
+/**
+ * Helper function to make workflow API calls with CSRF token
+ */
+async function workflowFetch(url: string, body: Record<string, unknown>): Promise<WorkflowStepResult> {
+  const csrfToken = await ensureCSRFToken();
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+    },
+    credentials: 'include',
+    body: JSON.stringify(body)
+  });
+  
+  return response.json();
+}
+
 // Get list of available workflows
 export async function getWorkflows(): Promise<WorkflowDefinition[]> {
   try {
-    const response = await fetch(`${API_URL}/api/workflows/list`);
+    const response = await fetch(`${API_URL}/api/workflows/list`, {
+      credentials: 'include'
+    });
     const data = await response.json();
     
     if (!data.success) {
@@ -51,17 +72,11 @@ export async function executeAIInfluencerVoice(
   language: string = 'en',
   auth: { userId?: string; email?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
-  const response = await fetch(`${API_URL}/api/workflows/ai-influencer/voice`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      script,
-      language,
-      ...auth
-    })
+  const data = await workflowFetch(`${API_URL}/api/workflows/ai-influencer/voice`, {
+    script,
+    language,
+    ...auth
   });
-  
-  const data = await response.json();
   logger.info('AI Influencer voice step', { success: data.success });
   return data;
 }
@@ -71,17 +86,11 @@ export async function executeAIInfluencerLipSync(
   voiceUrl: string,
   auth: { userId?: string; email?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
-  const response = await fetch(`${API_URL}/api/workflows/ai-influencer/lipsync`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      portraitUrl,
-      voiceUrl,
-      ...auth
-    })
+  const data = await workflowFetch(`${API_URL}/api/workflows/ai-influencer/lipsync`, {
+    portraitUrl,
+    voiceUrl,
+    ...auth
   });
-  
-  const data = await response.json();
   logger.info('AI Influencer lip sync step', { success: data.success });
   return data;
 }
@@ -92,17 +101,11 @@ export async function executeMusicVideoMusic(
   duration: number = 30,
   auth: { userId?: string; email?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
-  const response = await fetch(`${API_URL}/api/workflows/music-video/music`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      musicPrompt,
-      duration,
-      ...auth
-    })
+  const data = await workflowFetch(`${API_URL}/api/workflows/music-video/music`, {
+    musicPrompt,
+    duration,
+    ...auth
   });
-  
-  const data = await response.json();
   logger.info('Music Video music step', { success: data.success });
   return data;
 }
@@ -112,17 +115,11 @@ export async function executeMusicVideoVideo(
   visualPrompt: string | null,
   auth: { userId?: string; email?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
-  const response = await fetch(`${API_URL}/api/workflows/music-video/video`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      musicPrompt,
-      visualPrompt,
-      ...auth
-    })
+  const data = await workflowFetch(`${API_URL}/api/workflows/music-video/video`, {
+    musicPrompt,
+    visualPrompt,
+    ...auth
   });
-  
-  const data = await response.json();
   logger.info('Music Video video step', { success: data.success });
   return data;
 }
@@ -132,16 +129,10 @@ export async function executeAvatarCreatorGenerate(
   characterDescription: string,
   auth: { userId?: string; email?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
-  const response = await fetch(`${API_URL}/api/workflows/avatar-creator/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      characterDescription,
-      ...auth
-    })
+  const data = await workflowFetch(`${API_URL}/api/workflows/avatar-creator/generate`, {
+    characterDescription,
+    ...auth
   });
-  
-  const data = await response.json();
   logger.info('Avatar Creator generate step', { success: data.success });
   return data;
 }
@@ -152,18 +143,12 @@ export async function executeAvatarCreatorVariations(
   poses: string[] = ['smiling', 'serious expression', 'looking to the side'],
   auth: { userId?: string; email?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
-  const response = await fetch(`${API_URL}/api/workflows/avatar-creator/variations`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      characterDescription,
-      baseImageUrl,
-      poses,
-      ...auth
-    })
+  const data = await workflowFetch(`${API_URL}/api/workflows/avatar-creator/variations`, {
+    characterDescription,
+    baseImageUrl,
+    poses,
+    ...auth
   });
-  
-  const data = await response.json();
   logger.info('Avatar Creator variations step', { success: data.success, variations: data.variation_urls?.length });
   return data;
 }
@@ -173,16 +158,10 @@ export async function executeRemixVisualizerSeparate(
   audioUrl: string,
   auth: { userId?: string; email?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
-  const response = await fetch(`${API_URL}/api/workflows/remix-visualizer/separate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      audioUrl,
-      ...auth
-    })
+  const data = await workflowFetch(`${API_URL}/api/workflows/remix-visualizer/separate`, {
+    audioUrl,
+    ...auth
   });
-  
-  const data = await response.json();
   logger.info('Remix Visualizer separate step', { success: data.success });
   return data;
 }
@@ -191,16 +170,10 @@ export async function executeRemixVisualizerVisualize(
   stems: Record<string, string>,
   auth: { userId?: string; email?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
-  const response = await fetch(`${API_URL}/api/workflows/remix-visualizer/visualize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      stems,
-      ...auth
-    })
+  const data = await workflowFetch(`${API_URL}/api/workflows/remix-visualizer/visualize`, {
+    stems,
+    ...auth
   });
-  
-  const data = await response.json();
   logger.info('Remix Visualizer visualize step', { success: data.success });
   return data;
 }
@@ -211,16 +184,10 @@ export async function executeFullWorkflow(
   inputs: Record<string, unknown>,
   auth: { userId?: string; email?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
-  const response = await fetch(`${API_URL}/api/workflows/execute-full/${workflowId}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      inputs,
-      ...auth
-    })
+  const data = await workflowFetch(`${API_URL}/api/workflows/execute-full/${workflowId}`, {
+    inputs,
+    ...auth
   });
-  
-  const data = await response.json();
   logger.info('Full workflow execution', { workflowId, success: data.success });
   return data;
 }
@@ -236,9 +203,15 @@ export async function uploadWorkflowFile(
   
   const bodyKey = type === 'audio' ? 'audioDataUri' : 'imageDataUri';
   
+  const csrfToken = await ensureCSRFToken();
+  
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+    },
+    credentials: 'include',
     body: JSON.stringify({ [bodyKey]: dataUri })
   });
   

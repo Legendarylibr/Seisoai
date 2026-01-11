@@ -3,7 +3,7 @@
 import { VISUAL_STYLES } from '../utils/styles';
 import logger from '../utils/logger';
 import { optimizeImages, stripImagesMetadataToDataUri } from '../utils/imageOptimizer';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, getCSRFToken, ensureCSRFToken } from '../utils/apiConfig';
 import type { VisualStyle } from '../types';
 
 // Types
@@ -257,12 +257,17 @@ export const generateImage = async (
       model = 'flux';
     }
 
+    // Ensure CSRF token is available
+    const csrfToken = await ensureCSRFToken();
+
     // Call backend endpoint which checks credits before making external API call
     const response = await fetch(`${API_URL}/api/generate/image`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
       },
+      credentials: 'include',
       body: JSON.stringify({
         ...requestBody,
         walletAddress,
@@ -415,13 +420,18 @@ export const generateImageStreaming = async (
       optimizePrompt // Pass optimization flag to backend
     };
 
+    // Ensure CSRF token is available before making the request
+    const csrfToken = getCSRFToken();
+    
     // Use fetch with EventSource polyfill approach for POST SSE
     fetch(`${API_URL}/api/generate/image-stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'text/event-stream'
+        'Accept': 'text/event-stream',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
       },
+      credentials: 'include',
       body: JSON.stringify(requestBody)
     }).then(async (response) => {
       if (!response.ok) {

@@ -2,7 +2,7 @@
  * 3D Model Generation Service
  * Handles API calls to generate 3D models using Hunyuan3D V3
  */
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 import { getAuthToken } from './emailAuthService';
 
@@ -100,6 +100,9 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
     const token = getAuthToken() || '';
     const hasToken = !!token;
     const tokenPreview = token ? `${token.substring(0, 20)}...` : '(empty)';
+    
+    // Ensure CSRF token is available
+    const csrfToken = await ensureCSRFToken();
 
     logger.info('3D generation request details', {
       apiEndpoint,
@@ -127,8 +130,10 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken })
         },
+        credentials: 'include',
         body: JSON.stringify({
           input_image_url,
           back_image_url,

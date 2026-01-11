@@ -3,7 +3,7 @@
  * This avoids CORS issues and works even when frontend env vars aren't set
  */
 
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 
 // Types
 interface RpcResponse<T = unknown> {
@@ -34,9 +34,16 @@ interface TokenBalanceResult {
  */
 export async function solanaRpc<T = unknown>(method: string, params: unknown[] = []): Promise<T> {
   try {
+    // Ensure CSRF token is available
+    const csrfToken = await ensureCSRFToken();
+    
     const response = await fetch(`${API_URL}/api/solana/rpc`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+      },
+      credentials: 'include',
       body: JSON.stringify({ method, params })
     });
     
@@ -74,9 +81,16 @@ export async function solanaRpc<T = unknown>(method: string, params: unknown[] =
  * Make an EVM RPC call through the backend proxy
  */
 export async function evmRpc<T = unknown>(chainId: number, method: string, params: unknown[] = []): Promise<T> {
+  // Ensure CSRF token is available
+  const csrfToken = await ensureCSRFToken();
+  
   const response = await fetch(`${API_URL}/api/evm/rpc`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+    },
+    credentials: 'include',
     body: JSON.stringify({ chainId, method, params })
   });
   

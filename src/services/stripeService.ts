@@ -1,7 +1,7 @@
 // Stripe service for payment processing
 import { loadStripe, Stripe, StripeElements } from '@stripe/stripe-js';
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 
 // Types
 export interface PaymentIntentResponse {
@@ -175,11 +175,16 @@ export const createPaymentIntent = async (
       body.preferCrypto = true;
     }
 
+    // Ensure CSRF token is available
+    const csrfToken = await ensureCSRFToken();
+    
     const response = await fetch(`${API_URL}/api/stripe/create-payment-intent`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
       },
+      credentials: 'include',
       body: JSON.stringify(body)
     });
 
@@ -217,11 +222,16 @@ export const verifyStripePayment = async (
       body.walletAddress = walletAddress;
     }
 
+    // Ensure CSRF token is available
+    const csrfToken = await ensureCSRFToken();
+    
     const response = await fetch(`${API_URL}/api/stripe/verify-payment`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
       },
+      credentials: 'include',
       body: JSON.stringify(body)
     });
 

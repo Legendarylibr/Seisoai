@@ -1,6 +1,6 @@
 // Gallery and generation history service
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import { getAuthToken } from './emailAuthService';
 
 // Types
@@ -87,12 +87,17 @@ export const addGeneration = async (
       hasEmail: !!generationData.email
     });
 
+    // Ensure CSRF token is available
+    const csrfToken = await ensureCSRFToken();
+
     const response = await fetch(`${API_URL}/api/generations/add`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getAuthToken() || ''}`
+        'Authorization': `Bearer ${getAuthToken() || ''}`,
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
       },
+      credentials: 'include',
       body: JSON.stringify({
         walletAddress: isWalletAddress ? normalizedIdentifier : undefined,
         userId: !isWalletAddress ? normalizedIdentifier : undefined,
@@ -223,9 +228,16 @@ export const deleteGeneration = async (
 ): Promise<{ success: boolean }> => {
   try {
     // Note: API_URL can be empty string for same-origin production deployments
+    
+    // Ensure CSRF token is available
+    const csrfToken = await ensureCSRFToken();
 
     const response = await fetch(`${API_URL}/api/gallery/${walletAddress}/${generationId}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: {
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+      },
+      credentials: 'include'
     });
 
     if (!response.ok) {
@@ -272,12 +284,17 @@ export const updateSettings = async (
 ): Promise<{ success: boolean }> => {
   try {
     // Note: API_URL can be empty string for same-origin production deployments
+    
+    // Ensure CSRF token is available
+    const csrfToken = await ensureCSRFToken();
 
     const response = await fetch(`${API_URL}/api/users/${walletAddress}/settings`, {
       method: 'PUT',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
       },
+      credentials: 'include',
       body: JSON.stringify({ settings })
     });
 
