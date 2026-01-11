@@ -25,7 +25,7 @@ import { initializeQueues, closeAll as closeQueues } from './services/jobQueue.j
 import { getAllCircuitStats } from './services/circuitBreaker.js';
 import { metricsMiddleware, metricsHandler } from './services/metrics.js';
 import { initializeAuditLog } from './services/auditLog.js';
-import { initializeKeyRotation, scheduleKeyRotation, getKeyRotationStatus } from './services/keyRotation.js';
+import { getKeyRotationStatus } from './services/keyRotation.js';
 import { createOpenApiRoutes } from './services/openapi.js';
 import { deepHealthCheck, livenessCheck, readinessCheck } from './services/healthCheck.js';
 import { setupGracefulShutdown, requestTrackingMiddleware, getInFlightCount } from './services/gracefulShutdown.js';
@@ -576,12 +576,13 @@ async function startServer(): Promise<void> {
     await initializeAuditLog();
     logger.info('Audit logging service initialized');
 
-    // ENTERPRISE: Initialize JWT key rotation
-    initializeKeyRotation();
-    if (config.isProduction) {
-      scheduleKeyRotation();
-      logger.info('JWT key rotation scheduled');
-    }
+    // NOTE: JWT key rotation disabled for simplicity
+    // Uncomment if you need automatic key rotation
+    // initializeKeyRotation();
+    // if (config.isProduction) {
+    //   scheduleKeyRotation();
+    //   logger.info('JWT key rotation scheduled');
+    // }
 
     // Log FAL configuration
     if (config.FAL_API_KEY) {

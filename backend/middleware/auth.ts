@@ -114,13 +114,15 @@ export const createAuthenticateToken = (
         return;
       }
 
-      if (await isTokenBlacklisted(token)) {
-        res.status(401).json({
-          success: false,
-          error: 'Token has been revoked. Please sign in again.'
-        });
-        return;
-      }
+      // NOTE: Token blacklist check disabled for simplicity
+      // Uncomment if you need logout/revocation functionality
+      // if (await isTokenBlacklisted(token)) {
+      //   res.status(401).json({
+      //     success: false,
+      //     error: 'Token has been revoked. Please sign in again.'
+      //   });
+      //   return;
+      // }
 
       if (!jwtSecret) {
         res.status(500).json({
@@ -141,8 +143,7 @@ export const createAuthenticateToken = (
       }
       
       const User = getUserModel();
-      // SECURITY FIX: Prefer userId lookup (more reliable) over email
-      // userId is unique and doesn't have encryption/decryption complexity
+      // Prefer userId lookup (more reliable) over email
       let user = null;
       if (decoded.userId) {
         user = await User.findOne({ userId: decoded.userId })
@@ -182,7 +183,7 @@ export const createAuthenticateToken = (
 /**
  * Create flexible authentication middleware (JWT required, body-based DISABLED in production)
  * 
- * SECURITY FIX: Body-based authentication has been DISABLED as it allows impersonation.
+ * Body-based authentication has been DISABLED as it allows impersonation.
  * All authenticated endpoints now require JWT tokens.
  */
 export const createAuthenticateFlexible = (
@@ -197,13 +198,7 @@ export const createAuthenticateFlexible = (
 
       // JWT authentication (required)
       if (token && jwtSecret) {
-        if (await isTokenBlacklisted(token)) {
-          res.status(401).json({
-            success: false,
-            error: 'Token has been revoked. Please sign in again.'
-          });
-          return;
-        }
+        // NOTE: Token blacklist check disabled for simplicity
         
         try {
           const decoded = jwt.verify(token, jwtSecret) as JWTDecoded;
@@ -235,25 +230,13 @@ export const createAuthenticateFlexible = (
         }
       }
 
-      // SECURITY: Body-based authentication is DISABLED
-      // This was a critical vulnerability that allowed user impersonation
-      // by simply providing a wallet address, userId, or email in the request body.
-      // 
-      // If you need backwards compatibility for legacy clients, you must:
-      // 1. Implement cryptographic signature verification
-      // 2. Or require clients to migrate to JWT authentication
-      
+      // Body-based authentication is DISABLED for security
       const { walletAddress, userId, email } = req.body as { walletAddress?: string; userId?: string; email?: string };
       
       if (walletAddress || userId || email) {
-        // Log the attempt for security monitoring
-        logger.warn('SECURITY: Blocked body-based authentication attempt', { 
-          walletAddress: walletAddress ? walletAddress.substring(0, 10) + '...' : null,
-          userId: userId ? userId.substring(0, 10) + '...' : null,
-          email: email ? '***' : null,
+        logger.warn('Blocked body-based authentication attempt', { 
           path: req.path,
-          ip: req.ip,
-          userAgent: req.headers['user-agent']?.substring(0, 50)
+          ip: req.ip
         });
       }
 
