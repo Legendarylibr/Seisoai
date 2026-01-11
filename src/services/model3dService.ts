@@ -284,7 +284,6 @@ async function pollForCompletion(
   const pollInterval = 5000; // Poll every 5 seconds
   const startTime = Date.now();
   
-  const token = getAuthToken() || '';
   const statusEndpoint = `${API_URL}/api/model3d/status/${requestId}`;
   
   logger.info('Starting to poll for 3D generation completion', { requestId, statusEndpoint });
@@ -293,6 +292,9 @@ async function pollForCompletion(
     const elapsed = Math.round((Date.now() - startTime) / 1000);
     
     try {
+      // Refresh token on each poll in case it changed during long polling
+      const token = getAuthToken() || '';
+      
       // Short timeout for each poll request
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -309,10 +311,24 @@ async function pollForCompletion(
 
       if (!response.ok) {
         logger.warn('Status poll returned error', { status: response.status, elapsed });
-        // Continue polling on non-fatal errors
+        // Continue polling on server errors (5xx) - might be transient
         if (response.status >= 500) {
           await new Promise(resolve => setTimeout(resolve, pollInterval));
           continue;
+        }
+        // For auth errors (401/403), try to get error message and continue
+        // The token might get refreshed on next poll
+        if (response.status === 401 || response.status === 403) {
+          logger.warn('Auth error during poll, will retry with fresh token', { status: response.status });
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+          continue;
+        }
+        // For other client errors (4xx), try to parse error and throw
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Poll failed: ${response.status}`);
+        } catch {
+          throw new Error(`Poll failed with status ${response.status}`);
         }
       }
 
