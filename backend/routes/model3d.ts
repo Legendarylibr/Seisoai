@@ -517,8 +517,72 @@ export function createModel3dRoutes(deps: Dependencies) {
 
       const normalizedStatus = (rawStatusData.status || '').toUpperCase();
       
-      // If generation is complete and user is authenticated, try to update gallery
-      if (req.user && (isStatusCompleted(normalizedStatus) || rawStatusData.model_glb?.url || rawStatusData.glb?.url)) {
+      // Check if result data is already in status response
+      let statusResult = rawStatusData.data || rawStatusData;
+      let glbUrl = statusResult.model_glb?.url || statusResult.glb?.url || statusResult.model_urls?.glb?.url;
+      
+      // If status is completed but no model URL in response, fetch from result endpoint
+      if (isStatusCompleted(normalizedStatus) && !glbUrl) {
+        logger.info('Status completed but no model URL, fetching result', { requestId });
+        
+        type RawResultType = {
+          data?: {
+            glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+            model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+            thumbnail?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+            model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+            seed?: number;
+          };
+          output?: {
+            glb?: { url?: string };
+            model_glb?: { url?: string };
+            thumbnail?: { url?: string };
+            model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string } };
+          };
+          glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+          model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+          thumbnail?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+          model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+          seed?: number;
+        };
+
+        try {
+          let rawResult: RawResultType | null = null;
+
+          if (rawStatusData.response_url) {
+            const resultResponse = await fetch(rawStatusData.response_url, {
+              headers: { 'Authorization': `Key ${FAL_API_KEY}` }
+            });
+            if (resultResponse.ok) {
+              rawResult = await resultResponse.json() as RawResultType;
+            }
+          } else {
+            rawResult = await getQueueResult<RawResultType>(requestId, modelPath);
+          }
+
+          if (rawResult) {
+            // Merge result data into status response
+            const resultData = rawResult.data || rawResult.output || rawResult;
+            statusResult = resultData;
+            glbUrl = resultData.model_glb?.url || resultData.glb?.url || resultData.model_urls?.glb?.url;
+            
+            logger.info('Fetched result data for completed 3D generation', { 
+              requestId, 
+              hasGlb: !!glbUrl,
+              hasModelUrls: !!resultData.model_urls,
+              hasThumbnail: !!resultData.thumbnail
+            });
+          }
+        } catch (fetchError) {
+          logger.error('Failed to fetch result for completed status', { 
+            error: (fetchError as Error).message,
+            requestId 
+          });
+        }
+      }
+      
+      // If generation is complete and user is authenticated, update gallery
+      if (req.user && glbUrl) {
         try {
           const User = mongoose.model<IUser>('User');
           const updateQuery = buildUserUpdateQuery(req.user);
@@ -533,82 +597,17 @@ export function createModel3dRoutes(deps: Dependencies) {
             if (user) {
               const galleryItem = user.gallery?.find((item: { requestId?: string }) => item.requestId === requestId);
               
-              if (galleryItem && galleryItem.status !== 'completed') {
-                // Check if we have result data in status response
-                const statusResult = rawStatusData.data || rawStatusData;
-                const glbUrl = statusResult.model_glb?.url || statusResult.glb?.url || statusResult.model_urls?.glb?.url;
-                
-                if (glbUrl && galleryItem.id) {
-                  // Update gallery item
-                  await updateGalleryItemWithResult(
-                    updateQuery,
-                    galleryItem.id,
-                    statusResult,
-                    galleryItem.thumbnailUrl || galleryItem.imageUrl
-                  );
-                  logger.info('Gallery item updated from status check', { 
-                    requestId,
-                    generationId: galleryItem.id 
-                  });
-                } else if (isStatusCompleted(normalizedStatus)) {
-                  // Status says completed but no URL in status response, fetch result
-                  try {
-                    type RawResultType = {
-                      data?: {
-                        glb?: { url?: string };
-                        model_glb?: { url?: string };
-                        thumbnail?: { url?: string };
-                        model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string } };
-                      };
-                      output?: {
-                        glb?: { url?: string };
-                        model_glb?: { url?: string };
-                        thumbnail?: { url?: string };
-                        model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string } };
-                      };
-                      glb?: { url?: string };
-                      model_glb?: { url?: string };
-                      thumbnail?: { url?: string };
-                      model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string } };
-                    };
-
-                    let rawResult: RawResultType | null = null;
-
-                    if (rawStatusData.response_url) {
-                      const resultResponse = await fetch(rawStatusData.response_url, {
-                        headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-                      });
-                      if (resultResponse.ok) {
-                        rawResult = await resultResponse.json() as RawResultType;
-                      }
-                    } else {
-                      rawResult = await getQueueResult<RawResultType>(requestId, modelPath);
-                    }
-
-                    if (rawResult) {
-                      const resultData = rawResult.data || rawResult.output || rawResult;
-                      const fetchedGlbUrl = resultData.model_glb?.url || resultData.glb?.url || resultData.model_urls?.glb?.url;
-                      
-                      if (fetchedGlbUrl && galleryItem.id) {
-                        await updateGalleryItemWithResult(
-                          updateQuery,
-                          galleryItem.id,
-                          resultData,
-                          galleryItem.thumbnailUrl || galleryItem.imageUrl
-                        );
-                        logger.info('Gallery item updated from result fetch', { 
-                          requestId,
-                          generationId: galleryItem.id 
-                        });
-                      }
-                    }
-                  } catch (fetchError) {
-                    logger.error('Failed to fetch result for gallery update', { 
-                      error: (fetchError as Error).message,
-                      requestId 
-                    });
-                  }
-                }
+              if (galleryItem && galleryItem.status !== 'completed' && galleryItem.id) {
+                await updateGalleryItemWithResult(
+                  updateQuery,
+                  galleryItem.id,
+                  statusResult,
+                  galleryItem.thumbnailUrl || galleryItem.imageUrl
+                );
+                logger.info('Gallery item updated from status check', { 
+                  requestId,
+                  generationId: galleryItem.id 
+                });
               }
             }
           }
@@ -621,7 +620,22 @@ export function createModel3dRoutes(deps: Dependencies) {
         }
       }
 
-      res.json({ success: true, ...rawStatusData });
+      // Return response with result data merged in when available
+      // Cast to Record for safe property access
+      const resultRecord = statusResult as Record<string, unknown>;
+      const responseData: Record<string, unknown> = {
+        success: true,
+        status: rawStatusData.status
+      };
+      
+      // Include model data directly in response for frontend to consume
+      if (statusResult.model_glb) responseData.model_glb = statusResult.model_glb;
+      if (statusResult.glb) responseData.glb = statusResult.glb;
+      if (statusResult.thumbnail) responseData.thumbnail = statusResult.thumbnail;
+      if (statusResult.model_urls) responseData.model_urls = statusResult.model_urls;
+      if (resultRecord.seed !== undefined) responseData.seed = resultRecord.seed;
+      
+      res.json(responseData);
     } catch (error) {
       const err = error as Error;
       logger.error('3D status check error:', { error: err.message });
