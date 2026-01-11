@@ -114,16 +114,6 @@ export const createAuthenticateToken = (
         return;
       }
 
-      // NOTE: Token blacklist check disabled for simplicity
-      // Uncomment if you need logout/revocation functionality
-      // if (await isTokenBlacklisted(token)) {
-      //   res.status(401).json({
-      //     success: false,
-      //     error: 'Token has been revoked. Please sign in again.'
-      //   });
-      //   return;
-      // }
-
       if (!jwtSecret) {
         res.status(500).json({
           success: false,
@@ -143,7 +133,8 @@ export const createAuthenticateToken = (
       }
       
       const User = getUserModel();
-      // Prefer userId lookup (more reliable) over email
+      
+      // Simple lookup: userId first, then email
       let user = null;
       if (decoded.userId) {
         user = await User.findOne({ userId: decoded.userId })
@@ -151,22 +142,8 @@ export const createAuthenticateToken = (
           .maxTimeMS(5000);
       }
       
-      // Fallback to emailHash lookup if userId not found and email provided
       if (!user && decoded.email) {
-        const { createEmailHash } = await import('../utils/emailHash.js');
-        const emailHash = createEmailHash(decoded.email);
-        const normalizedEmail = decoded.email.toLowerCase().trim();
-        // Plain SHA-256 hash for cross-environment compatibility
-        const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
-        
-        user = await User.findOne({ 
-          $or: [
-            { emailHash },                    // Primary: HMAC hash
-            { emailHashPlain },               // Fallback: plain SHA-256
-            { emailLookup: normalizedEmail }, // Fallback: plain email field
-            { email: normalizedEmail }        // Legacy: direct match
-          ]
-        })
+        user = await User.findOne({ email: decoded.email.toLowerCase().trim() })
           .select('-password -generationHistory -gallery -paymentHistory')
           .maxTimeMS(5000);
       }
@@ -209,33 +186,20 @@ export const createAuthenticateFlexible = (
 
       // JWT authentication (required)
       if (token && jwtSecret) {
-        // NOTE: Token blacklist check disabled for simplicity
-        
         try {
           const decoded = jwt.verify(token, jwtSecret) as JWTDecoded;
           
           if (decoded.type !== 'refresh') {
             const User = getUserModel();
             
-            // Build query with multiple fallback lookup methods
-            const queryConditions: Record<string, unknown>[] = [];
+            // Simple lookup: userId first, then email
+            let user = null;
             if (decoded.userId) {
-              queryConditions.push({ userId: decoded.userId });
+              user = await User.findOne({ userId: decoded.userId }).select('-password');
             }
-            if (decoded.email) {
-              const { createEmailHash } = await import('../utils/emailHash.js');
-              const emailHash = createEmailHash(decoded.email);
-              const normalizedEmail = decoded.email.toLowerCase().trim();
-              const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
-              
-              queryConditions.push({ emailHash });
-              queryConditions.push({ emailHashPlain });
-              queryConditions.push({ emailLookup: normalizedEmail });
+            if (!user && decoded.email) {
+              user = await User.findOne({ email: decoded.email.toLowerCase().trim() }).select('-password');
             }
-            
-            const user = queryConditions.length > 0 
-              ? await User.findOne({ $or: queryConditions }).select('-password')
-              : null;
 
             if (user) {
               req.user = user;
@@ -255,19 +219,9 @@ export const createAuthenticateFlexible = (
         }
       }
 
-      // Body-based authentication is DISABLED for security
-      const { walletAddress, userId, email } = req.body as { walletAddress?: string; userId?: string; email?: string };
-      
-      if (walletAddress || userId || email) {
-        logger.warn('Blocked body-based authentication attempt', { 
-          path: req.path,
-          ip: req.ip
-        });
-      }
-
       res.status(401).json({
         success: false,
-        error: 'Authentication required. Please provide a valid JWT token in the Authorization header.'
+        error: 'Authentication required'
       });
     } catch (error) {
       logger.error('Authentication error:', error);

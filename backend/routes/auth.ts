@@ -514,31 +514,12 @@ export function createAuthRoutes(deps: Dependencies = {}) {
    */
   router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // authMiddleware already loaded the user - just use it directly
+      // For fresh data, re-fetch by userId
       const User = mongoose.model<IUser>('User');
-      
-      // Build query with encryption-aware email lookup
-      const orConditions: Array<Record<string, string>> = [];
-      
-      if (req.user?.userId) {
-        orConditions.push({ userId: req.user.userId });
-      }
-      
-      if (req.user?.email) {
-        // Use encryption-aware email lookup with multiple fallback methods
-        const normalizedEmail = req.user.email.toLowerCase().trim();
-        const emailHash = createEmailHash(normalizedEmail);
-        const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
-        orConditions.push(
-          { emailHash },
-          { emailHashPlain },
-          { emailLookup: normalizedEmail },
-          { email: normalizedEmail }
-        );
-      }
-      
-      const user = await User.findOne({
-        $or: orConditions
-      }).select('-password -generationHistory -gallery -paymentHistory').maxTimeMS(5000);
+      const user = await User.findOne({ userId: req.user?.userId })
+        .select('-password')
+        .maxTimeMS(5000);
       
       if (!user) {
         res.status(404).json({
@@ -548,16 +529,10 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         return;
       }
       
-      // Check NFT status if wallet is linked
-      let isNFTHolder = false;
-      if (user.walletAddress) {
-        isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-      }
+      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
 
-      // Set cache-control headers to prevent browser caching
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
       res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
       
       res.json({
         success: true,
@@ -568,12 +543,6 @@ export function createAuthRoutes(deps: Dependencies = {}) {
           totalCreditsEarned: user.totalCreditsEarned || 0,
           totalCreditsSpent: user.totalCreditsSpent || 0,
           walletAddress: user.walletAddress || null,
-          nftCollections: user.nftCollections || [],
-          paymentHistory: user.paymentHistory || [],
-          generationHistory: user.generationHistory || [],
-          gallery: user.gallery || [],
-          settings: user.settings || {},
-          lastActive: user.lastActive,
           isNFTHolder
         }
       });
