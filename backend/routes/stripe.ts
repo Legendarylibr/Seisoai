@@ -56,11 +56,12 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const { amount, currency = 'usd', userId, walletAddress } = req.body as {
+      const { amount, currency = 'usd', userId, walletAddress, preferCrypto } = req.body as {
         amount?: number;
         currency?: string;
         userId?: string;
         walletAddress?: string;
+        preferCrypto?: boolean;
       };
 
       if (!amount || amount < 1) {
@@ -82,7 +83,9 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       const { credits } = calculateCredits(amount, isNFTHolder);
 
       // Determine if this is a wallet user (stablecoins) or email user (card only)
-      const isWalletUser = !!walletAddress && !userId;
+      // Wallet takes priority: if wallet is connected, use stablecoin payments
+      // This allows users with both email+wallet to pay with crypto
+      const isWalletUser = !!walletAddress || preferCrypto;
 
       // Create payment intent with appropriate payment methods
       // - Wallet users: crypto/stablecoins (USDC on Ethereum, Solana, Polygon, Base)

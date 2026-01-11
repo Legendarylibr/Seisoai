@@ -183,16 +183,24 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
   const walletContext = useSimpleWallet();
   const emailContext = useEmailAuth();
   
-  // Use email auth if available, otherwise fall back to wallet
-  const isEmailAuth = emailContext.isAuthenticated;
+  // Determine auth type: wallet takes priority for payment (stablecoins)
+  const hasWallet = walletContext.isConnected && walletContext.address;
+  const hasEmailAuth = emailContext.isAuthenticated;
+  
+  // For payment purposes: wallet users get stablecoin option, email-only users get card
+  const isWalletPayment = hasWallet; // Wallet connected = stablecoin payment
   const address = walletContext.address;
-  const credits = isEmailAuth ? (emailContext.credits ?? 0) : (walletContext.credits ?? 0);
-  const userId = isEmailAuth ? emailContext.userId : null;
-  // Only apply NFT pricing if user has a linked wallet (for email users) or is a wallet user
-  const isNFTHolder = isEmailAuth 
-    ? false 
-    : (walletContext.isNFTHolder || false);
-  const fetchCredits = isEmailAuth ? emailContext.refreshCredits : walletContext.refreshCredits;
+  
+  // For credits display: prefer email auth credits if logged in, otherwise wallet
+  const credits = hasEmailAuth ? (emailContext.credits ?? 0) : (walletContext.credits ?? 0);
+  
+  // For user identification: send userId if email auth, walletAddress if wallet
+  // If both are present, send both - backend will handle appropriately
+  const userId = hasEmailAuth ? emailContext.userId : null;
+  
+  // Only apply NFT pricing if user has a linked wallet
+  const isNFTHolder = hasWallet ? (walletContext.isNFTHolder || false) : false;
+  const fetchCredits = hasEmailAuth ? emailContext.refreshCredits : walletContext.refreshCredits;
 
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [customAmount, setCustomAmount] = useState('');
@@ -267,14 +275,14 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
   };
 
   const validatePayment = () => {
-    // For email users, require package selection (no custom amount)
-    if (isEmailAuth && !selectedPackage) {
+    // For email-only users, require package selection (no custom amount)
+    if (!isWalletPayment && !selectedPackage) {
       setError('Please select a package');
       return false;
     }
     
     // For wallet users, allow either package or custom amount
-    if (!isEmailAuth && !selectedPackage && !customAmount) {
+    if (isWalletPayment && !selectedPackage && !customAmount) {
       setError('Please select a package or enter a custom amount');
       return false;
     }
@@ -309,7 +317,8 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
         amount, 
         creditsToPurchase, 
         'usd', 
-        userId
+        userId,
+        isWalletPayment // preferCrypto: wallet users get stablecoin options
       );
       
       if (!intentResponse.success || !intentResponse.clientSecret) {
@@ -343,7 +352,7 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
   if (!isOpen) return null;
 
   // Check if user is authenticated (either email or wallet)
-  if (!isEmailAuth && !walletContext.isConnected) {
+  if (!hasEmailAuth && !hasWallet) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
         <div className="bg-gray-900 rounded-xl border border-white/20 w-full max-w-md p-6">
@@ -540,8 +549,8 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
             </div>
           </div>
 
-          {/* Custom Amount - Only show for wallet users, not email users */}
-          {!isEmailAuth && (
+          {/* Custom Amount - Only show for wallet users, not email-only users */}
+          {isWalletPayment && (
             <div className="space-y-3">
               <h3 className="text-sm font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Or Enter Custom Amount</h3>
               <div className="relative">
@@ -611,22 +620,22 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
             <div className="flex items-center gap-2 mb-2">
               <Zap className="w-4 h-4" style={{ color: '#000000' }} />
               <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                {isEmailAuth ? 'Secure Card Payment' : 'Pay with Stablecoins'}
+                {isWalletPayment ? 'Pay with Stablecoins' : 'Secure Card Payment'}
               </span>
             </div>
             <div className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-              {isEmailAuth ? (
-                <>
-                  <p className="mb-1">• Visa, Mastercard, Amex and more</p>
-                  <p className="mb-1">• All payments processed securely by Stripe</p>
-                  <p>• No payment data stored on our servers</p>
-                </>
-              ) : (
+              {isWalletPayment ? (
                 <>
                   <p className="mb-1">• <strong>USDC</strong> on Ethereum, Solana, Polygon, Base</p>
                   <p className="mb-1">• Connect your wallet directly to Stripe</p>
                   <p className="mb-1">• No private keys shared with us</p>
                   <p>• Instant credit delivery after confirmation</p>
+                </>
+              ) : (
+                <>
+                  <p className="mb-1">• Visa, Mastercard, Amex and more</p>
+                  <p className="mb-1">• All payments processed securely by Stripe</p>
+                  <p>• No payment data stored on our servers</p>
                 </>
               )}
             </div>

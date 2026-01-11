@@ -145,7 +145,8 @@ export const createPaymentIntent = async (
   amount: number, 
   credits: number, 
   currency: string = 'usd', 
-  userId: string | null = null
+  userId: string | null = null,
+  preferCrypto: boolean = false
 ): Promise<PaymentIntentResponse> => {
   try {
     // Check if Stripe is configured (wait for async init)
@@ -160,11 +161,18 @@ export const createPaymentIntent = async (
       currency
     };
 
-    // Add walletAddress or userId based on auth type
+    // Add walletAddress and/or userId
+    // Both can be present if user has email+wallet linked
+    if (walletAddress) {
+      body.walletAddress = walletAddress;
+      body.preferCrypto = true; // Wallet users prefer crypto payments
+    }
     if (userId) {
       body.userId = userId;
-    } else if (walletAddress) {
-      body.walletAddress = walletAddress;
+    }
+    // Explicit preferCrypto flag overrides
+    if (preferCrypto) {
+      body.preferCrypto = true;
     }
 
     const response = await fetch(`${API_URL}/api/stripe/create-payment-intent`, {
