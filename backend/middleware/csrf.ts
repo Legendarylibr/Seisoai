@@ -96,11 +96,12 @@ export function setCSRFToken(req: Request, res: Response, next: NextFunction): v
 
   // Set token in cookie
   // SECURITY: HttpOnly=false so JavaScript can read it for header
-  // SameSite=Strict provides additional CSRF protection
+  // SameSite=Lax allows cookie to be sent on same-site navigations and top-level GET
+  // This is more compatible with CDN/proxy setups like Cloudflare while still preventing CSRF
   res.cookie(CSRF_TOKEN_COOKIE, token, {
     httpOnly: false, // Must be readable by JavaScript for header
     secure: config.isProduction, // HTTPS only in production
-    sameSite: 'strict', // CSRF protection
+    sameSite: 'lax', // CSRF protection - 'lax' works better with Cloudflare proxy
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     path: '/'
   });
@@ -121,7 +122,7 @@ export function getCSRFToken(req: Request, res: Response): void {
   res.cookie(CSRF_TOKEN_COOKIE, token, {
     httpOnly: false,
     secure: config.isProduction,
-    sameSite: 'strict',
+    sameSite: 'lax', // 'lax' works better with Cloudflare proxy
     maxAge: 24 * 60 * 60 * 1000,
     path: '/'
   });
