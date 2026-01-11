@@ -35,20 +35,23 @@ if (missingVars.length > 0) {
   }
 }
 
-// Validate JWT_SECRET minimum length
-if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
-  console.error('SECURITY ERROR: JWT_SECRET must be at least 32 characters long');
-  if (process.env.NODE_ENV === 'production') {
-    process.exit(1);
+// Validate JWT_SECRET minimum length (trim to handle copy-paste whitespace)
+if (process.env.JWT_SECRET) {
+  process.env.JWT_SECRET = process.env.JWT_SECRET.trim();
+  if (process.env.JWT_SECRET.length < 32) {
+    console.error('SECURITY ERROR: JWT_SECRET must be at least 32 characters long');
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
   }
 }
 
 // Validate ENCRYPTION_KEY format (64 hex characters = 256 bits)
+// Trim to handle any trailing whitespace from copy-paste
 if (process.env.ENCRYPTION_KEY) {
-  const keyLength = process.env.ENCRYPTION_KEY.length;
-  console.log(`ENCRYPTION_KEY length: ${keyLength} characters`);
-  if (keyLength !== 64) {
-    console.error(`SECURITY ERROR: ENCRYPTION_KEY must be exactly 64 hex characters (256 bits), got ${keyLength}`);
+  process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY.trim();
+  if (process.env.ENCRYPTION_KEY.length !== 64) {
+    console.error('SECURITY ERROR: ENCRYPTION_KEY must be exactly 64 hex characters (256 bits)');
     console.error('Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
     if (process.env.NODE_ENV === 'production') {
       process.exit(1);
@@ -57,11 +60,15 @@ if (process.env.ENCRYPTION_KEY) {
 }
 
 // SECURITY FIX: Validate ADMIN_SECRET minimum length (32 characters)
-if (process.env.ADMIN_SECRET && process.env.ADMIN_SECRET.length < 32) {
-  console.error('SECURITY ERROR: ADMIN_SECRET must be at least 32 characters long');
-  console.error('Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
-  if (process.env.NODE_ENV === 'production') {
-    process.exit(1);
+// Trim to handle copy-paste whitespace
+if (process.env.ADMIN_SECRET) {
+  process.env.ADMIN_SECRET = process.env.ADMIN_SECRET.trim();
+  if (process.env.ADMIN_SECRET.length < 32) {
+    console.error('SECURITY ERROR: ADMIN_SECRET must be at least 32 characters long');
+    console.error('Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
   }
 }
 
