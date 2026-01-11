@@ -400,16 +400,22 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+        expand: ['items.data.price']
+      });
+      
+      // Return the subscription data in a format the frontend expects
       res.json({
         success: true,
         hasSubscription: true,
         subscription: {
           id: subscription.id,
           status: subscription.status,
-          currentPeriodEnd: new Date((subscription.current_period_end as number) * 1000),
-          cancelAtPeriodEnd: subscription.cancel_at_period_end,
-          plan: subscription.metadata?.planType || 'unknown'
+          current_period_start: subscription.current_period_start,
+          current_period_end: subscription.current_period_end,
+          cancel_at_period_end: subscription.cancel_at_period_end,
+          plan: subscription.metadata?.planType || 'unknown',
+          items: subscription.items
         }
       });
     } catch (error) {
@@ -540,8 +546,8 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       });
 
       logger.info('Stripe billing portal session created', {
-        userId: user.userId,
-        email: user.email
+        userId: user.userId
+        // Note: Email intentionally not logged for privacy
       });
 
       res.json({
@@ -949,10 +955,9 @@ export function createStripeRoutes(deps: Dependencies = {}) {
 
       logger.info('Stripe checkout session created', {
         userId: user.userId,
-        email: user.email || null,
-        walletAddress: user.walletAddress || null,
         lookup_key,
         sessionId: session.id
+        // Note: Email/wallet intentionally not logged for privacy
       });
 
       res.json({

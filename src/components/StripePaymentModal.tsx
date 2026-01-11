@@ -599,7 +599,7 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
             </div>
           )}
 
-          {/* Payment Security Info */}
+          {/* Payment Security & Privacy Info */}
           <div 
             className="p-4 rounded"
             style={{
@@ -610,12 +610,13 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
           >
             <div className="flex items-center gap-2 mb-2">
               <Zap className="w-4 h-4" style={{ color: '#000000' }} />
-              <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Secure Payment</span>
+              <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Privacy-First Payment</span>
             </div>
             <div className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-              <p className="mb-1">• Powered by Stripe - industry standard security</p>
-              <p className="mb-1">• Your card details are never stored on our servers</p>
-              <p>• Instant credit delivery after successful payment</p>
+              <p className="mb-1">• Card details go directly to Stripe - never touch our servers</p>
+              <p className="mb-1">• No payment data is stored or logged by us</p>
+              <p className="mb-1">• We only receive a confirmation ID for credit delivery</p>
+              <p>• PCI-DSS compliant via Stripe's secure infrastructure</p>
             </div>
           </div>
 
