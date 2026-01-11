@@ -82,14 +82,9 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       // Calculate credits
       const { credits } = calculateCredits(amount, isNFTHolder);
 
-      // Determine if this is a wallet user (stablecoins) or email user (card only)
-      // Wallet takes priority: if wallet is connected, use stablecoin payments
-      // This allows users with both email+wallet to pay with crypto
-      const isWalletUser = !!walletAddress || preferCrypto;
-
-      // Create payment intent with appropriate payment methods
-      // - Wallet users: crypto/stablecoins (USDC on Ethereum, Solana, Polygon, Base)
-      // - Email users: card payments only
+      // Create payment intent with all available payment methods
+      // Both email and wallet users can pay with cards OR stablecoins
+      // Stripe will show available methods based on Dashboard configuration
       const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
         amount: Math.round(amount * 100), // Convert to cents
         currency,
@@ -98,20 +93,14 @@ export function createStripeRoutes(deps: Dependencies = {}) {
           walletAddress: walletAddress || 'none',
           credits: credits.toString(),
           isNFTHolder: isNFTHolder.toString()
-        }
-      };
-
-      if (isWalletUser) {
-        // Wallet users: enable crypto (stablecoins) via automatic payment methods
-        // Stablecoins require crypto to be enabled in Stripe Dashboard
-        paymentIntentParams.automatic_payment_methods = {
+        },
+        // Enable all payment methods configured in Stripe Dashboard
+        // This includes cards AND stablecoins (USDC) if enabled
+        automatic_payment_methods: {
           enabled: true,
           allow_redirects: 'never' // Stablecoin payments don't require redirects
-        };
-      } else {
-        // Email users: card payments only
-        paymentIntentParams.payment_method_types = ['card'];
-      }
+        }
+      };
 
       const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams);
 

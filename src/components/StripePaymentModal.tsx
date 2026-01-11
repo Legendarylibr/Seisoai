@@ -275,14 +275,8 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
   };
 
   const validatePayment = () => {
-    // For email-only users, require package selection (no custom amount)
-    if (!isWalletPayment && !selectedPackage) {
-      setError('Please select a package');
-      return false;
-    }
-    
-    // For wallet users, allow either package or custom amount
-    if (isWalletPayment && !selectedPackage && !customAmount) {
+    // All users can select a package or enter a custom amount
+    if (!selectedPackage && !customAmount) {
       setError('Please select a package or enter a custom amount');
       return false;
     }
@@ -399,8 +393,8 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
               <CreditCard className="w-5 h-5" style={{ color: '#000000' }} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Buy Credits with Card</h2>
-              <p className="text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Secure payment powered by Stripe</p>
+              <h2 className="text-lg font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Buy Credits</h2>
+              <p className="text-sm" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Pay with card or stablecoins via Stripe</p>
             </div>
           </div>
           <button
@@ -549,8 +543,8 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
             </div>
           </div>
 
-          {/* Custom Amount - Only show for wallet users, not email-only users */}
-          {isWalletPayment && (
+          {/* Custom Amount - Available for all users */}
+          {(
             <div className="space-y-3">
               <h3 className="text-sm font-medium" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Or Enter Custom Amount</h3>
               <div className="relative">
@@ -620,24 +614,14 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
             <div className="flex items-center gap-2 mb-2">
               <Zap className="w-4 h-4" style={{ color: '#000000' }} />
               <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                {isWalletPayment ? 'Pay with Stablecoins' : 'Secure Card Payment'}
+                Multiple Payment Options
               </span>
             </div>
             <div className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-              {isWalletPayment ? (
-                <>
-                  <p className="mb-1">• <strong>USDC</strong> on Ethereum, Solana, Polygon, Base</p>
-                  <p className="mb-1">• Connect your wallet directly to Stripe</p>
-                  <p className="mb-1">• No private keys shared with us</p>
-                  <p>• Instant credit delivery after confirmation</p>
-                </>
-              ) : (
-                <>
-                  <p className="mb-1">• Visa, Mastercard, Amex and more</p>
-                  <p className="mb-1">• All payments processed securely by Stripe</p>
-                  <p>• No payment data stored on our servers</p>
-                </>
-              )}
+              <p className="mb-1">• <strong>Cards:</strong> Visa, Mastercard, Amex and more</p>
+              <p className="mb-1">• <strong>Stablecoins:</strong> USDC on Ethereum, Solana, Polygon, Base</p>
+              <p className="mb-1">• All payments processed securely by Stripe</p>
+              <p>• No payment data or private keys stored on our servers</p>
             </div>
           </div>
 
