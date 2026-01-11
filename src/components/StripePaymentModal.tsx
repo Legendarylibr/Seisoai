@@ -610,13 +610,25 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
           >
             <div className="flex items-center gap-2 mb-2">
               <Zap className="w-4 h-4" style={{ color: '#000000' }} />
-              <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Pay with Card or Stablecoins</span>
+              <span className="text-sm font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                {isEmailAuth ? 'Secure Card Payment' : 'Pay with Stablecoins'}
+              </span>
             </div>
             <div className="text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-              <p className="mb-1">• <strong>Cards:</strong> Visa, Mastercard, Amex and more</p>
-              <p className="mb-1">• <strong>Stablecoins:</strong> USDC on Ethereum, Solana, Polygon, Base</p>
-              <p className="mb-1">• All payments processed securely by Stripe</p>
-              <p>• No payment data stored on our servers</p>
+              {isEmailAuth ? (
+                <>
+                  <p className="mb-1">• Visa, Mastercard, Amex and more</p>
+                  <p className="mb-1">• All payments processed securely by Stripe</p>
+                  <p>• No payment data stored on our servers</p>
+                </>
+              ) : (
+                <>
+                  <p className="mb-1">• <strong>USDC</strong> on Ethereum, Solana, Polygon, Base</p>
+                  <p className="mb-1">• Connect your wallet directly to Stripe</p>
+                  <p className="mb-1">• No private keys shared with us</p>
+                  <p>• Instant credit delivery after confirmation</p>
+                </>
+              )}
             </div>
           </div>
 

@@ -81,24 +81,36 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       // Calculate credits
       const { credits } = calculateCredits(amount, isNFTHolder);
 
-      // Create payment intent with automatic payment methods (includes card + stablecoins if enabled)
-      const paymentIntent = await stripe.paymentIntents.create({
+      // Determine if this is a wallet user (stablecoins) or email user (card only)
+      const isWalletUser = !!walletAddress && !userId;
+
+      // Create payment intent with appropriate payment methods
+      // - Wallet users: crypto/stablecoins (USDC on Ethereum, Solana, Polygon, Base)
+      // - Email users: card payments only
+      const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
         amount: Math.round(amount * 100), // Convert to cents
         currency,
-        // Enable automatic payment methods - includes card and crypto/stablecoins
-        // Stablecoins (USDC on Ethereum, Solana, Polygon, Base) are automatically available
-        // if enabled in Stripe Dashboard > Settings > Payment methods > Crypto
-        automatic_payment_methods: {
-          enabled: true,
-          allow_redirects: 'never' // Stablecoin payments don't require redirects
-        },
         metadata: {
           userId: userId || 'unknown',
           walletAddress: walletAddress || 'none',
           credits: credits.toString(),
           isNFTHolder: isNFTHolder.toString()
         }
-      });
+      };
+
+      if (isWalletUser) {
+        // Wallet users: enable crypto (stablecoins) via automatic payment methods
+        // Stablecoins require crypto to be enabled in Stripe Dashboard
+        paymentIntentParams.automatic_payment_methods = {
+          enabled: true,
+          allow_redirects: 'never' // Stablecoin payments don't require redirects
+        };
+      } else {
+        // Email users: card payments only
+        paymentIntentParams.payment_method_types = ['card'];
+      }
+
+      const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams);
 
       res.json({
         success: true,
