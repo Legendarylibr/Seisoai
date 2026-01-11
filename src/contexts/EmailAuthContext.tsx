@@ -131,7 +131,14 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
           setTotalCreditsEarned(Math.max(0, Math.floor(Number(user.totalCreditsEarned) || 0)));
           setTotalCreditsSpent(Math.max(0, Math.floor(Number(user.totalCreditsSpent) || 0)));
           if (user.email) setEmail(user.email);
-          if (user.userId) setUserId(user.userId);
+          if (user.userId) {
+            setUserId(user.userId);
+            // Store userId for user-specific gallery
+            try {
+              localStorage.setItem('seiso_current_user_id', user.userId);
+              window.dispatchEvent(new CustomEvent('seiso-user-change'));
+            } catch { /* ignore */ }
+          }
           setIsAuthenticated(true);
           setIsLoading(false);
         } else {
@@ -180,6 +187,12 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
         setTotalCreditsEarned(Math.max(0, Math.floor(Number(result.user.totalCreditsEarned) || 0)));
         setTotalCreditsSpent(Math.max(0, Math.floor(Number(result.user.totalCreditsSpent) || 0)));
         setIsAuthenticated(true);
+        // Store userId for user-specific gallery
+        try {
+          localStorage.setItem('seiso_current_user_id', result.user.userId);
+          // Notify gallery context of user change
+          window.dispatchEvent(new CustomEvent('seiso-user-change'));
+        } catch { /* ignore */ }
         // PERFORMANCE: Don't call fetchUserData - signUp already returns all user data
       }
       return result;
@@ -204,6 +217,12 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
         setTotalCreditsEarned(Math.max(0, Math.floor(Number(result.user.totalCreditsEarned) || 0)));
         setTotalCreditsSpent(Math.max(0, Math.floor(Number(result.user.totalCreditsSpent) || 0)));
         setIsAuthenticated(true);
+        // Store userId for user-specific gallery
+        try {
+          localStorage.setItem('seiso_current_user_id', result.user.userId);
+          // Notify gallery context of user change
+          window.dispatchEvent(new CustomEvent('seiso-user-change'));
+        } catch { /* ignore */ }
         // PERFORMANCE: Don't call fetchUserData - signIn already returns all user data
         // This eliminates a redundant /api/auth/me call after login
       }
@@ -223,6 +242,14 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
       await signOutService();
     } catch {
       // Ignore errors - still clear local state
+    }
+    // Clear user-specific data so next user doesn't see previous user's generations
+    try {
+      localStorage.removeItem('seiso_current_user_id');
+      // Dispatch custom event to notify ImageGeneratorContext to clear in-memory state
+      window.dispatchEvent(new CustomEvent('seiso-user-signout'));
+    } catch {
+      // Ignore storage errors
     }
     setIsAuthenticated(false);
     setEmail(null);

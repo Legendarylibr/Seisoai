@@ -1,13 +1,26 @@
-import React, { createContext, useContext, useReducer, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, ReactNode, useEffect } from 'react';
 import type { VisualStyle } from '../types';
 
-const GALLERY_STORAGE_KEY = 'seiso_gallery_history';
+const GALLERY_STORAGE_KEY_PREFIX = 'seiso_gallery_';
 const GALLERY_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Get the current user's gallery storage key
+const getGalleryStorageKey = (): string => {
+  try {
+    const userId = localStorage.getItem('seiso_current_user_id');
+    if (userId) {
+      return `${GALLERY_STORAGE_KEY_PREFIX}${userId}`;
+    }
+  } catch { /* ignore */ }
+  // No user logged in - use anonymous key (will be cleared on any login)
+  return `${GALLERY_STORAGE_KEY_PREFIX}anonymous`;
+};
 
 // Helper to load persisted gallery items (filtering out expired ones)
 const loadPersistedGallery = (): GenerationHistoryItem[] => {
   try {
-    const stored = localStorage.getItem(GALLERY_STORAGE_KEY);
+    const storageKey = getGalleryStorageKey();
+    const stored = localStorage.getItem(storageKey);
     if (!stored) return [];
     
     const items: GenerationHistoryItem[] = JSON.parse(stored);
@@ -21,7 +34,7 @@ const loadPersistedGallery = (): GenerationHistoryItem[] => {
     
     // If we filtered some out, save the cleaned list
     if (validItems.length !== items.length) {
-      localStorage.setItem(GALLERY_STORAGE_KEY, JSON.stringify(validItems));
+      localStorage.setItem(storageKey, JSON.stringify(validItems));
     }
     
     return validItems;
@@ -33,13 +46,14 @@ const loadPersistedGallery = (): GenerationHistoryItem[] => {
 // Helper to save gallery items to localStorage
 const saveGalleryToStorage = (items: GenerationHistoryItem[]): void => {
   try {
+    const storageKey = getGalleryStorageKey();
     // Only keep items from last 24 hours
     const now = Date.now();
     const validItems = items.filter(item => {
       const itemTime = new Date(item.timestamp).getTime();
       return (now - itemTime) < GALLERY_EXPIRY_MS;
     });
-    localStorage.setItem(GALLERY_STORAGE_KEY, JSON.stringify(validItems));
+    localStorage.setItem(storageKey, JSON.stringify(validItems));
   } catch {
     // Storage full or unavailable - silently fail
   }
@@ -101,6 +115,7 @@ type ImageGeneratorAction =
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'CLEAR_GENERATION' }
   | { type: 'CLEAR_ALL' }
+  | { type: 'RELOAD_GALLERY' }
   | { type: 'SET_GUIDANCE_SCALE'; payload: number }
   | { type: 'SET_INFERENCE_STEPS'; payload: number }
   | { type: 'SET_IMAGE_SIZE'; payload: string }
@@ -225,13 +240,20 @@ const imageGeneratorReducer = (state: ImageGeneratorState, action: ImageGenerato
     case 'CLEAR_ALL':
       // Clear persisted gallery when clearing all
       try {
-        localStorage.removeItem(GALLERY_STORAGE_KEY);
+        localStorage.removeItem(getGalleryStorageKey());
       } catch {
         // Ignore storage errors
       }
       return {
         ...getInitialState(),
         generationHistory: []
+      };
+    
+    case 'RELOAD_GALLERY':
+      // Reload gallery from localStorage (for user changes)
+      return {
+        ...state,
+        generationHistory: loadPersistedGallery()
       };
     
     case 'SET_GUIDANCE_SCALE':
@@ -290,6 +312,23 @@ interface ImageGeneratorProviderProps {
 
 export const ImageGeneratorProvider: React.FC<ImageGeneratorProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(imageGeneratorReducer, undefined, getInitialState);
+
+  // Listen for user auth events to manage gallery
+  useEffect(() => {
+    const handleSignout = () => {
+      dispatch({ type: 'CLEAR_ALL' });
+    };
+    const handleUserChange = () => {
+      // Reload gallery for the new user
+      dispatch({ type: 'RELOAD_GALLERY' });
+    };
+    window.addEventListener('seiso-user-signout', handleSignout);
+    window.addEventListener('seiso-user-change', handleUserChange);
+    return () => {
+      window.removeEventListener('seiso-user-signout', handleSignout);
+      window.removeEventListener('seiso-user-change', handleUserChange);
+    };
+  }, []);
 
   const selectStyle = (style: VisualStyle | null): void => {
     dispatch({ type: 'SELECT_STYLE', payload: style });
