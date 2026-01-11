@@ -69,6 +69,26 @@ const TermsOfService = memo(function TermsOfService() {
 
       <h3 className="font-bold">Dispute Resolution</h3>
       <p>Disputes shall be resolved through binding arbitration rather than court. You waive rights to participate in class actions. Small claims court remains available.</p>
+
+      <h3 className="font-bold">Geographic Restrictions</h3>
+      <div 
+        className="p-3 mt-1"
+        style={{ background: '#fff3e0', boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}` }}
+      >
+        <p className="font-bold mb-2" style={{ color: '#e65100' }}>Service Availability Notice</p>
+        <p className="mb-2" style={{ color: '#bf360c' }}>Seiso AI may not be available in certain countries or regions due to legal restrictions, payment processor limitations, or AI provider policies.</p>
+        <p className="font-bold mb-1" style={{ color: '#bf360c' }}>Service is NOT available in:</p>
+        <ul className="list-disc list-inside ml-2 mb-2" style={{ color: '#bf360c' }}>
+          <li>North Korea</li>
+          <li>Iran</li>
+          <li>Syria</li>
+          <li>Cuba</li>
+          <li>Crimea, Donetsk, and Luhansk regions</li>
+          <li>Russia (payment services restricted)</li>
+          <li>Other sanctioned territories per OFAC regulations</li>
+        </ul>
+        <p style={{ color: '#bf360c' }}>Stripe payments may have additional country restrictions. By using this service, you confirm you are not accessing it from a restricted territory and are not on any sanctions list.</p>
+      </div>
     </div>
   );
 });
