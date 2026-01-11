@@ -17,18 +17,50 @@ class BlockchainCache {
   private cache: Map<string, unknown>;
   private ttl: Map<string, number>; // Time-to-live for cache entries
   private defaultTTL: number;
+  private maxSize: number;
 
   constructor() {
     this.cache = new Map();
     this.ttl = new Map();
     this.defaultTTL = 5 * 60 * 1000; // 5 minutes default TTL
+    this.maxSize = 500; // Limit cache size to prevent memory leaks in browser
   }
 
   // Set cache entry with TTL
   set<T>(key: string, value: T, ttl: number = this.defaultTTL): void {
+    // Evict old entries if at capacity
+    if (this.cache.size >= this.maxSize && !this.cache.has(key)) {
+      this.evictOldest();
+    }
+    
     const expiry = Date.now() + ttl;
     this.cache.set(key, value);
     this.ttl.set(key, expiry);
+  }
+
+  // Evict oldest/expired entries when cache is full
+  private evictOldest(): void {
+    const now = Date.now();
+    let evicted = 0;
+    const targetEvictions = Math.ceil(this.maxSize * 0.2); // Evict 20% when full
+
+    // First pass: remove expired entries
+    for (const [key, expiry] of this.ttl.entries()) {
+      if (now > expiry) {
+        this.delete(key);
+        evicted++;
+        if (evicted >= targetEvictions) return;
+      }
+    }
+
+    // Second pass: remove oldest entries
+    const keysIterator = this.cache.keys();
+    while (evicted < targetEvictions) {
+      const result = keysIterator.next();
+      if (result.done) break;
+      this.delete(result.value);
+      evicted++;
+    }
   }
 
   // Get cache entry if not expired

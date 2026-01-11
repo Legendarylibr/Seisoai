@@ -5,6 +5,10 @@ const config: Config = {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  // Optimize for production - remove unused styles
+  future: {
+    hoverOnlyWhenSupported: true, // Reduces CSS for touch devices
+  },
   theme: {
     extend: {
       colors: {

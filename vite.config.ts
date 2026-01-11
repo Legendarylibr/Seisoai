@@ -49,9 +49,26 @@ export default defineConfig(({ mode }) => {
     
     build: {
       target: 'es2020',
-      // Use esbuild instead of terser - better handles CJS/ESM interop
-      minify: 'esbuild',
+      // Use terser for production - better minification than esbuild
+      minify: mode === 'production' ? 'terser' : 'esbuild',
       chunkSizeWarningLimit: 1000,
+      // Enable source maps only in development
+      sourcemap: mode !== 'production',
+      // Terser options for aggressive minification
+      terserOptions: mode === 'production' ? {
+        compress: {
+          drop_console: true,  // Remove console.log in production
+          drop_debugger: true,
+          pure_funcs: ['console.log', 'console.debug', 'console.info'],
+          passes: 2,  // Multiple compression passes
+        },
+        mangle: {
+          safari10: true,
+        },
+        format: {
+          comments: false,  // Remove all comments
+        },
+      } : undefined,
       commonjsOptions: {
         // Critical: transform CommonJS modules properly to avoid require$$X errors
         transformMixedEsModules: true,
@@ -80,6 +97,11 @@ export default defineConfig(({ mode }) => {
           chunkFileNames: 'assets/[name]-[hash:8].js',
           entryFileNames: 'assets/[name]-[hash:8].js',
           assetFileNames: 'assets/[name]-[hash:8].[ext]',
+        },
+        // Tree-shake aggressively
+        treeshake: {
+          moduleSideEffects: 'no-external',
+          propertyReadSideEffects: false,
         },
       },
     },

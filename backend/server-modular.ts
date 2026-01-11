@@ -204,7 +204,7 @@ const parseAllowedOrigins = (): string[] | true => {
       const url = new URL(origin);
       // Only allow https in production (http allowed in development)
       if (config.isProduction && url.protocol !== 'https:') {
-        logger.warn('SECURITY: Rejecting non-HTTPS origin in production', { origin });
+        logger.warn(`SECURITY: Rejecting non-HTTPS origin "${origin}" - change to "${origin.replace('http://', 'https://')}" in ALLOWED_ORIGINS`);
         continue;
       }
       // Validate it's a proper origin (no path, query, fragment)
@@ -285,14 +285,15 @@ if (config.isProduction) {
 }
 
 // Initialize caches
-const processedTransactions = new TTLCache<string, unknown>(7 * 24 * 60 * 60 * 1000); // 7 days TTL
+// Memory optimization: Added max size limit (5000 entries) to prevent unbounded growth
+const processedTransactions = new TTLCache<string, unknown>(7 * 24 * 60 * 60 * 1000, 5000); // 7 days TTL, 5000 max
 
 // Memory optimization: Periodic cleanup of expired TTL cache entries
-// Runs every hour to prevent stale entries from accumulating
+// Runs every 30 minutes (reduced from 1 hour) to free memory faster
 setInterval(() => {
   processedTransactions.cleanup();
-  logger.debug('TTL cache cleanup completed');
-}, 60 * 60 * 1000);
+  logger.debug('TTL cache cleanup completed', { cacheSize: processedTransactions.size });
+}, 30 * 60 * 1000);
 
 // Create rate limiters
 const authRateLimiter = createAuthLimiter();

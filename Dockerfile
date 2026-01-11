@@ -24,8 +24,25 @@ RUN npm ci --omit=dev --ignore-scripts --prefer-offline
 WORKDIR /deps/backend
 RUN npm ci --omit=dev --prefer-offline
 
-# Clean up
-RUN npm cache clean --force
+# Clean up npm cache and prune unnecessary files from node_modules
+# This reduces image size significantly (typically 30-50% smaller node_modules)
+WORKDIR /deps
+RUN npm cache clean --force && \
+    # Remove TypeScript source files (not needed at runtime)
+    find . -name "*.ts" -not -name "*.d.ts" -type f -delete 2>/dev/null || true && \
+    # Remove test files
+    find . -type d -name "__tests__" -exec rm -rf {} + 2>/dev/null || true && \
+    find . -type d -name "test" -exec rm -rf {} + 2>/dev/null || true && \
+    find . -name "*.test.js" -type f -delete 2>/dev/null || true && \
+    find . -name "*.spec.js" -type f -delete 2>/dev/null || true && \
+    # Remove documentation and markdown
+    find . -name "*.md" -type f -delete 2>/dev/null || true && \
+    find . -name "LICENSE*" -type f -delete 2>/dev/null || true && \
+    find . -name "CHANGELOG*" -type f -delete 2>/dev/null || true && \
+    # Remove source maps
+    find . -name "*.map" -type f -delete 2>/dev/null || true && \
+    # Remove TypeScript build info
+    find . -name "*.tsbuildinfo" -type f -delete 2>/dev/null || true
 
 # ============================================
 # Stage 2: Build Frontend

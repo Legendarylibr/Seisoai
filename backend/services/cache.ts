@@ -73,6 +73,7 @@ export class LRUCache<K, V> {
 /**
  * TTL (Time To Live) Cache
  * Automatically expires entries after specified time
+ * Memory-optimized with max size limit and automatic eviction
  */
 interface TTLValue<T> {
   value: T;
@@ -82,13 +83,20 @@ interface TTLValue<T> {
 export class TTLCache<K, V> {
   private cache: Map<K, TTLValue<V>>;
   private defaultTTL: number;
+  private maxSize: number;
 
-  constructor(defaultTTL: number = 60000) {
+  constructor(defaultTTL: number = 60000, maxSize: number = 10000) {
     this.cache = new Map();
     this.defaultTTL = defaultTTL;
+    this.maxSize = maxSize;
   }
 
   set(key: K, value: V, ttl: number = this.defaultTTL): void {
+    // Evict oldest entries if at capacity
+    if (this.cache.size >= this.maxSize && !this.cache.has(key)) {
+      this.evictOldest();
+    }
+    
     const expiresAt = Date.now() + ttl;
     this.cache.set(key, { value, expiresAt });
   }
@@ -111,12 +119,48 @@ export class TTLCache<K, V> {
     return this.cache.delete(key);
   }
 
+  get size(): number {
+    return this.cache.size;
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
   cleanup(): void {
     const now = Date.now();
     for (const [key, entry] of this.cache.entries()) {
       if (now > entry.expiresAt) {
         this.cache.delete(key);
       }
+    }
+  }
+
+  /**
+   * Evict oldest/expired entries when cache is full
+   * First removes expired, then oldest entries if still over limit
+   */
+  private evictOldest(): void {
+    const now = Date.now();
+    let evicted = 0;
+    const targetEvictions = Math.ceil(this.maxSize * 0.1); // Evict 10% when full
+
+    // First pass: remove expired entries
+    for (const [key, entry] of this.cache.entries()) {
+      if (now > entry.expiresAt) {
+        this.cache.delete(key);
+        evicted++;
+        if (evicted >= targetEvictions) return;
+      }
+    }
+
+    // Second pass: remove oldest entries (first inserted due to Map ordering)
+    const keysIterator = this.cache.keys();
+    while (evicted < targetEvictions) {
+      const result = keysIterator.next();
+      if (result.done) break;
+      this.cache.delete(result.value);
+      evicted++;
     }
   }
 }

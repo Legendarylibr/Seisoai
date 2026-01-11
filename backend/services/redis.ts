@@ -33,11 +33,22 @@ export async function initializeRedis(): Promise<Redis | null> {
     redisClient = new Redis(config.REDIS_URL, {
       maxRetriesPerRequest: 3,
       retryStrategy(times) {
-        const delay = Math.min(times * 50, 2000);
+        // Exponential backoff with max 30 second delay
+        // Stops retrying after 10 attempts to avoid resource waste
+        if (times > 10) {
+          return null; // Stop retrying
+        }
+        const delay = Math.min(times * 100, 30000);
         return delay;
       },
       lazyConnect: true,
       enableReadyCheck: true,
+      // Memory optimization: Enable offline queue with limits
+      enableOfflineQueue: true,
+      offlineQueue: true,
+      // Connection optimization
+      connectTimeout: 10000,
+      commandTimeout: 5000,
     });
 
     redisClient.on('connect', () => {

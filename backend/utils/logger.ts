@@ -42,45 +42,61 @@ const sanitizeFormat = winston.format((info) => {
   return { ...info, ...sanitized };
 });
 
+// Production optimization: Reduce log verbosity and file I/O
+const isProduction = process.env.NODE_ENV === 'production';
+
 // Define which transports the logger must use
 const transports: winston.transport[] = [
-  // Console transport
+  // Console transport - optimized for production (JSON) vs development (colorized)
   new winston.transports.Console({
-    format: winston.format.combine(
-      sanitizeFormat(),
-      winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-      winston.format.colorize({ all: true }),
-      winston.format.printf(
-        (info) => `${info.timestamp} ${info.level}: ${info.message}`
-      )
-    ),
-  }),
-  // File transport for errors
-  new DailyRotateFile({
-    filename: path.join(logsDir, 'error-%DATE%.log'),
-    datePattern: 'YYYY-MM-DD',
-    level: 'error',
-    maxSize: '20m',
-    maxFiles: '14d',
-    format: winston.format.combine(
-      sanitizeFormat(),
-      winston.format.timestamp(),
-      winston.format.json()
-    ),
-  }),
-  // File transport for all logs
-  new DailyRotateFile({
-    filename: path.join(logsDir, 'combined-%DATE%.log'),
-    datePattern: 'YYYY-MM-DD',
-    maxSize: '20m',
-    maxFiles: '14d',
-    format: winston.format.combine(
-      sanitizeFormat(),
-      winston.format.timestamp(),
-      winston.format.json()
-    ),
+    format: isProduction
+      ? winston.format.combine(
+          sanitizeFormat(),
+          winston.format.timestamp(),
+          winston.format.json()  // Structured logs for log aggregators
+        )
+      : winston.format.combine(
+          sanitizeFormat(),
+          winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+          winston.format.colorize({ all: true }),
+          winston.format.printf(
+            (info) => `${info.timestamp} ${info.level}: ${info.message}`
+          )
+        ),
   }),
 ];
+
+// File transports only in development or when explicitly enabled
+// In production, rely on container log aggregation (reduces disk I/O)
+if (!isProduction || process.env.ENABLE_FILE_LOGS === 'true') {
+  transports.push(
+    // File transport for errors
+    new DailyRotateFile({
+      filename: path.join(logsDir, 'error-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      level: 'error',
+      maxSize: '10m',     // Reduced from 20m
+      maxFiles: '7d',     // Reduced from 14d - saves storage
+      format: winston.format.combine(
+        sanitizeFormat(),
+        winston.format.timestamp(),
+        winston.format.json()
+      ),
+    }),
+    // File transport for all logs
+    new DailyRotateFile({
+      filename: path.join(logsDir, 'combined-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      maxSize: '10m',     // Reduced from 20m
+      maxFiles: '7d',     // Reduced from 14d - saves storage
+      format: winston.format.combine(
+        sanitizeFormat(),
+        winston.format.timestamp(),
+        winston.format.json()
+      ),
+    })
+  );
+}
 
 // Create the logger
 const logger = winston.createLogger({

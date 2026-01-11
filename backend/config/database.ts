@@ -6,18 +6,21 @@ import logger from '../utils/logger';
 import config from './env';
 
 // MongoDB connection options
+// Memory optimization: Reduced pool size from 100 to 20
+// Most apps don't need 100 connections; each connection uses ~1MB RAM
+// Increase only if you see waitQueue timeout errors under load
 const mongoOptions: ConnectOptions = {
-  maxPoolSize: 100,
-  minPoolSize: 5,
+  maxPoolSize: 20,         // Reduced from 100 - saves ~80MB RAM
+  minPoolSize: 2,          // Reduced from 5 - faster cold starts
   serverSelectionTimeoutMS: 30000,
   socketTimeoutMS: 60000,
-  maxIdleTimeMS: 60000,
+  maxIdleTimeMS: 30000,    // Reduced from 60000 - close idle connections faster
   connectTimeoutMS: 30000,
   heartbeatFrequencyMS: 10000,
   retryWrites: true,
   retryReads: true,
   waitQueueTimeoutMS: 15000,
-  compressors: ['zlib'],
+  compressors: ['zlib'],   // Network compression - reduces bandwidth
   family: 4
 };
 

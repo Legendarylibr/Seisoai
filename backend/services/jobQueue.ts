@@ -61,12 +61,14 @@ export function createQueue(name: string): Queue | null {
         type: 'exponential',
         delay: 1000,
       },
+      // Memory optimization: Reduced job retention to save Redis memory
       removeOnComplete: {
-        age: 3600, // Keep completed jobs for 1 hour
-        count: 1000, // Keep last 1000 completed jobs
+        age: 1800,  // Keep completed jobs for 30 min (reduced from 1 hour)
+        count: 100, // Keep last 100 completed jobs (reduced from 1000)
       },
       removeOnFail: {
-        age: 86400, // Keep failed jobs for 24 hours
+        age: 43200, // Keep failed jobs for 12 hours (reduced from 24)
+        count: 500, // Limit failed job count
       },
     },
   });
