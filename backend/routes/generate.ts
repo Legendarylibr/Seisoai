@@ -10,7 +10,7 @@ import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed, normalizeStatus, FAL_STATUS } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
-import { createEmailHash } from '../utils/emailHash';
+// createEmailHash import removed - SECURITY: Use authenticated user from JWT instead
 import type { IUser } from '../models/User';
 import { calculateVideoCredits, calculateMusicCredits, calculateUpscaleCredits, calculateVideoToAudioCredits } from '../utils/creditCalculations';
 import { encrypt, isEncryptionConfigured } from '../utils/encryption';
@@ -518,8 +518,8 @@ export function createGenerationRoutes(deps: Dependencies) {
     requireCredits
   } = deps;
 
-  const freeImageLimiter = freeImageRateLimiter || ((req: Request, res: Response, next: () => void) => next());
-  const flexibleAuth = authenticateFlexible || ((req: Request, res: Response, next: () => void) => next());
+  const freeImageLimiter = freeImageRateLimiter || ((_req: Request, _res: Response, next: () => void) => next());
+  const flexibleAuth = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Generate image
@@ -2604,21 +2604,25 @@ export function createGenerationRoutes(deps: Dependencies) {
   /**
    * Update a generation (e.g., when video completes)
    * PUT /api/generations/update/:generationId
+   * SECURITY FIX: Requires JWT authentication and verifies ownership
    */
-  router.put('/update/:generationId', async (req: Request, res: Response) => {
+  router.put('/update/:generationId', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // SECURITY: Require JWT authentication
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required. Please sign in with a valid token.'
+        });
+        return;
+      }
+
       const { generationId } = req.params;
       const { 
-        walletAddress, 
-        userId,
-        email,
         videoUrl,
         imageUrl,
         status
       } = req.body as {
-        walletAddress?: string;
-        userId?: string;
-        email?: string;
         videoUrl?: string;
         imageUrl?: string;
         status?: string;
@@ -2632,40 +2636,23 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Find user (use emailHash for encrypted email lookups)
+      // SECURITY: Use authenticated user, not body parameters
+      const user = req.user;
       const User = mongoose.model<IUser>('User');
-      let user: IUser | null = null;
-      let updateQuery: Record<string, string> | null = null;
-      
-      if (walletAddress) {
-        const isSolanaAddress = !walletAddress.startsWith('0x');
-        const normalizedWalletAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
-        updateQuery = { walletAddress: normalizedWalletAddress };
-        user = await User.findOne(updateQuery);
-      } else if (userId) {
-        updateQuery = { userId };
-        user = await User.findOne(updateQuery);
-      } else if (email) {
-        // Use emailHash for lookups since email is encrypted
-        const emailHash = createEmailHash(email);
-        updateQuery = { emailHash };
-        user = await User.findOne(updateQuery);
-        // Fallback: try direct email match for backward compatibility
-        if (!user) {
-          user = await User.findOne({ email: email.toLowerCase() });
-          if (user) {
-            updateQuery = { email: email.toLowerCase() };
-          }
-        }
-      } else {
+      const updateQuery = buildUserUpdateQuery(user);
+
+      if (!updateQuery) {
         res.status(400).json({
           success: false,
-          error: 'walletAddress, userId, or email is required'
+          error: 'User account not properly configured'
         });
         return;
       }
 
-      if (!user || !updateQuery) {
+      // Fetch user to get generation history
+      const userWithHistory = await User.findOne(updateQuery).select('generationHistory gallery');
+      
+      if (!userWithHistory) {
         res.status(404).json({
           success: false,
           error: 'User not found'
@@ -2673,12 +2660,18 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Find the generation in history
-      const generation = user.generationHistory?.find(gen => gen.id === generationId);
+      // SECURITY: Verify the generation belongs to this user
+      const generation = userWithHistory.generationHistory?.find(gen => gen.id === generationId);
       if (!generation) {
+        logger.warn('SECURITY: Blocked generation update attempt for non-owned generation', {
+          requestedGenerationId: generationId,
+          authenticatedUserId: user.userId,
+          path: req.path,
+          ip: req.ip
+        });
         res.status(404).json({
           success: false,
-          error: 'Generation not found'
+          error: 'Generation not found or does not belong to you'
         });
         return;
       }
@@ -2708,7 +2701,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         };
 
         // Check if already in gallery
-        const inGallery = user.gallery?.some(item => item.id === generationId);
+        const inGallery = userWithHistory.gallery?.some(item => item.id === generationId);
         if (!inGallery) {
           await User.updateOne(
             updateQuery,
@@ -2726,7 +2719,13 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
       }
 
-      logger.info('Generation updated', { generationId, status, hasVideoUrl: !!videoUrl, hasImageUrl: !!imageUrl });
+      logger.info('Generation updated', { 
+        generationId, 
+        userId: user.userId,
+        status, 
+        hasVideoUrl: !!videoUrl, 
+        hasImageUrl: !!imageUrl 
+      });
 
       res.json({
         success: true,

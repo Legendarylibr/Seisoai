@@ -92,35 +92,24 @@ export function createUserRoutes(deps: Dependencies = {}) {
   /**
    * Get user credits
    * POST /api/user/credits OR /api/credits/get
+   * SECURITY FIX: Requires authentication and only returns authenticated user's credits
    */
-  router.post('/credits', async (req: Request, res: Response) => {
+  router.post('/credits', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { walletAddress, userId, email } = req.body as {
-        walletAddress?: string;
-        userId?: string;
-        email?: string;
-      };
-      
-      if (!walletAddress && !userId && !email) {
-        res.status(400).json({
+      // SECURITY: Only return credits for authenticated user
+      if (!req.user) {
+        res.status(401).json({
           success: false,
-          error: 'Wallet address, userId, or email required'
+          error: 'Authentication required'
         });
         return;
       }
 
-      let user = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
-      
-      // Create user if doesn't exist and wallet provided
-      if (!user && walletAddress) {
-        user = await getOrCreateUser(walletAddress, email || null);
-      }
-
       res.json({
         success: true,
-        credits: user?.credits || 0,
-        totalCreditsEarned: user?.totalCreditsEarned || 0,
-        totalCreditsSpent: user?.totalCreditsSpent || 0
+        credits: req.user.credits || 0,
+        totalCreditsEarned: req.user.totalCreditsEarned || 0,
+        totalCreditsSpent: req.user.totalCreditsSpent || 0
       });
     } catch (error) {
       const err = error as Error;
@@ -134,35 +123,24 @@ export function createUserRoutes(deps: Dependencies = {}) {
 
   /**
    * Legacy endpoint - GET /api/credits/get
+   * SECURITY FIX: Requires authentication and only returns authenticated user's credits
    */
-  router.post('/get', async (req: Request, res: Response) => {
+  router.post('/get', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { walletAddress, userId, email } = req.body as {
-        walletAddress?: string;
-        userId?: string;
-        email?: string;
-      };
-      
-      if (!walletAddress && !userId && !email) {
-        res.status(400).json({
+      // SECURITY: Only return credits for authenticated user
+      if (!req.user) {
+        res.status(401).json({
           success: false,
-          error: 'Wallet address, userId, or email required'
+          error: 'Authentication required'
         });
         return;
       }
 
-      let user = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
-      
-      // Create user if doesn't exist and wallet provided
-      if (!user && walletAddress) {
-        user = await getOrCreateUser(walletAddress, email || null);
-      }
-
       res.json({
         success: true,
-        credits: user?.credits || 0,
-        totalCreditsEarned: user?.totalCreditsEarned || 0,
-        totalCreditsSpent: user?.totalCreditsSpent || 0
+        credits: req.user.credits || 0,
+        totalCreditsEarned: req.user.totalCreditsEarned || 0,
+        totalCreditsSpent: req.user.totalCreditsSpent || 0
       });
     } catch (error) {
       const err = error as Error;
@@ -310,19 +288,47 @@ export function createUserRoutes(deps: Dependencies = {}) {
   });
 
   /**
-   * Get user by wallet address (public endpoint)
+   * Get user by wallet address
    * GET /api/users/:walletAddress
+   * SECURITY FIX: Requires authentication for credit data, returns only public data otherwise
    */
-  router.get('/:walletAddress', async (req: Request, res: Response) => {
+  router.get('/:walletAddress', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { walletAddress } = req.params;
-      const { skipNFTs } = req.query;
 
       // Normalize address
       const isSolanaAddress = !walletAddress.startsWith('0x');
       const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
 
-      // Get or create user
+      // SECURITY: Verify the requested wallet matches the authenticated user
+      if (!req.user) {
+        // No authentication - return error requiring auth
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required to view account data'
+        });
+        return;
+      }
+
+      const normalizedUserWallet = req.user.walletAddress?.startsWith('0x') 
+        ? req.user.walletAddress.toLowerCase() 
+        : req.user.walletAddress;
+
+      if (normalizedUserWallet !== normalizedAddress) {
+        logger.warn('SECURITY: Blocked user data access attempt for different wallet', {
+          requestedWallet: normalizedAddress.substring(0, 10) + '...',
+          authenticatedUserId: req.user.userId,
+          path: req.path,
+          ip: req.ip
+        });
+        res.status(403).json({
+          success: false,
+          error: 'You can only access your own account data'
+        });
+        return;
+      }
+
+      // Get user data (already authenticated as the correct user)
       const user = await getOrCreateUser(normalizedAddress);
 
       // Update lastActive
@@ -332,14 +338,14 @@ export function createUserRoutes(deps: Dependencies = {}) {
         { lastActive: new Date() }
       );
 
-      // Check NFT holdings (unless skipped)
-      let isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      // Check NFT holdings
+      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
       
       // Set cache headers
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
       res.setHeader('Pragma', 'no-cache');
 
-      // SECURITY: Only return public data
+      // Return full data for authenticated user
       res.json({
         success: true,
         credits: user.credits || 0,
@@ -365,27 +371,26 @@ export function createUserRoutes(deps: Dependencies = {}) {
   /**
    * Check NFT holder credits
    * POST /api/nft/check-credits
+   * SECURITY FIX: Requires authentication and only returns authenticated user's credits
    */
-  router.post('/check-credits', async (req: Request, res: Response) => {
+  router.post('/check-credits', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { walletAddress } = req.body as { walletAddress?: string };
-
-      if (!walletAddress) {
-        res.status(400).json({
+      // SECURITY: Only return credits for authenticated user
+      if (!req.user) {
+        res.status(401).json({
           success: false,
-          error: 'Wallet address required'
+          error: 'Authentication required'
         });
         return;
       }
 
-      const user = await getOrCreateUser(walletAddress);
-      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      const isNFTHolder = req.user.nftCollections && req.user.nftCollections.length > 0;
 
       res.json({
         success: true,
-        totalCredits: user.credits || 0,
-        totalCreditsEarned: user.totalCreditsEarned || 0,
-        totalCreditsSpent: user.totalCreditsSpent || 0,
+        totalCredits: req.user.credits || 0,
+        totalCreditsEarned: req.user.totalCreditsEarned || 0,
+        totalCreditsSpent: req.user.totalCreditsSpent || 0,
         isNFTHolder,
         pricing: {
           costPerCredit: isNFTHolder ? 0.06 : 0.15,
@@ -405,26 +410,38 @@ export function createUserRoutes(deps: Dependencies = {}) {
   /**
    * Check NFT holdings for wallet
    * POST /api/nft/check-holdings
+   * SECURITY FIX: Requires authentication and only operates on authenticated user's wallet
    */
-  router.post('/check-holdings', async (req: Request, res: Response) => {
+  router.post('/check-holdings', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { walletAddress } = req.body as { walletAddress?: string };
-
-      if (!walletAddress) {
-        res.status(400).json({
+      // SECURITY: Only check holdings for authenticated user
+      if (!req.user) {
+        res.status(401).json({
           success: false,
-          error: 'Wallet address required'
+          error: 'Authentication required'
         });
         return;
       }
 
-      const isSolanaAddress = !walletAddress.startsWith('0x');
-      const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+      if (!req.user.walletAddress) {
+        res.status(400).json({
+          success: false,
+          error: 'No wallet address associated with this account'
+        });
+        return;
+      }
 
-      logger.info('Checking NFT holdings', { walletAddress: normalizedAddress });
+      const normalizedAddress = req.user.walletAddress.startsWith('0x') 
+        ? req.user.walletAddress.toLowerCase() 
+        : req.user.walletAddress;
 
-      // Get user's NFT collections from database
-      const user = await getOrCreateUser(normalizedAddress);
+      logger.info('Checking NFT holdings', { 
+        walletAddress: normalizedAddress.substring(0, 10) + '...',
+        userId: req.user.userId
+      });
+
+      // Use authenticated user's data
+      const user = req.user;
       const ownedCollections = user.nftCollections || [];
       const isHolder = ownedCollections.length > 0;
 
@@ -443,7 +460,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
         if (currentCredits < targetCredits && !hasBeenGranted) {
           const creditsToGrant = targetCredits - currentCredits;
           await User.findOneAndUpdate(
-            { walletAddress: user.walletAddress },
+            { userId: user.userId },
             {
               $inc: { credits: creditsToGrant, totalCreditsEarned: creditsToGrant },
               $push: {
@@ -457,7 +474,10 @@ export function createUserRoutes(deps: Dependencies = {}) {
               }
             }
           );
-          logger.info('NFT credits granted', { walletAddress: normalizedAddress, credits: creditsToGrant });
+          logger.info('NFT credits granted', { 
+            userId: user.userId, 
+            credits: creditsToGrant 
+          });
         }
       }
 

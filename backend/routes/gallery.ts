@@ -6,36 +6,40 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
-import { findUserByIdentifier } from '../services/user';
+// findUserByIdentifier import removed - SECURITY: Use authenticated user from JWT instead
 import type { IUser } from '../models/User';
 import { encrypt, isEncryptionConfigured } from '../utils/encryption';
 
 // Types
 interface Dependencies {
   authenticateToken: RequestHandler;
-  authenticateFlexible: RequestHandler;
+  authenticateFlexible?: RequestHandler; // Optional - kept for backwards compatibility
 }
 
 interface AuthenticatedRequest extends Request {
   user?: IUser;
 }
 
-interface UserQuery {
-  email?: string;
-  walletAddress?: string;
-  userId?: string;
-}
-
 export function createGalleryRoutes(deps: Dependencies) {
   const router = Router();
-  const { authenticateToken, authenticateFlexible } = deps;
+  const { authenticateToken } = deps;
 
   /**
    * Get user gallery
    * GET /api/gallery/:identifier
+   * SECURITY FIX: Requires authentication and only returns authenticated user's gallery
    */
-  router.get('/:identifier', async (req: Request, res: Response) => {
+  router.get('/:identifier', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // SECURITY: Only allow users to access their own gallery
+      if (!req.user) {
+        res.status(401).json({ 
+          success: false, 
+          error: 'Authentication required' 
+        });
+        return;
+      }
+
       const { identifier } = req.params;
       
       // Validate identifier format
@@ -51,18 +55,38 @@ export function createGalleryRoutes(deps: Dependencies) {
         return;
       }
 
-      const User = mongoose.model<IUser>('User');
-      const query: UserQuery = {};
-      
-      if (isEmail) {
-        query.email = identifier.toLowerCase();
+      // SECURITY: Verify the requested identifier matches the authenticated user
+      let isAuthorized = false;
+      if (isEmail && req.user.email?.toLowerCase() === identifier.toLowerCase()) {
+        isAuthorized = true;
       } else if (isWallet) {
-        query.walletAddress = identifier.startsWith('0x') ? identifier.toLowerCase() : identifier;
-      } else {
-        query.userId = identifier;
+        const normalizedRequest = identifier.startsWith('0x') ? identifier.toLowerCase() : identifier;
+        const normalizedUser = req.user.walletAddress?.startsWith('0x') 
+          ? req.user.walletAddress.toLowerCase() 
+          : req.user.walletAddress;
+        if (normalizedUser === normalizedRequest) {
+          isAuthorized = true;
+        }
+      } else if (isUserId && req.user.userId === identifier) {
+        isAuthorized = true;
       }
 
-      const user = await User.findOne(query)
+      if (!isAuthorized) {
+        logger.warn('SECURITY: Blocked gallery access attempt for different user', {
+          requestedIdentifier: identifier.substring(0, 20) + '...',
+          authenticatedUserId: req.user.userId,
+          path: req.path,
+          ip: req.ip
+        });
+        res.status(403).json({ 
+          success: false, 
+          error: 'You can only access your own gallery' 
+        });
+        return;
+      }
+
+      const User = mongoose.model<IUser>('User');
+      const user = await User.findOne({ userId: req.user.userId })
         .select('gallery')
         .lean()
         .maxTimeMS(10000);
@@ -92,15 +116,43 @@ export function createGalleryRoutes(deps: Dependencies) {
   /**
    * Get gallery stats
    * GET /api/gallery/:walletAddress/stats
+   * SECURITY FIX: Requires authentication and only returns authenticated user's stats
    */
-  router.get('/:walletAddress/stats', async (req: Request, res: Response) => {
+  router.get('/:walletAddress/stats', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // SECURITY: Only allow users to access their own stats
+      if (!req.user) {
+        res.status(401).json({ 
+          success: false, 
+          error: 'Authentication required' 
+        });
+        return;
+      }
+
       const { walletAddress } = req.params;
       
+      // SECURITY: Verify the requested wallet matches the authenticated user
+      const normalizedRequest = walletAddress.startsWith('0x') ? walletAddress.toLowerCase() : walletAddress;
+      const normalizedUser = req.user.walletAddress?.startsWith('0x') 
+        ? req.user.walletAddress.toLowerCase() 
+        : req.user.walletAddress;
+      
+      if (normalizedUser !== normalizedRequest) {
+        logger.warn('SECURITY: Blocked gallery stats access attempt for different user', {
+          requestedWallet: normalizedRequest.substring(0, 10) + '...',
+          authenticatedUserId: req.user.userId,
+          path: req.path,
+          ip: req.ip
+        });
+        res.status(403).json({ 
+          success: false, 
+          error: 'You can only access your own gallery stats' 
+        });
+        return;
+      }
+      
       const User = mongoose.model<IUser>('User');
-      const user = await User.findOne({ 
-        walletAddress: walletAddress.toLowerCase() 
-      })
+      const user = await User.findOne({ userId: req.user.userId })
         .select('gallery generationHistory')
         .lean();
 
@@ -180,17 +232,24 @@ export function createGalleryRoutes(deps: Dependencies) {
   /**
    * Save to gallery
    * POST /api/gallery/save
+   * SECURITY FIX: Uses authenticateToken and only saves to authenticated user's gallery
    */
-  router.post('/save', authenticateFlexible, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/save', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      // SECURITY: Only allow saving to authenticated user's gallery
+      if (!req.user) {
+        res.status(401).json({ 
+          success: false, 
+          error: 'Authentication required' 
+        });
+        return;
+      }
+
       const { 
-        walletAddress, userId, email, imageUrl, prompt, model, generationId,
+        imageUrl, prompt, model, generationId,
         // 3D model fields
         modelType, glbUrl, objUrl, fbxUrl, thumbnailUrl
       } = req.body as {
-        walletAddress?: string;
-        userId?: string;
-        email?: string;
         imageUrl?: string;
         prompt?: string;
         model?: string;
@@ -211,15 +270,8 @@ export function createGalleryRoutes(deps: Dependencies) {
         return;
       }
 
-      const user = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
-      
-      if (!user) {
-        res.status(404).json({ 
-          success: false, 
-          error: 'User not found' 
-        });
-        return;
-      }
+      // SECURITY: Use authenticated user, not body parameters
+      const user = req.user;
 
       // Build gallery item
       // Encrypt prompt if encryption is configured (findOneAndUpdate bypasses pre-save hooks)
