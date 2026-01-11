@@ -110,8 +110,10 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       host: true,
       headers: {
+        // Use 'credentialless' instead of 'require-corp' to allow loading FFmpeg from CDNs
+        // 'credentialless' enables SharedArrayBuffer while allowing cross-origin resources without CORP headers
         'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
+        'Cross-Origin-Embedder-Policy': 'credentialless',
       },
       proxy: {
         '/api': {
@@ -125,8 +127,9 @@ export default defineConfig(({ mode }) => {
       port: 4173,
       host: true,
       headers: {
+        // Use 'credentialless' instead of 'require-corp' to allow loading FFmpeg from CDNs
         'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
+        'Cross-Origin-Embedder-Policy': 'credentialless',
       },
       proxy: {
         '/api': {

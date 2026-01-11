@@ -5,7 +5,7 @@ import { generateMusic, calculateMusicCredits } from '../services/musicService';
 import { Music, Play, Pause, Download, AlertCircle, ChevronDown, Disc3, Square, Brain, Mic, Sliders, Upload, X } from 'lucide-react';
 import { API_URL } from '../utils/apiConfig';
 import logger from '../utils/logger';
-import { extractAudioFromVideo, isFFmpegSupported } from '../utils/ffmpeg';
+import { extractAudioFromVideo, getFFmpegSupportStatus, resetFFmpegError } from '../utils/ffmpeg';
 
 // Windows 95 style constants
 const WIN95 = {
@@ -529,6 +529,80 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
     }
   }, []);
 
+  // Helper function to extract audio from video with fallback to server-side
+  const extractAudioWithFallback = useCallback(async (file: File): Promise<string> => {
+    const ffmpegStatus = getFFmpegSupportStatus();
+    logger.debug('FFmpeg support status:', ffmpegStatus);
+    
+    // Try client-side extraction first if supported
+    if (ffmpegStatus.supported && !ffmpegStatus.hasError) {
+      try {
+        logger.info('Attempting client-side audio extraction...');
+        const audioBlob = await extractAudioFromVideo(file, 'mp3');
+        
+        // Convert blob to data URI
+        const audioDataUri = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read audio'));
+          reader.readAsDataURL(audioBlob);
+        });
+        
+        logger.info('Client-side audio extraction successful');
+        return audioDataUri;
+      } catch (clientError) {
+        logger.warn('Client-side extraction failed, falling back to server-side', { 
+          error: (clientError as Error).message 
+        });
+        // Reset error state so next attempt can try client-side again
+        resetFFmpegError();
+      }
+    } else {
+      logger.info('Client-side FFmpeg not available, using server-side extraction', {
+        supported: ffmpegStatus.supported,
+        reason: ffmpegStatus.reason || ffmpegStatus.errorMessage
+      });
+    }
+    
+    // Fallback to server-side extraction
+    logger.info('Using server-side audio extraction...');
+    
+    // First, read the video file as data URI
+    const videoDataUri = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read video file'));
+      reader.readAsDataURL(file);
+    });
+    
+    // Send to server for extraction
+    const extractResponse = await fetch(`${API_URL}/api/audio/extract-audio`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ videoDataUri })
+    });
+    
+    const extractData = await extractResponse.json();
+    if (!extractResponse.ok || !extractData.success) {
+      throw new Error(extractData.error || 'Server-side audio extraction failed');
+    }
+    
+    // Fetch the extracted audio and convert to data URI
+    const audioResponse = await fetch(extractData.url);
+    const audioBlob = await audioResponse.blob();
+    
+    const audioDataUri = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read extracted audio'));
+      reader.readAsDataURL(audioBlob);
+    });
+    
+    logger.info('Server-side audio extraction successful');
+    return audioDataUri;
+  }, []);
+
   // Voice Clone handlers
   const handleVoiceRefUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -555,21 +629,8 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
       let audioDataUri: string;
       
       if (isVideo) {
-        // Check if FFmpeg is supported in this browser
-        if (!isFFmpegSupported()) {
-          throw new Error('Audio extraction requires a browser with SharedArrayBuffer support. Please use Chrome, Firefox, or Edge with proper security headers.');
-        }
-        
-        // Extract audio from video using client-side FFmpeg
-        const audioBlob = await extractAudioFromVideo(file, 'mp3');
-        
-        // Convert blob to data URI
-        audioDataUri = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error('Failed to read audio'));
-          reader.readAsDataURL(audioBlob);
-        });
+        // Extract audio from video (with automatic fallback to server-side)
+        audioDataUri = await extractAudioWithFallback(file);
       } else {
         // Read audio file directly as data URI
         audioDataUri = await new Promise<string>((resolve, reject) => {
@@ -584,6 +645,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
       const uploadResponse = await fetch(`${API_URL}/api/audio/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ audioDataUri })
       });
       const uploadData = await uploadResponse.json();
@@ -593,11 +655,12 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
       
       setVoiceRefUrl(uploadData.url);
     } catch (err) {
+      logger.error('Voice reference upload failed', { error: (err as Error).message });
       setError((err as Error).message);
     } finally {
       setIsUploadingVoiceRef(false);
     }
-  }, []);
+  }, [extractAudioWithFallback]);
 
   const handleVoiceGenerate = useCallback(async () => {
     if (!voiceText.trim()) return;
@@ -666,21 +729,8 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
       let audioDataUri: string;
       
       if (isVideo) {
-        // Check if FFmpeg is supported in this browser
-        if (!isFFmpegSupported()) {
-          throw new Error('Audio extraction requires a browser with SharedArrayBuffer support. Please use Chrome, Firefox, or Edge with proper security headers.');
-        }
-        
-        // Extract audio from video using client-side FFmpeg
-        const audioBlob = await extractAudioFromVideo(file, 'mp3');
-        
-        // Convert blob to data URI
-        audioDataUri = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error('Failed to read audio'));
-          reader.readAsDataURL(audioBlob);
-        });
+        // Extract audio from video (with automatic fallback to server-side)
+        audioDataUri = await extractAudioWithFallback(file);
       } else {
         // Read audio file directly as data URI
         audioDataUri = await new Promise<string>((resolve, reject) => {
@@ -695,6 +745,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
       const uploadResponse = await fetch(`${API_URL}/api/audio/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ audioDataUri })
       });
       const uploadData = await uploadResponse.json();
@@ -704,11 +755,12 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator({ onSho
       
       setRemixSourceUrl(uploadData.url);
     } catch (err) {
+      logger.error('Remix source upload failed', { error: (err as Error).message });
       setError((err as Error).message);
     } finally {
       setIsUploadingRemixSource(false);
     }
-  }, []);
+  }, [extractAudioWithFallback]);
 
   const handleRemixSeparate = useCallback(async () => {
     if (!remixSourceUrl) return;

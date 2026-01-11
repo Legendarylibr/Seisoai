@@ -145,8 +145,10 @@ app.use(helmet({
       accelerometer: '()'
     }
   },
-  crossOriginEmbedderPolicy: false,
-  crossOriginOpenerPolicy: { policy: "unsafe-none" }, // Explicitly allow navigation from Twitter/other apps
+  // Use 'credentialless' for COEP to enable SharedArrayBuffer (needed for FFmpeg.wasm)
+  // while still allowing cross-origin resources from CDNs without CORP headers
+  crossOriginEmbedderPolicy: { policy: "credentialless" },
+  crossOriginOpenerPolicy: { policy: "same-origin" }, // Required for SharedArrayBuffer
   crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin resource loading
   hidePoweredBy: true,
   originAgentCluster: false, // Disable for in-app browser compatibility
