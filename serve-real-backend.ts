@@ -40,6 +40,9 @@ console.log('Environment variables:');
 console.log('  PORT:', process.env.PORT);
 console.log('  NODE_ENV:', process.env.NODE_ENV);
 console.log('  MONGODB_URI:', process.env.MONGODB_URI ? 'Set ✓' : 'Not set');
+console.log('  JWT_SECRET:', process.env.JWT_SECRET ? `Set (${process.env.JWT_SECRET.length} chars) ✓` : 'Not set');
+console.log('  ENCRYPTION_KEY:', process.env.ENCRYPTION_KEY ? `Set (${process.env.ENCRYPTION_KEY.length} chars) ✓` : 'Not set');
+console.log('  ADMIN_SECRET:', process.env.ADMIN_SECRET ? `Set (${process.env.ADMIN_SECRET.length} chars) ✓` : 'Not set');
 
 // Import the modular backend server (auto-starts on import)
 import('./backend/server-modular.ts')
