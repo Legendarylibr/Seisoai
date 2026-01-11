@@ -28,6 +28,7 @@ import createGDPRRoutes from './gdpr';
 import createSessionRoutes from './sessions';
 import createAuditRoutes from './audit';
 import { adminIPAllowlist } from '../middleware/ipAllowlist';
+import { getCSRFToken } from '../middleware/csrf';
 
 // Types
 interface Dependencies {
@@ -39,6 +40,11 @@ interface Dependencies {
  */
 export function createApiRoutes(deps: Dependencies) {
   const router = Router();
+
+  // ============================================
+  // CSRF Token Endpoint
+  // ============================================
+  router.get('/csrf-token', getCSRFToken);
 
   // ============================================
   // Static & Utility Routes (mounted at root)
