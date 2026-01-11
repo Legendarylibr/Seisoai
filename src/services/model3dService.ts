@@ -281,12 +281,27 @@ async function pollForCompletion(
   onProgress?: (status: string, elapsed: number) => void
 ): Promise<Model3dGenerationResult> {
   const maxWaitTime = 10 * 60 * 1000; // 10 minutes max
-  const basePollInterval = 6000; // Base: 6 seconds between polls
+  const basePollInterval = 8000; // Base: 8 seconds between polls
+  const initialDelay = 120000; // Wait 2 minutes before first poll (3D generation takes time)
   const startTime = Date.now();
   
   const statusEndpoint = `${API_URL}/api/model3d/status/${requestId}`;
   
-  logger.info('Starting to poll for 3D generation completion', { requestId, statusEndpoint });
+  logger.info('Starting 3D generation polling after initial delay', { 
+    requestId, 
+    statusEndpoint,
+    initialDelaySeconds: initialDelay / 1000 
+  });
+
+  // Report initial progress
+  if (onProgress) {
+    onProgress('PROCESSING', 0);
+  }
+
+  // Wait for initial delay before first poll - 3D generation typically takes 2+ minutes
+  await new Promise(resolve => setTimeout(resolve, initialDelay));
+  
+  logger.info('Initial delay complete, starting to poll for 3D generation', { requestId });
 
   // Track consecutive errors for backoff
   let consecutiveErrors = 0;
