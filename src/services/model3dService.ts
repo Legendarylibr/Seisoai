@@ -281,12 +281,15 @@ async function pollForCompletion(
   onProgress?: (status: string, elapsed: number) => void
 ): Promise<Model3dGenerationResult> {
   const maxWaitTime = 10 * 60 * 1000; // 10 minutes max
-  const pollInterval = 5000; // Poll every 5 seconds
+  const basePollInterval = 6000; // Base: 6 seconds between polls
   const startTime = Date.now();
   
   const statusEndpoint = `${API_URL}/api/model3d/status/${requestId}`;
   
   logger.info('Starting to poll for 3D generation completion', { requestId, statusEndpoint });
+
+  // Track consecutive errors for backoff
+  let consecutiveErrors = 0;
 
   while (Date.now() - startTime < maxWaitTime) {
     const elapsed = Math.round((Date.now() - startTime) / 1000);
@@ -299,11 +302,15 @@ async function pollForCompletion(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
 
+      // Use browser-like headers to avoid Cloudflare bot detection
       const response = await fetch(statusEndpoint, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         },
         credentials: 'include',
         signal: controller.signal
@@ -330,14 +337,21 @@ async function pollForCompletion(
         
         // Continue polling on server errors (5xx) or 405 (might be transient/Cloudflare)
         if (response.status >= 500 || response.status === 405) {
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
+          consecutiveErrors++;
+          // Exponential backoff with jitter to avoid Cloudflare rate limiting
+          const backoffTime = Math.min(basePollInterval * Math.pow(1.5, consecutiveErrors), 30000);
+          const jitter = Math.random() * 2000; // 0-2 seconds random jitter
+          await new Promise(resolve => setTimeout(resolve, backoffTime + jitter));
           continue;
         }
         // For auth errors (401/403), try to get error message and continue
         // The token might get refreshed on next poll
         if (response.status === 401 || response.status === 403) {
           logger.warn('Auth error during poll, will retry with fresh token', { status: response.status });
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
+          consecutiveErrors++;
+          const backoffTime = Math.min(basePollInterval * Math.pow(1.5, consecutiveErrors), 30000);
+          const jitter = Math.random() * 2000;
+          await new Promise(resolve => setTimeout(resolve, backoffTime + jitter));
           continue;
         }
         // For other client errors (4xx), try to parse error and throw
@@ -349,12 +363,17 @@ async function pollForCompletion(
         }
       }
 
+      // Reset consecutive errors on successful response
+      consecutiveErrors = 0;
+      
       const responseText = await response.text();
       
-      // Skip if HTML response
+      // Skip if HTML response (Cloudflare challenge page)
       if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
-        logger.warn('Status poll returned HTML, retrying', { elapsed });
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        logger.warn('Status poll returned HTML (possible Cloudflare challenge), retrying', { elapsed });
+        // Wait longer if we're getting HTML responses (Cloudflare might be blocking)
+        const waitTime = basePollInterval * 2 + Math.random() * 3000;
+        await new Promise(resolve => setTimeout(resolve, waitTime));
         continue;
       }
 
@@ -401,7 +420,7 @@ async function pollForCompletion(
         
         // If no model URL in completed status, continue polling briefly
         // The model URL might come in the next poll
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
         continue;
       }
 
@@ -411,8 +430,9 @@ async function pollForCompletion(
         throw new Error(data.error || '3D generation failed. Credits will be refunded.');
       }
 
-      // Still processing - wait and poll again
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      // Still processing - wait and poll again with jitter to avoid bot detection
+      const jitter = Math.random() * 2000; // 0-2 seconds random jitter
+      await new Promise(resolve => setTimeout(resolve, basePollInterval + jitter));
 
     } catch (error) {
       const err = error as Error;
@@ -422,12 +442,16 @@ async function pollForCompletion(
         throw err;
       }
       
-      // Log and continue for transient errors
+      // Log and continue for transient errors with backoff
+      consecutiveErrors++;
       logger.warn('Poll request failed, retrying', { 
         error: err.message, 
-        elapsed: Math.round((Date.now() - startTime) / 1000)
+        elapsed: Math.round((Date.now() - startTime) / 1000),
+        consecutiveErrors
       });
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      const backoffTime = Math.min(basePollInterval * Math.pow(1.5, consecutiveErrors), 30000);
+      const jitter = Math.random() * 2000;
+      await new Promise(resolve => setTimeout(resolve, backoffTime + jitter));
     }
   }
 
