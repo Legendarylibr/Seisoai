@@ -377,7 +377,9 @@ export const verifyToken = async (): Promise<VerifyResponse | null> => {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store',
+        'Pragma': 'no-cache'
       },
       credentials: 'include'
     }, 1); // Only 1 retry for verification

@@ -370,12 +370,19 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         return;
       }
 
+      // Prevent caching to ensure fresh credits data
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+
       res.json({
         success: true,
         user: {
           userId: user.userId,
           email: user.email,
           credits: user.credits,
+          totalCreditsEarned: user.totalCreditsEarned || 0,
+          totalCreditsSpent: user.totalCreditsSpent || 0,
           walletAddress: user.walletAddress
         }
       });
