@@ -342,6 +342,8 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
   const [faceCount, setFaceCount] = useState<number>(500000);
   const [enablePbr, setEnablePbr] = useState<boolean>(true);
   const [isGenerating3d, setIsGenerating3d] = useState<boolean>(false);
+  const [generationStatus, setGenerationStatus] = useState<string>('');
+  const [pollElapsed, setPollElapsed] = useState<number>(0);
   
   // General state
   const [error, setError] = useState<string | null>(null);
@@ -602,6 +604,8 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
       }
       
       setIsGenerating3d(true);
+      setGenerationStatus('Submitting...');
+      setPollElapsed(0);
       
       const result = await generate3dModel({
         input_image_url: finalImageUrl,
@@ -611,7 +615,15 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
         polygon_type: 'triangle',
         walletAddress: walletContext.address,
         userId: emailContext.userId,
-        email: emailContext.email
+        email: emailContext.email,
+        // Progress callback for polling updates
+        onProgress: (status: string, elapsed: number) => {
+          setPollElapsed(elapsed);
+          setGenerationStatus(status === 'IN_QUEUE' ? 'In queue...' : 
+                              status === 'IN_PROGRESS' ? 'Generating...' :
+                              status === 'PROCESSING' ? 'Processing...' :
+                              status || 'Processing...');
+        }
       });
 
       logger.info('3D generation result received', {
@@ -710,6 +722,8 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
       logger.error('3D generation failed', { error: error.message, stack: error.stack });
     } finally {
       setIsGenerating3d(false);
+      setGenerationStatus('');
+      setPollElapsed(0);
       stopTimer();
     }
   }, [imageUrl, isConnected, enablePbr, faceCount, generateType, prompt, walletContext, emailContext, isEmailAuth, startTimer, stopTimer, sessionGallery, isUploadedImage, optimizeImageFor3d]);
@@ -1039,7 +1053,7 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
                     fontWeight: 'bold'
                   }}
                 >
-                  ⏱️ {formatTime(elapsedTime)}
+                  ⏱️ {formatTime(isGenerating3d && pollElapsed > 0 ? pollElapsed : elapsedTime)}
                 </div>
                 
                 {isOptimizing ? (
@@ -1054,11 +1068,16 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
                 ) : (
                   <>
                     <p className="text-[11px] font-bold text-center" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                      📦 {isUploadedImage ? 'Step 2/2:' : ''} Converting to 3D model...
+                      📦 {isUploadedImage ? 'Step 2/2:' : ''} {generationStatus || 'Converting to 3D model...'}
                     </p>
                     <p className="text-[9px] mt-1 text-center" style={{ color: WIN95.textDisabled }}>
-                      This typically takes 1-3 minutes
+                      3D generation typically takes 2-5 minutes
                     </p>
+                    {pollElapsed > 30 && (
+                      <p className="text-[8px] mt-2 text-center px-4" style={{ color: WIN95.textDisabled }}>
+                        ℹ️ Still processing... Please keep this page open
+                      </p>
+                    )}
                   </>
                 )}
               </div>

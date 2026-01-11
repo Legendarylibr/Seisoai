@@ -1,6 +1,11 @@
 /**
  * 3D Model Generation Service
  * Handles API calls to generate 3D models using Hunyuan3D V3
+ * 
+ * CLOUDFLARE FIX: Uses async polling pattern to avoid 100-second timeout:
+ * 1. Submit generation request -> Backend returns 202 with requestId immediately
+ * 2. Poll status endpoint every 5 seconds until completion
+ * 3. Each poll request is short, avoiding Cloudflare timeout
  */
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
@@ -18,6 +23,8 @@ export interface Model3dGenerationParams {
   walletAddress?: string;
   userId?: string;
   email?: string;
+  // Optional callback for progress updates
+  onProgress?: (status: string, elapsed: number) => void;
 }
 
 export interface ModelFile {
@@ -48,8 +55,36 @@ export interface Model3dGenerationResult {
   error?: string;
 }
 
+// Status response from the polling endpoint
+interface StatusResponse {
+  success: boolean;
+  status?: string;
+  model_glb?: ModelFile;
+  glb?: ModelFile;
+  thumbnail?: ModelFile;
+  model_urls?: {
+    glb?: ModelFile;
+    obj?: ModelFile;
+    fbx?: ModelFile;
+    usdz?: ModelFile;
+  };
+  data?: {
+    model_glb?: ModelFile;
+    glb?: ModelFile;
+    thumbnail?: ModelFile;
+    model_urls?: {
+      glb?: ModelFile;
+      obj?: ModelFile;
+      fbx?: ModelFile;
+      usdz?: ModelFile;
+    };
+  };
+  error?: string;
+}
+
 /**
  * Generate a 3D model from an image using Hunyuan3D V3
+ * Uses async polling pattern to avoid Cloudflare timeout issues
  */
 export async function generate3dModel(params: Model3dGenerationParams): Promise<Model3dGenerationResult> {
   const {
@@ -63,7 +98,8 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
     polygon_type = 'triangle',
     walletAddress,
     userId,
-    email
+    email,
+    onProgress
   } = params;
 
   if (!input_image_url) {
@@ -75,256 +111,43 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
   }
 
   try {
-    // Note: API_URL can be empty string for same-origin production deployments
-    // This is intentional - empty string means requests go to relative URLs like /api/model3d/generate
-
-    const apiEndpoint = `${API_URL}/api/model3d/generate`;
-    logger.info('Starting 3D model generation', { 
-      apiEndpoint,
-      API_URL,
-      generate_type, 
+    // Step 1: Submit the generation request
+    const submitResult = await submitGeneration({
+      input_image_url,
+      back_image_url,
+      left_image_url,
+      right_image_url,
+      enable_pbr,
       face_count,
-      hasBackImage: !!back_image_url,
-      hasWalletAddress: !!walletAddress,
-      hasUserId: !!userId,
-      hasEmail: !!email,
-      hasInputImage: !!input_image_url
+      generate_type,
+      polygon_type,
+      walletAddress,
+      userId,
+      email
     });
 
-    // Create abort controller with 15 minute timeout (3D gen can take 5-10 mins + polling overhead)
-    // Backend polls for up to 12 minutes, so we need extra time for the response
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15 * 60 * 1000);
-
-    // Get JWT token for authentication
-    const token = getAuthToken() || '';
-    const hasToken = !!token;
-    const tokenPreview = token ? `${token.substring(0, 20)}...` : '(empty)';
-    
-    // Ensure CSRF token is available
-    const csrfToken = await ensureCSRFToken();
-
-    logger.info('3D generation request details', {
-      apiEndpoint,
-      hasToken,
-      tokenPreview,
-      requestBody: {
-        hasInputImage: !!input_image_url,
-        hasBackImage: !!back_image_url,
-        hasLeftImage: !!left_image_url,
-        hasRightImage: !!right_image_url,
-        enable_pbr,
-        face_count,
-        generate_type,
-        polygon_type,
-        hasWalletAddress: !!walletAddress,
-        hasUserId: !!userId,
-        hasEmail: !!email
-      }
-    });
-
-    let response: Response;
-    try {
-      logger.debug('Sending 3D generation request', { apiEndpoint, method: 'POST' });
-      response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          ...(csrfToken && { 'X-CSRF-Token': csrfToken })
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          input_image_url,
-          back_image_url,
-          left_image_url,
-          right_image_url,
-          enable_pbr,
-          face_count,
-          generate_type,
-          polygon_type,
-          walletAddress,
-          userId,
-          email
-        }),
-        signal: controller.signal
-      });
-      
-      logger.info('3D generation response received', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-        contentType: response.headers.get('content-type'),
-        headers: Object.fromEntries(response.headers.entries())
-      });
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      const err = fetchError as Error;
-      
-      // Check if this is an abort error (timeout or user cancellation)
-      if (err.name === 'AbortError' || err.message.includes('aborted')) {
-        logger.warn('3D generation request was aborted (likely timeout)', {
-          error: err.message,
-          errorName: err.name,
-          apiEndpoint
-        });
-        throw new Error('3D generation request timed out. The generation may still be processing in the background. Please check your gallery in a few minutes.');
-      }
-      
-      logger.error('3D generation fetch failed', {
-        error: err.message,
-        errorName: err.name,
-        apiEndpoint,
-        hasToken
-      });
-      throw err;
+    // If we already have a model URL (unlikely but handle it), return immediately
+    if (submitResult.model_glb?.url || submitResult.model_urls?.glb?.url) {
+      return submitResult;
     }
 
-    // Check if response is JSON before parsing
-    const contentType = response.headers.get('content-type') || '';
-    const isJson = contentType.includes('application/json');
-    let data: Model3dGenerationResult;
-    
-    logger.debug('Processing 3D generation response', {
-      status: response.status,
-      contentType,
-      isJson,
-      url: response.url,
-      redirected: response.redirected,
-      type: response.type
-    });
-    
-    // Always check the actual response body to detect HTML
-    let responseText: string;
-    try {
-      responseText = await response.text();
-    } catch (textError) {
-      clearTimeout(timeoutId);
-      const err = textError as Error;
-      logger.error('Failed to read response text', {
-        error: err.message,
-        errorName: err.name,
-        status: response.status
-      });
-      
-      if (err.name === 'AbortError' || err.message.includes('aborted')) {
-        throw new Error('3D generation request was interrupted. The generation may still be processing. Please check your gallery in a few minutes.');
-      }
-      throw new Error('Failed to read server response. Please try again.');
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    
-    const isHtml = responseText.trim().startsWith('<!DOCTYPE') || 
-                   responseText.trim().startsWith('<html') ||
-                   responseText.trim().startsWith('<!doctype');
-    
-    if (isHtml) {
-      // Response is HTML (likely SPA fallback, Cloudflare error, or CDN issue)
-      // Log detailed info for debugging
-      const htmlTitle = responseText.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || 'No title';
-      const isCloudflare = responseText.includes('cloudflare') || responseText.includes('cf-');
-      const isRailway = responseText.includes('railway') || responseText.includes('Application not found');
-      
-      logger.error('3D generation API returned HTML instead of JSON', { 
-        status: response.status,
-        statusText: response.statusText,
-        contentType,
-        htmlTitle,
-        isCloudflare,
-        isRailway,
-        responseLength: responseText.length,
-        responsePreview: responseText.substring(0, 800),
-        url: response.url,
-        redirected: response.redirected,
-        apiEndpoint: `${API_URL}/api/model3d/generate`,
-        apiUrlValue: API_URL,
-        windowLocation: typeof window !== 'undefined' ? window.location.href : 'N/A'
-      });
-      
-      if (response.status === 404) {
-        throw new Error('3D model generation endpoint not found. The API route may not be configured correctly.');
-      } else if (response.status === 401 || response.status === 403) {
-        throw new Error('Authentication failed. Please sign in again.');
-      } else if (isCloudflare) {
-        throw new Error('Request blocked by Cloudflare. Please try again or disable VPN/proxy if using one.');
-      } else if (isRailway) {
-        throw new Error('Server not found. The application may be restarting. Please wait a moment and try again.');
-      } else {
-        throw new Error(`Server returned HTML instead of JSON (${htmlTitle}). Try: 1) Hard refresh (Ctrl+Shift+R), 2) Clear browser cache, 3) Try incognito mode.`);
-      }
-    }
-    
-    if (!isJson && response.status !== 202) {
-      // 202 is acceptable (async processing), but other non-JSON responses are errors
-      logger.error('3D generation API returned non-JSON response', {
-        status: response.status,
-        contentType,
-        responsePreview: responseText.substring(0, 500)
-      });
-      throw new Error(`Server returned an unexpected response (${response.status}). Please try again later.`);
+    // If no requestId, we can't poll - return the result as-is
+    if (!submitResult.requestId) {
+      logger.warn('No requestId returned from 3D generation submit', { submitResult });
+      return submitResult;
     }
 
-    try {
-      logger.debug('Parsing JSON response');
-      // Parse from the text we already read
-      data = JSON.parse(responseText) as Model3dGenerationResult;
-      logger.debug('JSON parsed successfully', {
-        hasSuccess: 'success' in data,
-        hasError: 'error' in data,
-        keys: Object.keys(data)
-      });
-    } catch (parseError) {
-      logger.error('Failed to parse JSON response', { 
-        status: response.status,
-        statusText: response.statusText,
-        contentType,
-        isHtml,
-        responseLength: responseText.length,
-        responsePreview: responseText.substring(0, 500),
-        error: parseError instanceof Error ? parseError.message : 'Unknown error',
-        errorName: parseError instanceof Error ? parseError.name : 'Unknown',
-        url: response.url
-      });
-      
-      if (isHtml) {
-        throw new Error('Server returned HTML instead of JSON. The API endpoint may not be available.');
-      } else {
-        throw new Error(`Invalid JSON response from server: ${parseError instanceof Error ? parseError.message : 'Unknown error'}. Please try again.`);
-      }
-    }
+    // Step 2: Poll for completion
+    const pollResult = await pollForCompletion(
+      submitResult.requestId,
+      submitResult.generationId,
+      submitResult.remainingCredits,
+      submitResult.creditsDeducted,
+      onProgress
+    );
 
-    // Handle 202 Accepted (async processing - generation still in progress)
-    if (response.status === 202) {
-      logger.info('3D generation accepted, processing asynchronously', {
-        generationId: (data as { generationId?: string }).generationId,
-        requestId: (data as { requestId?: string }).requestId,
-        message: (data as { message?: string }).message
-      });
-      // Return the response data which should include generationId and statusEndpoint
-      return data;
-    }
+    return pollResult;
 
-    if (!response.ok) {
-      logger.error('3D generation API returned error', { 
-        status: response.status,
-        error: data.error,
-        creditsRefunded: data.creditsRefunded
-      });
-      throw new Error(data.error || `3D generation failed: ${response.status}`);
-    }
-
-    logger.info('3D model generation completed', { 
-      success: data.success,
-      hasModelGlb: !!data.model_glb?.url,
-      hasModelUrlsGlb: !!data.model_urls?.glb?.url,
-      hasObj: !!data.model_urls?.obj?.url,
-      hasThumbnail: !!data.thumbnail?.url,
-      creditsDeducted: data.creditsDeducted,
-      remainingCredits: data.remainingCredits
-    });
-
-    return data as Model3dGenerationResult;
   } catch (error) {
     const err = error as Error;
     logger.error('3D model generation error', { 
@@ -335,6 +158,260 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
     });
     throw new Error(`Failed to generate 3D model: ${err.message}`);
   }
+}
+
+/**
+ * Submit the initial generation request
+ * Returns immediately with requestId for polling
+ */
+async function submitGeneration(params: Omit<Model3dGenerationParams, 'onProgress'>): Promise<Model3dGenerationResult> {
+  const {
+    input_image_url,
+    back_image_url,
+    left_image_url,
+    right_image_url,
+    enable_pbr,
+    face_count,
+    generate_type,
+    polygon_type,
+    walletAddress,
+    userId,
+    email
+  } = params;
+
+  const apiEndpoint = `${API_URL}/api/model3d/generate`;
+  logger.info('Submitting 3D model generation', { 
+    apiEndpoint,
+    generate_type, 
+    face_count,
+    hasInputImage: !!input_image_url
+  });
+
+  // Short timeout for the submit request (30 seconds should be plenty)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  const token = getAuthToken() || '';
+  const csrfToken = await ensureCSRFToken();
+
+  try {
+    const response = await fetch(apiEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        input_image_url,
+        back_image_url,
+        left_image_url,
+        right_image_url,
+        enable_pbr,
+        face_count,
+        generate_type,
+        polygon_type,
+        walletAddress,
+        userId,
+        email
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    const responseText = await response.text();
+    
+    // Check for HTML response (Cloudflare error, etc.)
+    const isHtml = responseText.trim().startsWith('<!DOCTYPE') || 
+                   responseText.trim().startsWith('<html') ||
+                   responseText.trim().startsWith('<!doctype');
+    
+    if (isHtml) {
+      const htmlTitle = responseText.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || 'Unknown';
+      const isCloudflare = responseText.includes('cloudflare') || responseText.includes('cf-');
+      
+      logger.error('3D generation submit returned HTML', { 
+        status: response.status,
+        htmlTitle,
+        isCloudflare
+      });
+      
+      if (isCloudflare) {
+        throw new Error('Request blocked by Cloudflare. Please try again.');
+      }
+      throw new Error(`Server error (${htmlTitle}). Please try again.`);
+    }
+
+    const data = JSON.parse(responseText) as Model3dGenerationResult;
+
+    if (!response.ok && response.status !== 202) {
+      throw new Error(data.error || `Submit failed: ${response.status}`);
+    }
+
+    logger.info('3D generation submitted successfully', {
+      requestId: data.requestId,
+      generationId: data.generationId,
+      status: response.status
+    });
+
+    return data;
+
+  } catch (error) {
+    clearTimeout(timeoutId);
+    const err = error as Error;
+    
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out. Please try again.');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Poll the status endpoint until generation completes
+ * Each poll is a short request, avoiding Cloudflare timeout
+ */
+async function pollForCompletion(
+  requestId: string,
+  generationId: string | undefined,
+  remainingCredits: number | undefined,
+  creditsDeducted: number | undefined,
+  onProgress?: (status: string, elapsed: number) => void
+): Promise<Model3dGenerationResult> {
+  const maxWaitTime = 10 * 60 * 1000; // 10 minutes max
+  const pollInterval = 5000; // Poll every 5 seconds
+  const startTime = Date.now();
+  
+  const token = getAuthToken() || '';
+  const statusEndpoint = `${API_URL}/api/model3d/status/${requestId}`;
+  
+  logger.info('Starting to poll for 3D generation completion', { requestId, statusEndpoint });
+
+  while (Date.now() - startTime < maxWaitTime) {
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    
+    try {
+      // Short timeout for each poll request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const response = await fetch(statusEndpoint, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include',
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        logger.warn('Status poll returned error', { status: response.status, elapsed });
+        // Continue polling on non-fatal errors
+        if (response.status >= 500) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+          continue;
+        }
+      }
+
+      const responseText = await response.text();
+      
+      // Skip if HTML response
+      if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+        logger.warn('Status poll returned HTML, retrying', { elapsed });
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        continue;
+      }
+
+      const data = JSON.parse(responseText) as StatusResponse;
+      const status = (data.status || '').toUpperCase();
+
+      // Report progress
+      if (onProgress) {
+        onProgress(status || 'PROCESSING', elapsed);
+      }
+
+      logger.debug('3D generation poll status', { requestId, status, elapsed });
+
+      // Check for model URL in response (may be in data wrapper or at top level)
+      const resultData = data.data || data;
+      const modelGlb = resultData.model_glb || resultData.glb;
+      const modelUrls = resultData.model_urls;
+      const thumbnail = resultData.thumbnail;
+
+      if (modelGlb?.url || modelUrls?.glb?.url) {
+        logger.info('3D generation completed!', { 
+          requestId, 
+          elapsed,
+          hasModelGlb: !!modelGlb?.url,
+          hasModelUrls: !!modelUrls?.glb?.url
+        });
+
+        return {
+          success: true,
+          model_glb: modelGlb,
+          thumbnail: thumbnail,
+          model_urls: modelUrls,
+          generationId,
+          requestId,
+          remainingCredits,
+          creditsDeducted
+        };
+      }
+
+      // Check for completion status
+      if (status === 'COMPLETED' || status === 'OK' || status === 'SUCCEEDED') {
+        // Status says complete but no model yet - might need another poll
+        logger.info('Status shows completed, checking for model URL', { requestId, data });
+        
+        // If no model URL in completed status, continue polling briefly
+        // The model URL might come in the next poll
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+
+      // Check for failure
+      if (status === 'FAILED' || status === 'ERROR' || status === 'CANCELLED') {
+        logger.error('3D generation failed', { requestId, status, error: data.error });
+        throw new Error(data.error || '3D generation failed. Credits will be refunded.');
+      }
+
+      // Still processing - wait and poll again
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+    } catch (error) {
+      const err = error as Error;
+      
+      // Re-throw user-facing errors
+      if (err.message.includes('3D generation failed') || err.message.includes('Credits')) {
+        throw err;
+      }
+      
+      // Log and continue for transient errors
+      logger.warn('Poll request failed, retrying', { 
+        error: err.message, 
+        elapsed: Math.round((Date.now() - startTime) / 1000)
+      });
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+  }
+
+  // Timeout reached
+  logger.warn('3D generation polling timed out', { requestId, maxWaitTime });
+  
+  // Return with info so UI can show appropriate message
+  return {
+    success: false,
+    error: '3D generation is taking longer than expected. It will appear in your gallery when complete.',
+    generationId,
+    requestId,
+    statusEndpoint: `/api/model3d/status/${requestId}`,
+    message: 'Generation still processing. Check your gallery in a few minutes.',
+    remainingCredits,
+    creditsDeducted
+  };
 }
 
 /**

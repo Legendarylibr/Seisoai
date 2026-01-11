@@ -7,7 +7,7 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
-import { checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed } from '../services/fal';
+import { getQueueResult, getFalApiKey, isStatusCompleted } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import { CREDITS } from '../config/constants';
 import type { IUser } from '../models/User';
@@ -135,12 +135,12 @@ export function createModel3dRoutes(deps: Dependencies) {
   const router = Router();
   const { 
     freeImageRateLimiter,
-    authenticateFlexible,
-    requireCredits
+    authenticateFlexible
+    // requireCredits - not used, we use dynamic requireCreditsFor3d instead
   } = deps;
 
-  const freeImageLimiter = freeImageRateLimiter || ((req: Request, res: Response, next: () => void) => next());
-  const flexibleAuth = authenticateFlexible || ((req: Request, res: Response, next: () => void) => next());
+  const freeImageLimiter = freeImageRateLimiter || ((_req: Request, _res: Response, next: () => void) => next());
+  const flexibleAuth = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Dynamic credits middleware for 3D generation
@@ -428,377 +428,23 @@ export function createModel3dRoutes(deps: Dependencies) {
         // Don't fail the request if gallery save fails
       }
 
-      // Poll for completion
-      const modelPath = 'fal-ai/hunyuan3d-v3/image-to-3d';
-      const maxWaitTime = 12 * 60 * 1000; // 12 minutes max (3D gen can take 5-10 mins)
-      const pollInterval = 5000; // Poll every 5 seconds (reduce API calls)
-      const startTime = Date.now();
-      let lastStatus = '';
-      let pollCount = 0;
-
-      while (Date.now() - startTime < maxWaitTime) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-        pollCount++;
-
-        const statusResponse = await fetch(
-          `https://queue.fal.run/${modelPath}/requests/${requestId}/status`,
-          {
-            headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-          }
-        );
-
-        if (!statusResponse.ok) {
-          logger.warn('3D status check failed', { 
-            requestId, 
-            status: statusResponse.status,
-            elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
-          });
-          continue;
-        }
-
-        const rawStatusData = await statusResponse.json() as { 
-          status?: string;
-          // FAL queue returns response_url when completed
-          response_url?: string;
-          // FAL may include result data in status response
-          data?: {
-            // FAL Hunyuan3D returns 'glb' directly, not 'model_glb'
-            glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-            model_glb?: { url?: string };
-            thumbnail?: { url?: string };
-            model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-          };
-          // Or unwrapped - FAL returns 'glb' directly
-          glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-          model_glb?: { url?: string };
-          thumbnail?: { url?: string };
-          model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-          // Output fields that FAL may return
-          output?: {
-            glb?: { url?: string };
-            model_glb?: { url?: string };
-          };
-          result?: {
-            glb?: { url?: string };
-            model_glb?: { url?: string };
-          };
-        };
-        
-        // Handle wrapped or unwrapped data
-        const statusResult = rawStatusData.data || rawStatusData.output || rawStatusData.result || rawStatusData;
-        const rawStatus = rawStatusData.status || '';
-        const normalizedStatus = rawStatus.toUpperCase();
-
-        // Only log on status change or every 6th poll (~30s) to reduce log spam
-        const statusChanged = normalizedStatus !== lastStatus;
-        if (statusChanged || pollCount % 6 === 0) {
-          logger.info('3D model polling', { 
-            requestId, 
-            status: normalizedStatus,
-            pollCount,
-            elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
-          });
-          // Log the raw status response structure for debugging
-          logger.info('3D polling status response', {
-            requestId,
-            status: rawStatusData.status,
-            hasResponseUrl: !!rawStatusData.response_url,
-            hasData: !!rawStatusData.data,
-            hasOutput: !!rawStatusData.output,
-            hasResult: !!rawStatusData.result,
-            hasGlb: !!rawStatusData.glb,
-            hasModelGlb: !!rawStatusData.model_glb,
-            hasModelUrls: !!rawStatusData.model_urls,
-            topLevelKeys: Object.keys(rawStatusData).slice(0, 20),
-            rawResponsePreview: JSON.stringify(rawStatusData).substring(0, 1000)
-          });
-          lastStatus = normalizedStatus;
-        }
-
-        // Check if model in status response (some FAL endpoints include result in status)
-        // Per FAL docs: https://fal.ai/models/fal-ai/hunyuan3d-v3/image-to-3d/api
-        // Output includes: model_glb (File), thumbnail (File), model_urls (ModelUrls)
-        // Also check rawStatusData directly in case data is at top level
-        const typedStatusResult = (statusResult || rawStatusData) as {
-          model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-          glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string }; // fallback alias
-          thumbnail?: { url?: string };
-          model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-        };
-        // Prioritize model_glb as per FAL docs, with fallbacks
-        const glbFromStatus = typedStatusResult.model_glb || typedStatusResult.glb || typedStatusResult.model_urls?.glb;
-        if (glbFromStatus?.url) {
-          logger.info('3D model completed (from status response)', { 
-            requestId,
-            hasModelGlb: !!typedStatusResult.model_glb?.url,
-            hasGlb: !!typedStatusResult.glb?.url,
-            hasModelUrlsGlb: !!typedStatusResult.model_urls?.glb?.url,
-            hasThumbnail: !!typedStatusResult.thumbnail?.url,
-            glbUrl: glbFromStatus?.url?.substring(0, 100),
-            elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
-          });
-          
-          // Update gallery item with result
-          await updateGalleryItemWithResult(updateQuery, generationId, typedStatusResult, input_image_url);
-
-          // Ensure response hasn't been sent already
-          if (!res.headersSent) {
-            const responsePayload = {
-              success: true,
-              // Use model_glb directly as that's what FAL returns
-              model_glb: typedStatusResult.model_glb || typedStatusResult.glb,
-              thumbnail: typedStatusResult.thumbnail,
-              model_urls: typedStatusResult.model_urls,
-              remainingCredits: updateResult.credits,
-              creditsDeducted: creditsRequired,
-              generationId: generationId // Return generationId so frontend can find it in gallery
-            };
-            logger.info('3D polling returning success response (from status)', {
-              requestId,
-              hasModelGlb: !!responsePayload.model_glb,
-              hasThumbnail: !!responsePayload.thumbnail,
-              hasModelUrls: !!responsePayload.model_urls,
-              responsePreview: JSON.stringify(responsePayload).substring(0, 1000)
-            });
-            res.json(responsePayload);
-          }
-          return;
-        }
-
-        // Check for completion - handle various status formats from FAL
-        if (isStatusCompleted(normalizedStatus)) {
-          logger.info('3D model status COMPLETED, fetching result', { 
-            requestId, 
-            normalizedStatus,
-            hasResponseUrl: !!rawStatusData.response_url,
-            elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
-          });
-          
-          // Use FAL service helper to fetch result, or use response_url if provided
-          let rawResult: {
-            // FAL queue result may wrap response in various fields
-            data?: {
-              glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-              model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-              thumbnail?: { url?: string };
-              model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-              seed?: number;
-            };
-            output?: {
-              glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-              model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-              thumbnail?: { url?: string };
-              model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-            };
-            result?: {
-              glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-              model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-              thumbnail?: { url?: string };
-              model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-            };
-            response?: {
-              glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-              model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-              thumbnail?: { url?: string };
-              model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-            };
-            // Or it might be unwrapped (for direct API calls)
-            glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-            model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-            thumbnail?: { url?: string };
-            model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-            seed?: number;
-          };
-
-          try {
-            // If response_url is provided, use it directly, otherwise use the FAL service helper
-            if (rawStatusData.response_url) {
-              const resultResponse = await fetch(rawStatusData.response_url, {
-                headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-              });
-              if (!resultResponse.ok) {
-                throw new Error(`Failed to fetch from response_url: ${resultResponse.status}`);
-              }
-              rawResult = await resultResponse.json() as typeof rawResult;
-            } else {
-              // Use FAL service helper function
-              rawResult = await getQueueResult<typeof rawResult>(requestId, modelPath);
-            }
-          } catch (error) {
-            const err = error as Error;
-            logger.error('Failed to fetch 3D result', { 
-              requestId, 
-              error: err.message,
-              hasResponseUrl: !!rawStatusData.response_url
-            });
-            await refundCredits(user, creditsRequired, `Failed to fetch 3D result: ${err.message}`);
-            res.status(500).json({
-              success: false,
-              error: 'Failed to fetch 3D model result',
-              creditsRefunded: creditsRequired
-            });
-            return;
-          }
-
-          // Handle all possible wrapper formats - FAL can return in data/output/result/response or unwrapped
-          type ResultShape = {
-            glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-            model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-            thumbnail?: { url?: string };
-            model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-            seed?: number;
-          };
-          const resultData: ResultShape = rawResult.data || rawResult.output || rawResult.result || rawResult.response || rawResult;
-          
-          // Log the full raw response for debugging (truncated)
-          logger.info('3D result response structure', {
-            requestId,
-            hasDataWrapper: !!rawResult.data,
-            hasOutputWrapper: !!rawResult.output,
-            hasResultWrapper: !!rawResult.result,
-            hasResponseWrapper: !!rawResult.response,
-            hasGlb: !!resultData.glb?.url,
-            hasModelGlb: !!resultData.model_glb?.url,
-            hasModelUrls: !!resultData.model_urls,
-            keys: Object.keys(rawResult).slice(0, 20),
-            resultDataKeys: Object.keys(resultData).slice(0, 20),
-            fullResponse: JSON.stringify(rawResult).substring(0, 2000),
-            resultDataPreview: JSON.stringify(resultData).substring(0, 1000)
-          });
-
-          // Per FAL docs: output has model_glb (File), model_urls (ModelUrls with glb, obj, etc)
-          const glbResult = resultData.model_glb || resultData.glb || resultData.model_urls?.glb;
-          
-          if (glbResult?.url) {
-            logger.info('3D model generation completed (from result endpoint)', { 
-              requestId, 
-              hasModelGlb: !!resultData.model_glb?.url,
-              hasGlb: !!resultData.glb?.url,
-              hasModelUrlsGlb: !!resultData.model_urls?.glb?.url,
-              hasObj: !!resultData.model_urls?.obj?.url,
-              hasThumbnail: !!resultData.thumbnail?.url,
-              glbUrl: glbResult?.url?.substring(0, 100),
-              elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
-            });
-            
-            // Update gallery item with result
-            await updateGalleryItemWithResult(updateQuery, generationId, resultData, input_image_url);
-            
-          // Ensure response hasn't been sent already
-          if (!res.headersSent) {
-            const responsePayload = {
-              success: true,
-              // Return model_glb as per FAL docs
-              model_glb: resultData.model_glb || resultData.glb,
-              thumbnail: resultData.thumbnail,
-              model_urls: resultData.model_urls,
-              seed: resultData.seed,
-              remainingCredits: updateResult.credits,
-              creditsDeducted: creditsRequired,
-              generationId: generationId // Return generationId so frontend can find it in gallery
-            };
-            logger.info('3D polling returning success response', {
-              requestId,
-              hasModelGlb: !!responsePayload.model_glb,
-              hasThumbnail: !!responsePayload.thumbnail,
-              hasModelUrls: !!responsePayload.model_urls,
-              responsePreview: JSON.stringify(responsePayload).substring(0, 1000)
-            });
-            res.json(responsePayload);
-          }
-          return;
-          }
-
-          logger.error('No model URL in 3D result', { 
-            requestId,
-            rawResultKeys: Object.keys(rawResult).slice(0, 20),
-            resultDataKeys: Object.keys(resultData).slice(0, 20),
-            rawResultFull: JSON.stringify(rawResult).substring(0, 2000),
-            resultDataFull: JSON.stringify(resultData).substring(0, 2000)
-          });
-          await refundCredits(user, creditsRequired, 'No model in 3D result');
-          res.status(500).json({
-            success: false,
-            error: '3D generation completed but no model URL found',
-            creditsRefunded: creditsRequired
-          });
-          return;
-        }
-
-        if (isStatusFailed(normalizedStatus)) {
-          logger.error('3D model generation failed', { requestId, status: normalizedStatus });
-          
-          // Update gallery item status to failed
-          try {
-            const User = mongoose.model<IUser>('User');
-            await User.findOneAndUpdate(
-              {
-                ...updateQuery,
-                'gallery.id': generationId
-              },
-              {
-                $set: {
-                  'gallery.$.status': 'failed'
-                }
-              }
-            );
-          } catch (updateError) {
-            logger.error('Failed to update gallery item status to failed', { 
-              error: (updateError as Error).message,
-              generationId 
-            });
-          }
-          
-          await refundCredits(user, creditsRequired, `3D generation failed: ${normalizedStatus}`);
-          res.status(500).json({
-            success: false,
-            error: '3D model generation failed',
-            creditsRefunded: creditsRequired
-          });
-          return;
-        }
-      }
-
-      // Timeout - but generation may still complete in background
-      // Gallery item is already created, so user can check back later
-      logger.warn('3D model generation polling timeout', { 
-        requestId,
-        message: 'Generation may still be processing. Check gallery later.'
+      // CLOUDFLARE FIX: Return immediately with 202 Accepted
+      // Frontend will poll the status endpoint separately
+      // This avoids Cloudflare's 100-second timeout for long-running requests
+      logger.info('3D generation submitted, returning 202 for frontend polling', { 
+        requestId, 
+        generationId,
+        note: 'Frontend will poll /api/model3d/status/:requestId'
       });
       
-      // Update gallery item to indicate it's still processing
-      // The status endpoint can be used to check completion
-      try {
-        const User = mongoose.model<IUser>('User');
-        await User.findOneAndUpdate(
-          {
-            ...updateQuery,
-            'gallery.id': generationId
-          },
-          {
-            $set: {
-              'gallery.$.status': 'processing',
-              'gallery.$.requestId': requestId // Keep requestId for status checks
-            }
-          }
-        );
-        logger.info('Gallery item kept for async completion check', { generationId, requestId });
-      } catch (updateError) {
-        logger.error('Failed to update gallery item on timeout', { 
-          error: (updateError as Error).message,
-          generationId 
-        });
-      }
-      
-      // Don't refund credits yet - generation may still complete
-      // User can check gallery or status endpoint
       res.status(202).json({
-        success: false,
-        error: '3D model generation is taking longer than expected. Check your gallery in a few minutes.',
-        generationId: generationId,
+        success: true, // Mark as success since submission worked
         requestId: requestId,
+        generationId: generationId,
         statusEndpoint: `/api/model3d/status/${requestId}`,
-        message: 'Your generation is still processing. It will appear in your gallery when complete.'
+        message: '3D model generation started. Polling for completion...',
+        remainingCredits: updateResult.credits,
+        creditsDeducted: creditsRequired
       });
 
     } catch (error) {
@@ -892,7 +538,7 @@ export function createModel3dRoutes(deps: Dependencies) {
                 const statusResult = rawStatusData.data || rawStatusData;
                 const glbUrl = statusResult.model_glb?.url || statusResult.glb?.url || statusResult.model_urls?.glb?.url;
                 
-                if (glbUrl) {
+                if (glbUrl && galleryItem.id) {
                   // Update gallery item
                   await updateGalleryItemWithResult(
                     updateQuery,
@@ -907,7 +553,7 @@ export function createModel3dRoutes(deps: Dependencies) {
                 } else if (isStatusCompleted(normalizedStatus)) {
                   // Status says completed but no URL in status response, fetch result
                   try {
-                    let rawResult: {
+                    type RawResultType = {
                       data?: {
                         glb?: { url?: string };
                         model_glb?: { url?: string };
@@ -926,31 +572,35 @@ export function createModel3dRoutes(deps: Dependencies) {
                       model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string } };
                     };
 
+                    let rawResult: RawResultType | null = null;
+
                     if (rawStatusData.response_url) {
                       const resultResponse = await fetch(rawStatusData.response_url, {
                         headers: { 'Authorization': `Key ${FAL_API_KEY}` }
                       });
                       if (resultResponse.ok) {
-                        rawResult = await resultResponse.json() as typeof rawResult;
+                        rawResult = await resultResponse.json() as RawResultType;
                       }
                     } else {
-                      rawResult = await getQueueResult<typeof rawResult>(requestId, modelPath);
+                      rawResult = await getQueueResult<RawResultType>(requestId, modelPath);
                     }
 
-                    const resultData = rawResult.data || rawResult.output || rawResult;
-                    const glbUrl = resultData.model_glb?.url || resultData.glb?.url || resultData.model_urls?.glb?.url;
-                    
-                    if (glbUrl) {
-                      await updateGalleryItemWithResult(
-                        updateQuery,
-                        galleryItem.id,
-                        resultData,
-                        galleryItem.thumbnailUrl || galleryItem.imageUrl
-                      );
-                      logger.info('Gallery item updated from result fetch', { 
-                        requestId,
-                        generationId: galleryItem.id 
-                      });
+                    if (rawResult) {
+                      const resultData = rawResult.data || rawResult.output || rawResult;
+                      const fetchedGlbUrl = resultData.model_glb?.url || resultData.glb?.url || resultData.model_urls?.glb?.url;
+                      
+                      if (fetchedGlbUrl && galleryItem.id) {
+                        await updateGalleryItemWithResult(
+                          updateQuery,
+                          galleryItem.id,
+                          resultData,
+                          galleryItem.thumbnailUrl || galleryItem.imageUrl
+                        );
+                        logger.info('Gallery item updated from result fetch', { 
+                          requestId,
+                          generationId: galleryItem.id 
+                        });
+                      }
                     }
                   } catch (fetchError) {
                     logger.error('Failed to fetch result for gallery update', { 
