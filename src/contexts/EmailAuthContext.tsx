@@ -61,7 +61,7 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
   const MIN_FETCH_INTERVAL = 5000; // Minimum 5s between fetches
 
   const fetchUserData = useCallback(async (force: boolean = false): Promise<void> => {
-    // PERFORMANCE: Debounce - prevent fetching more than once per 5 seconds unless forced
+    // Debounce - prevent fetching more than once per 5 seconds unless forced
     const now = Date.now();
     if (!force && now - lastFetchRef.current < MIN_FETCH_INTERVAL) {
       return;
@@ -79,18 +79,20 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
     }
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/me`, {
+      // Use simple /api/auth/credits endpoint - direct DB query, no complexity
+      const response = await fetch(`${API_URL}/api/auth/credits`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache'
+          'Cache-Control': 'no-store'
         }
       });
 
       if (!response.ok) {
-        signOutService();
-        setIsAuthenticated(false);
+        if (response.status === 401 || response.status === 403) {
+          signOutService();
+          setIsAuthenticated(false);
+        }
         setCredits(0);
         setTotalCreditsEarned(0);
         setTotalCreditsSpent(0);
@@ -100,17 +102,15 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
 
       const data = await response.json();
       
-      if (data.success && data.user) {
-        setCredits(Math.max(0, Math.floor(Number(data.user.credits) || 0)));
-        setTotalCreditsEarned(Math.max(0, Math.floor(Number(data.user.totalCreditsEarned) || 0)));
-        setTotalCreditsSpent(Math.max(0, Math.floor(Number(data.user.totalCreditsSpent) || 0)));
-        if (data.user.email) setEmail(data.user.email);
-        if (data.user.userId) setUserId(data.user.userId);
+      if (data.success) {
+        setCredits(Math.max(0, Math.floor(Number(data.credits) || 0)));
+        setTotalCreditsEarned(Math.max(0, Math.floor(Number(data.totalCreditsEarned) || 0)));
+        setTotalCreditsSpent(Math.max(0, Math.floor(Number(data.totalCreditsSpent) || 0)));
         setIsAuthenticated(true);
       }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-      logger.error('Failed to fetch user data', { error: errorMessage });
+      logger.error('Failed to fetch credits', { error: errorMessage });
     } finally {
       setIsLoading(false);
     }
@@ -125,22 +125,18 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
       if (token && authType === 'email') {
         const verified = await verifyToken();
         if (verified && verified.user) {
-          // PERFORMANCE: Use data from verify response instead of making a second fetchUserData call
           const user = verified.user;
-          setCredits(Math.max(0, Math.floor(Number(user.credits) || 0)));
-          setTotalCreditsEarned(Math.max(0, Math.floor(Number(user.totalCreditsEarned) || 0)));
-          setTotalCreditsSpent(Math.max(0, Math.floor(Number(user.totalCreditsSpent) || 0)));
           if (user.email) setEmail(user.email);
           if (user.userId) {
             setUserId(user.userId);
-            // Store userId for user-specific gallery
             try {
               localStorage.setItem('seiso_current_user_id', user.userId);
               window.dispatchEvent(new CustomEvent('seiso-user-change'));
             } catch { /* ignore */ }
           }
           setIsAuthenticated(true);
-          setIsLoading(false);
+          // Fetch fresh credits from simple endpoint
+          await fetchUserData(true);
         } else {
           setIsLoading(false);
         }
@@ -149,7 +145,7 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
       }
     };
     checkAuth();
-  }, []);
+  }, [fetchUserData]);
 
   // PERFORMANCE: Smarter periodic refresh - only when visible and at longer intervals
   useEffect(() => {

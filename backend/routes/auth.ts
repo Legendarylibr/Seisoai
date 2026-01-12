@@ -395,6 +395,43 @@ export function createAuthRoutes(deps: Dependencies = {}) {
   });
 
   /**
+   * Simple credits check - bypasses all complexity
+   * GET /api/auth/credits
+   */
+  router.get('/credits', async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const token = authHeader?.split(' ')[1];
+
+      if (!token || !JWT_SECRET) {
+        res.status(401).json({ success: false, error: 'No token' });
+        return;
+      }
+
+      const decoded = jwt.verify(token, JWT_SECRET) as JWTDecoded;
+      
+      // Direct DB query - no mongoose model overhead
+      const db = mongoose.connection.db;
+      const user = await db.collection('users').findOne({ userId: decoded.userId });
+
+      if (!user) {
+        res.status(404).json({ success: false, error: 'User not found' });
+        return;
+      }
+
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({
+        success: true,
+        credits: user.credits || 0,
+        totalCreditsEarned: user.totalCreditsEarned || 0,
+        totalCreditsSpent: user.totalCreditsSpent || 0
+      });
+    } catch (error) {
+      res.status(403).json({ success: false, error: 'Invalid token' });
+    }
+  });
+
+  /**
    * Logout (blacklist tokens)
    * POST /api/auth/logout
    */
