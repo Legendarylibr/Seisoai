@@ -78,21 +78,33 @@ const userSchema = new Schema<IUser>({
   timestamps: true,
 });
 
-// Only register if not already registered
-let User: mongoose.Model<IUser>;
-if (mongoose.models.User) {
-  User = mongoose.models.User as mongoose.Model<IUser>;
-} else {
-  User = mongoose.model<IUser>('User', userSchema);
-}
-
-// Ensure the model is registered by accessing it
-// This helps prevent "Schema hasn't been registered" errors
-export const ensureUserModel = (): mongoose.Model<IUser> => {
-  if (!mongoose.models.User) {
-    User = mongoose.model<IUser>('User', userSchema);
+/**
+ * Get or create the User model
+ * Always returns a valid model, registering the schema if needed
+ */
+export const getUserModel = (): mongoose.Model<IUser> => {
+  // Check if model already exists in mongoose registry
+  if (mongoose.models.User) {
+    return mongoose.models.User as mongoose.Model<IUser>;
   }
-  return mongoose.models.User as mongoose.Model<IUser>;
+  
+  // Register the model with schema
+  return mongoose.model<IUser>('User', userSchema);
 };
+
+// Legacy export for backwards compatibility
+export const ensureUserModel = getUserModel;
+
+// Default export - lazy initialization to avoid registration issues
+const User = new Proxy({} as mongoose.Model<IUser>, {
+  get(_, prop) {
+    const model = getUserModel();
+    return (model as any)[prop];
+  },
+  apply(_, thisArg, args) {
+    const model = getUserModel();
+    return (model as any).apply(thisArg, args);
+  }
+});
 
 export default User;

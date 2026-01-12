@@ -13,7 +13,7 @@ import {
 } from 'discord.js';
 import config, { validateConfig } from './config/index.js';
 import { connectDatabase, ensureConnected } from './database/index.js';
-import commands, { handleLinkModal, handleHelpSelect } from './commands/index.js';
+import commands, { handleLinkModal, handleLinkButton, handleHelpSelect } from './commands/index.js';
 import { getOrCreatePrivateChannel } from './services/channels.js';
 import management from './services/management.js';
 import DiscordUser from './database/models/DiscordUser.js';
@@ -217,6 +217,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
   // Handle button interactions
   if (interaction.isButton()) {
     const customId = interaction.customId;
+
+    // Link account buttons
+    if (customId.startsWith('link_')) {
+      await handleLinkButton(interaction);
+      return;
+    }
 
     // Quick generate button from welcome message
     if (customId === 'quick_imagine') {

@@ -43,8 +43,8 @@ for (const command of commandModules) {
   commands.set(command.data.name, command);
 }
 
-// Export individual command handlers for modal/select interactions
-export { handleLinkModal } from './link.js';
+// Export individual command handlers for modal/select/button interactions
+export { handleLinkModal, handleLinkButton } from './link.js';
 export { handleHelpSelect } from './help.js';
 
 // Export command data for deployment

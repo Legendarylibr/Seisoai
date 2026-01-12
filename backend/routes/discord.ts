@@ -1,6 +1,7 @@
 /**
  * Discord OAuth Routes
  * Handles Discord account linking for authenticated users
+ * Syncs with Discord bot's DiscordUser collection for seamless integration
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
@@ -9,6 +10,7 @@ import crypto from 'crypto';
 import logger from '../utils/logger.js';
 import config from '../config/env.js';
 import type { IUser } from '../models/User.js';
+import getDiscordUserModel from '../models/DiscordUser.js';
 
 // Types
 interface Dependencies {
@@ -222,6 +224,34 @@ export function createDiscordRoutes(deps: Dependencies = {}) {
         return;
       }
 
+      // Sync to Discord bot's DiscordUser collection
+      // This allows the bot to immediately recognize the linked account
+      try {
+        const DiscordUserModel = getDiscordUserModel();
+        await DiscordUserModel.syncFromMainUser({
+          userId: user.userId,
+          email: user.email,
+          walletAddress: user.walletAddress,
+          credits: user.credits,
+          totalCreditsEarned: user.totalCreditsEarned,
+          totalCreditsSpent: user.totalCreditsSpent,
+          discordId: discordUser.id,
+          discordUsername: discordUser.global_name || discordUser.username
+        });
+        
+        logger.info('Synced Discord link to bot collection', {
+          userId: user.userId,
+          discordId: discordUser.id
+        });
+      } catch (syncError) {
+        // Don't fail the main flow if bot sync fails
+        logger.warn('Failed to sync Discord link to bot collection', {
+          error: (syncError as Error).message,
+          userId: user.userId,
+          discordId: discordUser.id
+        });
+      }
+
       logger.info('Discord account linked', {
         userId: user.userId,
         discordId: discordUser.id,
@@ -252,6 +282,11 @@ export function createDiscordRoutes(deps: Dependencies = {}) {
       }
 
       const User = mongoose.model<IUser>('User');
+      
+      // Get user first to get Discord ID for cleanup
+      const existingUser = await User.findOne({ userId: req.user.userId });
+      const discordId = existingUser?.discordId;
+      
       const user = await User.findOneAndUpdate(
         { userId: req.user.userId },
         {
@@ -270,6 +305,35 @@ export function createDiscordRoutes(deps: Dependencies = {}) {
           error: 'User not found'
         });
         return;
+      }
+
+      // Also unlink from Discord bot's collection
+      if (discordId) {
+        try {
+          const DiscordUserModel = getDiscordUserModel();
+          await DiscordUserModel.findOneAndUpdate(
+            { discordId },
+            {
+              $unset: {
+                seisoUserId: '',
+                email: '',
+                walletAddress: ''
+              },
+              $set: {
+                credits: 0,
+                totalCreditsEarned: 0,
+                totalCreditsSpent: 0
+              }
+            }
+          );
+          
+          logger.info('Discord bot record unlinked', { discordId });
+        } catch (syncError) {
+          logger.warn('Failed to unlink from Discord bot collection', {
+            error: (syncError as Error).message,
+            discordId
+          });
+        }
       }
 
       logger.info('Discord account unlinked', { userId: user.userId });

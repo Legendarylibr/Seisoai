@@ -14,11 +14,11 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ModalSubmitInteraction
+  ModalSubmitInteraction,
+  ButtonInteraction
 } from 'discord.js';
-import mongoose from 'mongoose';
 import DiscordUser from '../database/models/DiscordUser.js';
-import User, { ensureUserModel } from '../database/models/User.js';
+import { getUserModel, IUser } from '../database/models/User.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { buildEmailLookupConditions } from '../utils/encryption.js';
@@ -38,65 +38,9 @@ interface IMainUser {
 
 export const data = new SlashCommandBuilder()
   .setName('link')
-  .setDescription('Link your Discord account to SeisoAI')
-  .addSubcommand(subcommand =>
-    subcommand
-      .setName('auto')
-      .setDescription('Auto-detect if your account is already linked via the website')
-  )
-  .addSubcommand(subcommand =>
-    subcommand
-      .setName('email')
-      .setDescription('Link with your email address')
-  )
-  .addSubcommand(subcommand =>
-    subcommand
-      .setName('wallet')
-      .setDescription('Link with your wallet address')
-  )
-  .addSubcommand(subcommand =>
-    subcommand
-      .setName('status')
-      .setDescription('Check your link status')
-  );
+  .setDescription('Link your Discord account to SeisoAI');
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const subcommand = interaction.options.getSubcommand();
-
-  if (subcommand === 'status') {
-    await handleStatus(interaction);
-    return;
-  }
-
-  if (subcommand === 'auto') {
-    await handleAutoLink(interaction);
-    return;
-  }
-
-  // Show modal for email or wallet input
-  const modal = new ModalBuilder()
-    .setCustomId(`link_${subcommand}_modal`)
-    .setTitle(subcommand === 'email' ? 'Link Email Account' : 'Link Wallet');
-
-  const input = new TextInputBuilder()
-    .setCustomId(`${subcommand}_input`)
-    .setLabel(subcommand === 'email' ? 'Your SeisoAI Email' : 'Your Wallet Address')
-    .setPlaceholder(subcommand === 'email' ? 'you@example.com' : '0x... or Solana address')
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setMinLength(subcommand === 'email' ? 5 : 20)
-    .setMaxLength(subcommand === 'email' ? 100 : 64);
-
-  const row = new ActionRowBuilder<TextInputBuilder>().addComponents(input);
-  modal.addComponents(row);
-
-  await interaction.showModal(modal);
-}
-
-/**
- * Auto-detect if user's Discord is already linked via OAuth on the website
- */
-async function handleAutoLink(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   try {
@@ -105,16 +49,14 @@ async function handleAutoLink(interaction: ChatInputCommandInteraction): Promise
 
     const discordId = interaction.user.id;
 
-    // Check if already linked in our Discord database
-    let discordUser = await DiscordUser.findOne({ discordId });
+    // First, try auto-detection from main database
+    const UserModel = getUserModel();
+    const mainUser = await UserModel.findOne({ discordId }) as IMainUser | null;
+    const discordUser = await DiscordUser.findOne({ discordId });
 
-    // Check main SeisoAI database for OAuth-linked accounts
-    // Ensure User model is registered before using it
-    const UserModel = ensureUserModel();
-    const mainUser = await UserModel.findOne({ discordId });
-
+    // If already linked via OAuth, show success
     if (mainUser) {
-      // Found! Link the accounts
+      // Sync local Discord user data
       const linkedUser = discordUser ?? await DiscordUser.findOrCreate({
         id: interaction.user.id,
         username: interaction.user.username,
@@ -122,7 +64,6 @@ async function handleAutoLink(interaction: ChatInputCommandInteraction): Promise
         avatar: interaction.user.avatar || undefined
       });
 
-      // Sync data from main account
       linkedUser.seisoUserId = mainUser.userId;
       if (mainUser.email) linkedUser.email = mainUser.email;
       if (mainUser.walletAddress) linkedUser.walletAddress = mainUser.walletAddress;
@@ -133,153 +74,254 @@ async function handleAutoLink(interaction: ChatInputCommandInteraction): Promise
 
       const embed = new EmbedBuilder()
         .setColor(0x2ECC71)
-        .setTitle('✅ Account Found & Linked!')
-        .setDescription('Your Discord was already connected via the SeisoAI website. Credits synced!')
+        .setTitle('✅ Account Already Linked!')
+        .setDescription('Your Discord is connected to your SeisoAI account.')
+        .setThumbnail(interaction.user.displayAvatarURL())
         .addFields(
-          { name: '💰 Credits', value: `${linkedUser.credits}`, inline: true },
-          { name: '📊 Total Earned', value: `${linkedUser.totalCreditsEarned}`, inline: true }
+          { name: '💰 Credits', value: `**${linkedUser.credits.toLocaleString()}**`, inline: true },
+          { name: '📊 Total Earned', value: `${linkedUser.totalCreditsEarned.toLocaleString()}`, inline: true },
+          { name: '📈 Total Spent', value: `${linkedUser.totalCreditsSpent.toLocaleString()}`, inline: true }
         )
-        .setFooter({ text: 'You\'re all set! Start generating with /imagine' });
+        .setFooter({ text: 'Start generating with /imagine, /video, /music, or /3d' });
 
-      await interaction.editReply({ embeds: [embed] });
+      if (mainUser.email) {
+        const maskedEmail = mainUser.email.replace(/(.{2})(.*)(@.*)/, '$1***$3');
+        embed.addFields({ name: '📧 Email', value: maskedEmail, inline: true });
+      }
 
-      logger.info('Auto-linked Discord account from OAuth', {
-        discordId,
-        seisoUserId: mainUser.userId
-      });
-    } else {
-      // No OAuth link found
-      const embed = new EmbedBuilder()
-        .setColor(0xFFA500)
-        .setTitle('🔍 No Linked Account Found')
-        .setDescription('Your Discord isn\'t connected to a SeisoAI account yet.')
-        .addFields(
-          {
-            name: '🌐 Option 1: Link via Website (Recommended)',
-            value: `1. Go to [SeisoAI](${config.urls.website})\n2. Log in to your account\n3. Click "Connect Discord" in settings\n4. Authorize the connection\n5. Run \`/link auto\` again!`
-          },
-          {
-            name: '📧 Option 2: Link Manually',
-            value: '`/link email` - Link with your SeisoAI email\n`/link wallet` - Link with your wallet address'
-          }
-        );
-
-      const row = new ActionRowBuilder<ButtonBuilder>()
-        .addComponents(
-          new ButtonBuilder()
-            .setLabel('Open SeisoAI')
-            .setStyle(ButtonStyle.Link)
-            .setURL(config.urls.website)
-            .setEmoji('🌐')
-        );
-
-      await interaction.editReply({ embeds: [embed], components: [row] });
-    }
-  } catch (error) {
-    const err = error as Error;
-    logger.error('Auto-link error', { error: err.message, userId: interaction.user.id });
-
-    const errorEmbed = new EmbedBuilder()
-      .setColor(0xE74C3C)
-      .setTitle('❌ Error')
-      .setDescription('Failed to check for linked account.');
-
-    await interaction.editReply({ embeds: [errorEmbed] });
-  }
-}
-
-async function handleStatus(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
-
-  try {
-    // Ensure database is connected
-    await ensureConnected();
-
-    // First try auto-detection from main database
-    // Ensure User model is registered before using it
-    const UserModel = ensureUserModel();
-    const mainUser = await UserModel.findOne({ discordId: interaction.user.id });
-    
-    let discordUser = await DiscordUser.findOne({ discordId: interaction.user.id });
-
-    // If found in main DB but not synced locally, sync it
-    if (mainUser && discordUser && !discordUser.seisoUserId) {
-      discordUser.seisoUserId = mainUser.userId;
-      discordUser.credits = mainUser.credits;
-      discordUser.totalCreditsEarned = mainUser.totalCreditsEarned;
-      discordUser.totalCreditsSpent = mainUser.totalCreditsSpent;
-      await discordUser.save();
-    }
-
-    if (!discordUser) {
-      const embed = new EmbedBuilder()
-        .setColor(0xFFA500)
-        .setTitle('📋 Link Status')
-        .setDescription('You haven\'t linked any accounts yet.')
-        .addFields({
-          name: '🔗 How to Link',
-          value: '`/link auto` - Auto-detect if linked via website\n`/link email` - Link with your SeisoAI email\n`/link wallet` - Link with your wallet address'
+      if (mainUser.walletAddress) {
+        const addr = mainUser.walletAddress;
+        embed.addFields({ 
+          name: '💳 Wallet', 
+          value: `\`${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}\``, 
+          inline: true 
         });
+      }
 
       await interaction.editReply({ embeds: [embed] });
       return;
     }
 
+    // Check if linked via email/wallet
+    if (discordUser?.seisoUserId) {
+      const embed = new EmbedBuilder()
+        .setColor(0x2ECC71)
+        .setTitle('✅ Account Linked!')
+        .setDescription('Your Discord is connected to SeisoAI.')
+        .setThumbnail(interaction.user.displayAvatarURL())
+        .addFields(
+          { name: '💰 Credits', value: `**${discordUser.credits.toLocaleString()}**`, inline: true },
+          { name: '📊 Total Earned', value: `${discordUser.totalCreditsEarned.toLocaleString()}`, inline: true }
+        )
+        .setFooter({ text: 'Start generating with /imagine, /video, /music, or /3d' });
+
+      await interaction.editReply({ embeds: [embed] });
+      return;
+    }
+
+    // Not linked - show options
     const embed = new EmbedBuilder()
-      .setColor(0x2ECC71)
-      .setTitle('📋 Link Status')
-      .setThumbnail(interaction.user.displayAvatarURL());
+      .setColor(0x5865F2)
+      .setTitle('🔗 Connect Your SeisoAI Account')
+      .setDescription('Link your Discord to access your credits and sync your generations across platforms.')
+      .setThumbnail(interaction.user.displayAvatarURL())
+      .addFields(
+        {
+          name: '🌐 Website (Recommended)',
+          value: 'Connect via the SeisoAI website for the easiest setup. Your credits sync automatically!',
+          inline: false
+        },
+        {
+          name: '📧 Email',
+          value: 'Link using the email on your SeisoAI account.',
+          inline: true
+        },
+        {
+          name: '💳 Wallet',
+          value: 'Link using your connected wallet address.',
+          inline: true
+        }
+      )
+      .setFooter({ text: 'Choose a method below to get started' });
 
-    if (discordUser.seisoUserId) {
-      embed.addFields({ 
-        name: '🆔 SeisoAI ID', 
-        value: `\`${discordUser.seisoUserId}\``, 
-        inline: true 
-      });
-    }
+    const row = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('Connect via Website')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${config.urls.website}/settings?connect=discord`)
+          .setEmoji('🌐'),
+        new ButtonBuilder()
+          .setCustomId('link_email_btn')
+          .setLabel('Use Email')
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji('📧'),
+        new ButtonBuilder()
+          .setCustomId('link_wallet_btn')
+          .setLabel('Use Wallet')
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji('💳')
+      );
 
-    if (discordUser.email) {
-      embed.addFields({ 
-        name: '📧 Email', 
-        value: discordUser.email, 
-        inline: true 
-      });
-    }
+    const refreshRow = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId('link_refresh')
+          .setLabel('I\'ve connected on the website')
+          .setStyle(ButtonStyle.Success)
+          .setEmoji('🔄')
+      );
 
-    if (discordUser.walletAddress) {
-      const addr = discordUser.walletAddress;
-      embed.addFields({ 
-        name: '💳 Wallet', 
-        value: `${addr.substring(0, 8)}...${addr.substring(addr.length - 6)}`, 
-        inline: true 
-      });
-    }
+    await interaction.editReply({ embeds: [embed], components: [row, refreshRow] });
 
-    embed.addFields(
-      { name: '💰 Credits', value: `${discordUser.credits}`, inline: true },
-      { name: '📊 Earned', value: `${discordUser.totalCreditsEarned}`, inline: true },
-      { name: '📈 Spent', value: `${discordUser.totalCreditsSpent}`, inline: true }
-    );
-
-    if (!discordUser.seisoUserId && !discordUser.email && !discordUser.walletAddress) {
-      embed.setColor(0xFFA500);
-      embed.setDescription('❌ No accounts linked');
-    } else {
-      embed.setDescription('✅ Account linked successfully!');
-    }
-
-    await interaction.editReply({ embeds: [embed] });
+    logger.info('Link command - showing options', {
+      discordId,
+      username: interaction.user.username
+    });
 
   } catch (error) {
     const err = error as Error;
-    logger.error('Link status error', { error: err.message, userId: interaction.user.id });
+    logger.error('Link command error', { error: err.message, stack: err.stack, userId: interaction.user.id });
 
     const errorEmbed = new EmbedBuilder()
       .setColor(0xE74C3C)
-      .setTitle('❌ Error')
-      .setDescription('Failed to retrieve link status.');
+      .setTitle('❌ Connection Error')
+      .setDescription('Unable to check your account status. Please try again in a moment.')
+      .setFooter({ text: 'If this persists, contact support' });
 
     await interaction.editReply({ embeds: [errorEmbed] });
+  }
+}
+
+/**
+ * Handle link button interactions
+ */
+export async function handleLinkButton(interaction: ButtonInteraction): Promise<void> {
+  const customId = interaction.customId;
+
+  if (customId === 'link_email_btn') {
+    const modal = new ModalBuilder()
+      .setCustomId('link_email_modal')
+      .setTitle('Link Email Account');
+
+    const input = new TextInputBuilder()
+      .setCustomId('email_input')
+      .setLabel('Your SeisoAI Email')
+      .setPlaceholder('you@example.com')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMinLength(5)
+      .setMaxLength(100);
+
+    const row = new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+    modal.addComponents(row);
+
+    await interaction.showModal(modal);
+    return;
+  }
+
+  if (customId === 'link_wallet_btn') {
+    const modal = new ModalBuilder()
+      .setCustomId('link_wallet_modal')
+      .setTitle('Link Wallet Address');
+
+    const input = new TextInputBuilder()
+      .setCustomId('wallet_input')
+      .setLabel('Your Wallet Address')
+      .setPlaceholder('0x... or Solana address')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMinLength(20)
+      .setMaxLength(64);
+
+    const row = new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+    modal.addComponents(row);
+
+    await interaction.showModal(modal);
+    return;
+  }
+
+  if (customId === 'link_refresh') {
+    await interaction.deferUpdate();
+
+    try {
+      await ensureConnected();
+
+      const discordId = interaction.user.id;
+      const UserModel = getUserModel();
+      const mainUser = await UserModel.findOne({ discordId }) as IMainUser | null;
+
+      if (mainUser) {
+        // Found! Sync the accounts
+        const discordUser = await DiscordUser.findOrCreate({
+          id: interaction.user.id,
+          username: interaction.user.username,
+          discriminator: interaction.user.discriminator,
+          avatar: interaction.user.avatar || undefined
+        });
+
+        discordUser.seisoUserId = mainUser.userId;
+        if (mainUser.email) discordUser.email = mainUser.email;
+        if (mainUser.walletAddress) discordUser.walletAddress = mainUser.walletAddress;
+        discordUser.credits = mainUser.credits;
+        discordUser.totalCreditsEarned = mainUser.totalCreditsEarned;
+        discordUser.totalCreditsSpent = mainUser.totalCreditsSpent;
+        await discordUser.save();
+
+        const embed = new EmbedBuilder()
+          .setColor(0x2ECC71)
+          .setTitle('✅ Account Connected!')
+          .setDescription('Your Discord is now linked to your SeisoAI account.')
+          .setThumbnail(interaction.user.displayAvatarURL())
+          .addFields(
+            { name: '💰 Credits', value: `**${discordUser.credits.toLocaleString()}**`, inline: true },
+            { name: '📊 Total Earned', value: `${discordUser.totalCreditsEarned.toLocaleString()}`, inline: true }
+          )
+          .setFooter({ text: 'Start generating with /imagine, /video, /music, or /3d' });
+
+        await interaction.editReply({ embeds: [embed], components: [] });
+
+        logger.info('Refreshed and linked Discord account', {
+          discordId,
+          seisoUserId: mainUser.userId
+        });
+      } else {
+        const embed = new EmbedBuilder()
+          .setColor(0xFFA500)
+          .setTitle('🔍 No Connection Found Yet')
+          .setDescription('Make sure you\'ve clicked **Connect Discord** in your [SeisoAI settings](' + config.urls.website + '/settings) and authorized the connection.')
+          .addFields({
+            name: '💡 Steps',
+            value: '1. Go to SeisoAI website\n2. Log into your account\n3. Go to Settings\n4. Click "Connect Discord"\n5. Authorize in Discord\n6. Click the refresh button again'
+          });
+
+        const row = new ActionRowBuilder<ButtonBuilder>()
+          .addComponents(
+            new ButtonBuilder()
+              .setLabel('Open Settings')
+              .setStyle(ButtonStyle.Link)
+              .setURL(`${config.urls.website}/settings?connect=discord`)
+              .setEmoji('🌐'),
+            new ButtonBuilder()
+              .setCustomId('link_refresh')
+              .setLabel('Check Again')
+              .setStyle(ButtonStyle.Success)
+              .setEmoji('🔄')
+          );
+
+        await interaction.editReply({ embeds: [embed], components: [row] });
+      }
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Link refresh error', { error: err.message, userId: interaction.user.id });
+
+      const errorEmbed = new EmbedBuilder()
+        .setColor(0xE74C3C)
+        .setTitle('❌ Error')
+        .setDescription('Unable to check your account. Please try again.');
+
+      await interaction.editReply({ embeds: [errorEmbed], components: [] });
+    }
   }
 }
 
@@ -323,8 +365,7 @@ export async function handleLinkModal(interaction: ModalSubmitInteraction): Prom
     }
 
     // Try to find existing SeisoAI user
-    // Ensure User model is registered before using it
-    const UserModel = ensureUserModel();
+    const UserModel = getUserModel();
     let mainUser: IMainUser | null = null;
 
     if (isEmail) {
@@ -364,12 +405,13 @@ export async function handleLinkModal(interaction: ModalSubmitInteraction): Prom
       const embed = new EmbedBuilder()
         .setColor(0x2ECC71)
         .setTitle('✅ Account Linked!')
-        .setDescription(`Successfully linked to your SeisoAI account.`)
+        .setDescription('Successfully linked to your SeisoAI account.')
+        .setThumbnail(interaction.user.displayAvatarURL())
         .addFields(
-          { name: '💰 Credits Synced', value: `${discordUser.credits}`, inline: true },
-          { name: '📊 Total Earned', value: `${discordUser.totalCreditsEarned}`, inline: true }
+          { name: '💰 Credits', value: `**${discordUser.credits.toLocaleString()}**`, inline: true },
+          { name: '📊 Total Earned', value: `${discordUser.totalCreditsEarned.toLocaleString()}`, inline: true }
         )
-        .setFooter({ text: 'Your credits are now synced between Discord and the website!' });
+        .setFooter({ text: 'Start generating with /imagine, /video, /music, or /3d' });
 
       await interaction.editReply({ embeds: [embed] });
 
@@ -380,26 +422,17 @@ export async function handleLinkModal(interaction: ModalSubmitInteraction): Prom
       });
 
     } else {
-      // No existing account - store the link info for future
-      if (isEmail) {
-        discordUser.email = inputValue.toLowerCase();
-      } else {
-        discordUser.walletAddress = inputValue.startsWith('0x') ? inputValue.toLowerCase() : inputValue;
-      }
-      await discordUser.save();
-
+      // No existing account found
       const embed = new EmbedBuilder()
         .setColor(0xFFA500)
-        .setTitle('📝 Link Saved')
+        .setTitle('🔍 Account Not Found')
         .setDescription(`No SeisoAI account found with this ${isEmail ? 'email' : 'wallet'}.`)
         .addFields(
           {
-            name: '🔗 What\'s Next?',
-            value: `1. Visit [SeisoAI](${config.urls.website}) and create an account\n2. Use the same ${isEmail ? 'email' : 'wallet'} to sign up\n3. Your accounts will be automatically linked!`
-          },
-          {
-            name: '💡 Current Credits',
-            value: `You have **${discordUser.credits}** credits available to use now.`
+            name: '💡 What to do',
+            value: isEmail 
+              ? '• Make sure you entered the email you used on SeisoAI\n• Check for typos\n• Try linking via website instead'
+              : '• Make sure you entered the correct wallet address\n• Wallet must be connected to your SeisoAI account\n• Try linking via website instead'
           }
         );
 
@@ -409,12 +442,17 @@ export async function handleLinkModal(interaction: ModalSubmitInteraction): Prom
             .setLabel('Create Account')
             .setStyle(ButtonStyle.Link)
             .setURL(config.urls.website)
-            .setEmoji('🚀')
+            .setEmoji('🚀'),
+          new ButtonBuilder()
+            .setLabel('Connect via Website')
+            .setStyle(ButtonStyle.Link)
+            .setURL(`${config.urls.website}/settings?connect=discord`)
+            .setEmoji('🌐')
         );
 
       await interaction.editReply({ embeds: [embed], components: [row] });
 
-      logger.info('Discord link saved (no existing account)', {
+      logger.info('Link attempt - no matching account', {
         discordId: interaction.user.id,
         method: isEmail ? 'email' : 'wallet'
       });
@@ -422,12 +460,13 @@ export async function handleLinkModal(interaction: ModalSubmitInteraction): Prom
 
   } catch (error) {
     const err = error as Error;
-    logger.error('Link modal error', { error: err.message, userId: interaction.user.id });
+    logger.error('Link modal error', { error: err.message, stack: err.stack, userId: interaction.user.id });
 
     const errorEmbed = new EmbedBuilder()
       .setColor(0xE74C3C)
-      .setTitle('❌ Link Failed')
-      .setDescription(`Something went wrong: ${err.message}`);
+      .setTitle('❌ Connection Error')
+      .setDescription('Unable to link your account. Please try again in a moment.')
+      .setFooter({ text: 'If this persists, try connecting via the website instead' });
 
     await interaction.editReply({ embeds: [errorEmbed] });
   }
