@@ -18,11 +18,13 @@ import {
 } from 'discord.js';
 import mongoose from 'mongoose';
 import DiscordUser from '../database/models/DiscordUser.js';
+import User from '../database/models/User.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { buildEmailLookupConditions } from '../utils/encryption.js';
+import { ensureConnected } from '../database/index.js';
 
-// Interface for main User model
+// Interface for main User model (matches IUser from User model)
 interface IMainUser {
   userId?: string;
   email?: string;
@@ -98,13 +100,15 @@ async function handleAutoLink(interaction: ChatInputCommandInteraction): Promise
   await interaction.deferReply({ ephemeral: true });
 
   try {
+    // Ensure database is connected
+    await ensureConnected();
+
     const discordId = interaction.user.id;
 
     // Check if already linked in our Discord database
     let discordUser = await DiscordUser.findOne({ discordId });
 
     // Check main SeisoAI database for OAuth-linked accounts
-    const User = mongoose.model<IMainUser>('User');
     const mainUser = await User.findOne({ discordId });
 
     if (mainUser) {
@@ -186,8 +190,10 @@ async function handleStatus(interaction: ChatInputCommandInteraction): Promise<v
   await interaction.deferReply({ ephemeral: true });
 
   try {
+    // Ensure database is connected
+    await ensureConnected();
+
     // First try auto-detection from main database
-    const User = mongoose.model<IMainUser>('User');
     const mainUser = await User.findOne({ discordId: interaction.user.id });
     
     let discordUser = await DiscordUser.findOne({ discordId: interaction.user.id });
@@ -280,6 +286,9 @@ export async function handleLinkModal(interaction: ModalSubmitInteraction): Prom
   await interaction.deferReply({ ephemeral: true });
 
   try {
+    // Ensure database is connected
+    await ensureConnected();
+
     const isEmail = interaction.customId === 'link_email_modal';
     const inputValue = interaction.fields.getTextInputValue(isEmail ? 'email_input' : 'wallet_input');
 
@@ -310,7 +319,6 @@ export async function handleLinkModal(interaction: ModalSubmitInteraction): Prom
     }
 
     // Try to find existing SeisoAI user
-    const User = mongoose.model<IMainUser>('User');
     let mainUser: IMainUser | null = null;
 
     if (isEmail) {

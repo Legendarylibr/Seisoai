@@ -9,7 +9,8 @@ import {
   ButtonBuilder,
   ButtonStyle,
   GuildMember,
-  Message
+  Message,
+  TextChannel
 } from 'discord.js';
 import { v4 as uuidv4 } from 'uuid';
 import DiscordUser from '../database/models/DiscordUser.js';
@@ -98,20 +99,15 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       return;
     }
 
+    // Try to get private channel, fallback to current channel
     const privateChannel = await getOrCreatePrivateChannel(
       interaction.client,
       interaction.guild,
       interaction.member as GuildMember
     );
-
-    if (!privateChannel) {
-      const embed = new EmbedBuilder()
-        .setColor(0xE74C3C)
-        .setTitle('❌ Channel Error')
-        .setDescription('Could not create your private generation channel. Please contact an admin.');
-      await interaction.editReply({ embeds: [embed] });
-      return;
-    }
+    
+    // Use private channel if available, otherwise use current channel
+    const outputChannel = privateChannel || (interaction.channel as TextChannel);
 
     // Get or create user
     const discordUser = await DiscordUser.findOrCreate({
@@ -145,19 +141,27 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if (mood) promptParts.push(mood);
     const enhancedPrompt = promptParts.join(', ');
 
-    // Notify user and redirect to private channel
-    const redirectEmbed = new EmbedBuilder()
-      .setColor(0x5865F2)
-      .setTitle('🔒 Generating in Private Channel')
-      .setDescription(`Your music is being generated in your private channel!`)
-      .addFields({
-        name: '📍 Go to your channel',
-        value: `<#${privateChannel.id}>`
-      });
+    // Notify user about generation
+    const isPrivate = privateChannel !== null;
+    if (isPrivate) {
+      const redirectEmbed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('🔒 Generating in Private Channel')
+        .setDescription(`Your music is being generated in your private channel!`)
+        .addFields({
+          name: '📍 Go to your channel',
+          value: `<#${privateChannel.id}>`
+        });
+      await interaction.editReply({ embeds: [redirectEmbed] });
+    } else {
+      const startEmbed = new EmbedBuilder()
+        .setColor(0x9B59B6)
+        .setTitle('🎵 Generation Started')
+        .setDescription('Your music is being generated...');
+      await interaction.editReply({ embeds: [startEmbed] });
+    }
 
-    await interaction.editReply({ embeds: [redirectEmbed] });
-
-    // Show processing message in private channel
+    // Show processing message
     const processingEmbed = new EmbedBuilder()
       .setColor(0x9B59B6)
       .setTitle('🎵 Generating Music...')
@@ -170,7 +174,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       )
       .setFooter({ text: 'Music generation takes 10-60 seconds...' });
 
-    const processingMessage: Message = await privateChannel.send({ embeds: [processingEmbed] });
+    const processingMessage: Message = await outputChannel.send({ embeds: [processingEmbed] });
 
     // Deduct credits upfront
     discordUser.credits -= creditsRequired;
@@ -267,23 +271,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         name: '💡 What to do',
         value: 'Try again with a different prompt. If credits were deducted, they will be refunded automatically.'
       });
-
-    // Try to send error to private channel
-    try {
-      if (interaction.guild && interaction.member) {
-        const privateChannel = await getOrCreatePrivateChannel(
-          interaction.client,
-          interaction.guild,
-          interaction.member as GuildMember
-        );
-        if (privateChannel) {
-          await privateChannel.send({ embeds: [errorEmbed] });
-          return;
-        }
-      }
-    } catch {
-      // Fallback to interaction reply
-    }
 
     await interaction.editReply({ embeds: [errorEmbed] });
   }
