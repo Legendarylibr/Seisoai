@@ -610,6 +610,260 @@ export function createAuthRoutes(deps: Dependencies = {}) {
     }
   });
 
+  /**
+   * Generate Discord account linking code
+   * POST /api/auth/discord-link-code
+   * 
+   * User must be authenticated. Generates a 6-digit code valid for 5 minutes.
+   * User enters this code in Discord with /link code command.
+   */
+  router.post('/discord-link-code', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user?.userId) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const User = mongoose.model<IUser>('User');
+      const user = await User.findOne({ userId: req.user.userId });
+
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+        return;
+      }
+
+      // Check if already linked to Discord
+      if (user.discordId) {
+        res.status(400).json({
+          success: false,
+          error: 'This account is already linked to a Discord account',
+          discordUsername: user.discordUsername
+        });
+        return;
+      }
+
+      // Generate a secure 6-digit code
+      const code = crypto.randomInt(100000, 999999).toString();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+      // Store the code on the user
+      await User.findOneAndUpdate(
+        { userId: user.userId },
+        {
+          discordLinkCode: code,
+          discordLinkCodeExpires: expiresAt
+        }
+      );
+
+      logger.info('Discord link code generated', { 
+        userId: user.userId,
+        expiresAt
+      });
+
+      res.json({
+        success: true,
+        code,
+        expiresAt: expiresAt.toISOString(),
+        expiresIn: 300, // 5 minutes in seconds
+        message: 'Enter this code in Discord using: /link code:' + code
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Generate Discord link code error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to generate link code'
+      });
+    }
+  });
+
+  /**
+   * Verify Discord account linking code
+   * POST /api/auth/verify-discord-link
+   * 
+   * Called by Discord bot to verify a linking code and complete the link.
+   * Requires API key or internal auth (not user JWT).
+   */
+  router.post('/verify-discord-link', async (req: Request, res: Response) => {
+    try {
+      const { code, discordId, discordUsername } = req.body as {
+        code?: string;
+        discordId?: string;
+        discordUsername?: string;
+      };
+
+      // Validate input
+      if (!code || !discordId) {
+        res.status(400).json({
+          success: false,
+          error: 'Code and Discord ID are required'
+        });
+        return;
+      }
+
+      // Validate code format (6 digits)
+      if (!/^\d{6}$/.test(code)) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid code format'
+        });
+        return;
+      }
+
+      const User = mongoose.model<IUser>('User');
+
+      // Find user with this code that hasn't expired
+      const user = await User.findOne({
+        discordLinkCode: code,
+        discordLinkCodeExpires: { $gt: new Date() }
+      });
+
+      if (!user) {
+        // Check if code exists but expired
+        const expiredUser = await User.findOne({ discordLinkCode: code });
+        if (expiredUser) {
+          res.status(400).json({
+            success: false,
+            error: 'This code has expired. Please generate a new one from the website.'
+          });
+          return;
+        }
+
+        res.status(400).json({
+          success: false,
+          error: 'Invalid code. Please check the code and try again.'
+        });
+        return;
+      }
+
+      // Check if this Discord account is already linked to another user
+      const existingDiscordUser = await User.findOne({ discordId });
+      if (existingDiscordUser && existingDiscordUser.userId !== user.userId) {
+        res.status(400).json({
+          success: false,
+          error: 'This Discord account is already linked to another SeisoAI account.'
+        });
+        return;
+      }
+
+      // Link the accounts
+      await User.findOneAndUpdate(
+        { userId: user.userId },
+        {
+          discordId,
+          discordUsername,
+          discordLinkedAt: new Date(),
+          // Clear the link code after successful use
+          $unset: { discordLinkCode: '', discordLinkCodeExpires: '' }
+        }
+      );
+
+      logger.info('Discord account linked successfully', {
+        userId: user.userId,
+        discordId,
+        discordUsername
+      });
+
+      res.json({
+        success: true,
+        message: 'Discord account linked successfully!',
+        user: {
+          userId: user.userId,
+          email: user.email,
+          credits: user.credits,
+          totalCreditsEarned: user.totalCreditsEarned,
+          totalCreditsSpent: user.totalCreditsSpent,
+          walletAddress: user.walletAddress
+        }
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Verify Discord link error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to verify link code'
+      });
+    }
+  });
+
+  /**
+   * Unlink Discord account
+   * POST /api/auth/unlink-discord
+   * 
+   * Allows authenticated user to unlink their Discord account.
+   */
+  router.post('/unlink-discord', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user?.userId) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const User = mongoose.model<IUser>('User');
+      const user = await User.findOne({ userId: req.user.userId });
+
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+        return;
+      }
+
+      if (!user.discordId) {
+        res.status(400).json({
+          success: false,
+          error: 'No Discord account is linked to this account'
+        });
+        return;
+      }
+
+      const oldDiscordId = user.discordId;
+      const oldDiscordUsername = user.discordUsername;
+
+      // Unlink Discord
+      await User.findOneAndUpdate(
+        { userId: user.userId },
+        {
+          $unset: { 
+            discordId: '', 
+            discordUsername: '', 
+            discordLinkedAt: '',
+            discordLinkCode: '',
+            discordLinkCodeExpires: ''
+          }
+        }
+      );
+
+      logger.info('Discord account unlinked', {
+        userId: user.userId,
+        oldDiscordId,
+        oldDiscordUsername
+      });
+
+      res.json({
+        success: true,
+        message: 'Discord account unlinked successfully'
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Unlink Discord error:', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to unlink Discord account'
+      });
+    }
+  });
+
   return router;
 }
 

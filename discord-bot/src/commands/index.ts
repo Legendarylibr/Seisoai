@@ -44,7 +44,7 @@ for (const command of commandModules) {
 }
 
 // Export individual command handlers for modal/select/button interactions
-export { handleLinkModal, handleLinkButton } from './link.js';
+export { handleLinkButton } from './link.js';
 export { handleHelpSelect } from './help.js';
 
 // Export command data for deployment

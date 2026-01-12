@@ -90,6 +90,9 @@ export interface IUser extends Document {
   discordId?: string;
   discordUsername?: string;
   discordLinkedAt?: Date;
+  // Discord account linking code (secure verification flow)
+  discordLinkCode?: string;
+  discordLinkCodeExpires?: Date;
   // SECURITY: Account lockout fields for brute force protection
   failedLoginAttempts?: number;
   lockoutUntil?: Date;
@@ -276,6 +279,9 @@ const userSchema = new mongoose.Schema<IUser>({
   },
   discordUsername: String,
   discordLinkedAt: Date,
+  // Discord account linking code (secure verification flow)
+  discordLinkCode: { type: String, sparse: true },
+  discordLinkCodeExpires: { type: Date },
   // SECURITY: Account lockout fields for brute force protection
   failedLoginAttempts: { type: Number, default: 0, min: 0 },
   lockoutUntil: { type: Date, required: false }

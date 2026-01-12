@@ -13,7 +13,7 @@ import {
 } from 'discord.js';
 import config, { validateConfig } from './config/index.js';
 import { connectDatabase, ensureConnected } from './database/index.js';
-import commands, { handleLinkModal, handleLinkButton, handleHelpSelect } from './commands/index.js';
+import commands, { handleLinkButton, handleHelpSelect } from './commands/index.js';
 import { getOrCreatePrivateChannel } from './services/channels.js';
 import management from './services/management.js';
 import DiscordUser from './database/models/DiscordUser.js';
@@ -197,13 +197,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       } else {
         await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
       }
-    }
-  }
-
-  // Handle modal submissions
-  if (interaction.isModalSubmit()) {
-    if (interaction.customId.startsWith('link_')) {
-      await handleLinkModal(interaction);
     }
   }
 

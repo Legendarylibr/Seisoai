@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
-import { Mail, LogOut, Coins, RefreshCw, User, MessageCircle, Check, X, Loader2 } from 'lucide-react';
-import { WIN95, BTN, PANEL, TEXT } from '../utils/buttonStyles';
-import { API_URL } from '../utils/apiConfig';
+import { Mail, LogOut, Coins, RefreshCw, User, MessageCircle, Check, X, Loader2, Copy, Key } from 'lucide-react';
+import { WIN95, BTN } from '../utils/buttonStyles';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+import { getAuthToken } from '../services/emailAuthService';
 
 interface DiscordStatus {
   linked: boolean;
@@ -14,22 +15,39 @@ interface DiscordStatus {
   } | null;
 }
 
+interface LinkCodeResponse {
+  success: boolean;
+  code?: string;
+  expiresAt?: string;
+  expiresIn?: number;
+  error?: string;
+}
+
 const EmailUserInfo: React.FC = () => {
-  const { email, credits, refreshCredits, signOut, isLoading, token } = useEmailAuth();
-  const displayCredits = isLoading ? '...' : Math.max(0, Math.floor(credits) || 0);
+  const { email, credits, refreshCredits, signOut, isLoading, isAuthenticated } = useEmailAuth();
+  const numericCredits = Math.max(0, Math.floor(Number(credits)) || 0);
+  const displayCredits = isLoading ? '...' : numericCredits.toString();
   
   const [discordStatus, setDiscordStatus] = useState<DiscordStatus | null>(null);
   const [loadingDiscord, setLoadingDiscord] = useState(false);
   const [unlinkingDiscord, setUnlinkingDiscord] = useState(false);
   
+  // Link code state
+  const [linkCode, setLinkCode] = useState<string | null>(null);
+  const [linkCodeExpiry, setLinkCodeExpiry] = useState<Date | null>(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  
   // Check Discord link status on mount
   useEffect(() => {
-    if (token) {
+    if (isAuthenticated) {
       checkDiscordStatus();
     }
-  }, [token]);
+  }, [isAuthenticated]);
   
-  const checkDiscordStatus = async () => {
+  const checkDiscordStatus = useCallback(async () => {
+    const token = getAuthToken();
     if (!token) return;
     try {
       setLoadingDiscord(true);
@@ -47,43 +65,126 @@ const EmailUserInfo: React.FC = () => {
     } finally {
       setLoadingDiscord(false);
     }
+  }, []);
+  
+  // Generate a linking code for Discord bot
+  const handleGenerateLinkCode = useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) return;
+    try {
+      setGeneratingCode(true);
+      setCodeError(null);
+      
+      const csrfToken = await ensureCSRFToken();
+      const response = await fetch(`${API_URL}/api/auth/discord-link-code`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+        },
+        credentials: 'include'
+      });
+      
+      const data: LinkCodeResponse = await response.json();
+      
+      if (data.success && data.code) {
+        setLinkCode(data.code);
+        setLinkCodeExpiry(data.expiresAt ? new Date(data.expiresAt) : null);
+      } else {
+        setCodeError(data.error || 'Failed to generate code');
+      }
+    } catch (error) {
+      console.error('Failed to generate link code:', error);
+      setCodeError('Failed to generate code. Please try again.');
+    } finally {
+      setGeneratingCode(false);
+    }
+  }, []);
+  
+  // Copy code to clipboard
+  const handleCopyCode = async () => {
+    if (!linkCode) return;
+    try {
+      await navigator.clipboard.writeText(linkCode);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    } catch (error) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = linkCode;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    }
   };
   
-  const handleConnectDiscord = () => {
-    // Redirect to Discord OAuth - the backend will handle the rest
-    window.location.href = `${API_URL}/api/auth/discord`;
-  };
+  // Clear link code when it expires
+  useEffect(() => {
+    if (linkCodeExpiry) {
+      const timeout = linkCodeExpiry.getTime() - Date.now();
+      if (timeout > 0) {
+        const timer = setTimeout(() => {
+          setLinkCode(null);
+          setLinkCodeExpiry(null);
+        }, timeout);
+        return () => clearTimeout(timer);
+      } else {
+        setLinkCode(null);
+        setLinkCodeExpiry(null);
+      }
+    }
+  }, [linkCodeExpiry]);
   
-  const handleUnlinkDiscord = async () => {
+  const handleUnlinkDiscord = useCallback(async () => {
+    const token = getAuthToken();
     if (!token) return;
     try {
       setUnlinkingDiscord(true);
-      const response = await fetch(`${API_URL}/api/auth/discord`, {
-        method: 'DELETE',
+      const csrfToken = await ensureCSRFToken();
+      const response = await fetch(`${API_URL}/api/auth/unlink-discord`, {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+        },
+        credentials: 'include'
       });
       if (response.ok) {
         setDiscordStatus({ linked: false, discord: null });
+        setLinkCode(null);
+        setLinkCodeExpiry(null);
       }
     } catch (error) {
       console.error('Failed to unlink Discord:', error);
     } finally {
       setUnlinkingDiscord(false);
     }
-  };
+  }, []);
   
   // Check URL params for Discord OAuth result
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const discordResult = params.get('discord');
+    const connectDiscord = params.get('connect');
+    
     if (discordResult === 'success') {
       checkDiscordStatus();
       // Clean up URL
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, []);
+    
+    // Auto-generate code if redirected from Discord bot
+    if (connectDiscord === 'discord' && isAuthenticated && !discordStatus?.linked) {
+      handleGenerateLinkCode();
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [isAuthenticated, discordStatus?.linked, checkDiscordStatus, handleGenerateLinkCode]);
 
   return (
     <div 
@@ -151,7 +252,7 @@ const EmailUserInfo: React.FC = () => {
             <span 
               className="font-bold text-[12px] px-2 py-0.5" 
               style={{ 
-                color: displayCredits > 0 ? '#008000' : '#800000',
+                color: numericCredits > 0 ? '#008000' : '#800000',
                 background: WIN95.bg,
                 boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
               }}
@@ -171,64 +272,129 @@ const EmailUserInfo: React.FC = () => {
         
         {/* Discord connection row */}
         <div 
-          className="flex items-center justify-between p-1.5"
+          className="p-1.5"
           style={{
             background: WIN95.inputBg,
             boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`
           }}
         >
-          <div className="flex items-center gap-1.5">
-            <MessageCircle className="w-4 h-4" style={{ color: '#5865F2' }} />
-            <span className="text-[10px] font-bold" style={{ color: WIN95.text }}>Discord:</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {loadingDiscord ? (
-              <Loader2 className="w-4 h-4 animate-spin" style={{ color: WIN95.text }} />
-            ) : discordStatus?.linked && discordStatus.discord ? (
-              <>
-                <div className="flex items-center gap-1.5">
-                  <Check className="w-3 h-3" style={{ color: '#008000' }} />
-                  <span 
-                    className="text-[10px] px-1.5 py-0.5" 
-                    style={{ 
-                      color: WIN95.text,
-                      background: WIN95.bg,
-                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
-                    }}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <MessageCircle className="w-4 h-4" style={{ color: '#5865F2' }} />
+              <span className="text-[10px] font-bold" style={{ color: WIN95.text }}>Discord:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {loadingDiscord ? (
+                <Loader2 className="w-4 h-4 animate-spin" style={{ color: WIN95.text }} />
+              ) : discordStatus?.linked && discordStatus.discord ? (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-3 h-3" style={{ color: '#008000' }} />
+                    <span 
+                      className="text-[10px] px-1.5 py-0.5" 
+                      style={{ 
+                        color: WIN95.text,
+                        background: WIN95.bg,
+                        boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                      }}
+                    >
+                      {discordStatus.discord.username}
+                    </span>
+                  </div>
+                  <button 
+                    onClick={handleUnlinkDiscord}
+                    disabled={unlinkingDiscord}
+                    className="p-1"
+                    style={BTN.base}
+                    title="Disconnect Discord"
                   >
-                    {discordStatus.discord.username}
-                  </span>
+                    {unlinkingDiscord ? (
+                      <Loader2 className="w-3 h-3 animate-spin" style={{ color: WIN95.text }} />
+                    ) : (
+                      <X className="w-3 h-3" style={{ color: '#800000' }} />
+                    )}
+                  </button>
+                </>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={handleGenerateLinkCode}
+                    disabled={generatingCode}
+                    className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold"
+                    style={{
+                      ...BTN.base,
+                      background: '#5865F2',
+                      color: '#ffffff'
+                    }}
+                    title="Get a code to link in Discord"
+                  >
+                    {generatingCode ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Key className="w-3 h-3" />
+                    )}
+                    <span>Get Code</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Link code display */}
+          {linkCode && !discordStatus?.linked && (
+            <div 
+              className="mt-2 p-2"
+              style={{
+                background: WIN95.bg,
+                boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+              }}
+            >
+              <div className="text-[9px] mb-1" style={{ color: WIN95.textDisabled }}>
+                Run this in Discord: <span style={{ color: WIN95.text, fontFamily: 'monospace' }}>/link code:{linkCode}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div 
+                  className="flex-1 text-center py-1 font-mono text-lg font-bold tracking-[0.3em]"
+                  style={{
+                    background: WIN95.inputBg,
+                    color: '#000080',
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                  }}
+                >
+                  {linkCode}
                 </div>
                 <button 
-                  onClick={handleUnlinkDiscord}
-                  disabled={unlinkingDiscord}
-                  className="p-1"
+                  onClick={handleCopyCode}
+                  className="p-1.5"
                   style={BTN.base}
-                  title="Disconnect Discord"
+                  title="Copy code"
                 >
-                  {unlinkingDiscord ? (
-                    <Loader2 className="w-3 h-3 animate-spin" style={{ color: WIN95.text }} />
+                  {codeCopied ? (
+                    <Check className="w-4 h-4" style={{ color: '#008000' }} />
                   ) : (
-                    <X className="w-3 h-3" style={{ color: '#800000' }} />
+                    <Copy className="w-4 h-4" style={{ color: WIN95.text }} />
                   )}
                 </button>
-              </>
-            ) : (
-              <button 
-                onClick={handleConnectDiscord}
-                className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold"
-                style={{
-                  ...BTN.base,
-                  background: '#5865F2',
-                  color: '#ffffff'
-                }}
-                title="Connect Discord to use the bot"
-              >
-                <MessageCircle className="w-3 h-3" />
-                <span>Connect</span>
-              </button>
-            )}
-          </div>
+              </div>
+              <div className="text-[8px] mt-1 text-center" style={{ color: WIN95.textDisabled }}>
+                Code expires in 5 minutes
+              </div>
+            </div>
+          )}
+          
+          {/* Error display */}
+          {codeError && (
+            <div 
+              className="mt-2 p-1.5 text-[9px]"
+              style={{
+                background: '#ffcccc',
+                color: '#800000',
+                boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+              }}
+            >
+              {codeError}
+            </div>
+          )}
         </div>
       </div>
     </div>
