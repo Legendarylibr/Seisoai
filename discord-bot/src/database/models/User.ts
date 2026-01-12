@@ -86,4 +86,13 @@ if (mongoose.models.User) {
   User = mongoose.model<IUser>('User', userSchema);
 }
 
+// Ensure the model is registered by accessing it
+// This helps prevent "Schema hasn't been registered" errors
+export const ensureUserModel = (): mongoose.Model<IUser> => {
+  if (!mongoose.models.User) {
+    User = mongoose.model<IUser>('User', userSchema);
+  }
+  return mongoose.models.User as mongoose.Model<IUser>;
+};
+
 export default User;

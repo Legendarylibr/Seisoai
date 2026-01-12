@@ -18,7 +18,7 @@ import {
 } from 'discord.js';
 import mongoose from 'mongoose';
 import DiscordUser from '../database/models/DiscordUser.js';
-import User from '../database/models/User.js';
+import User, { ensureUserModel } from '../database/models/User.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { buildEmailLookupConditions } from '../utils/encryption.js';
@@ -109,7 +109,9 @@ async function handleAutoLink(interaction: ChatInputCommandInteraction): Promise
     let discordUser = await DiscordUser.findOne({ discordId });
 
     // Check main SeisoAI database for OAuth-linked accounts
-    const mainUser = await User.findOne({ discordId });
+    // Ensure User model is registered before using it
+    const UserModel = ensureUserModel();
+    const mainUser = await UserModel.findOne({ discordId });
 
     if (mainUser) {
       // Found! Link the accounts
@@ -194,7 +196,9 @@ async function handleStatus(interaction: ChatInputCommandInteraction): Promise<v
     await ensureConnected();
 
     // First try auto-detection from main database
-    const mainUser = await User.findOne({ discordId: interaction.user.id });
+    // Ensure User model is registered before using it
+    const UserModel = ensureUserModel();
+    const mainUser = await UserModel.findOne({ discordId: interaction.user.id });
     
     let discordUser = await DiscordUser.findOne({ discordId: interaction.user.id });
 
@@ -319,16 +323,18 @@ export async function handleLinkModal(interaction: ModalSubmitInteraction): Prom
     }
 
     // Try to find existing SeisoAI user
+    // Ensure User model is registered before using it
+    const UserModel = ensureUserModel();
     let mainUser: IMainUser | null = null;
 
     if (isEmail) {
       // Use encryption-aware email lookup with multiple fallback methods
       const emailConditions = buildEmailLookupConditions(inputValue);
-      mainUser = await User.findOne({ $or: emailConditions }) as IMainUser | null;
+      mainUser = await UserModel.findOne({ $or: emailConditions }) as IMainUser | null;
     } else {
       // Wallet lookup (no encryption needed)
       const walletQuery = { walletAddress: inputValue.startsWith('0x') ? inputValue.toLowerCase() : inputValue };
-      mainUser = await User.findOne(walletQuery) as IMainUser | null;
+      mainUser = await UserModel.findOne(walletQuery) as IMainUser | null;
     }
 
     // Get or create Discord user

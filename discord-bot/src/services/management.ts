@@ -15,7 +15,7 @@ import {
   EmbedBuilder
 } from 'discord.js';
 import DiscordUser from '../database/models/DiscordUser.js';
-import User from '../database/models/User.js';
+import User, { ensureUserModel } from '../database/models/User.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { buildEmailLookupConditions } from '../utils/encryption.js';
@@ -281,23 +281,24 @@ export async function syncCreditsFromMain(discordId: string): Promise<boolean> {
   try {
     let discordUser = await DiscordUser.findOne({ discordId });
     
-    // User model is imported at the top of the file to ensure schema is registered
+    // Ensure User model is registered before using it
+    const UserModel = ensureUserModel();
 
     // First, check if there's an OAuth-linked account (by discordId in main User)
-    let mainUser = await User.findOne({ discordId });
+    let mainUser = await UserModel.findOne({ discordId });
     
     // If not OAuth-linked, try other identifiers
     if (!mainUser && discordUser) {
       if (discordUser.seisoUserId) {
         // Direct userId lookup
-        mainUser = await User.findOne({ userId: discordUser.seisoUserId });
+        mainUser = await UserModel.findOne({ userId: discordUser.seisoUserId });
       } else if (discordUser.email) {
         // Use encryption-aware email lookup with multiple fallback methods
         const emailConditions = buildEmailLookupConditions(discordUser.email);
-        mainUser = await User.findOne({ $or: emailConditions });
+        mainUser = await UserModel.findOne({ $or: emailConditions });
       } else if (discordUser.walletAddress) {
         // Direct wallet lookup (no encryption needed)
-        mainUser = await User.findOne({ walletAddress: discordUser.walletAddress });
+        mainUser = await UserModel.findOne({ walletAddress: discordUser.walletAddress });
       }
     }
 

@@ -6,7 +6,7 @@ import config from '../config/index.js';
 import logger from '../utils/logger.js';
 // Import models to ensure they're registered
 import './models/DiscordUser.js';
-import './models/User.js';
+import User, { ensureUserModel } from './models/User.js';
 
 let isConnected = false;
 let connectionPromise: Promise<void> | null = null;
@@ -36,6 +36,9 @@ export async function connectDatabase(): Promise<void> {
         maxPoolSize: 10,
         minPoolSize: 1,
       });
+
+      // Ensure User model is registered after connection
+      ensureUserModel();
 
       isConnected = true;
       logger.info('Connected to MongoDB successfully');
