@@ -404,20 +404,36 @@ export function createAuthRoutes(deps: Dependencies = {}) {
       const token = authHeader?.split(' ')[1];
 
       if (!token || !JWT_SECRET) {
+        logger.warn('Credits endpoint: No token provided');
         res.status(401).json({ success: false, error: 'No token' });
         return;
       }
 
-      const decoded = jwt.verify(token, JWT_SECRET) as JWTDecoded;
+      let decoded: JWTDecoded;
+      try {
+        decoded = jwt.verify(token, JWT_SECRET) as JWTDecoded;
+      } catch (jwtErr) {
+        logger.warn('Credits endpoint: Invalid JWT', { error: (jwtErr as Error).message });
+        res.status(403).json({ success: false, error: 'Invalid token' });
+        return;
+      }
+      
+      logger.info('Credits endpoint: Looking up user', { userId: decoded.userId });
       
       // Direct DB query - no mongoose model overhead
       const db = mongoose.connection.db;
       const user = await db.collection('users').findOne({ userId: decoded.userId });
 
       if (!user) {
-        res.status(404).json({ success: false, error: 'User not found' });
+        logger.warn('Credits endpoint: User not found', { userId: decoded.userId });
+        res.status(404).json({ success: false, error: 'User not found', userId: decoded.userId });
         return;
       }
+
+      logger.info('Credits endpoint: Returning credits', { 
+        userId: decoded.userId, 
+        credits: user.credits 
+      });
 
       res.setHeader('Cache-Control', 'no-store');
       res.json({
@@ -427,7 +443,8 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         totalCreditsSpent: user.totalCreditsSpent || 0
       });
     } catch (error) {
-      res.status(403).json({ success: false, error: 'Invalid token' });
+      logger.error('Credits endpoint error', { error: (error as Error).message });
+      res.status(500).json({ success: false, error: 'Server error' });
     }
   });
 

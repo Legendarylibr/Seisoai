@@ -80,6 +80,7 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
 
     try {
       // Use simple /api/auth/credits endpoint - direct DB query, no complexity
+      console.log('[EmailAuthContext] Fetching credits from:', `${API_URL}/api/auth/credits`);
       const response = await fetch(`${API_URL}/api/auth/credits`, {
         method: 'GET',
         headers: {
@@ -88,7 +89,11 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
         }
       });
 
+      console.log('[EmailAuthContext] Response status:', response.status);
+
       if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[EmailAuthContext] Error response:', errorData);
         if (response.status === 401 || response.status === 403) {
           signOutService();
           setIsAuthenticated(false);
@@ -101,15 +106,19 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
       }
 
       const data = await response.json();
+      console.log('[EmailAuthContext] Credits response:', data);
       
       if (data.success) {
-        setCredits(Math.max(0, Math.floor(Number(data.credits) || 0)));
+        const newCredits = Math.max(0, Math.floor(Number(data.credits) || 0));
+        console.log('[EmailAuthContext] Setting credits to:', newCredits);
+        setCredits(newCredits);
         setTotalCreditsEarned(Math.max(0, Math.floor(Number(data.totalCreditsEarned) || 0)));
         setTotalCreditsSpent(Math.max(0, Math.floor(Number(data.totalCreditsSpent) || 0)));
         setIsAuthenticated(true);
       }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+      console.error('[EmailAuthContext] Fetch error:', errorMessage);
       logger.error('Failed to fetch credits', { error: errorMessage });
     } finally {
       setIsLoading(false);
