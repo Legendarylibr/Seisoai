@@ -103,8 +103,16 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   await interaction.deferReply({ ephemeral: true });
 
   try {
-    // Ensure database is connected
-    await ensureConnected();
+    // Try to connect to database, but don't fail if it's unavailable
+    let dbAvailable = false;
+    try {
+      await ensureConnected();
+      dbAvailable = true;
+    } catch (dbError) {
+      logger.warn('Database unavailable for link command, continuing with API-only mode', {
+        error: (dbError as Error).message
+      });
+    }
 
     const discordId = interaction.user.id;
     const code = interaction.options.getString('code');
@@ -134,21 +142,29 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       );
 
       if (result.success && result.user) {
-        // Sync to local DiscordUser for quick access
-        const discordUser = await DiscordUser.findOrCreate({
-          id: interaction.user.id,
-          username: interaction.user.username,
-          discriminator: interaction.user.discriminator,
-          avatar: interaction.user.avatar || undefined
-        });
+        // Sync to local DiscordUser for quick access (if DB available)
+        if (dbAvailable) {
+          try {
+            const discordUser = await DiscordUser.findOrCreate({
+              id: interaction.user.id,
+              username: interaction.user.username,
+              discriminator: interaction.user.discriminator,
+              avatar: interaction.user.avatar || undefined
+            });
 
-        discordUser.seisoUserId = result.user.userId;
-        if (result.user.email) discordUser.email = result.user.email;
-        if (result.user.walletAddress) discordUser.walletAddress = result.user.walletAddress;
-        discordUser.credits = result.user.credits;
-        discordUser.totalCreditsEarned = result.user.totalCreditsEarned;
-        discordUser.totalCreditsSpent = result.user.totalCreditsSpent;
-        await discordUser.save();
+            discordUser.seisoUserId = result.user.userId;
+            if (result.user.email) discordUser.email = result.user.email;
+            if (result.user.walletAddress) discordUser.walletAddress = result.user.walletAddress;
+            discordUser.credits = result.user.credits;
+            discordUser.totalCreditsEarned = result.user.totalCreditsEarned;
+            discordUser.totalCreditsSpent = result.user.totalCreditsSpent;
+            await discordUser.save();
+          } catch (dbSyncError) {
+            logger.warn('Failed to sync Discord user to local DB', {
+              error: (dbSyncError as Error).message
+            });
+          }
+        }
 
         const embed = new EmbedBuilder()
           .setColor(0x2ECC71)
@@ -156,9 +172,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
           .setDescription('Your Discord is now connected to your SeisoAI account.')
           .setThumbnail(interaction.user.displayAvatarURL())
           .addFields(
-            { name: '💰 Credits', value: `**${discordUser.credits.toLocaleString()}**`, inline: true },
-            { name: '📊 Total Earned', value: `${discordUser.totalCreditsEarned.toLocaleString()}`, inline: true },
-            { name: '📈 Total Spent', value: `${discordUser.totalCreditsSpent.toLocaleString()}`, inline: true }
+            { name: '💰 Credits', value: `**${result.user.credits.toLocaleString()}**`, inline: true },
+            { name: '📊 Total Earned', value: `${result.user.totalCreditsEarned.toLocaleString()}`, inline: true },
+            { name: '📈 Total Spent', value: `${result.user.totalCreditsSpent.toLocaleString()}`, inline: true }
           )
           .setFooter({ text: 'Start generating with /imagine, /video, /music, or /3d' });
 
@@ -200,73 +216,82 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     }
 
     // No code provided - check if already linked or show instructions
-    const UserModel = getUserModel();
-    const mainUser = await UserModel.findOne({ discordId }) as IMainUser | null;
-    const discordUser = await DiscordUser.findOne({ discordId });
+    // Only check DB if available
+    if (dbAvailable) {
+      try {
+        const UserModel = getUserModel();
+        const mainUser = await UserModel.findOne({ discordId }) as IMainUser | null;
+        const discordUser = await DiscordUser.findOne({ discordId });
 
-    // If already linked via OAuth, show success
-    if (mainUser) {
-      // Sync local Discord user data
-      const linkedUser = discordUser ?? await DiscordUser.findOrCreate({
-        id: interaction.user.id,
-        username: interaction.user.username,
-        discriminator: interaction.user.discriminator,
-        avatar: interaction.user.avatar || undefined
-      });
+        // If already linked via OAuth, show success
+        if (mainUser) {
+          // Sync local Discord user data
+          const linkedUser = discordUser ?? await DiscordUser.findOrCreate({
+            id: interaction.user.id,
+            username: interaction.user.username,
+            discriminator: interaction.user.discriminator,
+            avatar: interaction.user.avatar || undefined
+          });
 
-      linkedUser.seisoUserId = mainUser.userId;
-      if (mainUser.email) linkedUser.email = mainUser.email;
-      if (mainUser.walletAddress) linkedUser.walletAddress = mainUser.walletAddress;
-      linkedUser.credits = mainUser.credits;
-      linkedUser.totalCreditsEarned = mainUser.totalCreditsEarned;
-      linkedUser.totalCreditsSpent = mainUser.totalCreditsSpent;
-      await linkedUser.save();
+          linkedUser.seisoUserId = mainUser.userId;
+          if (mainUser.email) linkedUser.email = mainUser.email;
+          if (mainUser.walletAddress) linkedUser.walletAddress = mainUser.walletAddress;
+          linkedUser.credits = mainUser.credits;
+          linkedUser.totalCreditsEarned = mainUser.totalCreditsEarned;
+          linkedUser.totalCreditsSpent = mainUser.totalCreditsSpent;
+          await linkedUser.save();
 
-      const embed = new EmbedBuilder()
-        .setColor(0x2ECC71)
-        .setTitle('✅ Account Already Linked!')
-        .setDescription('Your Discord is connected to your SeisoAI account.')
-        .setThumbnail(interaction.user.displayAvatarURL())
-        .addFields(
-          { name: '💰 Credits', value: `**${linkedUser.credits.toLocaleString()}**`, inline: true },
-          { name: '📊 Total Earned', value: `${linkedUser.totalCreditsEarned.toLocaleString()}`, inline: true },
-          { name: '📈 Total Spent', value: `${linkedUser.totalCreditsSpent.toLocaleString()}`, inline: true }
-        )
-        .setFooter({ text: 'Start generating with /imagine, /video, /music, or /3d' });
+          const embed = new EmbedBuilder()
+            .setColor(0x2ECC71)
+            .setTitle('✅ Account Already Linked!')
+            .setDescription('Your Discord is connected to your SeisoAI account.')
+            .setThumbnail(interaction.user.displayAvatarURL())
+            .addFields(
+              { name: '💰 Credits', value: `**${linkedUser.credits.toLocaleString()}**`, inline: true },
+              { name: '📊 Total Earned', value: `${linkedUser.totalCreditsEarned.toLocaleString()}`, inline: true },
+              { name: '📈 Total Spent', value: `${linkedUser.totalCreditsSpent.toLocaleString()}`, inline: true }
+            )
+            .setFooter({ text: 'Start generating with /imagine, /video, /music, or /3d' });
 
-      if (mainUser.email) {
-        const maskedEmail = mainUser.email.replace(/(.{2})(.*)(@.*)/, '$1***$3');
-        embed.addFields({ name: '📧 Email', value: maskedEmail, inline: true });
-      }
+          if (mainUser.email) {
+            const maskedEmail = mainUser.email.replace(/(.{2})(.*)(@.*)/, '$1***$3');
+            embed.addFields({ name: '📧 Email', value: maskedEmail, inline: true });
+          }
 
-      if (mainUser.walletAddress) {
-        const addr = mainUser.walletAddress;
-        embed.addFields({ 
-          name: '💳 Wallet', 
-          value: `\`${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}\``, 
-          inline: true 
+          if (mainUser.walletAddress) {
+            const addr = mainUser.walletAddress;
+            embed.addFields({ 
+              name: '💳 Wallet', 
+              value: `\`${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}\``, 
+              inline: true 
+            });
+          }
+
+          await interaction.editReply({ embeds: [embed] });
+          return;
+        }
+
+        // Check if linked via local storage
+        if (discordUser?.seisoUserId) {
+          const embed = new EmbedBuilder()
+            .setColor(0x2ECC71)
+            .setTitle('✅ Account Linked!')
+            .setDescription('Your Discord is connected to SeisoAI.')
+            .setThumbnail(interaction.user.displayAvatarURL())
+            .addFields(
+              { name: '💰 Credits', value: `**${discordUser.credits.toLocaleString()}**`, inline: true },
+              { name: '📊 Total Earned', value: `${discordUser.totalCreditsEarned.toLocaleString()}`, inline: true }
+            )
+            .setFooter({ text: 'Start generating with /imagine, /video, /music, or /3d' });
+
+          await interaction.editReply({ embeds: [embed] });
+          return;
+        }
+      } catch (dbLookupError) {
+        logger.warn('Failed to check link status in DB', {
+          error: (dbLookupError as Error).message
         });
       }
-
-      await interaction.editReply({ embeds: [embed] });
-      return;
-    }
-
-    // Check if linked via local storage
-    if (discordUser?.seisoUserId) {
-      const embed = new EmbedBuilder()
-        .setColor(0x2ECC71)
-        .setTitle('✅ Account Linked!')
-        .setDescription('Your Discord is connected to SeisoAI.')
-        .setThumbnail(interaction.user.displayAvatarURL())
-        .addFields(
-          { name: '💰 Credits', value: `**${discordUser.credits.toLocaleString()}**`, inline: true },
-          { name: '📊 Total Earned', value: `${discordUser.totalCreditsEarned.toLocaleString()}`, inline: true }
-        )
-        .setFooter({ text: 'Start generating with /imagine, /video, /music, or /3d' });
-
-      await interaction.editReply({ embeds: [embed] });
-      return;
     }
 
     // Not linked - show secure linking instructions
