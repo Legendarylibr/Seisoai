@@ -257,6 +257,12 @@ app.use(cors({
   optionsSuccessStatus: 200
 }));
 
+// Add CORP headers to all API responses to prevent COEP blocking
+app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
+
 // Body parsing
 // Stripe webhook needs raw body
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
