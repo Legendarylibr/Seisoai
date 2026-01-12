@@ -305,6 +305,9 @@ async function pollForCompletion(
 
   // Track consecutive errors for backoff
   let consecutiveErrors = 0;
+  
+  // Track how many times we've seen completed status without a model URL
+  let completedWithoutModelCount = 0;
 
   while (Date.now() - startTime < maxWaitTime) {
     const elapsed = Math.round((Date.now() - startTime) / 1000);
@@ -429,13 +432,30 @@ async function pollForCompletion(
       }
 
       // Check for completion status
-      if (status === 'COMPLETED' || status === 'OK' || status === 'SUCCEEDED') {
+      if (status === 'COMPLETED' || status === 'OK' || status === 'SUCCEEDED' || status === 'DONE' || status === 'SUCCESS') {
         // Status says complete but no model yet - might need another poll
-        logger.info('Status shows completed, checking for model URL', { requestId, data });
+        // Track how many times we've seen completed without a model
+        completedWithoutModelCount++;
         
-        // If no model URL in completed status, continue polling briefly
-        // The model URL might come in the next poll
-        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+        logger.info('Status shows completed, checking for model URL', { 
+          requestId, 
+          data,
+          completedWithoutModelCount 
+        });
+        
+        // If we've seen completed status multiple times without a model, give up
+        // The backend should have retried fetching the result
+        if (completedWithoutModelCount >= 5) {
+          logger.error('3D generation completed but no model URL after multiple checks', { 
+            requestId, 
+            completedWithoutModelCount,
+            responseData: JSON.stringify(data).substring(0, 500)
+          });
+          throw new Error('3D generation completed but could not retrieve the model. Please check your gallery.');
+        }
+        
+        // Wait a bit and try again - backend might be fetching the result
+        await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
         continue;
       }
 
@@ -444,6 +464,10 @@ async function pollForCompletion(
         logger.error('3D generation failed', { requestId, status, error: data.error });
         throw new Error(data.error || '3D generation failed. Credits will be refunded.');
       }
+
+      // Reset completedWithoutModelCount if we see a non-completed status
+      // (in case status temporarily showed completed then went back to processing)
+      completedWithoutModelCount = 0;
 
       // Still processing - wait and poll again with jitter to avoid bot detection
       const jitter = Math.random() * 2000; // 0-2 seconds random jitter

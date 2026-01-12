@@ -546,37 +546,75 @@ export function createModel3dRoutes(deps: Dependencies) {
           seed?: number;
         };
 
-        try {
-          let rawResult: RawResultType | null = null;
+        // Retry logic for fetching result - sometimes the result is delayed slightly
+        const maxRetries = 3;
+        let retryDelay = 2000;
+        
+        for (let attempt = 1; attempt <= maxRetries && !glbUrl; attempt++) {
+          try {
+            let rawResult: RawResultType | null = null;
 
-          if (rawStatusData.response_url) {
-            const resultResponse = await fetch(rawStatusData.response_url, {
-              headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-            });
-            if (resultResponse.ok) {
-              rawResult = await resultResponse.json() as RawResultType;
+            if (rawStatusData.response_url) {
+              const resultResponse = await fetch(rawStatusData.response_url, {
+                headers: { 'Authorization': `Key ${FAL_API_KEY}` }
+              });
+              if (resultResponse.ok) {
+                rawResult = await resultResponse.json() as RawResultType;
+              }
+            } else {
+              rawResult = await getQueueResult<RawResultType>(requestId, modelPath);
             }
-          } else {
-            rawResult = await getQueueResult<RawResultType>(requestId, modelPath);
-          }
 
-          if (rawResult) {
-            // Merge result data into status response
-            const resultData = rawResult.data || rawResult.output || rawResult;
-            statusResult = resultData;
-            glbUrl = resultData.model_glb?.url || resultData.glb?.url || resultData.model_urls?.glb?.url;
+            if (rawResult) {
+              // Merge result data into status response - check all possible locations
+              const resultData = rawResult.data || rawResult.output || rawResult;
+              statusResult = resultData;
+              glbUrl = resultData.model_glb?.url || resultData.glb?.url || resultData.model_urls?.glb?.url;
+              
+              // Also check top level of rawResult if resultData doesn't have it
+              if (!glbUrl) {
+                glbUrl = rawResult.model_glb?.url || rawResult.glb?.url || rawResult.model_urls?.glb?.url;
+                if (glbUrl) {
+                  statusResult = rawResult;
+                }
+              }
+              
+              logger.info('Fetched result data for completed 3D generation', { 
+                requestId, 
+                attempt,
+                hasGlb: !!glbUrl,
+                hasModelUrls: !!resultData.model_urls,
+                hasThumbnail: !!resultData.thumbnail
+              });
+            }
             
-            logger.info('Fetched result data for completed 3D generation', { 
-              requestId, 
-              hasGlb: !!glbUrl,
-              hasModelUrls: !!resultData.model_urls,
-              hasThumbnail: !!resultData.thumbnail
+            // If still no glbUrl and we have more retries, wait and try again
+            if (!glbUrl && attempt < maxRetries) {
+              logger.info('Result fetch attempt had no glb URL, retrying', { requestId, attempt, retryDelay });
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              retryDelay *= 1.5; // Exponential backoff
+            }
+          } catch (fetchError) {
+            logger.error('Failed to fetch result for completed status', { 
+              error: (fetchError as Error).message,
+              requestId,
+              attempt
             });
+            
+            // Wait before retry
+            if (attempt < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              retryDelay *= 1.5;
+            }
           }
-        } catch (fetchError) {
-          logger.error('Failed to fetch result for completed status', { 
-            error: (fetchError as Error).message,
-            requestId 
+        }
+        
+        // Log warning if we still couldn't get the result after all retries
+        if (!glbUrl) {
+          logger.warn('Could not fetch glb URL after all retries for completed 3D generation', { 
+            requestId, 
+            maxRetries,
+            statusResult: JSON.stringify(statusResult).substring(0, 500)
           });
         }
       }
