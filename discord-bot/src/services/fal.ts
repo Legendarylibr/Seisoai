@@ -158,7 +158,7 @@ export async function uploadToFal(
 // Generation Types
 export interface ImageGenerationOptions {
   prompt: string;
-  model?: 'flux' | 'flux-2' | 'nano-banana-pro';
+  model?: 'flux' | 'flux-multi' | 'flux-2' | 'nano-banana-pro' | 'qwen-image-layered';
   aspectRatio?: string;
   numImages?: number;
   guidanceScale?: number;
@@ -216,6 +216,67 @@ export async function generateImage(options: ImageGenerationOptions): Promise<{
   const hasImages = imageUrl || (imageUrls && imageUrls.length > 0);
   const isMultipleImages = imageUrls && imageUrls.length >= 2;
 
+  // Handle Qwen layer extraction (requires image)
+  if (model === 'qwen-image-layered') {
+    if (!imageUrl && (!imageUrls || imageUrls.length === 0)) {
+      throw new Error('Qwen layer extraction requires a reference image');
+    }
+    
+    // Use the first image for layer extraction
+    const targetImageUrl = imageUrl || (imageUrls && imageUrls[0]);
+    if (!targetImageUrl) {
+      throw new Error('No image provided for layer extraction');
+    }
+    
+    // Call layer extraction endpoint
+    const endpoint = 'https://queue.fal.run/fal-ai/birefnet';
+    const body: Record<string, unknown> = {
+      image_url: targetImageUrl,
+      model: 'General Use (Light)',
+      operating_resolution: '1024x1024',
+      output_format: 'png'
+    };
+    
+    // Add prompt if provided (optional for layer extraction)
+    if (prompt && prompt.trim()) {
+      body.prompt = prompt.trim();
+    }
+    
+    logger.debug('Layer extraction request', { endpoint, hasPrompt: !!prompt });
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+    
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Layer extraction failed: ${response.status} - ${error}`);
+    }
+    
+    const result = await response.json() as {
+      image?: { url?: string } | string;
+    };
+    
+    // Extract image URL
+    let extractedImageUrl: string | undefined;
+    if (typeof result.image === 'string') {
+      extractedImageUrl = result.image;
+    } else if (result.image?.url) {
+      extractedImageUrl = result.image.url;
+    }
+    
+    if (!extractedImageUrl) {
+      throw new Error('No image returned from layer extraction');
+    }
+    
+    return { images: [extractedImageUrl], sync: true };
+  }
+
   // Determine endpoint based on model and inputs
   let endpoint: string;
   if (model === 'nano-banana-pro') {
@@ -226,7 +287,8 @@ export async function generateImage(options: ImageGenerationOptions): Promise<{
     endpoint = 'https://fal.run/fal-ai/flux-2/edit';
   } else if (model === 'flux-2') {
     endpoint = 'https://fal.run/fal-ai/flux-2';
-  } else if (isMultipleImages) {
+  } else if (model === 'flux-multi' || isMultipleImages) {
+    // Use multi-image endpoint for flux-multi or when multiple images provided
     endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/max/multi';
   } else if (hasImages) {
     endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/max';

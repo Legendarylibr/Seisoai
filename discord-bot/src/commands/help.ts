@@ -49,7 +49,7 @@ async function showGeneralHelp(interaction: ChatInputCommandInteraction): Promis
     .addFields(
       {
         name: '🖼️ /imagine',
-        value: 'Generate AI images from text prompts\n`/imagine prompt:a beautiful sunset over mountains`',
+        value: 'Generate or edit AI images\n`/imagine prompt:a sunset over mountains`\n`/imagine prompt:make it more colorful image:[attach]`',
         inline: false
       },
       {
@@ -81,7 +81,7 @@ async function showGeneralHelp(interaction: ChatInputCommandInteraction): Promis
     .addFields(
       {
         name: '📊 Credit Costs',
-        value: '```\n🖼️ Image:  1-4 credits\n🎬 Video:  4-10 credits\n🎵 Music:  1-4 credits\n📦 3D:     2-3 credits\n```',
+        value: '```\n🖼️ Images: 0.3-1.25 credits\n  (auto-selected based on your needs)\n\n🎬 Videos: 4-10 credits\n🎵 Music: 1-4 credits\n📦 3D Models: 2-3 credits\n```',
         inline: false
       }
     )
@@ -115,34 +115,48 @@ async function showCommandHelp(interaction: ChatInputCommandInteraction | String
       .addFields(
         {
           name: '📝 Basic Usage',
-          value: '`/imagine prompt:your description here`',
+          value: [
+            '`/imagine prompt:a beautiful sunset` - Generate from text',
+            '`/imagine prompt:make it more colorful image:[attach]` - Edit an image',
+            '`/imagine prompt:blend these images image:[attach]` - Blend images'
+          ].join('\n'),
           inline: false
         },
         {
           name: '🎨 Options',
           value: [
-            '**prompt** (required) - Describe your image',
-            '**style** - Preset style (artistic, photorealistic, anime, etc.)',
-            '**aspect** - Aspect ratio (16:9, 9:16, 1:1, etc.)',
-            '**model** - AI model (flux, flux-2, nano-banana-pro)',
-            '**reference** - Reference image for style transfer',
-            '**count** - Number of images (1-4)'
+            '**prompt** (required) - What you want to create',
+            '**image** - Optional image to edit or use as reference',
+            '**model** - Choose AI model (auto-selected if not specified)',
+            '**style** - Visual style preset',
+            '**aspect** - Image shape (wide, tall, square)',
+            '**count** - How many images (1-4)'
+          ].join('\n'),
+          inline: false
+        },
+        {
+          name: '🤖 Models (Auto-selected)',
+          value: [
+            '**⚡ FLUX** (0.6 cr) - Fast & balanced (default)',
+            '**✨ FLUX 2** (0.3 cr) - Best quality & text rendering',
+            '**🍌 Nano Banana** (1.25 cr) - Premium creative quality',
+            '**🎨 Qwen** (0.3 cr) - Extract layers from images'
           ].join('\n'),
           inline: false
         },
         {
           name: '💡 Tips',
           value: [
-            '• Be specific and descriptive in your prompts',
-            '• Use style presets for consistent results',
-            '• FLUX-2 is slower but higher quality',
-            '• Reference images help maintain style consistency'
+            '• Just type your prompt - the bot picks the best model automatically',
+            '• Attach an image to edit it or use as reference',
+            '• FLUX 2 is cheaper and great for realistic images',
+            '• Qwen extracts layers - perfect for design work'
           ].join('\n'),
           inline: false
         },
         {
           name: '💰 Cost',
-          value: '1 credit per image',
+          value: '0.3-1.25 credits per image (varies by model)',
           inline: true
         }
       ),
@@ -268,7 +282,7 @@ async function showCommandHelp(interaction: ChatInputCommandInteraction | String
       .addFields(
         {
           name: '📊 Credit Costs',
-          value: '```\n🖼️ Image:  1 credit each\n🎬 Video:  4-10 credits\n🎵 Music:  1-4 credits\n📦 3D:     2-3 credits\n```',
+          value: '```\n🖼️ Images: 0.3-1.25 credits\n  (model auto-selected)\n\n🎬 Videos: 4-10 credits\n🎵 Music: 1-4 credits\n📦 3D: 2-3 credits\n```',
           inline: false
         },
         {

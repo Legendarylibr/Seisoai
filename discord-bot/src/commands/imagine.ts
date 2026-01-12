@@ -21,18 +21,36 @@ import logger from '../utils/logger.js';
 
 export const data = new SlashCommandBuilder()
   .setName('imagine')
-  .setDescription('Generate an AI image from your prompt')
+  .setDescription('Generate AI images from text or edit existing images')
   .addStringOption(option =>
     option
       .setName('prompt')
-      .setDescription('Describe the image you want to create')
+      .setDescription('What you want to create (e.g., "a sunset over mountains")')
       .setRequired(true)
       .setMaxLength(500)
+  )
+  .addAttachmentOption(option =>
+    option
+      .setName('image')
+      .setDescription('Optional: Image to edit or use as reference')
+      .setRequired(false)
+  )
+  .addStringOption(option =>
+    option
+      .setName('model')
+      .setDescription('Which AI model to use (auto-selected if not specified)')
+      .setRequired(false)
+      .addChoices(
+        { name: '⚡ FLUX - Fast & balanced', value: 'flux' },
+        { name: '✨ FLUX 2 - Best quality & text', value: 'flux-2' },
+        { name: '🍌 Nano Banana - Premium creative', value: 'nano-banana-pro' },
+        { name: '🎨 Qwen - Extract layers from image', value: 'qwen-image-layered' }
+      )
   )
   .addStringOption(option =>
     option
       .setName('style')
-      .setDescription('Style preset for the image')
+      .setDescription('Visual style preset')
       .setRequired(false)
       .addChoices(
         { name: '🎨 Artistic', value: 'artistic' },
@@ -48,41 +66,37 @@ export const data = new SlashCommandBuilder()
   .addStringOption(option =>
     option
       .setName('aspect')
-      .setDescription('Aspect ratio of the image')
+      .setDescription('Image shape')
       .setRequired(false)
       .addChoices(
-        { name: '🖥️ Landscape (16:9)', value: '16:9' },
-        { name: '📱 Portrait (9:16)', value: '9:16' },
+        { name: '🖥️ Wide (16:9)', value: '16:9' },
+        { name: '📱 Tall (9:16)', value: '9:16' },
         { name: '⬜ Square (1:1)', value: '1:1' },
-        { name: '📺 Wide (4:3)', value: '4:3' },
-        { name: '📸 Tall (3:4)', value: '3:4' }
+        { name: '📺 Standard (4:3)', value: '4:3' }
       )
-  )
-  .addStringOption(option =>
-    option
-      .setName('model')
-      .setDescription('AI model to use')
-      .setRequired(false)
-      .addChoices(
-        { name: '⚡ FLUX Kontext (Fast)', value: 'flux' },
-        { name: '✨ FLUX 2 (High Quality)', value: 'flux-2' },
-        { name: '🍌 Nano Banana Pro (Creative)', value: 'nano-banana-pro' }
-      )
-  )
-  .addAttachmentOption(option =>
-    option
-      .setName('reference')
-      .setDescription('Reference image for style transfer or editing')
-      .setRequired(false)
   )
   .addIntegerOption(option =>
     option
       .setName('count')
-      .setDescription('Number of images to generate (1-4)')
+      .setDescription('How many images to generate (1-4)')
       .setRequired(false)
       .setMinValue(1)
       .setMaxValue(4)
   );
+
+// Calculate credits based on model
+function calculateImageCredits(model: string, count: number): number {
+  const creditsPerImage: Record<string, number> = {
+    'flux': 0.6,
+    'flux-multi': 0.6,
+    'flux-2': 0.3,
+    'nano-banana-pro': 1.25,
+    'qwen-image-layered': 0.3
+  };
+  
+  const baseCredits = creditsPerImage[model] || 0.6;
+  return Math.ceil(baseCredits * count * 10) / 10; // Round to 1 decimal place
+}
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
@@ -91,8 +105,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const prompt = interaction.options.getString('prompt', true);
     const style = interaction.options.getString('style') || '';
     const aspect = interaction.options.getString('aspect') || '16:9';
-    const model = interaction.options.getString('model') as 'flux' | 'flux-2' | 'nano-banana-pro' || 'flux';
-    const reference = interaction.options.getAttachment('reference');
+    const userModel = interaction.options.getString('model') as 'flux' | 'flux-2' | 'nano-banana-pro' | 'qwen-image-layered' | null;
+    const image = interaction.options.getAttachment('image');
     const count = interaction.options.getInteger('count') || 1;
 
     // Get or create user
@@ -123,8 +137,33 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     // Use private channel if available, otherwise use current channel
     const outputChannel = privateChannel || (interaction.channel as TextChannel);
 
-    // Calculate credits
-    const creditsRequired = count * config.credits.image;
+    // Smart model selection: auto-detect based on context
+    let finalModel: 'flux' | 'flux-multi' | 'flux-2' | 'nano-banana-pro' | 'qwen-image-layered';
+    
+    if (userModel) {
+      // User explicitly chose a model
+      finalModel = userModel;
+    } else if (image) {
+      // Has image - default to flux for editing
+      finalModel = 'flux';
+    } else {
+      // No image - default to flux for text-to-image
+      finalModel = 'flux';
+    }
+    
+    // Validate model selection for layer extraction
+    if (finalModel === 'qwen-image-layered' && !image) {
+      const embed = new EmbedBuilder()
+        .setColor(0xFFA500)
+        .setTitle('⚠️ Image Required')
+        .setDescription('Qwen Layers requires an image to extract layers from. Please attach an image.');
+
+      await interaction.editReply({ embeds: [embed] });
+      return;
+    }
+
+    // Calculate credits based on model
+    const creditsRequired = calculateImageCredits(finalModel, count);
 
     // Check credits
     if (discordUser.credits < creditsRequired) {
@@ -156,15 +195,19 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       ? `${stylePrompts[style] || ''} ${prompt}`
       : prompt;
 
-    // Upload reference image if provided
+    // Upload image if provided
     let imageUrl: string | undefined;
-    if (reference) {
+    let imageUrls: string[] | undefined;
+    
+    if (image) {
       try {
-        const response = await fetch(reference.url);
+        const response = await fetch(image.url);
         const buffer = Buffer.from(await response.arrayBuffer());
-        imageUrl = await uploadToFal(buffer, reference.contentType || 'image/png', reference.name || 'reference.png');
+        const uploadedUrl = await uploadToFal(buffer, image.contentType || 'image/png', image.name || 'image.png');
+        imageUrl = uploadedUrl;
       } catch (error) {
-        logger.warn('Failed to upload reference image', { error: (error as Error).message });
+        logger.warn('Failed to upload image', { error: (error as Error).message });
+        throw new Error('Failed to upload image');
       }
     }
 
@@ -196,8 +239,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .addFields(
         { name: 'Style', value: style || 'None', inline: true },
         { name: 'Aspect', value: aspect, inline: true },
-        { name: 'Model', value: model, inline: true },
-        { name: 'Count', value: `${count}`, inline: true }
+        { name: 'Model', value: finalModel, inline: true },
+        { name: 'Count', value: `${count}`, inline: true },
+        { name: 'Image', value: image ? 'Yes' : 'No', inline: true }
       )
       .setFooter({ text: 'This may take 10-30 seconds...' });
 
@@ -206,10 +250,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     // Generate images
     const result = await generateImage({
       prompt: enhancedPrompt,
-      model,
+      model: finalModel as 'flux' | 'flux-multi' | 'flux-2' | 'nano-banana-pro' | 'qwen-image-layered',
       aspectRatio: aspect,
       numImages: count,
-      imageUrl
+      imageUrl,
+      imageUrls
     });
 
     if (!result.images || result.images.length === 0) {
@@ -250,7 +295,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .addFields(
         { name: 'Credits Used', value: `${creditsRequired}`, inline: true },
         { name: 'Remaining', value: `${discordUser.credits}`, inline: true },
-        { name: 'Model', value: model, inline: true }
+        { name: 'Model', value: finalModel, inline: true }
       )
       .setFooter({ text: `Generation ID: ${generationId}` })
       .setTimestamp();
@@ -274,9 +319,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     logger.info('Image generated via Discord', {
       userId: interaction.user.id,
       prompt: prompt.substring(0, 50),
-      model,
+      model: finalModel,
       count,
-      creditsUsed: creditsRequired
+      creditsUsed: creditsRequired,
+      hasImage: !!image
     });
 
   } catch (error) {
