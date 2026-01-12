@@ -99,15 +99,28 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       return;
     }
 
-    // Try to get private channel, fallback to current channel
+    // Get or create private channel for the user
     const privateChannel = await getOrCreatePrivateChannel(
       interaction.client,
       interaction.guild,
       interaction.member as GuildMember
     );
     
-    // Use private channel if available, otherwise use current channel
-    const outputChannel = privateChannel || (interaction.channel as TextChannel);
+    // Require private channel - don't fall back to public channels
+    if (!privateChannel) {
+      const embed = new EmbedBuilder()
+        .setColor(0xE74C3C)
+        .setTitle('❌ Channel Creation Failed')
+        .setDescription('Could not create your private generation channel. Please contact an admin.')
+        .addFields({
+          name: '💡 For Admins',
+          value: 'Ensure the bot has **Manage Channels** permission and can create channels in this server.'
+        });
+      await interaction.editReply({ embeds: [embed] });
+      return;
+    }
+    
+    const outputChannel = privateChannel;
 
     // Get or create user
     const discordUser = await DiscordUser.findOrCreate({
@@ -141,25 +154,16 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if (mood) promptParts.push(mood);
     const enhancedPrompt = promptParts.join(', ');
 
-    // Notify user about generation
-    const isPrivate = privateChannel !== null;
-    if (isPrivate) {
-      const redirectEmbed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle('🔒 Generating in Private Channel')
-        .setDescription(`Your music is being generated in your private channel!`)
-        .addFields({
-          name: '📍 Go to your channel',
-          value: `<#${privateChannel.id}>`
-        });
-      await interaction.editReply({ embeds: [redirectEmbed] });
-    } else {
-      const startEmbed = new EmbedBuilder()
-        .setColor(0x9B59B6)
-        .setTitle('🎵 Generation Started')
-        .setDescription('Your music is being generated...');
-      await interaction.editReply({ embeds: [startEmbed] });
-    }
+    // Notify user about generation in private channel
+    const redirectEmbed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle('🔒 Generating in Private Channel')
+      .setDescription(`Your music is being generated in your private channel!`)
+      .addFields({
+        name: '📍 Go to your channel',
+        value: `<#${privateChannel.id}>`
+      });
+    await interaction.editReply({ embeds: [redirectEmbed] });
 
     // Show processing message
     const processingEmbed = new EmbedBuilder()

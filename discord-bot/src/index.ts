@@ -16,6 +16,7 @@ import { connectDatabase, ensureConnected } from './database/index.js';
 import commands, { handleLinkButton, handleHelpSelect } from './commands/index.js';
 import { getOrCreatePrivateChannel } from './services/channels.js';
 import management from './services/management.js';
+import roles from './services/roles.js';
 import DiscordUser from './database/models/DiscordUser.js';
 import logger from './utils/logger.js';
 

@@ -18,6 +18,8 @@ export const config = {
     clientId: process.env.DISCORD_CLIENT_ID || '',
     guildId: process.env.DISCORD_GUILD_ID || '', // For development/testing
     privateChannelCategoryId: process.env.PRIVATE_CHANNEL_CATEGORY_ID || '',
+    verifiedRoleId: process.env.VERIFIED_ROLE_ID || '', // Role given to users with credits
+    mainChatChannelId: process.env.MAIN_CHAT_CHANNEL_ID || '', // Main chat requires verified role
   },
   
   // Database
