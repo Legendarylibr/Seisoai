@@ -99,6 +99,15 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
   
   const getCredits = (value: number | undefined | null): number => Math.max(0, Math.floor(Number(value ?? 0) || 0));
   const credits = getCredits(isEmailAuth ? emailContext?.credits : walletContext?.credits);
+  
+  // DEBUG: Log credits source
+  console.log('[Navigation] Auth state:', { 
+    isEmailAuth, 
+    isWalletAuth, 
+    emailCredits: emailContext?.credits, 
+    walletCredits: walletContext?.credits,
+    displayedCredits: credits 
+  });
   const totalCreditsEarned = getCredits(isEmailAuth ? emailContext?.totalCreditsEarned : walletContext?.totalCreditsEarned);
   const isLoading = isEmailAuth ? emailContext.isLoading : walletContext.isLoading;
   
