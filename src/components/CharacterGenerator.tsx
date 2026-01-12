@@ -9,7 +9,7 @@ import { optimizeImage } from '../utils/imageOptimizer';
 import { 
   Box, Upload, Play, Download, AlertCircle, ChevronDown, 
   Sparkles, Wand2, Eye, Settings,
-  ArrowRight, Check, Loader2, Clock
+  ArrowRight, Loader2, Clock
 } from 'lucide-react';
 import logger from '../utils/logger';
 import { WIN95 } from '../utils/buttonStyles';
@@ -261,7 +261,7 @@ interface StepIndicatorProps {
   has3dModel: boolean;
 }
 
-const StepIndicator = memo<StepIndicatorProps>(function StepIndicator({ currentStep, hasImage, has3dModel }) {
+const StepIndicator = memo<StepIndicatorProps>(function StepIndicator({ currentStep, hasImage: _hasImage, has3dModel: _has3dModel }) {
   const steps = [
     { id: 'create', label: '1. Create', icon: '🎨' },
     { id: 'preview', label: '2. Preview', icon: '👁️' },
@@ -314,7 +314,7 @@ interface CharacterGeneratorProps {
   onShowStripePayment?: () => void;
 }
 
-const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGenerator({ onShowTokenPayment, onShowStripePayment }) {
+const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGenerator({ onShowTokenPayment: _onShowTokenPayment, onShowStripePayment: _onShowStripePayment }) {
   const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   
@@ -434,9 +434,9 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
           model: 'nano-banana-pro',
           aspect_ratio: '1:1', // Square works best for 3D
           num_images: 1,
-          walletAddress: walletContext.address,
-          userId: emailContext.userId,
-          email: emailContext.email
+          walletAddress: walletContext.address ?? undefined,
+          userId: emailContext.userId ?? undefined,
+          email: emailContext.email ?? undefined
         })
       });
 
@@ -495,9 +495,9 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
           model: 'nano-banana-pro',
           image_urls: [imageUrl],
           num_images: 1,
-          walletAddress: walletContext.address,
-          userId: emailContext.userId,
-          email: emailContext.email
+          walletAddress: walletContext.address ?? undefined,
+          userId: emailContext.userId ?? undefined,
+          email: emailContext.email ?? undefined
         })
       });
 
@@ -579,9 +579,9 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
         image_urls: [preprocessedUrl],
         num_images: 1,
         aspect_ratio: '1:1',
-        walletAddress: walletContext.address,
-        userId: emailContext.userId,
-        email: emailContext.email
+        walletAddress: walletContext.address ?? undefined,
+        userId: emailContext.userId ?? undefined,
+        email: emailContext.email ?? undefined
       })
     });
 
@@ -641,9 +641,9 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
         face_count: faceCount,
         generate_type: generateType,
         polygon_type: 'triangle',
-        walletAddress: walletContext.address,
-        userId: emailContext.userId,
-        email: emailContext.email,
+        walletAddress: walletContext.address ?? undefined,
+        userId: emailContext.userId ?? undefined,
+        email: emailContext.email ?? undefined,
         // Progress callback for polling updates
         onProgress: (status: string, elapsed: number) => {
           setPollElapsed(elapsed);
@@ -706,8 +706,8 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
             style: `3D ${generateType}`,
             imageUrl: result.thumbnail?.url || finalImageUrl,
             creditsUsed: generateType === 'Geometry' ? 2 : 3,
-            userId: isEmailAuth ? emailContext.userId : undefined,
-            email: isEmailAuth ? emailContext.email : undefined,
+            userId: isEmailAuth ? (emailContext.userId ?? undefined) : undefined,
+            email: isEmailAuth ? (emailContext.email ?? undefined) : undefined,
             // 3D model data - saved to gallery for 1 day
             modelType: '3d',
             glbUrl: glbUrl,

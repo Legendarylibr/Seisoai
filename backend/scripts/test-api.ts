@@ -12,7 +12,7 @@ const token = jwt.sign(
 
 console.log('Test this URL in your browser console:');
 console.log('');
-console.log(\`fetch('/api/auth/credits', { headers: { 'Authorization': 'Bearer \${token}' }}).then(r => r.json()).then(console.log)\`);
+console.log(`fetch('/api/auth/credits', { headers: { 'Authorization': 'Bearer ${token}' }}).then(r => r.json()).then(console.log)`);
 console.log('');
 console.log('Or run this in terminal:');
-console.log(\`curl -H "Authorization: Bearer \${token}" https://YOUR_RAILWAY_URL/api/auth/credits\`);
+console.log(`curl -H "Authorization: Bearer ${token}" https://YOUR_RAILWAY_URL/api/auth/credits`);

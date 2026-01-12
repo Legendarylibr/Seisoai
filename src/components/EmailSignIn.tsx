@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, FormEvent } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Wifi, WifiOff } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, WifiOff } from 'lucide-react';
 
 const EmailSignIn: React.FC = () => {
   const { signIn, signUp, isLoading, error: authError } = useEmailAuth();
