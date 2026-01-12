@@ -31,17 +31,18 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
     // Calculate generation stats
     const totalGenerations = discordUser.generations.length;
-    const imageCount = discordUser.generations.filter(g => g.type === 'image').length;
-    const videoCount = discordUser.generations.filter(g => g.type === 'video').length;
-    const musicCount = discordUser.generations.filter(g => g.type === 'music').length;
-    const model3dCount = discordUser.generations.filter(g => g.type === '3d').length;
+    const imageCount = discordUser.generations.filter((g: { type: string }) => g.type === 'image').length;
+    const videoCount = discordUser.generations.filter((g: { type: string }) => g.type === 'video').length;
+    const musicCount = discordUser.generations.filter((g: { type: string }) => g.type === 'music').length;
+    const model3dCount = discordUser.generations.filter((g: { type: string }) => g.type === '3d').length;
 
     // Recent generations (last 5)
+    const typeEmojiMap: Record<string, string> = { image: '🖼️', video: '🎬', music: '🎵', '3d': '📦' };
     const recentGens = discordUser.generations
       .slice(-5)
       .reverse()
-      .map(g => {
-        const typeEmoji = { image: '🖼️', video: '🎬', music: '🎵', '3d': '📦' }[g.type];
+      .map((g: { type: string; prompt: string; creditsUsed: number; timestamp: Date }) => {
+        const typeEmoji = typeEmojiMap[g.type] || '📦';
         const date = new Date(g.timestamp).toLocaleDateString();
         return `${typeEmoji} ${g.prompt.substring(0, 30)}... (-${g.creditsUsed}) • ${date}`;
       })

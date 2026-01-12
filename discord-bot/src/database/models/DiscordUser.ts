@@ -3,18 +3,28 @@
  * Links Discord accounts to SeisoAI accounts
  * Includes field-level encryption for prompts (sensitive user content)
  */
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema, Model } from 'mongoose';
 import { encrypt, decrypt, isEncryptionConfigured, isEncrypted } from '../../utils/encryption.js';
 import logger from '../../utils/logger.js';
+
+// Static methods interface
+export interface IDiscordUserModel extends Model<IDiscordUser> {
+  findByDiscordId(discordId: string): Promise<IDiscordUser | null>;
+  findOrCreate(discordUser: {
+    id: string;
+    username: string;
+    discriminator?: string;
+    avatar?: string;
+  }): Promise<IDiscordUser>;
+}
 
 export interface IDiscordUser extends Document {
   discordId: string;
   discordUsername: string;
-  // DATA MINIMIZATION: Removed discordDiscriminator and discordAvatar
   
   // Linked SeisoAI account
   seisoUserId?: string;
-  // DATA MINIMIZATION: Removed email - use seisoUserId for linking
+  email?: string;
   walletAddress?: string;
   
   // Credits (mirrored from main user for quick access)
@@ -62,10 +72,14 @@ const discordUserSchema = new Schema<IDiscordUser>({
     type: String,
     required: true
   },
-  // DATA MINIMIZATION: Removed discordDiscriminator, discordAvatar, email
   
   // Linked accounts
   seisoUserId: {
+    type: String,
+    sparse: true,
+    index: true
+  },
+  email: {
     type: String,
     sparse: true,
     index: true
@@ -211,15 +225,16 @@ discordUserSchema.methods.addCredits = async function(amount: number): Promise<v
 };
 
 // Statics
-discordUserSchema.statics.findByDiscordId = function(discordId: string) {
+discordUserSchema.statics.findByDiscordId = function(discordId: string): Promise<IDiscordUser | null> {
   return this.findOne({ discordId });
 };
 
-// DATA MINIMIZATION: Only store essential Discord info
 discordUserSchema.statics.findOrCreate = async function(discordUser: {
   id: string;
   username: string;
-}) {
+  discriminator?: string;
+  avatar?: string;
+}): Promise<IDiscordUser> {
   let user = await this.findOne({ discordId: discordUser.id });
   
   if (!user) {
@@ -242,7 +257,7 @@ discordUserSchema.statics.findOrCreate = async function(discordUser: {
   return user;
 };
 
-export const DiscordUser = mongoose.model<IDiscordUser>('DiscordUser', discordUserSchema);
+export const DiscordUser = mongoose.model<IDiscordUser, IDiscordUserModel>('DiscordUser', discordUserSchema);
 
 export default DiscordUser;
 

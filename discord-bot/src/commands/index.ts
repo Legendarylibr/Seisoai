@@ -2,7 +2,13 @@
  * Command Handler Index
  * Exports all commands and provides command collection
  */
-import { Collection, SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import { 
+  Collection, 
+  SlashCommandBuilder, 
+  SlashCommandOptionsOnlyBuilder,
+  SlashCommandSubcommandsOnlyBuilder,
+  ChatInputCommandInteraction 
+} from 'discord.js';
 
 import * as imagine from './imagine.js';
 import * as video from './video.js';
@@ -14,7 +20,7 @@ import * as help from './help.js';
 import * as admin from './admin.js';
 
 export interface Command {
-  data: SlashCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">;
+  data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder | SlashCommandSubcommandsOnlyBuilder;
   execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
 }
 

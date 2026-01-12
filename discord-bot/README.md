@@ -23,6 +23,7 @@ A Discord bot that brings all of SeisoAI's AI generation capabilities directly t
 | `/credits` | Check credit balance | Free |
 | `/link` | Link SeisoAI account | Free |
 | `/help` | Get help with commands | Free |
+| `/admin` | Bot administration (admin only) | Free |
 
 ## Quick Start
 
@@ -125,6 +126,7 @@ discord-bot/
 │   │   ├── credits.ts     # /credits command
 │   │   ├── link.ts        # /link command
 │   │   ├── help.ts        # /help command
+│   │   ├── admin.ts       # /admin command (server admins)
 │   │   └── index.ts       # Command registry
 │   ├── config/
 │   │   └── index.ts       # Configuration loader
@@ -134,9 +136,12 @@ discord-bot/
 │   │   └── index.ts       # Database connection
 │   ├── services/
 │   │   ├── fal.ts         # FAL.ai API service
-│   │   └── channels.ts    # Private channel management
+│   │   ├── channels.ts    # Private channel management
+│   │   └── management.ts  # Bot management (rate limits, permissions)
 │   ├── utils/
-│   │   └── logger.ts      # Winston logger
+│   │   ├── logger.ts      # Winston logger
+│   │   ├── logSanitizer.ts # Log sanitization for security
+│   │   └── encryption.ts  # Field-level encryption utilities
 │   ├── deploy-commands.ts # Command deployment script
 │   └── index.ts           # Main entry point
 ├── env.example

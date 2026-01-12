@@ -109,31 +109,29 @@ async function handleAutoLink(interaction: ChatInputCommandInteraction): Promise
 
     if (mainUser) {
       // Found! Link the accounts
-      if (!discordUser) {
-        discordUser = await DiscordUser.findOrCreate({
-          id: interaction.user.id,
-          username: interaction.user.username,
-          discriminator: interaction.user.discriminator,
-          avatar: interaction.user.avatar || undefined
-        });
-      }
+      const linkedUser = discordUser ?? await DiscordUser.findOrCreate({
+        id: interaction.user.id,
+        username: interaction.user.username,
+        discriminator: interaction.user.discriminator,
+        avatar: interaction.user.avatar || undefined
+      });
 
       // Sync data from main account
-      discordUser.seisoUserId = mainUser.userId;
-      if (mainUser.email) discordUser.email = mainUser.email;
-      if (mainUser.walletAddress) discordUser.walletAddress = mainUser.walletAddress;
-      discordUser.credits = mainUser.credits;
-      discordUser.totalCreditsEarned = mainUser.totalCreditsEarned;
-      discordUser.totalCreditsSpent = mainUser.totalCreditsSpent;
-      await discordUser.save();
+      linkedUser.seisoUserId = mainUser.userId;
+      if (mainUser.email) linkedUser.email = mainUser.email;
+      if (mainUser.walletAddress) linkedUser.walletAddress = mainUser.walletAddress;
+      linkedUser.credits = mainUser.credits;
+      linkedUser.totalCreditsEarned = mainUser.totalCreditsEarned;
+      linkedUser.totalCreditsSpent = mainUser.totalCreditsSpent;
+      await linkedUser.save();
 
       const embed = new EmbedBuilder()
         .setColor(0x2ECC71)
         .setTitle('✅ Account Found & Linked!')
         .setDescription('Your Discord was already connected via the SeisoAI website. Credits synced!')
         .addFields(
-          { name: '💰 Credits', value: `${discordUser.credits}`, inline: true },
-          { name: '📊 Total Earned', value: `${discordUser.totalCreditsEarned}`, inline: true }
+          { name: '💰 Credits', value: `${linkedUser.credits}`, inline: true },
+          { name: '📊 Total Earned', value: `${linkedUser.totalCreditsEarned}`, inline: true }
         )
         .setFooter({ text: 'You\'re all set! Start generating with /imagine' });
 
