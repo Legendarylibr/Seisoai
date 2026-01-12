@@ -12,7 +12,7 @@ import {
   ChannelType
 } from 'discord.js';
 import config, { validateConfig } from './config/index.js';
-import { connectDatabase } from './database/index.js';
+import { connectDatabase, ensureConnected } from './database/index.js';
 import commands, { handleLinkModal, handleHelpSelect } from './commands/index.js';
 import { getOrCreatePrivateChannel } from './services/channels.js';
 import management from './services/management.js';
@@ -93,6 +93,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (!command) {
       logger.warn(`Unknown command: ${interaction.commandName}`);
+      return;
+    }
+
+    // Ensure database is connected before executing commands
+    try {
+      await ensureConnected();
+    } catch (error) {
+      logger.error('Database connection error', { error: (error as Error).message });
+      const errorEmbed = new EmbedBuilder()
+        .setColor(0xE74C3C)
+        .setTitle('❌ Database Error')
+        .setDescription('Unable to connect to the database. Please try again in a moment.');
+      
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ embeds: [errorEmbed], ephemeral: true });
+      } else {
+        await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+      }
       return;
     }
 
@@ -229,6 +247,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
 // Guild member join - create profile
 client.on(Events.GuildMemberAdd, async (member) => {
   try {
+    // Ensure database is connected
+    await ensureConnected();
+    
     // Create or get the user's Discord profile
     await DiscordUser.findOrCreate({
       id: member.id,
@@ -293,6 +314,9 @@ client.on(Events.ChannelDelete, async (channel) => {
   if (channel.type !== ChannelType.GuildText) return;
 
   try {
+    // Ensure database is connected
+    await ensureConnected();
+    
     // Check if this was someone's private channel
     const user = await DiscordUser.findOne({ privateChannelId: channel.id });
     if (user) {
@@ -311,6 +335,9 @@ client.on(Events.ChannelDelete, async (channel) => {
 // Guild member leave - optionally clean up their private channel
 client.on(Events.GuildMemberRemove, async (member) => {
   try {
+    // Ensure database is connected
+    await ensureConnected();
+    
     const user = await DiscordUser.findOne({ discordId: member.id });
     if (user?.privateChannelId) {
       // Delete their private channel in this guild
