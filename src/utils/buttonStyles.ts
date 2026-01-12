@@ -2,6 +2,7 @@ import type { MouseEventHandler } from '../types';
 import React from 'react';
 
 // Windows 95 style constants - shared across all components
+// Now using CSS variables for automatic dark mode support
 export interface Win95Colors {
   bg: string;
   bgLight: string;
@@ -54,107 +55,108 @@ export interface InputStyle {
   fontFamily: string;
 }
 
+// CSS variable references - automatically adapt to dark mode
 export const WIN95: Win95Colors = {
-  bg: '#c0c0c0',
-  bgLight: '#dfdfdf',
-  bgDark: '#808080',
+  bg: 'var(--win95-bg)',
+  bgLight: 'var(--win95-bg-light)',
+  bgDark: 'var(--win95-bg-dark)',
   border: {
-    light: '#ffffff',
-    dark: '#404040',
-    darker: '#000000'
+    light: 'var(--win95-border-light)',
+    dark: 'var(--win95-border-dark)',
+    darker: 'var(--win95-border-darker)'
   },
-  text: '#000000',
-  textDisabled: '#808080',
-  highlight: '#000080',
-  highlightText: '#ffffff',
-  inputBg: '#ffffff',
-  buttonFace: '#c0c0c0'
+  text: 'var(--win95-text)',
+  textDisabled: 'var(--win95-text-disabled)',
+  highlight: 'var(--win95-highlight)',
+  highlightText: 'var(--win95-highlight-text)',
+  inputBg: 'var(--win95-input-bg)',
+  buttonFace: 'var(--win95-button-face)'
 };
 
 export const BTN: Record<string, ButtonStyle> = {
   base: {
-    background: WIN95.buttonFace,
+    background: 'var(--win95-button-face)',
     border: 'none',
-    boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
-    color: WIN95.text,
+    boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), inset 2px 2px 0 var(--win95-bg-light), inset -2px -2px 0 var(--win95-bg-dark)',
+    color: 'var(--win95-text)',
     fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
     cursor: 'pointer'
   },
   hover: {
-    background: '#d0d0d0',
+    background: 'var(--win95-bg-light)',
     border: 'none',
-    boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 #e8e8e8, inset -2px -2px 0 ${WIN95.bgDark}`,
-    color: WIN95.text
+    boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), inset 2px 2px 0 var(--win95-bg-light), inset -2px -2px 0 var(--win95-bg-dark)',
+    color: 'var(--win95-text)'
   },
   active: {
-    background: WIN95.bgDark,
+    background: 'var(--win95-bg-dark)',
     border: 'none',
-    boxShadow: `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`,
-    color: WIN95.text
+    boxShadow: 'inset 1px 1px 0 var(--win95-border-darker), inset -1px -1px 0 var(--win95-border-light)',
+    color: 'var(--win95-text)'
   },
   disabled: {
-    background: WIN95.buttonFace,
+    background: 'var(--win95-button-face)',
     border: 'none',
-    boxShadow: `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.bgDark}`,
-    color: WIN95.textDisabled,
+    boxShadow: 'inset 1px 1px 0 var(--win95-bg-light), inset -1px -1px 0 var(--win95-bg-dark)',
+    color: 'var(--win95-text-disabled)',
     cursor: 'default'
   },
   small: {
-    background: WIN95.buttonFace,
+    background: 'var(--win95-button-face)',
     border: 'none',
-    boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
+    boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)',
     fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
   }
 };
 
 export const PANEL: Record<string, PanelStyle> = {
   base: {
-    background: WIN95.bg,
-    boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
+    background: 'var(--win95-bg)',
+    boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)'
   },
   sunken: {
-    background: WIN95.inputBg,
-    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`
+    background: 'var(--win95-input-bg)',
+    boxShadow: 'inset 1px 1px 0 var(--win95-border-dark), inset -1px -1px 0 var(--win95-border-light), inset 2px 2px 0 var(--win95-border-darker)'
   },
   card: {
-    background: WIN95.bg,
-    border: `1px solid ${WIN95.border.darker}`,
-    boxShadow: `2px 2px 0 ${WIN95.border.darker}`
+    background: 'var(--win95-bg)',
+    border: '1px solid var(--win95-border-darker)',
+    boxShadow: '2px 2px 0 var(--win95-border-darker)'
   },
   window: {
-    background: WIN95.bg,
-    boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`
+    background: 'var(--win95-bg)',
+    boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), inset 2px 2px 0 var(--win95-bg-light), inset -2px -2px 0 var(--win95-bg-dark)'
   }
 };
 
 export const TITLEBAR: Record<string, TitlebarStyle> = {
   active: {
-    background: 'linear-gradient(90deg, #000080, #1084d0)',
-    color: '#ffffff',
+    background: 'var(--win95-active-title)',
+    color: 'var(--win95-highlight-text)',
     fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
     fontWeight: 'bold'
   },
   inactive: {
-    background: 'linear-gradient(90deg, #808080, #a0a0a0)',
-    color: '#c0c0c0',
+    background: 'var(--win95-inactive-title)',
+    color: 'var(--win95-text-disabled)',
     fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
     fontWeight: 'bold'
   }
 };
 
 export const TEXT: Record<string, TextStyle> = {
-  primary: { color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' },
-  secondary: { color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' },
-  muted: { color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' },
-  highlight: { color: WIN95.highlight, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }
+  primary: { color: 'var(--win95-text)', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' },
+  secondary: { color: 'var(--win95-border-dark)', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' },
+  muted: { color: 'var(--win95-text-disabled)', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' },
+  highlight: { color: 'var(--win95-highlight)', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }
 };
 
 export const INPUT: Record<string, InputStyle> = {
   base: {
-    background: WIN95.inputBg,
-    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`,
+    background: 'var(--win95-input-bg)',
+    boxShadow: 'inset 1px 1px 0 var(--win95-border-dark), inset -1px -1px 0 var(--win95-border-light), inset 2px 2px 0 var(--win95-border-darker)',
     border: 'none',
-    color: WIN95.text,
+    color: 'var(--win95-text)',
     fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
   }
 };

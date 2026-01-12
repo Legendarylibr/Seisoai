@@ -1,12 +1,13 @@
 /* Windows 95 Authentic Theme - Enhanced Edition */
 /* Chicago Design Language (c) 1995 Microsoft Corporation */
+/* Now with Dark Mode Support */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Windows 95 Color Palette - Authentic System Colors */
+  /* Windows 95 Color Palette - Authentic System Colors (Light Mode) */
   --win95-bg: #c0c0c0;
   --win95-bg-light: #dfdfdf;
   --win95-bg-dark: #808080;
@@ -35,6 +36,39 @@
   --pixel-size: 1px;
 }
 
+/* Windows 95 Dark Mode - Authentic Dark Theme */
+/* Inspired by high-contrast mode and dark shell themes */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark Windows 95 Color Palette */
+    --win95-bg: #2d2d2d;
+    --win95-bg-light: #404040;
+    --win95-bg-dark: #1a1a1a;
+    --win95-border-light: #505050;
+    --win95-border-dark: #1a1a1a;
+    --win95-border-darker: #000000;
+    --win95-text: #e0e0e0;
+    --win95-text-disabled: #666666;
+    --win95-highlight: #4080c0;
+    --win95-highlight-text: #ffffff;
+    --win95-input-bg: #1a1a1a;
+    --win95-button-face: #2d2d2d;
+    
+    /* Dark Mode Accent Colors */
+    --win95-teal: #0a2a3e;
+    --win95-green: #00a000;
+    --win95-red: #c04040;
+    --win95-yellow: #c0c000;
+    --win95-purple: #a040a0;
+    --win95-cyan: #40e0e0;
+    --win95-active-title: linear-gradient(90deg, #1a4a6e 0%, #2090d0 100%);
+    --win95-inactive-title: linear-gradient(90deg, #404040 0%, #505050 100%);
+    
+    /* Dark CRT Effects */
+    --crt-glow: 0 0 4px rgba(64, 128, 192, 0.2);
+  }
+}
+
 @layer base {
   * {
     @apply border-gray-400;
@@ -46,7 +80,7 @@
   }
   
   body {
-    @apply text-black;
+    color: var(--win95-text);
     font-family: Tahoma, 'MS Sans Serif', Geneva, sans-serif;
     -webkit-font-smoothing: none;
     -moz-osx-font-smoothing: auto;
@@ -75,6 +109,20 @@
     pointer-events: none;
     z-index: 9999;
     mix-blend-mode: multiply;
+  }
+  
+  /* Dark mode scanlines - lighter overlay */
+  @media (prefers-color-scheme: dark) {
+    body::after {
+      background: repeating-linear-gradient(
+        0deg,
+        transparent 0px,
+        transparent 2px,
+        rgba(255, 255, 255, 0.01) 2px,
+        rgba(255, 255, 255, 0.01) 4px
+      );
+      mix-blend-mode: overlay;
+    }
   }
   
   @media (min-width: 1024px) {
@@ -202,8 +250,8 @@
   
   /* Window title bar - active */
   .win95-titlebar {
-    background: linear-gradient(90deg, #000080 0%, #1084d0 100%);
-    color: #ffffff;
+    background: var(--win95-active-title);
+    color: var(--win95-highlight-text);
     font-family: Tahoma, 'MS Sans Serif', sans-serif;
     font-weight: bold;
     font-size: 11px;
@@ -216,8 +264,8 @@
   
   /* Window title bar - inactive */
   .win95-titlebar-inactive {
-    background: linear-gradient(90deg, #808080 0%, #a0a0a0 100%);
-    color: #c0c0c0;
+    background: var(--win95-inactive-title);
+    color: var(--win95-text-disabled);
   }
   
   /* Title bar buttons (minimize, maximize, close) */
@@ -278,7 +326,7 @@
   }
 
   .btn-primary:hover:not(:disabled) {
-    background: #d4d4d4;
+    background: var(--win95-bg-light);
   }
 
   .btn-primary:active:not(:disabled) {
@@ -322,7 +370,7 @@
   }
 
   .btn-secondary:hover:not(:disabled) {
-    background: #d4d4d4;
+    background: var(--win95-bg-light);
   }
 
   .btn-secondary:active:not(:disabled) {
@@ -385,27 +433,44 @@
       inset -1px -1px 0 #5dba5d !important;
   }
   
+  /* Dark mode generate button - brighter green for visibility */
+  @media (prefers-color-scheme: dark) {
+    .generate-btn {
+      background: linear-gradient(180deg, #4db34d 0%, #3da33d 50%, #2d932d 100%) !important;
+      box-shadow: 
+        inset 1px 1px 0 #6dca6d,
+        inset -1px -1px 0 #1d5a1d,
+        inset 2px 2px 0 #5dba5d,
+        inset -2px -2px 0 #2d7a2d,
+        2px 2px 0 rgba(0, 0, 0, 0.5) !important;
+    }
+    
+    .generate-btn:hover:not(:disabled) {
+      background: linear-gradient(180deg, #5dc35d 0%, #4db34d 50%, #3da33d 100%) !important;
+    }
+  }
+  
   /* Accent button - Blue Win95 style */
   .win95-btn-accent {
-    background: linear-gradient(180deg, #1084d0 0%, #000080 100%);
-    color: #ffffff;
+    background: var(--win95-active-title);
+    color: var(--win95-highlight-text);
     border: none;
     box-shadow: 
-      inset 1px 1px 0 #4090e0,
-      inset -1px -1px 0 #000040,
+      inset 1px 1px 0 var(--win95-highlight),
+      inset -1px -1px 0 var(--win95-border-darker),
       2px 2px 0 rgba(0, 0, 0, 0.3);
-    text-shadow: 1px 1px 0 #000040;
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
     font-weight: bold;
   }
   
   .win95-btn-accent:hover:not(:disabled) {
-    background: linear-gradient(180deg, #2094e0 0%, #0000a0 100%);
+    filter: brightness(1.1);
   }
   
   .win95-btn-accent:active:not(:disabled) {
     box-shadow: 
-      inset 1px 1px 0 #000040,
-      inset -1px -1px 0 #4090e0;
+      inset 1px 1px 0 var(--win95-border-darker),
+      inset -1px -1px 0 var(--win95-highlight);
   }
 
   /* ===== WIN95 INPUT ===== */
@@ -442,7 +507,7 @@
   }
 
   .win95-btn:hover:not(:disabled) {
-    background: #d0d0d0;
+    background: var(--win95-bg-light);
     transform: none;
   }
 
@@ -581,8 +646,8 @@
       90deg,
       var(--win95-highlight) 0px,
       var(--win95-highlight) 8px,
-      #0000a0 8px,
-      #0000a0 10px
+      var(--win95-bg-dark) 8px,
+      var(--win95-bg-dark) 10px
     );
     transition: width 0.3s ease-out;
   }
@@ -593,8 +658,8 @@
       -45deg,
       var(--win95-highlight) 0px,
       var(--win95-highlight) 10px,
-      #1084d0 10px,
-      #1084d0 20px
+      var(--win95-bg-light) 10px,
+      var(--win95-bg-light) 20px
     );
     background-size: 28px 100%;
     animation: win95-progress-move 0.5s linear infinite;
@@ -612,10 +677,17 @@
     padding: 2px 6px;
     font-size: 11px;
     font-family: Tahoma, 'MS Sans Serif', sans-serif;
-    color: var(--win95-text);
+    color: #000000;
     box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.3);
     white-space: nowrap;
     z-index: 10000;
+  }
+  
+  @media (prefers-color-scheme: dark) {
+    .win95-tooltip {
+      background: #3a3a28;
+      color: #e0e0e0;
+    }
   }
   
   /* ===== WIN95 STATUS BAR ===== */
@@ -777,7 +849,7 @@
   .win95-spinner {
     width: 16px;
     height: 16px;
-    border: 2px solid var(--win95-bg-dark);
+    border: 2px solid var(--win95-border-dark);
     border-top-color: var(--win95-highlight);
     border-radius: 50%;
     animation: win95Spin 0.8s linear infinite;
@@ -871,7 +943,7 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #d4d4d4;
+  background: var(--win95-bg-light);
 }
 
 ::-webkit-scrollbar-thumb:active {
@@ -893,7 +965,7 @@
 }
 
 ::-webkit-scrollbar-button:hover {
-  background: #d4d4d4;
+  background: var(--win95-bg-light);
 }
 
 ::-webkit-scrollbar-button:active {
@@ -932,6 +1004,22 @@
   background-repeat: no-repeat;
   background-position: center;
   background-size: 8px;
+}
+
+/* Dark mode scrollbar arrows */
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-button:vertical:decrement {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 5L4 9h8L8 5z' fill='%23e0e0e0'/%3E%3C/svg%3E");
+  }
+  ::-webkit-scrollbar-button:vertical:increment {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L4 7h8L8 11z' fill='%23e0e0e0'/%3E%3C/svg%3E");
+  }
+  ::-webkit-scrollbar-button:horizontal:decrement {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5 8L9 4v8L5 8z' fill='%23e0e0e0'/%3E%3C/svg%3E");
+  }
+  ::-webkit-scrollbar-button:horizontal:increment {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M11 8L7 4v8L11 8z' fill='%23e0e0e0'/%3E%3C/svg%3E");
+  }
 }
 
 ::-webkit-scrollbar-corner {
@@ -974,9 +1062,9 @@
   user-select: none;
 }
 
-.win95-desktop-icon:hover {
-  background: rgba(16, 132, 208, 0.3);
-}
+  .win95-desktop-icon:hover {
+    background: rgba(64, 128, 192, 0.3);
+  }
 
 .win95-desktop-icon-label {
   color: #ffffff;

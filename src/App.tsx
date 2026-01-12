@@ -44,20 +44,20 @@ function Win95LoadingFallback({ text }: { text: string }): JSX.Element {
     <div 
       className="h-full flex flex-col items-center justify-center p-8"
       style={{ 
-        background: '#c0c0c0',
+        background: 'var(--win95-bg)',
         fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
       }}
     >
       <div 
         className="p-6 text-center"
         style={{
-          background: '#c0c0c0',
-          boxShadow: 'inset 1px 1px 0 #ffffff, inset -1px -1px 0 #000000, inset 2px 2px 0 #dfdfdf, inset -2px -2px 0 #808080'
+          background: 'var(--win95-bg)',
+          boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), inset 2px 2px 0 var(--win95-bg-light), inset -2px -2px 0 var(--win95-bg-dark)'
         }}
       >
-        <div className="w-8 h-8 mx-auto mb-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#000080', borderTopColor: 'transparent' }} />
-        <p className="text-[11px] font-bold" style={{ color: '#000' }}>{text}</p>
-        <p className="text-[10px] mt-1" style={{ color: '#808080' }}>Please wait...</p>
+        <div className="w-8 h-8 mx-auto mb-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--win95-highlight)', borderTopColor: 'transparent' }} />
+        <p className="text-[11px] font-bold" style={{ color: 'var(--win95-text)' }}>{text}</p>
+        <p className="text-[10px] mt-1" style={{ color: 'var(--win95-text-disabled)' }}>Please wait...</p>
       </div>
     </div>
   );

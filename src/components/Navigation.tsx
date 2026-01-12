@@ -138,7 +138,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
               </div>
               <h1 className="text-xl font-bold" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Seiso AI</h1>
             </div>
-            <div className="text-[11px]" style={{ color: '#800000' }}>Navigation Error</div>
+            <div className="text-[11px]" style={{ color: 'var(--win95-red)' }}>Navigation Error</div>
           </div>
         </div>
       </header>
@@ -366,23 +366,17 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                 {/* Buy Credits Button - Emphasized with Win95 blue */}
                 <button
                   onClick={handleBuyCredits}
-                  className="flex items-center gap-2 px-5 py-2 transition-none select-none"
+                  className="flex items-center gap-2 px-5 py-2 transition-none select-none win95-btn-accent"
                   style={{
-                    background: 'linear-gradient(180deg, #1084d0 0%, #000080 100%)',
-                    color: '#ffffff',
+                    background: 'var(--win95-active-title)',
+                    color: 'var(--win95-highlight-text)',
                     border: 'none',
-                    boxShadow: `inset 1px 1px 0 #4090e0, inset -1px -1px 0 #000040, 2px 2px 0 ${WIN95.border.darker}`,
+                    boxShadow: `inset 1px 1px 0 var(--win95-highlight), inset -1px -1px 0 var(--win95-border-darker), 2px 2px 0 var(--win95-border-darker)`,
                     cursor: 'pointer',
                     fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
                     fontSize: '13px',
                     fontWeight: 'bold',
-                    textShadow: '1px 1px 0 #000040'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(180deg, #2094e0 0%, #0000a0 100%)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(180deg, #1084d0 0%, #000080 100%)';
+                    textShadow: '1px 1px 0 rgba(0, 0, 0, 0.4)'
                   }}
                 >
                   {isEmailAuth ? <CreditCard className="w-4 h-4" /> : <Coins className="w-4 h-4" />}
@@ -429,10 +423,10 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                       onClick={handleBuyCredits} 
                       className="ml-1 px-2 py-1 flex items-center gap-1"
                       style={{
-                        background: 'linear-gradient(180deg, #1084d0 0%, #000080 100%)',
-                        color: '#ffffff',
+                        background: 'var(--win95-active-title)',
+                        color: 'var(--win95-highlight-text)',
                         border: 'none',
-                        boxShadow: 'inset 1px 1px 0 #4090e0, inset -1px -1px 0 #000040',
+                        boxShadow: 'inset 1px 1px 0 var(--win95-highlight), inset -1px -1px 0 var(--win95-border-darker)',
                         cursor: 'pointer',
                         fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
                         fontSize: '10px',
