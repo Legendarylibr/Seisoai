@@ -15,6 +15,7 @@ import {
   EmbedBuilder
 } from 'discord.js';
 import DiscordUser from '../database/models/DiscordUser.js';
+import User from '../database/models/User.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { buildEmailLookupConditions } from '../utils/encryption.js';
@@ -280,10 +281,7 @@ export async function syncCreditsFromMain(discordId: string): Promise<boolean> {
   try {
     let discordUser = await DiscordUser.findOne({ discordId });
     
-    // Import mongoose to query main User model
-    const mongoose = await import('mongoose');
-    const User = mongoose.default.models.User;
-    if (!User) return false;
+    // User model is imported at the top of the file to ensure schema is registered
 
     // First, check if there's an OAuth-linked account (by discordId in main User)
     let mainUser = await User.findOne({ discordId });
