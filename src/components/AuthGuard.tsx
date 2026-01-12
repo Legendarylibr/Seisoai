@@ -1,16 +1,15 @@
 import React, { ReactNode } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
-import { Wallet, CreditCard, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import AuthPrompt from './AuthPrompt';
 
 interface AuthGuardProps {
   children: ReactNode;
-  requireCredits?: boolean;
   fallback?: ReactNode | null;
 }
 
-const AuthGuard: React.FC<AuthGuardProps> = ({ children, requireCredits = true, fallback = null }) => {
+const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null }) => {
   const walletContext = useSimpleWallet();
   const emailContext = useEmailAuth();
   
@@ -18,8 +17,6 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children, requireCredits = true, 
   const isConnected = walletContext.isConnected || emailContext.isAuthenticated;
   const address = walletContext.address;
   const isEmailAuth = emailContext.isAuthenticated;
-  // Use credits from the active auth method (email or wallet)
-  const credits = isEmailAuth ? (emailContext.credits ?? 0) : (walletContext.credits ?? 0);
   const isLoading = walletContext.isLoading || emailContext.isLoading;
   const error = walletContext.error || emailContext.error;
 

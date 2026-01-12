@@ -94,7 +94,25 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('[EmailAuthContext] Error response:', errorData);
+        console.error('[EmailAuthContext] CREDITS FETCH FAILED - Status:', response.status, 'Error:', errorData.error);
+        
+        // Log additional debug info
+        const token = getAuthToken();
+        if (token) {
+          try {
+            // Decode JWT payload (base64) to check expiry
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            console.error('[EmailAuthContext] Token debug - userId:', payload.userId, 'exp:', new Date(payload.exp * 1000).toISOString());
+            if (payload.exp * 1000 < Date.now()) {
+              console.error('[EmailAuthContext] TOKEN EXPIRED! User needs to sign in again');
+            }
+          } catch (e) {
+            console.error('[EmailAuthContext] Could not decode token');
+          }
+        }
+        
         if (response.status === 401 || response.status === 403) {
+          console.warn('[EmailAuthContext] Auth failed - signing out user');
           signOutService();
           setIsAuthenticated(false);
         }
@@ -215,10 +233,14 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
       setIsLoading(true);
       setError(null);
       const result = await signIn(userEmail, password);
+      console.log('[EmailAuthContext] Sign in result:', { success: result.success, hasUser: !!result.user, credits: result.user?.credits });
       if (result.success && result.user) {
+        console.log('[EmailAuthContext] Setting user state - userId:', result.user.userId, 'credits:', result.user.credits);
         setEmail(userEmail);
         setUserId(result.user.userId);
-        setCredits(Math.max(0, Math.floor(Number(result.user.credits) || 0)));
+        const creditsValue = Math.max(0, Math.floor(Number(result.user.credits) || 0));
+        console.log('[EmailAuthContext] Credits after signin:', creditsValue);
+        setCredits(creditsValue);
         setTotalCreditsEarned(Math.max(0, Math.floor(Number(result.user.totalCreditsEarned) || 0)));
         setTotalCreditsSpent(Math.max(0, Math.floor(Number(result.user.totalCreditsSpent) || 0)));
         setIsAuthenticated(true);

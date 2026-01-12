@@ -33,7 +33,7 @@ export function createStaticRoutes(deps: Dependencies = {}) {
    * Metrics endpoint
    * GET /api/metrics
    */
-  router.get('/metrics', async (req: Request, res: Response) => {
+  router.get('/metrics', async (_req: Request, res: Response) => {
     try {
       const dbState = mongoose.connection.readyState;
       const uptime = process.uptime();

@@ -7,8 +7,8 @@ import { getAuthToken } from '../services/emailAuthService';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import { optimizeImage } from '../utils/imageOptimizer';
 import { 
-  Box, Upload, Play, X, Download, AlertCircle, ChevronDown, 
-  Sparkles, Image, Wand2, RotateCcw, Eye, Layers, Settings,
+  Box, Upload, Play, Download, AlertCircle, ChevronDown, 
+  Sparkles, Wand2, Eye, Settings,
   ArrowRight, Check, Loader2, Clock
 } from 'lucide-react';
 import logger from '../utils/logger';

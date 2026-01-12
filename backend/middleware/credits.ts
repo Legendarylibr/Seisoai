@@ -32,7 +32,7 @@ const BATCH_PREMIUM = 0.15;
  * SECURITY: User must already be authenticated via JWT (set on req.user)
  */
 export const createRequireCredits = (
-  getUserModel: () => Model<IUser>, 
+  _getUserModel: () => Model<IUser>, 
   getUserFromRequest: (req: Request) => Promise<IUser | null>
 ) => {
   return (requiredCredits: number) => {
@@ -45,7 +45,8 @@ export const createRequireCredits = (
         if (!user) {
           // Fallback: try to get user from request (for backwards compatibility)
           // But log this as it should ideally come from JWT auth
-          user = await getUserFromRequest(req);
+          const fetchedUser = await getUserFromRequest(req);
+          user = fetchedUser || undefined;
           if (user) {
             logger.debug('User resolved from request body in credits middleware', {
               path: req.path,
@@ -114,7 +115,7 @@ export const createRequireCredits = (
  * SECURITY: User must already be authenticated via JWT (set on req.user)
  */
 export const createRequireCreditsForModel = (
-  getUserModel: () => Model<IUser>, 
+  _getUserModel: () => Model<IUser>, 
   getUserFromRequest: (req: Request) => Promise<IUser | null>
 ) => {
   return () => {
@@ -124,7 +125,8 @@ export const createRequireCreditsForModel = (
         let user = req.user;
         
         if (!user) {
-          user = await getUserFromRequest(req);
+          const fetchedUser = await getUserFromRequest(req);
+          user = fetchedUser || undefined;
         }
         
         if (!user) {
@@ -193,7 +195,7 @@ export const createRequireCreditsForModel = (
  * SECURITY: User must already be authenticated via JWT (set on req.user)
  */
 export const createRequireCreditsForVideo = (
-  getUserModel: () => Model<IUser>, 
+  _getUserModel: () => Model<IUser>, 
   getUserFromRequest: (req: Request) => Promise<IUser | null>
 ) => {
   return () => {
@@ -203,7 +205,8 @@ export const createRequireCreditsForVideo = (
         let user = req.user;
         
         if (!user) {
-          user = await getUserFromRequest(req);
+          const fetchedUser = await getUserFromRequest(req);
+          user = fetchedUser || undefined;
         }
         
         if (!user) {
