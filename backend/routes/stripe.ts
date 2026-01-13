@@ -281,7 +281,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
           }
 
           case 'invoice.payment_succeeded': {
-            const invoice = event.data.object as Stripe.Invoice;
+            const invoice = event.data.object as Stripe.Invoice & { subscription?: string };
             const subscriptionId = invoice.subscription as string;
             
             if (subscriptionId) {

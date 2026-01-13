@@ -203,8 +203,8 @@ const imageGeneratorReducer = (state: ImageGeneratorState, action: ImageGenerato
       };
     
     case 'SET_GENERATED_IMAGE': {
-      const isArray = Array.isArray(action.payload);
-      const images = isArray ? action.payload : [action.payload];
+      const payload = action.payload;
+      const images: string[] = Array.isArray(payload) ? payload.flat() : [payload];
       
       const newHistoryItems = images.map((image: string, index: number) => ({
         id: Date.now() + index,
@@ -220,7 +220,7 @@ const imageGeneratorReducer = (state: ImageGeneratorState, action: ImageGenerato
       
       return {
         ...state,
-        generatedImage: isArray ? action.payload[0] : action.payload,
+        generatedImage: images[0] ?? null,
         generatedImages: images,
         isGenerating: false,
         error: null,
@@ -398,8 +398,10 @@ export const ImageGeneratorProvider: React.FC<ImageGeneratorProviderProps> = ({ 
     dispatch({ type: 'SET_CONTROL_NET_TYPE', payload: type });
   };
 
-  const setControlNetImage = (image: string | null, dimensions: ImageDimensions | null = null): void => {
-    dispatch({ type: 'SET_CONTROL_NET_IMAGE', payload: { image, dimensions } });
+  const setControlNetImage = (image: string | string[] | null, dimensions: ImageDimensions | null = null): void => {
+    // Normalize to single image for storage (take first if array)
+    const normalizedImage = Array.isArray(image) ? (image[0] ?? null) : image;
+    dispatch({ type: 'SET_CONTROL_NET_IMAGE', payload: { image: normalizedImage, dimensions } });
   };
 
   const setCurrentGeneration = (generation: CurrentGeneration | null): void => {

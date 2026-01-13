@@ -177,8 +177,8 @@ export async function getJob(queueName: string, jobId: string): Promise<Job | nu
   if (!queue) return null;
 
   try {
-    return await queue.getJob(jobId);
-  } catch (error) {
+    return await queue.getJob(jobId) ?? null;
+  } catch {
     return null;
   }
 }

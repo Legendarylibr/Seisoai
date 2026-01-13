@@ -100,7 +100,7 @@ const getStripePublishableKey = async (): Promise<string | null> => {
       return cachedPublishableKey;
     }
   } catch (error) {
-    logger.warn('Failed to fetch config from backend:', error);
+    logger.warn('Failed to fetch config from backend:', { error: (error as Error).message });
   }
   
   configFetched = true;
@@ -269,7 +269,7 @@ export const processStripePayment = async (
       throw new Error('Stripe failed to load');
     }
 
-    const { error, paymentIntent } = await stripe.confirmPayment({
+    const result = await stripe.confirmPayment({
       elements,
       clientSecret,
       confirmParams: {
@@ -278,13 +278,13 @@ export const processStripePayment = async (
       }
     });
 
-    if (error) {
-      throw new Error(error.message);
+    if (result.error) {
+      throw new Error(result.error.message);
     }
 
     return {
       success: true,
-      paymentIntent
+      paymentIntent: 'paymentIntent' in result ? result.paymentIntent : undefined
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

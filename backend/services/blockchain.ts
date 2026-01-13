@@ -3,7 +3,7 @@
  * Handles blockchain interactions (EVM and Solana)
  */
 import { ethers, type JsonRpcProvider, type Contract } from 'ethers';
-import { Connection, PublicKey, type ParsedTransactionWithMeta } from '@solana/web3.js';
+import { Connection, type ParsedTransactionWithMeta } from '@solana/web3.js';
 import logger from '../utils/logger';
 import config from '../config/env';
 

@@ -16,7 +16,8 @@ interface StripImageMetadataOptions {
 let sharp: any = null;
 
 try {
-  // Dynamic import for sharp
+  // Dynamic import for sharp (optional dependency)
+  // @ts-expect-error - sharp may not be installed
   const sharpModule = await import('sharp');
   sharp = sharpModule.default;
   logger.info('Sharp library loaded - metadata cleaning enabled');

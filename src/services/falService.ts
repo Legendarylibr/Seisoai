@@ -204,7 +204,7 @@ export const generateImage = async (
     };
     
     // Also set numImages for backend compatibility
-    (requestBody as Record<string, unknown>).numImages = numImages;
+    (requestBody as unknown as Record<string, unknown>).numImages = numImages;
 
     // Add reference image(s) if provided based on image count
     // OPTIMIZATION: Streamlined image processing with single-pass optimization check

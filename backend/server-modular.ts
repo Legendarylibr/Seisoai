@@ -31,7 +31,7 @@ import { deepHealthCheck, livenessCheck, readinessCheck } from './services/healt
 import { setupGracefulShutdown, requestTrackingMiddleware, getInFlightCount } from './services/gracefulShutdown.js';
 import correlationIdMiddleware from './middleware/correlationId.js';
 import { getIPAllowlistConfig } from './middleware/ipAllowlist.js';
-import { tieredGeneralLimiter, tieredGenerationLimiter } from './middleware/tieredRateLimiter.js';
+import { tieredGeneralLimiter as _tieredGeneralLimiter, tieredGenerationLimiter as _tieredGenerationLimiter } from './middleware/tieredRateLimiter.js';
 
 // Middleware
 import {
@@ -513,7 +513,7 @@ app.post('/create-checkout-session', (req: Request, res: Response, next: NextFun
 
 // Fallback for SPA routing (production only)
 if (config.isProduction) {
-  app.get('*', (req: Request, res: Response) => {
+  app.get('*', (_req: Request, res: Response) => {
     // Set headers for in-app browser compatibility
     // Note: X-Frame-Options is set to SAMEORIGIN for security; frame-ancestors in CSP handles embedding
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');

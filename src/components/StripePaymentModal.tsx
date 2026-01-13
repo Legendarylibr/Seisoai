@@ -199,7 +199,7 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
   const hasEmailAuth = emailContext.isAuthenticated;
   
   // For payment purposes: wallet users get stablecoin option, email-only users get card
-  const isWalletPayment = hasWallet; // Wallet connected = stablecoin payment
+  const isWalletPayment = Boolean(hasWallet); // Wallet connected = stablecoin payment
   const address = walletContext.address;
   
   // For credits display: prefer email auth credits if logged in, otherwise wallet
@@ -323,7 +323,7 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
         creditsToPurchase, 
         'usd', 
         userId,
-        isWalletPayment || false // preferCrypto: wallet users get stablecoin options
+        isWalletPayment // preferCrypto: wallet users get stablecoin options
       );
       
       if (!intentResponse.success || !intentResponse.clientSecret) {

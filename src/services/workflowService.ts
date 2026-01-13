@@ -2,7 +2,7 @@
  * Workflow Service
  * Manages multi-step AI generation pipelines
  */
-import { API_URL, getCSRFToken, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
 // Types
@@ -149,7 +149,7 @@ export async function executeAvatarCreatorVariations(
     poses,
     ...auth
   });
-  logger.info('Avatar Creator variations step', { success: data.success, variations: data.variation_urls?.length });
+  logger.info('Avatar Creator variations step', { success: data.success, variations: Array.isArray(data.variation_urls) ? data.variation_urls.length : 0 });
   return data;
 }
 

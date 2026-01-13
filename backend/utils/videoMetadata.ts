@@ -9,7 +9,6 @@ import { promisify } from 'util';
 import { createWriteStream, unlink } from 'fs';
 import { pipeline } from 'stream/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
 import { resolve } from 'path';
 
 const execFileAsync = promisify(execFile);
@@ -27,7 +26,7 @@ interface StripVideoMetadataOptions {
 const checkFFmpegAvailable = async (): Promise<boolean> => {
   try {
     // Check if ffmpeg binary exists and is executable
-    const versionResult = await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
+    await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
     
     // Check if libx264 codec is available (required for video encoding)
     try {
@@ -105,10 +104,11 @@ export const stripVideoMetadata = async (
       const writeStream = createWriteStream(tempInput);
       // Convert ReadableStream to Node stream if needed
       if (response.body && typeof (response.body as { pipe?: unknown }).pipe === 'function') {
-        await pipeline(response.body as NodeJS.ReadableStream, writeStream);
+        await pipeline(response.body as unknown as NodeJS.ReadableStream, writeStream);
       } else {
-        // Fallback: write chunks manually
-        const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+        // Fallback: write chunks manually for web ReadableStream
+        type WebReadableStream = { getReader(): { read(): Promise<{ done: boolean; value?: Uint8Array }> } };
+        const reader = (response.body as unknown as WebReadableStream).getReader();
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;

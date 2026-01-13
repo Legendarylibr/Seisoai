@@ -209,7 +209,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
 
   const disconnectWallet = useCallback(async (): Promise<void> => {
     if (walletConnectProviderRef.current) {
-      try { await walletConnectProviderRef.current.disconnect(); } catch { /* ignore */ }
+      try { await (walletConnectProviderRef.current as { disconnect?: () => Promise<void> }).disconnect?.(); } catch { /* ignore */ }
       walletConnectProviderRef.current = null;
     }
     setIsConnected(false);
@@ -238,9 +238,9 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
 
       switch (selectedWallet) {
         case 'metamask': {
-          const isReal = (p: NonNullable<typeof window.ethereum>) => p?.isMetaMask && !p.isRabby && !p.isCoinbaseWallet && !p.isBraveWallet && !p.isTrust && !p.isPhantom;
+          const isReal = (p: NonNullable<typeof window.ethereum>): boolean => Boolean(p?.isMetaMask && !p.isRabby && !p.isCoinbaseWallet && !p.isBraveWallet && !p.isTrust && !p.isPhantom);
           const eth = safeGetEthereum();
-          provider = isReal(eth!) ? eth : findProvider(isReal);
+          provider = (eth && isReal(eth)) ? eth : findProvider(isReal);
           if (!provider) throw createWalletNotFoundError('metamask', 'MetaMask');
           walletAddress = await getEvmAddress(provider);
           setWalletType('evm');
@@ -260,7 +260,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
               icons: [`${window.location.origin}/favicon.ico`] 
             }
           });
-          walletConnectProviderRef.current = wc;
+          walletConnectProviderRef.current = wc as unknown as typeof walletConnectProviderRef.current;
           await wc.enable();
           const accounts = await wc.request({ method: 'eth_accounts' }) as string[];
           if (!accounts?.length) throw new Error('No accounts from WalletConnect');
