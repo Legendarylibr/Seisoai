@@ -4,9 +4,9 @@ import {
   Sparkles, Lightbulb, Check, Copy, ChevronDown
 } from 'lucide-react';
 import { WIN95, BTN, PANEL } from '../utils/buttonStyles';
-import { sendCoworkMessage, getCoworkSuggestions, type ChatMessage, type CoworkContext } from '../services/coworkService';
+import { sendPromptLabMessage, getPromptLabSuggestions, type ChatMessage, type PromptLabContext } from '../services/promptLabService';
 
-interface ClaudeCoworkProps {
+interface PromptLabProps {
   /** Current mode (image, video, music, 3d) */
   mode?: 'image' | 'video' | 'music' | '3d';
   /** Current prompt in the main input */
@@ -22,11 +22,11 @@ interface ClaudeCoworkProps {
 }
 
 /**
- * ClaudeCowork - AI prompt planning assistant
+ * PromptLab - AI prompt planning assistant
  * Helps users brainstorm and refine their prompts through conversation
  * Does NOT access any user files - only works with in-app context
  */
-const ClaudeCowork: React.FC<ClaudeCoworkProps> = memo(({
+const PromptLab: React.FC<PromptLabProps> = memo(({
   mode = 'image',
   currentPrompt = '',
   selectedStyle,
@@ -53,7 +53,7 @@ const ClaudeCowork: React.FC<ClaudeCoworkProps> = memo(({
   // Load suggestions when mode changes
   useEffect(() => {
     if (isOpen && messages.length === 0) {
-      getCoworkSuggestions(mode).then(setSuggestions);
+      getPromptLabSuggestions(mode).then(setSuggestions);
     }
   }, [isOpen, mode, messages.length]);
 
@@ -79,14 +79,14 @@ const ClaudeCowork: React.FC<ClaudeCoworkProps> = memo(({
     setSuggestions([]);
 
     // Build context from current app state
-    const context: CoworkContext = {
+    const context: PromptLabContext = {
       mode,
       currentPrompt: currentPrompt || undefined,
       selectedStyle: selectedStyle || undefined,
       selectedModel: selectedModel || undefined
     };
 
-    const response = await sendCoworkMessage(
+    const response = await sendPromptLabMessage(
       userMessage.content,
       messages,
       context
@@ -139,7 +139,7 @@ const ClaudeCowork: React.FC<ClaudeCoworkProps> = memo(({
 
   const clearChat = useCallback(() => {
     setMessages([]);
-    getCoworkSuggestions(mode).then(setSuggestions);
+    getPromptLabSuggestions(mode).then(setSuggestions);
   }, [mode]);
 
   // Floating button when closed
@@ -154,10 +154,10 @@ const ClaudeCowork: React.FC<ClaudeCoworkProps> = memo(({
           color: '#fff',
           boxShadow: '2px 2px 8px rgba(0,0,0,0.3), inset 1px 1px 0 rgba(255,255,255,0.3)'
         }}
-        title="Open Claude Cowork - AI prompt planning assistant"
+        title="Open Prompt Lab - AI prompt planning assistant"
       >
         <Sparkles className="w-4 h-4" />
-        <span>Cowork</span>
+        <span>Prompt Lab</span>
       </button>
     );
   }
@@ -175,7 +175,7 @@ const ClaudeCowork: React.FC<ClaudeCoworkProps> = memo(({
       >
         <Sparkles className="w-3.5 h-3.5 text-white" />
         <span className="text-[11px] font-bold text-white" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-          Claude Cowork
+          Prompt Lab
         </span>
         <Maximize2 className="w-3 h-3 text-white/70 ml-2" />
       </div>
@@ -204,7 +204,7 @@ const ClaudeCowork: React.FC<ClaudeCoworkProps> = memo(({
           className="text-[11px] font-bold flex-1" 
           style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
         >
-          Claude Cowork
+          Prompt Lab
         </span>
         <div className="flex gap-0.5">
           <button
@@ -401,6 +401,6 @@ const ClaudeCowork: React.FC<ClaudeCoworkProps> = memo(({
   );
 });
 
-ClaudeCowork.displayName = 'ClaudeCowork';
+PromptLab.displayName = 'PromptLab';
 
-export default ClaudeCowork;
+export default PromptLab;

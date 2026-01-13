@@ -80,7 +80,7 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
 
     try {
       // Use simple /api/auth/credits endpoint - direct DB query, no complexity
-      console.log('[EmailAuthContext] Fetching credits from:', `${API_URL}/api/auth/credits`);
+      logger.debug('[EmailAuthContext] Fetching credits', { endpoint: `${API_URL}/api/auth/credits` });
       const response = await fetch(`${API_URL}/api/auth/credits`, {
         method: 'GET',
         headers: {
@@ -90,12 +90,14 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
         credentials: 'include'
       });
 
-      console.log('[EmailAuthContext] Response status:', response.status);
+      logger.debug('[EmailAuthContext] Response status', { status: response.status });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('[EmailAuthContext] Error response:', errorData);
-        console.error('[EmailAuthContext] CREDITS FETCH FAILED - Status:', response.status, 'Error:', errorData.error);
+        logger.error('[EmailAuthContext] Credits fetch failed', { 
+          status: response.status, 
+          error: errorData.error 
+        });
         
         // Log additional debug info
         const token = getAuthToken();
@@ -103,17 +105,18 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
           try {
             // Decode JWT payload (base64) to check expiry
             const payload = JSON.parse(atob(token.split('.')[1]));
-            console.error('[EmailAuthContext] Token debug - userId:', payload.userId, 'exp:', new Date(payload.exp * 1000).toISOString());
-            if (payload.exp * 1000 < Date.now()) {
-              console.error('[EmailAuthContext] TOKEN EXPIRED! User needs to sign in again');
-            }
-          } catch (e) {
-            console.error('[EmailAuthContext] Could not decode token');
+            logger.error('[EmailAuthContext] Token debug', { 
+              userId: payload.userId, 
+              exp: new Date(payload.exp * 1000).toISOString(),
+              expired: payload.exp * 1000 < Date.now()
+            });
+          } catch {
+            logger.error('[EmailAuthContext] Could not decode token');
           }
         }
         
         if (response.status === 401 || response.status === 403) {
-          console.warn('[EmailAuthContext] Auth failed - signing out user');
+          logger.warn('[EmailAuthContext] Auth failed - signing out user');
           signOutService();
           setIsAuthenticated(false);
         }
@@ -125,11 +128,11 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
       }
 
       const data = await response.json();
-      console.log('[EmailAuthContext] Credits response:', data);
+      logger.debug('[EmailAuthContext] Credits response', { data });
       
       if (data.success) {
         const newCredits = Math.max(0, Math.floor(Number(data.credits) || 0));
-        console.log('[EmailAuthContext] Setting credits to:', newCredits);
+        logger.debug('[EmailAuthContext] Setting credits', { credits: newCredits });
         setCredits(newCredits);
         setTotalCreditsEarned(Math.max(0, Math.floor(Number(data.totalCreditsEarned) || 0)));
         setTotalCreditsSpent(Math.max(0, Math.floor(Number(data.totalCreditsSpent) || 0)));
@@ -137,8 +140,7 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
       }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-      console.error('[EmailAuthContext] Fetch error:', errorMessage);
-      logger.error('Failed to fetch credits', { error: errorMessage });
+      logger.error('[EmailAuthContext] Fetch error', { error: errorMessage });
     } finally {
       setIsLoading(false);
     }
@@ -234,13 +236,20 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
       setIsLoading(true);
       setError(null);
       const result = await signIn(userEmail, password);
-      console.log('[EmailAuthContext] Sign in result:', { success: result.success, hasUser: !!result.user, credits: result.user?.credits });
+      logger.debug('[EmailAuthContext] Sign in result', { 
+        success: result.success, 
+        hasUser: !!result.user, 
+        credits: result.user?.credits 
+      });
       if (result.success && result.user) {
-        console.log('[EmailAuthContext] Setting user state - userId:', result.user.userId, 'credits:', result.user.credits);
+        logger.debug('[EmailAuthContext] Setting user state', { 
+          userId: result.user.userId, 
+          credits: result.user.credits 
+        });
         setEmail(userEmail);
         setUserId(result.user.userId);
         const creditsValue = Math.max(0, Math.floor(Number(result.user.credits) || 0));
-        console.log('[EmailAuthContext] Credits after signin:', creditsValue);
+        logger.debug('[EmailAuthContext] Credits after signin', { credits: creditsValue });
         setCredits(creditsValue);
         setTotalCreditsEarned(Math.max(0, Math.floor(Number(result.user.totalCreditsEarned) || 0)));
         setTotalCreditsSpent(Math.max(0, Math.floor(Number(result.user.totalCreditsSpent) || 0)));

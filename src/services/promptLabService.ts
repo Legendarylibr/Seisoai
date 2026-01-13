@@ -1,5 +1,5 @@
 /**
- * Cowork Service
+ * Prompt Lab Service
  * Handles communication with Claude for prompt planning assistance
  * Does NOT access any user files - only works with in-app context
  */
@@ -11,26 +11,26 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp?: string;
-  action?: CoworkAction;
+  action?: PromptLabAction;
 }
 
-export interface CoworkAction {
+export interface PromptLabAction {
   type: 'suggest_prompt' | 'suggest_style' | 'suggest_mode' | 'tip';
   value?: string;
   label?: string;
 }
 
-export interface CoworkContext {
+export interface PromptLabContext {
   mode?: 'image' | 'video' | 'music' | '3d';
   currentPrompt?: string;
   selectedStyle?: string;
   selectedModel?: string;
 }
 
-export interface CoworkResponse {
+export interface PromptLabResponse {
   success: boolean;
   response?: string;
-  action?: CoworkAction;
+  action?: PromptLabAction;
   timestamp?: string;
   error?: string;
 }
@@ -38,15 +38,15 @@ export interface CoworkResponse {
 /**
  * Send a message to Claude for prompt planning help
  */
-export async function sendCoworkMessage(
+export async function sendPromptLabMessage(
   message: string,
   history: ChatMessage[] = [],
-  context?: CoworkContext
-): Promise<CoworkResponse> {
+  context?: PromptLabContext
+): Promise<PromptLabResponse> {
   try {
     const csrfToken = await ensureCSRFToken();
     
-    const response = await fetch(`${API_URL}/api/cowork/chat`, {
+    const response = await fetch(`${API_URL}/api/prompt-lab/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -77,7 +77,7 @@ export async function sendCoworkMessage(
     };
   } catch (error) {
     const err = error as Error;
-    logger.error('Cowork message failed', { error: err.message });
+    logger.error('Prompt Lab message failed', { error: err.message });
     return {
       success: false,
       error: err.message
@@ -88,9 +88,9 @@ export async function sendCoworkMessage(
 /**
  * Get starter suggestions for a mode
  */
-export async function getCoworkSuggestions(mode: string): Promise<string[]> {
+export async function getPromptLabSuggestions(mode: string): Promise<string[]> {
   try {
-    const response = await fetch(`${API_URL}/api/cowork/suggestions?mode=${mode}`, {
+    const response = await fetch(`${API_URL}/api/prompt-lab/suggestions?mode=${mode}`, {
       credentials: 'include'
     });
     
@@ -110,7 +110,7 @@ export async function getCoworkSuggestions(mode: string): Promise<string[]> {
  * Parse any actionable suggestions from Claude's response
  * Looks for patterns like "Try this prompt: ..." or quoted suggestions
  */
-function parseActionFromResponse(response: string): CoworkAction | undefined {
+function parseActionFromResponse(response: string): PromptLabAction | undefined {
   // Look for explicit prompt suggestions
   const promptPatterns = [
     /(?:try|use|here's a prompt|suggested prompt)[:\s]+["']([^"']+)["']/i,
@@ -133,6 +133,6 @@ function parseActionFromResponse(response: string): CoworkAction | undefined {
 }
 
 export default {
-  sendCoworkMessage,
-  getCoworkSuggestions
+  sendPromptLabMessage,
+  getPromptLabSuggestions
 };

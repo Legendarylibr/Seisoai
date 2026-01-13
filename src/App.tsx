@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import logger from './utils/logger';
 
 // Build version - check console to verify deployment
-console.log('%c[SEISOAI BUILD] v2026.01.06.1', 'background: #4f46e5; color: white; padding: 4px 8px; border-radius: 4px;');
+logger.info('[SEISOAI BUILD] v2026.01.06.1');
 import { ImageGeneratorProvider } from './contexts/ImageGeneratorContext';
 import { SimpleWalletProvider } from './contexts/SimpleWalletContext';
 import { EmailAuthProvider, useEmailAuth } from './contexts/EmailAuthContext';
@@ -16,7 +17,7 @@ import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
-import ClaudeCowork from './components/ClaudeCowork';
+import PromptLab from './components/PromptLab';
 import { Grid, Sparkles, Film, Music, Layers, Box, type LucideIcon } from 'lucide-react';
 import logger from './utils/logger';
 import { API_URL, ensureCSRFToken } from './utils/apiConfig';
@@ -354,9 +355,9 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         </Suspense>
       )}
 
-      {/* Claude Cowork - AI prompt planning assistant */}
+      {/* Prompt Lab - AI prompt planning assistant */}
       {(activeTab === 'generate' || activeTab === 'batch' || activeTab === 'video' || activeTab === 'music') && (
-        <ClaudeCowork
+        <PromptLab
           mode={activeTab === 'generate' || activeTab === 'batch' ? 'image' : activeTab as 'video' | 'music'}
           currentPrompt={userPrompt}
           onApplyPrompt={setUserPrompt}

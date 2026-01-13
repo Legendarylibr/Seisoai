@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { Play, Pause, Download, Volume2, VolumeX, RotateCcw } from 'lucide-react';
+import logger from '../utils/logger';
 
 // Win95 styling constants
 const WIN95 = {
@@ -132,7 +133,7 @@ const StemMixer: React.FC<StemMixerProps> = ({ stems, onClose }) => {
         gainNode.connect(audioContextRef.current.destination);
         gainNodesRef.current[name] = gainNode;
       } catch (error) {
-        console.error(`Failed to load ${name} stem:`, error);
+        logger.error(`Failed to load ${name} stem`, { error });
       }
     };
     
@@ -324,7 +325,7 @@ const StemMixer: React.FC<StemMixerProps> = ({ stems, onClose }) => {
       URL.revokeObjectURL(url);
       
     } catch (error) {
-      console.error('Export failed:', error);
+      logger.error('Export failed', { error });
       alert('Failed to export mix. Please try again.');
     } finally {
       setIsExporting(false);

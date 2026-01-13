@@ -8,6 +8,7 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
+import { requireAuth, sendServerError } from '../utils/responses';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed, normalizeStatus, FAL_STATUS } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 // createEmailHash import removed - SECURITY: Use authenticated user from JWT instead
@@ -2009,13 +2010,7 @@ export function createGenerationRoutes(deps: Dependencies) {
   router.get('/status/:requestId', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       // SECURITY: Require authentication
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required to check generation status'
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const { requestId } = req.params;
       
@@ -2053,13 +2048,7 @@ export function createGenerationRoutes(deps: Dependencies) {
   router.get('/result/:requestId', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       // SECURITY: Require authentication
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required to get generation result'
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const { requestId } = req.params;
       
@@ -2710,13 +2699,7 @@ export function createGenerationRoutes(deps: Dependencies) {
   router.put('/update/:generationId', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       // SECURITY: Require JWT authentication
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required. Please sign in with a valid token.'
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const { generationId } = req.params;
       const { 

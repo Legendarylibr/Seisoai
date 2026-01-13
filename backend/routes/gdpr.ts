@@ -15,6 +15,7 @@ import logger from '../utils/logger.js';
 import type { IUser } from '../models/User.js';
 // Note: decryption is handled automatically by mongoose hooks
 import { logAuditEvent, AuditEventType, AuditSeverity } from '../services/auditLog.js';
+import { requireAuth } from '../utils/responses.js';
 
 // Types
 interface Dependencies {
@@ -41,10 +42,7 @@ export function createGDPRRoutes(deps: Dependencies) {
    */
   router.get('/export', limiter, authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      if (!req.user) {
-        res.status(401).json({ success: false, error: 'Authentication required' });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const User = mongoose.model<IUser>('User');
       const user = await User.findOne({ userId: req.user.userId })
@@ -166,10 +164,7 @@ export function createGDPRRoutes(deps: Dependencies) {
    */
   router.post('/delete', limiter, authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      if (!req.user) {
-        res.status(401).json({ success: false, error: 'Authentication required' });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const { confirmation } = req.body as { confirmation?: string };
       
@@ -265,10 +260,7 @@ export function createGDPRRoutes(deps: Dependencies) {
    */
   router.put('/rectify', limiter, authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      if (!req.user) {
-        res.status(401).json({ success: false, error: 'Authentication required' });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const { settings, discordUsername } = req.body as {
         settings?: {

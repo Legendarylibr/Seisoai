@@ -4,6 +4,7 @@ import { Mail, LogOut, Coins, RefreshCw, User, MessageCircle, Check, X, Loader2,
 import { WIN95, BTN } from '../utils/buttonStyles';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import { getAuthToken } from '../services/emailAuthService';
+import logger from '../utils/logger';
 
 interface DiscordStatus {
   linked: boolean;
@@ -61,7 +62,7 @@ const EmailUserInfo: React.FC = () => {
         setDiscordStatus(data);
       }
     } catch (error) {
-      console.error('Failed to check Discord status:', error);
+      logger.error('Failed to check Discord status', { error });
     } finally {
       setLoadingDiscord(false);
     }
@@ -95,7 +96,7 @@ const EmailUserInfo: React.FC = () => {
         setCodeError(data.error || 'Failed to generate code');
       }
     } catch (error) {
-      console.error('Failed to generate link code:', error);
+      logger.error('Failed to generate link code', { error });
       setCodeError('Failed to generate code. Please try again.');
     } finally {
       setGeneratingCode(false);
@@ -160,7 +161,7 @@ const EmailUserInfo: React.FC = () => {
         setLinkCodeExpiry(null);
       }
     } catch (error) {
-      console.error('Failed to unlink Discord:', error);
+      logger.error('Failed to unlink Discord', { error });
     } finally {
       setUnlinkingDiscord(false);
     }

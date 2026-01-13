@@ -4,6 +4,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import SubscriptionManagement from './SubscriptionManagement';
 import { WIN95, BTN, PANEL, TITLEBAR, TEXT } from '../utils/buttonStyles';
+import logger from '../utils/logger';
 
 // System tray clock component
 const SystemClock = memo(function SystemClock() {
@@ -101,7 +102,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
   const credits = getCredits(isEmailAuth ? emailContext?.credits : walletContext?.credits);
   
   // DEBUG: Log credits source
-  console.log('[Navigation] Auth state:', { 
+  logger.debug('[Navigation] Auth state:', { 
     isEmailAuth, 
     isWalletAuth, 
     emailCredits: emailContext?.credits, 

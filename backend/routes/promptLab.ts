@@ -1,5 +1,5 @@
 /**
- * Claude Cowork Route
+ * Prompt Lab Route
  * Provides conversational AI assistance to help users plan and refine their prompts
  * Uses Claude via fal.run for natural conversation without affecting generation functionality
  */
@@ -10,7 +10,7 @@ import logger from '../utils/logger';
 const FAL_API_KEY = config.FAL_API_KEY;
 
 // System prompt for Claude to act as a helpful prompt planning assistant
-const COWORK_SYSTEM_PROMPT = `You are Claude Cowork, a friendly AI assistant embedded in SeisoAI - a creative AI platform for generating images, videos, and music. You help users plan and refine their prompts.
+const PROMPT_LAB_SYSTEM_PROMPT = `You are Prompt Lab, a friendly AI assistant embedded in SeisoAI - a creative AI platform for generating images, videos, and music. You help users plan and refine their prompts.
 
 Your role is to:
 1. Help users brainstorm and develop their creative ideas
@@ -44,7 +44,7 @@ interface ChatMessage {
   content: string;
 }
 
-interface CoworkChatRequest {
+interface PromptLabChatRequest {
   message: string;
   history?: ChatMessage[];
   context?: {
@@ -54,9 +54,9 @@ interface CoworkChatRequest {
 }
 
 /**
- * Create cowork routes
+ * Create prompt lab routes
  */
-export default function createCoworkRoutes(_deps: Record<string, unknown>) {
+export default function createPromptLabRoutes(_deps: Record<string, unknown>) {
   const router = Router();
 
   /**
@@ -67,7 +67,7 @@ export default function createCoworkRoutes(_deps: Record<string, unknown>) {
     const startTime = Date.now();
     
     try {
-      const { message, history = [], context } = req.body as CoworkChatRequest;
+      const { message, history = [], context } = req.body as PromptLabChatRequest;
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return res.status(400).json({
@@ -84,7 +84,7 @@ export default function createCoworkRoutes(_deps: Record<string, unknown>) {
       }
 
       if (!FAL_API_KEY) {
-        logger.error('FAL_API_KEY not configured for cowork');
+        logger.error('FAL_API_KEY not configured for prompt lab');
         return res.status(500).json({
           success: false,
           error: 'AI service not configured'
@@ -136,7 +136,7 @@ export default function createCoworkRoutes(_deps: Record<string, unknown>) {
         body: JSON.stringify({
           model: 'anthropic/claude-3-haiku',
           prompt: fullPrompt,
-          system_prompt: COWORK_SYSTEM_PROMPT + contextInfo,
+          system_prompt: PROMPT_LAB_SYSTEM_PROMPT + contextInfo,
           temperature: 0.7,
           max_tokens: 500
         }),
@@ -147,7 +147,7 @@ export default function createCoworkRoutes(_deps: Record<string, unknown>) {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error');
-        logger.error('Cowork LLM request failed', { 
+        logger.error('Prompt Lab LLM request failed', { 
           status: response.status, 
           error: errorText 
         });
@@ -168,7 +168,7 @@ export default function createCoworkRoutes(_deps: Record<string, unknown>) {
       }
 
       const duration = Date.now() - startTime;
-      logger.info('Cowork chat completed', { 
+      logger.info('Prompt Lab chat completed', { 
         duration,
         messageLength: message.length,
         responseLength: assistantResponse.length,
@@ -185,14 +185,14 @@ export default function createCoworkRoutes(_deps: Record<string, unknown>) {
       const err = error as Error;
       
       if (err.name === 'AbortError') {
-        logger.warn('Cowork request timed out');
+        logger.warn('Prompt Lab request timed out');
         return res.status(504).json({
           success: false,
           error: 'Request timed out'
         });
       }
 
-      logger.error('Cowork chat error', { error: err.message });
+      logger.error('Prompt Lab chat error', { error: err.message });
       return res.status(500).json({
         success: false,
         error: 'Failed to process request'
