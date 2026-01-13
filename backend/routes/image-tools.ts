@@ -596,45 +596,37 @@ Be specific and detailed about each element.`,
 
       logger.debug('Image described for batch variation', { descriptionLength: description.length });
 
-      // Step 2: Generate variation prompts using LLM - preserve pose/character, vary everything else
-      const variationSystemPrompt = `You are an expert at creating WILDLY DIFFERENT variations of image prompts for AI image generation.
+      // Step 2: Generate variation prompts using LLM - preserve pose/character, vary only surface details
+      const variationSystemPrompt = `You create variations of image prompts that ONLY change clothing, hair color, and background.
 
-CRITICAL RULES - MUST PRESERVE IN EVERY PROMPT:
-- Character's exact POSE (body position, angle, stance)
-- Character's POSITION in frame
-- Character's PHYSICAL FEATURES (face, skin tone, body type)
-- Character's EXPRESSION
+ABSOLUTE RULES - NEVER CHANGE:
+- GENDER (if female, ALL outputs must be female; if male, ALL must be male)
+- EXACT POSE and body position
+- FACE and facial features
+- BODY TYPE and proportions
+- EXPRESSION
+- AGE
 
-MUST BE COMPLETELY DIFFERENT IN EACH PROMPT - NO REPETITION:
-Each of the ${validNumOutputs} prompts must use a UNIQUE combination from these categories:
+ONLY CHANGE THESE SURFACE DETAILS:
+- Outfit/clothing style and color
+- Hair color (keep same length/style)
+- Background scene
+- Lighting mood
+- Color palette
 
-CLOTHING THEMES (use different one each time):
-- Elegant formal (gowns, suits, tuxedos)
-- Casual streetwear (jeans, hoodies, sneakers)
-- Fantasy/Medieval (armor, robes, capes)
-- Futuristic/Cyberpunk (neon, tech wear, visors)
-- Athletic/Sporty (jerseys, workout gear)
-- Beach/Summer (swimwear, sundresses)
-- Winter/Cozy (sweaters, coats, scarves)
-- Gothic/Dark (black leather, chains, dark makeup)
-- Bohemian/Hippie (flowy fabrics, patterns)
-- Professional/Business (blazers, formal wear)
+For each of the ${validNumOutputs} prompts:
+1. Start by repeating the EXACT character description (gender, pose, features)
+2. Then add different clothing, hair color, and background
 
-HAIR STYLES (use different one each time):
-- Long flowing, short pixie, braided, ponytail, bun, curly, straight, mohawk, shaved, colorful dyed
+Example for female character:
+["A woman with the same pose and features, wearing a red dress, blonde hair, city background at night",
+"A woman with the same pose and features, wearing casual jeans and white top, brunette hair, park background"]
 
-BACKGROUNDS (use different one each time):
-- Urban city, tropical beach, snowy mountains, futuristic space station, enchanted forest, underwater, desert, rooftop at sunset, nightclub, ancient ruins, cozy cafe, art gallery
+Example for male character:  
+["A man with the same pose and features, wearing a suit, dark hair, office background",
+"A man with the same pose and features, wearing casual hoodie, light brown hair, street background"]
 
-LIGHTING (use different one each time):
-- Golden hour, neon glow, dramatic shadows, soft diffused, moonlight, spotlight, candlelight, studio lighting
-
-ART STYLES (use different one each time):
-- Photorealistic, anime, oil painting, watercolor, digital art, comic book, vintage film, cinematic
-
-IMPORTANT: Each prompt MUST be drastically different from all others. NO similar outfits, NO similar backgrounds, NO similar color schemes between any two prompts.
-
-Respond with a JSON array of ${validNumOutputs} prompt strings only.`;
+Respond with a JSON array of ${validNumOutputs} prompts. PRESERVE THE GENDER AND CHARACTER.`;
 
       // Calculate max_tokens based on number of outputs (each prompt ~200 tokens + overhead)
       const tokensNeeded = Math.max(3000, validNumOutputs * 250 + 500);
@@ -647,7 +639,7 @@ Respond with a JSON array of ${validNumOutputs} prompt strings only.`;
         },
         body: JSON.stringify({
           model: 'anthropic/claude-3-haiku',
-          prompt: `Create EXACTLY ${validNumOutputs} COMPLETELY DIFFERENT variations based on this image. Each must have a unique outfit, unique hairstyle, unique background, and unique art style. NO TWO can be similar:\n\n${description}`,
+          prompt: `Create EXACTLY ${validNumOutputs} variations of this character. KEEP THE SAME GENDER AND POSE. Only change outfit, hair color, and background:\n\n${description}`,
           system_prompt: variationSystemPrompt,
           max_tokens: tokensNeeded
         })
@@ -690,34 +682,30 @@ Respond with a JSON array of ${validNumOutputs} prompt strings only.`;
 
       // Ensure we have the right number of prompts
       if (prompts.length < validNumOutputs) {
-        logger.warn('LLM returned fewer prompts than requested, generating fallbacks', { 
+        logger.warn('LLM returned fewer prompts than requested, using description', { 
           have: prompts.length, 
           need: validNumOutputs 
         });
         
-        // Create varied fallback prompts instead of using same description
-        const fallbackStyles = [
-          'elegant evening wear, glamorous makeup, city skyline at night',
-          'casual streetwear, messy hair, urban graffiti background',
-          'fantasy armor and cape, magical forest with glowing lights',
-          'cyberpunk neon outfit, futuristic city, holographic elements',
-          'athletic sportswear, outdoor stadium, energetic pose',
-          'beach summer outfit, tropical paradise, golden sunset',
-          'winter cozy sweater, snowy mountain cabin, warm lighting',
-          'gothic dark fashion, mysterious castle, dramatic shadows',
-          'bohemian flowy dress, flower field, soft natural light',
-          'professional business attire, modern office, clean lighting',
-          'vintage retro style, 1950s diner, nostalgic atmosphere',
-          'anime style, colorful hair, cherry blossom background',
-          'oil painting style, renaissance clothing, dramatic chiaroscuro',
-          'watercolor style, pastel colors, dreamy atmosphere',
-          'comic book style, bold colors, action pose'
+        // Pad with the original description - ControlNet will handle the structure
+        // Just add minor color variations to ensure some difference
+        const colorVariations = [
+          'warm lighting',
+          'cool lighting', 
+          'soft natural light',
+          'dramatic shadows',
+          'golden hour glow',
+          'studio lighting',
+          'neon accent lighting',
+          'candlelight ambiance',
+          'moonlit scene',
+          'vibrant colors'
         ];
         
         let fallbackIndex = 0;
         while (prompts.length < validNumOutputs) {
-          const style = fallbackStyles[fallbackIndex % fallbackStyles.length];
-          prompts.push(`${description}, ${style}`);
+          const lighting = colorVariations[fallbackIndex % colorVariations.length];
+          prompts.push(`${description}, ${lighting}`);
           fallbackIndex++;
         }
       } else if (prompts.length > validNumOutputs) {
