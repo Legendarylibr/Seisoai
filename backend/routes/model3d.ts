@@ -527,14 +527,30 @@ export function createModel3dRoutes(deps: Dependencies) {
           
           if (resultResponse.ok) {
             const rawResult = await resultResponse.json() as Record<string, unknown>;
-            statusResult = rawResult;
+            
+            // FAL may nest result under 'data' or 'output'
+            const resultData = (rawResult.data || rawResult.output || rawResult) as Record<string, unknown>;
+            statusResult = resultData;
             
             // Extract GLB URL from various possible locations
-            const glbData = rawResult.model_glb || rawResult.glb || 
-              (rawResult.model_urls as Record<string, unknown>)?.glb;
+            // Hunyuan3D returns: glb.url, model_glb.url, or model_urls.glb.url
+            const glbData = resultData.glb || resultData.model_glb || 
+              (resultData.model_urls as Record<string, unknown>)?.glb;
             glbUrl = (glbData as { url?: string })?.url;
             
-            logger.info('Fetched 3D result', { requestId, hasGlb: !!glbUrl });
+            // Also check top level if nested didn't work
+            if (!glbUrl) {
+              const topGlb = rawResult.glb || rawResult.model_glb ||
+                (rawResult.model_urls as Record<string, unknown>)?.glb;
+              glbUrl = (topGlb as { url?: string })?.url;
+              if (glbUrl) statusResult = rawResult;
+            }
+            
+            logger.info('Fetched 3D result', { 
+              requestId, 
+              hasGlb: !!glbUrl,
+              resultKeys: Object.keys(resultData).slice(0, 10)
+            });
           }
         } catch (fetchError) {
           logger.error('Failed to fetch 3D result', { 

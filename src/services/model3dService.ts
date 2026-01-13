@@ -185,24 +185,29 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
         continue;
       }
 
-      const data = JSON.parse(statusText) as StatusResponse;
-      const status = (data.status || '').toUpperCase();
+      const rawData = JSON.parse(statusText);
+      const status = (rawData.status || '').toUpperCase();
 
       // Report progress
       if (onProgress) {
         onProgress(status || 'PROCESSING', elapsed);
       }
 
-      // Check for model URL
-      const modelGlb = data.model_glb || data.glb;
-      const modelUrls = data.model_urls;
+      // Handle nested response - FAL may wrap in 'data' or 'output'
+      const data = (rawData.data || rawData.output || rawData) as StatusResponse;
+      
+      // Check for model URL in various locations
+      const modelGlb = data.model_glb || data.glb || rawData.model_glb || rawData.glb;
+      const modelUrls = data.model_urls || rawData.model_urls;
+      const thumbnail = data.thumbnail || rawData.thumbnail;
+      const glbUrl = modelGlb?.url || modelUrls?.glb?.url;
 
-      if (modelGlb?.url || modelUrls?.glb?.url) {
-        logger.info('3D generation completed!', { elapsed });
+      if (glbUrl) {
+        logger.info('3D generation completed!', { elapsed, glbUrl: glbUrl.substring(0, 50) });
         return {
           success: true,
           model_glb: modelGlb,
-          thumbnail: data.thumbnail,
+          thumbnail: thumbnail,
           model_urls: modelUrls,
           generationId: submitResult.generationId,
           requestId: submitResult.requestId,
