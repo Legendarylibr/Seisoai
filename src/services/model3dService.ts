@@ -152,6 +152,7 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
   const initialDelay = 10000; // Wait 10 seconds before first poll
   const startTime = Date.now();
   const statusEndpoint = `${API_URL}/api/model3d/status/${submitResult.requestId}`;
+  let completedWithoutModel = 0; // Track completed status without model URL
 
   // Report initial progress
   if (onProgress) {
@@ -215,6 +216,19 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
         throw new Error(data.error || '3D generation failed. Credits will be refunded.');
       }
 
+      // Handle completed status without model URL - give it a few more tries
+      if (status === 'COMPLETED' || status === 'OK' || status === 'SUCCESS') {
+        completedWithoutModel++;
+        logger.info('Status completed but no model yet', { attempt: completedWithoutModel });
+        
+        if (completedWithoutModel >= 5) {
+          throw new Error('3D generation completed but model could not be retrieved. Check your gallery.');
+        }
+        // Short wait then retry
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+
       // Still processing - wait and poll again
       await new Promise(resolve => setTimeout(resolve, pollInterval));
 
@@ -222,7 +236,7 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
       const err = error as Error;
       
       // Re-throw user-facing errors
-      if (err.message.includes('failed') || err.message.includes('Credits')) {
+      if (err.message.includes('failed') || err.message.includes('Credits') || err.message.includes('completed')) {
         throw err;
       }
       
