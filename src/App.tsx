@@ -81,7 +81,8 @@ function App(): JSX.Element {
     { id: 'batch', name: 'Batch', icon: Layers },
     { id: 'video', name: 'Video', icon: Film },
     { id: 'music', name: 'Music', icon: Music },
-    { id: '3d', name: '3D', icon: Box },
+    // TEMPORARILY DISABLED - 3D not working, re-enable when fixed
+    // { id: '3d', name: '3D', icon: Box },
     { id: 'gallery', name: 'Gallery', icon: Grid }
   ];
 
@@ -306,6 +307,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           </Suspense>
         )}
         
+        {/* TEMPORARILY DISABLED - 3D not working, re-enable when fixed
         {activeTab === '3d' && (
           <Suspense fallback={<Win95LoadingFallback text="Loading 3D Character Creator..." />}>
             <CharacterGenerator 
@@ -314,6 +316,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
             />
           </Suspense>
         )}
+        */}
         
         
         {activeTab === 'gallery' && (
