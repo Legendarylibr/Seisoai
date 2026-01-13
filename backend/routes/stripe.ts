@@ -16,6 +16,7 @@ import config from '../config/env';
 import User, { type IUser } from '../models/User';
 import Payment from '../models/Payment';
 import type Stripe from 'stripe';
+import { requireAuth } from '../utils/responses';
 
 // Types
 interface Dependencies {
@@ -295,19 +296,78 @@ export function createStripeRoutes(deps: Dependencies = {}) {
                 
                 const user = await findUserByIdentifier(walletAddress || null, null, userId || null);
                 if (user) {
+                  // Store subscriptionId in paymentHistory for future lookups
                   await User.findOneAndUpdate(
                     { userId: user.userId },
                     {
                       $inc: {
                         credits: creditsNum,
                         totalCreditsEarned: creditsNum
+                      },
+                      $push: {
+                        paymentHistory: {
+                          $each: [{
+                            type: 'subscription',
+                            subscriptionId,
+                            credits: creditsNum,
+                            amount: (invoice.amount_paid || 0) / 100,
+                            timestamp: new Date()
+                          }],
+                          $slice: -30 // Keep last 30 entries
+                        }
                       }
                     }
                   );
                   
                   logger.info('Subscription credits added', {
                     userId: user.userId,
-                    credits: creditsNum
+                    credits: creditsNum,
+                    subscriptionId
+                  });
+                }
+              }
+            }
+            break;
+          }
+
+          case 'customer.subscription.created':
+          case 'customer.subscription.updated': {
+            const subscription = event.data.object as Stripe.Subscription;
+            const { userId, walletAddress, email } = subscription.metadata;
+            
+            if (userId || walletAddress || email) {
+              const User = mongoose.model<IUser>('User');
+              const user = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
+              
+              if (user) {
+                // Check if this subscription is already in paymentHistory
+                const hasSubscription = user.paymentHistory?.some(
+                  (p: { subscriptionId?: string }) => p.subscriptionId === subscription.id
+                );
+                
+                // Only add if not already present (for 'created' event or first 'updated')
+                if (!hasSubscription && subscription.status === 'active') {
+                  await User.findOneAndUpdate(
+                    { userId: user.userId },
+                    {
+                      $push: {
+                        paymentHistory: {
+                          $each: [{
+                            type: 'subscription',
+                            subscriptionId: subscription.id,
+                            credits: 0, // Credits added via invoice.payment_succeeded
+                            timestamp: new Date()
+                          }],
+                          $slice: -30
+                        }
+                      }
+                    }
+                  );
+                  
+                  logger.info('Subscription linked to user', {
+                    userId: user.userId,
+                    subscriptionId: subscription.id,
+                    status: subscription.status
                   });
                 }
               }
@@ -358,7 +418,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
             new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
           )[0];
         
-        if (subscriptionPayment) {
+        if (subscriptionPayment && subscriptionPayment.subscriptionId) {
           subscriptionId = subscriptionPayment.subscriptionId;
         }
       }
@@ -387,13 +447,48 @@ export function createStripeRoutes(deps: Dependencies = {}) {
           });
 
           if (customers.data.length > 0) {
-            const subscriptions = await stripe.subscriptions.list({
-              customer: customers.data[0].id,
-              status: 'all',
+            const customerId = customers.data[0].id;
+            
+            // First, try to find an active subscription
+            let subscriptions = await stripe.subscriptions.list({
+              customer: customerId,
+              status: 'active',
               limit: 1
             });
 
-            if (subscriptions.data.length > 0) {
+            // If no active subscription, check for trialing
+            if (subscriptions.data.length === 0) {
+              subscriptions = await stripe.subscriptions.list({
+                customer: customerId,
+                status: 'trialing',
+                limit: 1
+              });
+            }
+
+            // If no trialing, check for past_due (user might need to update payment)
+            if (subscriptions.data.length === 0) {
+              subscriptions = await stripe.subscriptions.list({
+                customer: customerId,
+                status: 'past_due',
+                limit: 1
+              });
+            }
+
+            // If still none, check for any subscription that's not canceled/incomplete_expired
+            // This catches edge cases like 'incomplete' subscriptions awaiting payment
+            if (subscriptions.data.length === 0) {
+              const allSubs = await stripe.subscriptions.list({
+                customer: customerId,
+                limit: 10
+              });
+              // Filter to usable subscriptions (not canceled or incomplete_expired)
+              const usableSub = allSubs.data.find(sub => 
+                sub.status !== 'canceled' && sub.status !== 'incomplete_expired'
+              );
+              if (usableSub) {
+                subscriptionId = usableSub.id;
+              }
+            } else {
               subscriptionId = subscriptions.data[0].id;
             }
           }
@@ -589,13 +684,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       }
 
       // SECURITY: Require authentication
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required to verify payment'
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const { paymentIntentId } = req.body as {
         paymentIntentId?: string;
@@ -733,13 +822,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       }
 
       // SECURITY: Require authentication
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required to verify subscription'
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const { sessionId } = req.body as { sessionId?: string };
       if (!sessionId) {
