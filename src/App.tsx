@@ -355,10 +355,10 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         </Suspense>
       )}
 
-      {/* Prompt Lab - AI prompt planning assistant */}
-      {(activeTab === 'generate' || activeTab === 'batch' || activeTab === 'video' || activeTab === 'music') && (
+      {/* Prompt Lab - AI prompt planning assistant (only on generation screens) */}
+      {(activeTab === 'generate' || activeTab === 'video' || activeTab === 'music') && (
         <PromptLab
-          mode={activeTab === 'generate' || activeTab === 'batch' ? 'image' : activeTab as 'video' | 'music'}
+          mode={activeTab === 'generate' ? 'image' : activeTab as 'video' | 'music'}
           currentPrompt={userPrompt}
           onApplyPrompt={setUserPrompt}
         />
