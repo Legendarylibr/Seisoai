@@ -301,30 +301,51 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
                     wordBreak: 'break-word'
                   }}
                 >
-                  {msg.content}
+                  {/* Clean up [PROMPT] tags from display */}
+                  {msg.content.replace(/\[PROMPT\][\s\S]*?\[\/PROMPT\]/gi, '').trim() || msg.content}
                   
                   {/* Action button for suggested prompts */}
                   {msg.action?.type === 'suggest_prompt' && msg.action.value && (
-                    <div className="mt-2 pt-2 border-t border-current/20 flex gap-1">
-                      <button
-                        onClick={() => handleApplyPrompt(msg.action!.value!)}
-                        className="flex items-center gap-1 px-2 py-0.5 text-[9px]"
-                        style={{ ...BTN.base }}
-                        disabled={copiedPrompt === msg.action.value}
+                    <div className="mt-2 pt-2 border-t border-current/20">
+                      <div 
+                        className="text-[10px] px-2 py-1 mb-2 italic"
+                        style={{ 
+                          background: WIN95.bgLight,
+                          color: WIN95.text,
+                          border: `1px solid ${WIN95.border.dark}`
+                        }}
                       >
-                        {copiedPrompt === msg.action.value ? (
-                          <><Check className="w-3 h-3" /> Applied!</>
-                        ) : (
-                          <><Sparkles className="w-3 h-3" /> Use this</>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleCopyPrompt(msg.action!.value!)}
-                        className="flex items-center gap-1 px-2 py-0.5 text-[9px]"
-                        style={{ ...BTN.base }}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
+                        {msg.action.value}
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleApplyPrompt(msg.action!.value!)}
+                          className="flex items-center gap-1 px-3 py-1 text-[10px] font-bold"
+                          style={{ 
+                            ...BTN.base,
+                            background: copiedPrompt === msg.action.value 
+                              ? '#4ade80' 
+                              : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            color: '#fff',
+                            boxShadow: '1px 1px 0 rgba(255,255,255,0.3) inset'
+                          }}
+                          disabled={copiedPrompt === msg.action.value}
+                        >
+                          {copiedPrompt === msg.action.value ? (
+                            <><Check className="w-3 h-3" /> Applied!</>
+                          ) : (
+                            <><Sparkles className="w-3 h-3" /> Use Prompt</>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleCopyPrompt(msg.action!.value!)}
+                          className="flex items-center gap-1 px-2 py-1 text-[9px]"
+                          style={{ ...BTN.base }}
+                          title="Copy to clipboard"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

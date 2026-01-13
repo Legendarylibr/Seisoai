@@ -108,13 +108,23 @@ export async function getPromptLabSuggestions(mode: string): Promise<string[]> {
 
 /**
  * Parse any actionable suggestions from Claude's response
- * Looks for patterns like "Try this prompt: ..." or quoted suggestions
+ * Looks for [PROMPT]...[/PROMPT] tags or quoted prompts
  */
 function parseActionFromResponse(response: string): PromptLabAction | undefined {
-  // Look for explicit prompt suggestions
+  // Primary: Look for [PROMPT]...[/PROMPT] tags (most reliable)
+  const tagMatch = response.match(/\[PROMPT\]([\s\S]*?)\[\/PROMPT\]/i);
+  if (tagMatch && tagMatch[1] && tagMatch[1].trim().length > 5) {
+    return {
+      type: 'suggest_prompt',
+      value: tagMatch[1].trim(),
+      label: 'Use Prompt'
+    };
+  }
+
+  // Fallback: Look for quoted prompts
   const promptPatterns = [
-    /(?:try|use|here's a prompt|suggested prompt)[:\s]+["']([^"']+)["']/i,
-    /(?:try|use)[:\s]+[""]([^""]+)[""]/i,
+    /(?:try|use|here's a prompt|suggested prompt|prompt)[:\s]+["']([^"']+)["']/i,
+    /(?:try|use|here's)[:\s]+[""]([^""]+)[""]/i,
     /^["']([^"']{20,})["']$/m
   ];
 
@@ -124,7 +134,7 @@ function parseActionFromResponse(response: string): PromptLabAction | undefined 
       return {
         type: 'suggest_prompt',
         value: match[1].trim(),
-        label: 'Use this prompt'
+        label: 'Use Prompt'
       };
     }
   }
