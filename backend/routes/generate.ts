@@ -692,15 +692,20 @@ export function createGenerationRoutes(deps: Dependencies) {
       
       if (isControlNet && hasImages) {
         // ControlNet Canny - preserves edges/structure from control image
-        // Using high controlnet_conditioning_scale (0.9) for strict pose matching
+        // Using control_lora_image_url as per FAL API docs
         const controlImageUrl = image_url || (image_urls && image_urls[0]);
+        
+        logger.info('ControlNet generation', { 
+          hasControlImage: !!controlImageUrl,
+          imageLength: controlImageUrl?.length || 0 
+        });
+        
         requestBody = {
           prompt: finalPrompt,
-          control_image_url: controlImageUrl,
-          controlnet_conditioning_scale: 0.95, // High value for strict structure matching (0-1)
-          num_images: 1, // ControlNet generates one at a time
+          control_lora_image_url: controlImageUrl, // Correct parameter name for flux-control-lora-canny
+          num_images: 1,
           guidance_scale: guidanceScale || 3.5,
-          num_inference_steps: 35, // More steps for better quality
+          num_inference_steps: 28,
           output_format: 'jpeg',
           enable_safety_checker: false
         };
