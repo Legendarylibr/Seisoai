@@ -7,7 +7,7 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
-import { getQueueResult, getFalApiKey, isStatusCompleted } from '../services/fal';
+import { getFalApiKey, isStatusCompleted } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import { CREDITS } from '../config/constants';
 import type { IUser } from '../models/User';
@@ -485,11 +485,11 @@ export function createModel3dRoutes(deps: Dependencies) {
       }
 
       const modelPath = 'fal-ai/hunyuan3d-v3/image-to-3d';
+      
+      // Check status from FAL
       const statusResponse = await fetch(
         `https://queue.fal.run/${modelPath}/requests/${requestId}/status`,
-        {
-          headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-        }
+        { headers: { 'Authorization': `Key ${FAL_API_KEY}` } }
       );
 
       if (!statusResponse.ok) {
@@ -503,130 +503,54 @@ export function createModel3dRoutes(deps: Dependencies) {
       const rawStatusData = await statusResponse.json() as { 
         status?: string;
         response_url?: string;
-        data?: {
-          glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-          model_glb?: { url?: string };
-          thumbnail?: { url?: string };
-          model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-        };
-        glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
+        glb?: { url?: string };
         model_glb?: { url?: string };
         thumbnail?: { url?: string };
-        model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
+        model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string } };
       };
 
       const normalizedStatus = (rawStatusData.status || '').toUpperCase();
+      let statusResult: Record<string, unknown> = rawStatusData;
+      let glbUrl = rawStatusData.model_glb?.url || rawStatusData.glb?.url || rawStatusData.model_urls?.glb?.url;
       
-      // Check if result data is already in status response
-      let statusResult = rawStatusData.data || rawStatusData;
-      let glbUrl = statusResult.model_glb?.url || statusResult.glb?.url || statusResult.model_urls?.glb?.url;
-      
-      // If status is completed but no model URL in response, fetch from result endpoint
+      // If completed but no model URL, fetch from result endpoint
       if (isStatusCompleted(normalizedStatus) && !glbUrl) {
-        logger.info('Status completed but no model URL, fetching result', { requestId });
+        logger.info('Status completed, fetching result', { requestId });
         
-        type RawResultType = {
-          data?: {
-            glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-            model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-            thumbnail?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-            model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-            seed?: number;
-          };
-          output?: {
-            glb?: { url?: string };
-            model_glb?: { url?: string };
-            thumbnail?: { url?: string };
-            model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string } };
-          };
-          glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-          model_glb?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-          thumbnail?: { url?: string; file_size?: number; file_name?: string; content_type?: string };
-          model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string }; usdz?: { url?: string } };
-          seed?: number;
-        };
-
-        // Retry logic for fetching result - sometimes the result is delayed slightly
-        const maxRetries = 3;
-        let retryDelay = 2000;
-        
-        for (let attempt = 1; attempt <= maxRetries && !glbUrl; attempt++) {
-          try {
-            let rawResult: RawResultType | null = null;
-
-            if (rawStatusData.response_url) {
-              const resultResponse = await fetch(rawStatusData.response_url, {
-                headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-              });
-              if (resultResponse.ok) {
-                rawResult = await resultResponse.json() as RawResultType;
-              }
-            } else {
-              rawResult = await getQueueResult<RawResultType>(requestId, modelPath);
-            }
-
-            if (rawResult) {
-              // Merge result data into status response - check all possible locations
-              const resultData = rawResult.data || rawResult.output || rawResult;
-              statusResult = resultData;
-              glbUrl = resultData.model_glb?.url || resultData.glb?.url || resultData.model_urls?.glb?.url;
-              
-              // Also check top level of rawResult if resultData doesn't have it
-              if (!glbUrl) {
-                glbUrl = rawResult.model_glb?.url || rawResult.glb?.url || rawResult.model_urls?.glb?.url;
-                if (glbUrl) {
-                  statusResult = rawResult;
-                }
-              }
-              
-              logger.info('Fetched result data for completed 3D generation', { 
-                requestId, 
-                attempt,
-                hasGlb: !!glbUrl,
-                hasModelUrls: !!resultData.model_urls,
-                hasThumbnail: !!resultData.thumbnail
-              });
-            }
+        try {
+          const resultUrl = rawStatusData.response_url || 
+            `https://queue.fal.run/${modelPath}/requests/${requestId}`;
+          
+          const resultResponse = await fetch(resultUrl, {
+            headers: { 'Authorization': `Key ${FAL_API_KEY}` }
+          });
+          
+          if (resultResponse.ok) {
+            const rawResult = await resultResponse.json() as Record<string, unknown>;
+            statusResult = rawResult;
             
-            // If still no glbUrl and we have more retries, wait and try again
-            if (!glbUrl && attempt < maxRetries) {
-              logger.info('Result fetch attempt had no glb URL, retrying', { requestId, attempt, retryDelay });
-              await new Promise(resolve => setTimeout(resolve, retryDelay));
-              retryDelay *= 1.5; // Exponential backoff
-            }
-          } catch (fetchError) {
-            logger.error('Failed to fetch result for completed status', { 
-              error: (fetchError as Error).message,
-              requestId,
-              attempt
-            });
+            // Extract GLB URL from various possible locations
+            const glbData = rawResult.model_glb || rawResult.glb || 
+              (rawResult.model_urls as Record<string, unknown>)?.glb;
+            glbUrl = (glbData as { url?: string })?.url;
             
-            // Wait before retry
-            if (attempt < maxRetries) {
-              await new Promise(resolve => setTimeout(resolve, retryDelay));
-              retryDelay *= 1.5;
-            }
+            logger.info('Fetched 3D result', { requestId, hasGlb: !!glbUrl });
           }
-        }
-        
-        // Log warning if we still couldn't get the result after all retries
-        if (!glbUrl) {
-          logger.warn('Could not fetch glb URL after all retries for completed 3D generation', { 
-            requestId, 
-            maxRetries,
-            statusResult: JSON.stringify(statusResult).substring(0, 500)
+        } catch (fetchError) {
+          logger.error('Failed to fetch 3D result', { 
+            error: (fetchError as Error).message, 
+            requestId 
           });
         }
       }
       
-      // If generation is complete and user is authenticated, update gallery
+      // Update gallery if completed and authenticated
       if (req.user && glbUrl) {
         try {
           const User = mongoose.model<IUser>('User');
           const updateQuery = buildUserUpdateQuery(req.user);
           
           if (updateQuery) {
-            // Find gallery item with this requestId
             const user = await User.findOne({
               ...updateQuery,
               'gallery.requestId': requestId
@@ -639,39 +563,34 @@ export function createModel3dRoutes(deps: Dependencies) {
                 await updateGalleryItemWithResult(
                   updateQuery,
                   galleryItem.id,
-                  statusResult,
+                  statusResult as {
+                    model_glb?: { url?: string };
+                    glb?: { url?: string };
+                    thumbnail?: { url?: string };
+                    model_urls?: { glb?: { url?: string }; obj?: { url?: string }; fbx?: { url?: string } };
+                  },
                   galleryItem.thumbnailUrl || galleryItem.imageUrl
                 );
-                logger.info('Gallery item updated from status check', { 
-                  requestId,
-                  generationId: galleryItem.id 
-                });
               }
             }
           }
         } catch (galleryUpdateError) {
-          logger.error('Failed to update gallery from status check', { 
-            error: (galleryUpdateError as Error).message,
-            requestId 
-          });
-          // Don't fail the status check if gallery update fails
+          // Don't fail status check if gallery update fails
+          logger.error('Gallery update failed', { error: (galleryUpdateError as Error).message });
         }
       }
 
-      // Return response with result data merged in when available
-      // Cast to Record for safe property access
-      const resultRecord = statusResult as Record<string, unknown>;
+      // Build response
       const responseData: Record<string, unknown> = {
         success: true,
         status: rawStatusData.status
       };
       
-      // Include model data directly in response for frontend to consume
+      // Include model data
       if (statusResult.model_glb) responseData.model_glb = statusResult.model_glb;
       if (statusResult.glb) responseData.glb = statusResult.glb;
       if (statusResult.thumbnail) responseData.thumbnail = statusResult.thumbnail;
       if (statusResult.model_urls) responseData.model_urls = statusResult.model_urls;
-      if (resultRecord.seed !== undefined) responseData.seed = resultRecord.seed;
       
       res.json(responseData);
     } catch (error) {
