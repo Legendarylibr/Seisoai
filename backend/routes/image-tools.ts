@@ -690,17 +690,45 @@ Respond with a JSON array of ${validNumOutputs} prompt strings only.`;
 
       // Ensure we have the right number of prompts
       if (prompts.length < validNumOutputs) {
-        logger.info('Padding prompts with description', { 
+        logger.warn('LLM returned fewer prompts than requested, generating fallbacks', { 
           have: prompts.length, 
           need: validNumOutputs 
         });
-        // Pad with the original description
+        
+        // Create varied fallback prompts instead of using same description
+        const fallbackStyles = [
+          'elegant evening wear, glamorous makeup, city skyline at night',
+          'casual streetwear, messy hair, urban graffiti background',
+          'fantasy armor and cape, magical forest with glowing lights',
+          'cyberpunk neon outfit, futuristic city, holographic elements',
+          'athletic sportswear, outdoor stadium, energetic pose',
+          'beach summer outfit, tropical paradise, golden sunset',
+          'winter cozy sweater, snowy mountain cabin, warm lighting',
+          'gothic dark fashion, mysterious castle, dramatic shadows',
+          'bohemian flowy dress, flower field, soft natural light',
+          'professional business attire, modern office, clean lighting',
+          'vintage retro style, 1950s diner, nostalgic atmosphere',
+          'anime style, colorful hair, cherry blossom background',
+          'oil painting style, renaissance clothing, dramatic chiaroscuro',
+          'watercolor style, pastel colors, dreamy atmosphere',
+          'comic book style, bold colors, action pose'
+        ];
+        
+        let fallbackIndex = 0;
         while (prompts.length < validNumOutputs) {
-          prompts.push(description);
+          const style = fallbackStyles[fallbackIndex % fallbackStyles.length];
+          prompts.push(`${description}, ${style}`);
+          fallbackIndex++;
         }
       } else if (prompts.length > validNumOutputs) {
         prompts = prompts.slice(0, validNumOutputs);
       }
+      
+      // Final verification
+      logger.info('Final prompt count', { 
+        requested: validNumOutputs, 
+        delivering: prompts.length 
+      });
 
       logger.info('Batch variation completed', { userId: user.userId, promptCount: prompts.length, useControlNet });
 

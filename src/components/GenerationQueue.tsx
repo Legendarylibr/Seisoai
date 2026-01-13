@@ -197,7 +197,18 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment: _
             throw new Error('Failed to generate variation prompts');
           }
           
-          logger.info('Got variation prompts', { count: variateResult.prompts.length });
+          logger.info('Got variation prompts', { 
+            requested: imagesToGenerate, 
+            received: variateResult.prompts.length 
+          });
+          
+          // Verify we have all the prompts we need
+          if (variateResult.prompts.length < imagesToGenerate) {
+            logger.warn('Received fewer prompts than requested', {
+              requested: imagesToGenerate,
+              received: variateResult.prompts.length
+            });
+          }
           lastRemainingCredits = variateResult.remainingCredits;
           
           // Step 2: Generate each image with its unique prompt
