@@ -518,9 +518,10 @@ export function createImageToolsRoutes(deps: Dependencies) {
         return;
       }
 
-      const { image_url, num_outputs = 4 } = req.body as {
+      const { image_url, num_outputs = 4, use_controlnet = false } = req.body as {
         image_url?: string;
         num_outputs?: number;
+        use_controlnet?: boolean;
       };
 
       if (!image_url) {
@@ -529,6 +530,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
       }
 
       const validNumOutputs = Math.min(Math.max(1, num_outputs), 100);
+      const useControlNet = !!use_controlnet;
       const creditsRequired = 0.5; // Just for the analysis, generation costs are separate
 
       // Deduct credits
@@ -689,12 +691,13 @@ Example format:
         prompts = prompts.slice(0, validNumOutputs);
       }
 
-      logger.info('Batch variation completed', { userId: user.userId, promptCount: prompts.length });
+      logger.info('Batch variation completed', { userId: user.userId, promptCount: prompts.length, useControlNet });
 
       res.json({
         success: true,
         description,
         prompts,
+        useControlNet,
         remainingCredits: updateResult.credits,
         creditsDeducted: creditsRequired
       });

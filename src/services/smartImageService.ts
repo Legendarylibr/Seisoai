@@ -14,6 +14,7 @@ export interface BatchVariateResult {
   success: boolean;
   description?: string;
   prompts?: string[];
+  useControlNet?: boolean;
   remainingCredits?: number;
   creditsDeducted?: number;
   error?: string;
@@ -27,7 +28,8 @@ export interface BatchVariateResult {
 export const batchVariate = async (
   imageUrl: string,
   numOutputs: number,
-  credentials: { walletAddress?: string; userId?: string; email?: string }
+  credentials: { walletAddress?: string; userId?: string; email?: string },
+  options: { useControlNet?: boolean } = {}
 ): Promise<BatchVariateResult> => {
   const csrfToken = await ensureCSRFToken();
   
@@ -43,7 +45,8 @@ export const batchVariate = async (
       num_outputs: numOutputs,
       walletAddress: credentials.walletAddress,
       userId: credentials.userId,
-      email: credentials.email
+      email: credentials.email,
+      use_controlnet: options.useControlNet || false
     })
   });
 

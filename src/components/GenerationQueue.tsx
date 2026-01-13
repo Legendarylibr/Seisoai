@@ -36,6 +36,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment: _
   const [isExpanded, setIsExpanded] = useState(true);
   const [numImages, setNumImages] = useState<number>(1); // Default number of images to generate per single image
   const [progressCount, setProgressCount] = useState(0); // Track completed images in current batch
+  const [useControlNet, setUseControlNet] = useState(false); // ControlNet for pose/structure preservation
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
 
@@ -178,14 +179,19 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment: _
 
         if (isSingleImageBatch) {
           // AI-powered batch variation flow
-          logger.info('Starting AI batch variation', { numOutputs: imagesToGenerate });
+          logger.info('Starting AI batch variation', { numOutputs: imagesToGenerate, useControlNet });
           
           // Step 1: Get AI-generated variation prompts
-          const variateResult = await batchVariate(item.imageDataUrl, imagesToGenerate, {
-            walletAddress: isEmailAuth ? undefined : (address || undefined),
-            userId: isEmailAuth ? (emailContext.userId || undefined) : undefined,
-            email: isEmailAuth ? (emailContext.email || undefined) : undefined
-          });
+          const variateResult = await batchVariate(
+            item.imageDataUrl, 
+            imagesToGenerate, 
+            {
+              walletAddress: isEmailAuth ? undefined : (address || undefined),
+              userId: isEmailAuth ? (emailContext.userId || undefined) : undefined,
+              email: isEmailAuth ? (emailContext.email || undefined) : undefined
+            },
+            { useControlNet }
+          );
           
           if (!variateResult.prompts || variateResult.prompts.length === 0) {
             throw new Error('Failed to generate variation prompts');
@@ -210,7 +216,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment: _
                   userId: isEmailAuth ? (emailContext.userId || undefined) : undefined,
                   email: isEmailAuth ? (emailContext.email || undefined) : undefined,
                   isNFTHolder: isNFTHolder || false,
-                  multiImageModel: multiImageModel || 'flux',
+                  multiImageModel: variateResult.useControlNet ? 'controlnet-canny' : (multiImageModel || 'flux'),
                   numImages: 1
                 },
                 item.imageDataUrl
@@ -564,16 +570,55 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment: _
                   </div>
                 </div>
 
+                {/* ControlNet Toggle */}
+                <div 
+                  className="flex items-center justify-between p-2"
+                  style={{ 
+                    background: useControlNet ? '#e8f5e9' : WIN95.bg,
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                  }}
+                >
+                  <label 
+                    onClick={() => setUseControlNet(!useControlNet)}
+                    className="flex items-center gap-2 cursor-pointer select-none flex-1"
+                    style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
+                  >
+                    <div 
+                      className="w-4 h-4 flex items-center justify-center flex-shrink-0"
+                      style={{
+                        background: WIN95.inputBg,
+                        boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`
+                      }}
+                    >
+                      {useControlNet && (
+                        <span className="text-[10px] font-bold" style={{ color: '#2e7d32' }}>✓</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold block" style={{ color: useControlNet ? '#2e7d32' : WIN95.text }}>
+                        🎯 ControlNet Mode
+                      </span>
+                      <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>
+                        Strict pose/structure matching
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
                 {/* Info text */}
                 <div 
                   className="p-2 text-[9px]"
                   style={{ 
-                    background: '#e3f2fd', 
-                    color: '#1565c0',
+                    background: useControlNet ? '#fff3e0' : '#e3f2fd', 
+                    color: useControlNet ? '#e65100' : '#1565c0',
                     boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
                   }}
                 >
-                  <strong>AI-powered variations:</strong> Same pose & character, different outfits, hair, backgrounds, and styles
+                  {useControlNet ? (
+                    <><strong>ControlNet:</strong> Outputs match exact pose, edges &amp; structure. Best for consistent character sheets.</>
+                  ) : (
+                    <><strong>AI-powered variations:</strong> Same pose &amp; character, different outfits, hair, backgrounds, and styles</>
+                  )}
                 </div>
               </div>
             );

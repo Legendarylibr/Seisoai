@@ -663,9 +663,13 @@ export function createGenerationRoutes(deps: Dependencies) {
       // Determine endpoint based on image inputs and model selection
       const isNanoBananaPro = model === 'nano-banana-pro';
       const isFlux2 = isFlux2Model;
+      const isControlNet = model === 'controlnet-canny';
 
       let endpoint: string;
-      if (isNanoBananaPro) {
+      if (isControlNet && hasImages) {
+        // ControlNet Canny - uses edge detection to preserve structure
+        endpoint = 'https://fal.run/fal-ai/flux-lora-canny';
+      } else if (isNanoBananaPro) {
         endpoint = hasImages 
           ? 'https://fal.run/fal-ai/nano-banana-pro/edit'
           : 'https://fal.run/fal-ai/nano-banana-pro';
@@ -686,7 +690,23 @@ export function createGenerationRoutes(deps: Dependencies) {
       // Build request body based on model
       let requestBody: Record<string, unknown>;
       
-      if (isNanoBananaPro) {
+      if (isControlNet && hasImages) {
+        // ControlNet Canny - preserves edges/structure from control image
+        const controlImageUrl = image_url || (image_urls && image_urls[0]);
+        requestBody = {
+          prompt: finalPrompt,
+          control_image_url: controlImageUrl,
+          num_images: 1, // ControlNet generates one at a time
+          guidance_scale: guidanceScale || 3.5,
+          num_inference_steps: 28,
+          output_format: 'jpeg',
+          enable_safety_checker: false
+        };
+        
+        if (seed !== undefined) {
+          requestBody.seed = seed;
+        }
+      } else if (isNanoBananaPro) {
         requestBody = {
           prompt: finalPrompt,
           resolution: '1K'
