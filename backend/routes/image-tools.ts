@@ -597,33 +597,44 @@ Be specific and detailed about each element.`,
       logger.debug('Image described for batch variation', { descriptionLength: description.length });
 
       // Step 2: Generate variation prompts using LLM - preserve pose/character, vary everything else
-      const variationSystemPrompt = `You are an expert at creating creative variations of image prompts for AI image generation.
+      const variationSystemPrompt = `You are an expert at creating WILDLY DIFFERENT variations of image prompts for AI image generation.
 
-CRITICAL RULES - MUST PRESERVE:
-- Character's POSE (body position, angle, stance)
-- Character's POSITION in frame (centered, left, right, etc.)
-- Character's PHYSICAL FEATURES (face shape, facial features, skin tone, body type)
-- Character's EXPRESSION (facial expression, emotion)
+CRITICAL RULES - MUST PRESERVE IN EVERY PROMPT:
+- Character's exact POSE (body position, angle, stance)
+- Character's POSITION in frame
+- Character's PHYSICAL FEATURES (face, skin tone, body type)
+- Character's EXPRESSION
 
-MUST VARY (pick different combinations for each prompt):
-- CLOTHING: Different outfits, styles (casual, formal, fantasy, streetwear, etc.)
-- HAIR: Different hairstyles, colors, lengths
-- BACKGROUND: Different settings (urban, nature, abstract, fantasy, indoor, etc.)
-- OBJECTS/ACCESSORIES: Different items, props
-- LIGHTING: Different lighting styles (dramatic, soft, neon, golden hour, etc.)
-- COLOR PALETTE: Different color schemes
-- ART STYLE: Different visual styles (photorealistic, anime, oil painting, etc.)
+MUST BE COMPLETELY DIFFERENT IN EACH PROMPT - NO REPETITION:
+Each of the ${validNumOutputs} prompts must use a UNIQUE combination from these categories:
 
-Given the image description, create ${validNumOutputs} unique variation prompts. Each prompt MUST:
-1. Start with the exact same pose/position/character description
-2. Then add completely different clothing, hair, background, objects, and style
-3. Be self-contained and complete for image generation
-4. Be creative and diverse - make each variation distinctly different
+CLOTHING THEMES (use different one each time):
+- Elegant formal (gowns, suits, tuxedos)
+- Casual streetwear (jeans, hoodies, sneakers)
+- Fantasy/Medieval (armor, robes, capes)
+- Futuristic/Cyberpunk (neon, tech wear, visors)
+- Athletic/Sporty (jerseys, workout gear)
+- Beach/Summer (swimwear, sundresses)
+- Winter/Cozy (sweaters, coats, scarves)
+- Gothic/Dark (black leather, chains, dark makeup)
+- Bohemian/Hippie (flowy fabrics, patterns)
+- Professional/Business (blazers, formal wear)
 
-Respond with a JSON array of prompt strings only.
+HAIR STYLES (use different one each time):
+- Long flowing, short pixie, braided, ponytail, bun, curly, straight, mohawk, shaved, colorful dyed
 
-Example format:
-["A woman in the same seated pose with legs crossed, wearing a red evening gown, long flowing black hair, in an elegant ballroom with chandeliers, dramatic lighting", "A woman in the same seated pose with legs crossed, wearing a cyberpunk jacket and neon accessories, short blue pixie cut, in a futuristic city at night with holographic ads, neon lighting"]`;
+BACKGROUNDS (use different one each time):
+- Urban city, tropical beach, snowy mountains, futuristic space station, enchanted forest, underwater, desert, rooftop at sunset, nightclub, ancient ruins, cozy cafe, art gallery
+
+LIGHTING (use different one each time):
+- Golden hour, neon glow, dramatic shadows, soft diffused, moonlight, spotlight, candlelight, studio lighting
+
+ART STYLES (use different one each time):
+- Photorealistic, anime, oil painting, watercolor, digital art, comic book, vintage film, cinematic
+
+IMPORTANT: Each prompt MUST be drastically different from all others. NO similar outfits, NO similar backgrounds, NO similar color schemes between any two prompts.
+
+Respond with a JSON array of ${validNumOutputs} prompt strings only.`;
 
       // Calculate max_tokens based on number of outputs (each prompt ~200 tokens + overhead)
       const tokensNeeded = Math.max(3000, validNumOutputs * 250 + 500);
@@ -636,7 +647,7 @@ Example format:
         },
         body: JSON.stringify({
           model: 'anthropic/claude-3-haiku',
-          prompt: `Based on this image analysis, create EXACTLY ${validNumOutputs} variation prompts that KEEP the same pose and character but CHANGE clothing, hair, background, and style. You MUST generate all ${validNumOutputs} prompts:\n\n${description}`,
+          prompt: `Create EXACTLY ${validNumOutputs} COMPLETELY DIFFERENT variations based on this image. Each must have a unique outfit, unique hairstyle, unique background, and unique art style. NO TWO can be similar:\n\n${description}`,
           system_prompt: variationSystemPrompt,
           max_tokens: tokensNeeded
         })

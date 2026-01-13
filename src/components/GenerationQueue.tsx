@@ -208,6 +208,9 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment: _
             setProgressCount(i + 1);
             
             try {
+              // Generate unique seed for each variation to ensure different outputs
+              const uniqueSeed = Math.floor(Math.random() * 2147483647);
+              
               const result = await generateImage(
                 selectedStyle,
                 variationPrompt,
@@ -217,7 +220,8 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment: _
                   email: isEmailAuth ? (emailContext.email || undefined) : undefined,
                   isNFTHolder: isNFTHolder || false,
                   multiImageModel: variateResult.useControlNet ? 'controlnet-canny' : (multiImageModel || 'flux'),
-                  numImages: 1
+                  numImages: 1,
+                  seed: uniqueSeed // Unique seed per variation
                 },
                 item.imageDataUrl
               );
