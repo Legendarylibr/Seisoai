@@ -65,8 +65,8 @@ export const createRequireCredits = (
 
         req.user = user;
 
-        // SECURITY: Validate requiredCredits is a positive integer
-        if (typeof requiredCredits !== 'number' || requiredCredits <= 0 || !Number.isInteger(requiredCredits)) {
+        // SECURITY: Validate requiredCredits is a positive number (allows decimals like 0.5)
+        if (typeof requiredCredits !== 'number' || requiredCredits <= 0 || !Number.isFinite(requiredCredits)) {
           logger.error('Invalid credits requirement', { requiredCredits, path: req.path });
           res.status(400).json({
             success: false,
