@@ -75,6 +75,10 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
+  // Track if credits were deducted so we can refund on error
+  let creditsDeducted = false;
+  let creditsAmount = 0;
+
   try {
     const imageAttachment = interaction.options.getAttachment('image', true);
     const generateType = (interaction.options.getString('type') || 'Normal') as 'Normal' | 'LowPoly' | 'Geometry';
@@ -215,10 +219,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
     let processingMessage: Message = await outputChannel.send({ embeds: [processingEmbed] });
 
-    // Deduct credits upfront
+    // Deduct credits upfront and track for potential refund
     discordUser.credits -= creditsRequired;
     discordUser.totalCreditsSpent += creditsRequired;
     await discordUser.save();
+    
+    // Mark credits as deducted for error handling
+    creditsDeducted = true;
+    creditsAmount = creditsRequired;
 
     // Generate 3D model
     const { requestId, modelPath } = await generate3DModel({
@@ -353,14 +361,55 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const err = error as Error;
     logger.error('3D generation error', { error: err.message, userId: interaction.user.id });
 
+    // Refund credits only if they were actually deducted
+    let refundSuccessful = false;
+    if (creditsDeducted && creditsAmount > 0) {
+      try {
+        // Re-fetch user to get latest state and avoid race conditions
+        const discordUserForRefund = await DiscordUser.findOne({ discordId: interaction.user.id });
+        if (discordUserForRefund) {
+          discordUserForRefund.credits += creditsAmount;
+          discordUserForRefund.totalCreditsSpent -= creditsAmount;
+          await discordUserForRefund.save();
+          refundSuccessful = true;
+          
+          logger.info('Credits refunded after 3D generation error', {
+            userId: interaction.user.id,
+            creditsRefunded: creditsAmount,
+            newBalance: discordUserForRefund.credits
+          });
+        }
+      } catch (refundError) {
+        logger.error('Failed to refund credits after 3D error', {
+          error: (refundError as Error).message,
+          userId: interaction.user.id,
+          creditsAmount
+        });
+      }
+    }
+
     const errorEmbed = new EmbedBuilder()
       .setColor(0xE74C3C)
       .setTitle('❌ Generation Failed')
-      .setDescription(`Sorry, something went wrong: ${err.message}`)
-      .addFields({
-        name: '💡 What to do',
-        value: 'Make sure your image clearly shows the object from the front. Try with a different image if the issue persists.'
+      .setDescription(`Sorry, something went wrong: ${err.message}`);
+    
+    // Only show refund message if credits were actually refunded
+    if (creditsDeducted && refundSuccessful) {
+      errorEmbed.addFields({
+        name: '💰 Credits Refunded',
+        value: `${creditsAmount} credits have been refunded automatically.`
       });
+    } else if (creditsDeducted && !refundSuccessful) {
+      errorEmbed.addFields({
+        name: '⚠️ Refund Issue',
+        value: 'There was an issue refunding your credits. Please contact support.'
+      });
+    }
+    
+    errorEmbed.addFields({
+      name: '💡 What to do',
+      value: 'Make sure your image clearly shows the object from the front. Try with a different image if the issue persists.'
+    });
 
     await interaction.editReply({ embeds: [errorEmbed] });
   }

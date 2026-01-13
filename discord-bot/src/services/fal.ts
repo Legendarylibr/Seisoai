@@ -557,8 +557,7 @@ export async function pollForResult<T>(
       }
 
       if (isStatusCompleted(status)) {
-        const resultUrl = statusData.response_url || 
-          `https://queue.fal.run/${modelPath}/requests/${requestId}`;
+        // Fetch result from queue (response_url is available but we use getQueueResult for consistency)
         return getQueueResult<T>(requestId, modelPath);
       }
 
