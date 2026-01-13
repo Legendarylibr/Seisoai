@@ -623,6 +623,9 @@ Respond with a JSON array of prompt strings only.
 Example format:
 ["A woman in the same seated pose with legs crossed, wearing a red evening gown, long flowing black hair, in an elegant ballroom with chandeliers, dramatic lighting", "A woman in the same seated pose with legs crossed, wearing a cyberpunk jacket and neon accessories, short blue pixie cut, in a futuristic city at night with holographic ads, neon lighting"]`;
 
+      // Calculate max_tokens based on number of outputs (each prompt ~200 tokens + overhead)
+      const tokensNeeded = Math.max(3000, validNumOutputs * 250 + 500);
+      
       const variationResponse = await fetch('https://fal.run/fal-ai/any-llm', {
         method: 'POST',
         headers: {
@@ -631,9 +634,9 @@ Example format:
         },
         body: JSON.stringify({
           model: 'anthropic/claude-3-haiku',
-          prompt: `Based on this image analysis, create ${validNumOutputs} variation prompts that KEEP the same pose and character but CHANGE clothing, hair, background, and style:\n\n${description}`,
+          prompt: `Based on this image analysis, create EXACTLY ${validNumOutputs} variation prompts that KEEP the same pose and character but CHANGE clothing, hair, background, and style. You MUST generate all ${validNumOutputs} prompts:\n\n${description}`,
           system_prompt: variationSystemPrompt,
-          max_tokens: 3000
+          max_tokens: tokensNeeded
         })
       });
 
@@ -659,13 +662,25 @@ Example format:
         const jsonMatch = variationOutput.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           prompts = JSON.parse(jsonMatch[0]) as string[];
+          logger.info('Parsed variation prompts from LLM', { 
+            requested: validNumOutputs, 
+            received: prompts.length,
+            outputLength: variationOutput.length
+          });
         }
-      } catch {
-        logger.warn('Failed to parse variation prompts, using description');
+      } catch (parseError) {
+        logger.warn('Failed to parse variation prompts', { 
+          error: (parseError as Error).message,
+          outputPreview: variationOutput.substring(0, 200)
+        });
       }
 
       // Ensure we have the right number of prompts
       if (prompts.length < validNumOutputs) {
+        logger.info('Padding prompts with description', { 
+          have: prompts.length, 
+          need: validNumOutputs 
+        });
         // Pad with the original description
         while (prompts.length < validNumOutputs) {
           prompts.push(description);
