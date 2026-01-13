@@ -26,7 +26,8 @@ export interface BatchVariateResult {
  */
 export const batchVariate = async (
   imageUrl: string,
-  numOutputs: number
+  numOutputs: number,
+  credentials: { walletAddress?: string; userId?: string; email?: string }
 ): Promise<BatchVariateResult> => {
   const csrfToken = await ensureCSRFToken();
   
@@ -39,7 +40,10 @@ export const batchVariate = async (
     credentials: 'include',
     body: JSON.stringify({
       image_url: imageUrl,
-      num_outputs: numOutputs
+      num_outputs: numOutputs,
+      walletAddress: credentials.walletAddress,
+      userId: credentials.userId,
+      email: credentials.email
     })
   });
 

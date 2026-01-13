@@ -181,7 +181,11 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment: _
           logger.info('Starting AI batch variation', { numOutputs: imagesToGenerate });
           
           // Step 1: Get AI-generated variation prompts
-          const variateResult = await batchVariate(item.imageDataUrl, imagesToGenerate);
+          const variateResult = await batchVariate(item.imageDataUrl, imagesToGenerate, {
+            walletAddress: isEmailAuth ? undefined : (address || undefined),
+            userId: isEmailAuth ? (emailContext.userId || undefined) : undefined,
+            email: isEmailAuth ? (emailContext.email || undefined) : undefined
+          });
           
           if (!variateResult.prompts || variateResult.prompts.length === 0) {
             throw new Error('Failed to generate variation prompts');
