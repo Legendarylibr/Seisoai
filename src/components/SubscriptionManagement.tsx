@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Calendar, DollarSign, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 
 interface SubscriptionManagementProps {
   isOpen: boolean;
@@ -39,7 +39,8 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({ isOpen,
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        credentials: 'include'
       });
 
       const data = await response.json();
@@ -72,12 +73,15 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({ isOpen,
         return;
       }
 
+      const csrfToken = await ensureCSRFToken();
       const response = await fetch(`${API_URL}/api/stripe/billing-portal`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+        },
+        credentials: 'include'
       });
 
       const data = await response.json();

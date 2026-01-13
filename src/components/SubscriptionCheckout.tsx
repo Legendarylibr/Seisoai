@@ -3,7 +3,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import TokenPaymentModal from './TokenPaymentModal';
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 
 /**
  * SubscriptionCheckout Component
@@ -120,11 +120,16 @@ const SubscriptionCheckout: React.FC<SubscriptionCheckoutProps> = ({
         body.userId = userId;
       }
 
+      // Get CSRF token for secure API call
+      const csrfToken = await ensureCSRFToken();
+      
       const response = await fetch(`${API_URL}/create-checkout-session`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
         },
+        credentials: 'include',
         body: JSON.stringify(body)
       });
 

@@ -203,10 +203,11 @@ export const createFreeImageLimiter = (): RateLimitRequestHandler => {
       const authHeader = req.headers['authorization'];
       if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.split(' ')[1];
-        // Only skip if token exists and has reasonable length (JWT tokens are long)
-        // The actual validation happens in auth middleware, this just prevents
-        // unauthenticated requests from bypassing rate limits
-        if (token && token.length > 50) {
+        // SECURITY: Validate JWT structure (3 base64url parts separated by dots)
+        // This prevents attackers from using long garbage strings to bypass rate limits
+        // Regex: base64url characters (A-Za-z0-9_-) with dots separating 3 parts
+        const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+        if (token && jwtPattern.test(token)) {
           return true;
         }
       }

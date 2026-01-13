@@ -66,6 +66,7 @@ export const data = new SlashCommandBuilder()
 
 /**
  * Call backend API to verify Discord link code
+ * SECURITY: Uses API key authentication to prevent unauthorized access
  */
 async function verifyLinkCode(
   code: string,
@@ -73,12 +74,23 @@ async function verifyLinkCode(
   discordUsername: string
 ): Promise<VerifyLinkResponse> {
   const apiUrl = process.env.API_URL || config.urls.website;
+  const botApiKey = process.env.DISCORD_BOT_API_KEY;
+  
+  // SECURITY: Ensure API key is configured
+  if (!botApiKey) {
+    logger.error('DISCORD_BOT_API_KEY not configured - cannot verify link codes');
+    return {
+      success: false,
+      error: 'Bot configuration error. Please contact support.'
+    };
+  }
   
   try {
     const response = await fetch(`${apiUrl}/api/auth/verify-discord-link`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Bot-API-Key': botApiKey
       },
       body: JSON.stringify({
         code,

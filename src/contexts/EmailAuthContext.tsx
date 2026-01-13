@@ -86,7 +86,8 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-store'
-        }
+        },
+        credentials: 'include'
       });
 
       console.log('[EmailAuthContext] Response status:', response.status);

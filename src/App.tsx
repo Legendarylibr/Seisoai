@@ -16,6 +16,7 @@ import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
+import ClaudeCowork from './components/ClaudeCowork';
 import { Grid, Sparkles, Film, Music, Layers, Box, type LucideIcon } from 'lucide-react';
 import logger from './utils/logger';
 import { API_URL, ensureCSRFToken } from './utils/apiConfig';
@@ -351,6 +352,15 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
             initialPage={termsPage}
           />
         </Suspense>
+      )}
+
+      {/* Claude Cowork - AI prompt planning assistant */}
+      {(activeTab === 'generate' || activeTab === 'batch' || activeTab === 'video' || activeTab === 'music') && (
+        <ClaudeCowork
+          mode={activeTab === 'generate' || activeTab === 'batch' ? 'image' : activeTab as 'video' | 'music'}
+          currentPrompt={userPrompt}
+          onApplyPrompt={setUserPrompt}
+        />
       )}
 
       <Footer onOpenTerms={handleOpenTerms} />

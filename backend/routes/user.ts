@@ -8,7 +8,19 @@ import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { findUserByIdentifier, getOrCreateUser } from '../services/user';
 import { checkNFTBalance } from '../services/blockchain';
+import { isValidWalletAddress } from '../utils/validation';
+import { requireAuth, sendError, sendServerError } from '../utils/responses';
 import type { IUser } from '../models/User';
+
+// Constants
+const PRICING = {
+  COST_PER_CREDIT_DEFAULT: 0.15,
+  COST_PER_CREDIT_NFT_HOLDER: 0.06,
+  CREDITS_PER_USDC_DEFAULT: 6.67,
+  CREDITS_PER_USDC_NFT_HOLDER: 16.67,
+} as const;
+
+const GALLERY_MAX_ITEMS = 100;
 
 // Types
 interface Dependencies {
@@ -18,19 +30,30 @@ interface Dependencies {
 
 interface AuthenticatedRequest extends Request {
   user?: IUser;
+  requestId?: string;
+}
+
+/**
+ * Get pricing based on NFT holder status
+ */
+function getPricing(isNFTHolder: boolean) {
+  return {
+    costPerCredit: isNFTHolder ? PRICING.COST_PER_CREDIT_NFT_HOLDER : PRICING.COST_PER_CREDIT_DEFAULT,
+    creditsPerUSDC: isNFTHolder ? PRICING.CREDITS_PER_USDC_NFT_HOLDER : PRICING.CREDITS_PER_USDC_DEFAULT
+  };
 }
 
 export function createUserRoutes(deps: Dependencies = {}) {
   const router = Router();
   const { authenticateFlexible, authenticateToken } = deps;
 
-  const authMiddleware = authenticateFlexible || ((req: Request, res: Response, next: () => void) => next());
-  const strictAuth = authenticateToken || ((req: Request, res: Response, next: () => void) => next());
+  const authMiddleware = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
+  const strictAuth = authenticateToken || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Get user info
    * POST /api/user/info
-   * SECURITY FIX: Only returns public data unless authenticated user requests their own data
+   * SECURITY: Only returns public data unless authenticated user requests their own data
    */
   router.post('/info', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -43,18 +66,18 @@ export function createUserRoutes(deps: Dependencies = {}) {
       const requestedUser = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
       
       if (!requestedUser) {
-        res.json({
-          success: true,
-          user: null
-        });
+        res.json({ success: true, user: null });
         return;
       }
 
-      // SECURITY: If authenticated, only return full data for own account
-      // Otherwise, return only public data
-      if (req.user && (req.user.userId === requestedUser.userId || 
-                       req.user.email === requestedUser.email ||
-                       (req.user.walletAddress && req.user.walletAddress.toLowerCase() === requestedUser.walletAddress?.toLowerCase()))) {
+      // Check if user is requesting their own data
+      const isOwnData = req.user && (
+        req.user.userId === requestedUser.userId || 
+        req.user.email === requestedUser.email ||
+        (req.user.walletAddress && req.user.walletAddress.toLowerCase() === requestedUser.walletAddress?.toLowerCase())
+      );
+
+      if (isOwnData) {
         // Authenticated user requesting their own data - return full info
         res.json({
           success: true,
@@ -74,36 +97,24 @@ export function createUserRoutes(deps: Dependencies = {}) {
           user: {
             userId: requestedUser.userId,
             walletAddress: requestedUser.walletAddress,
-            // DO NOT return: email, credits (sensitive data)
             isNFTHolder: requestedUser.nftCollections && requestedUser.nftCollections.length > 0
           }
         });
       }
     } catch (error) {
-      const err = error as Error;
-      logger.error('User info error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch user info'
-      });
+      logger.error('User info error:', { error: (error as Error).message });
+      sendServerError(res, error as Error, req.requestId);
     }
   });
 
   /**
    * Get user credits
    * POST /api/user/credits OR /api/credits/get
-   * SECURITY FIX: Requires authentication and only returns authenticated user's credits
+   * SECURITY: Requires authentication and only returns authenticated user's credits
    */
   router.post('/credits', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      // SECURITY: Only return credits for authenticated user
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required'
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       res.json({
         success: true,
@@ -112,29 +123,18 @@ export function createUserRoutes(deps: Dependencies = {}) {
         totalCreditsSpent: req.user.totalCreditsSpent || 0
       });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Get credits error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch credits'
-      });
+      logger.error('Get credits error:', { error: (error as Error).message });
+      sendServerError(res, error as Error, req.requestId);
     }
   });
 
   /**
    * Legacy endpoint - GET /api/credits/get
-   * SECURITY FIX: Requires authentication and only returns authenticated user's credits
+   * SECURITY: Requires authentication and only returns authenticated user's credits
    */
   router.post('/get', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      // SECURITY: Only return credits for authenticated user
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required'
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       res.json({
         success: true,
@@ -143,30 +143,19 @@ export function createUserRoutes(deps: Dependencies = {}) {
         totalCreditsSpent: req.user.totalCreditsSpent || 0
       });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Get credits error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch credits'
-      });
+      logger.error('Get credits error:', { error: (error as Error).message });
+      sendServerError(res, error as Error, req.requestId);
     }
   });
 
   /**
    * Get user gallery
    * POST /api/user/gallery OR /api/gallery/get
-   * SECURITY FIX: Only returns gallery for authenticated user to prevent IDOR
+   * SECURITY: Only returns gallery for authenticated user to prevent IDOR
    */
   router.post('/gallery', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      // SECURITY: Only return gallery for authenticated user
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required'
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const User = mongoose.model<IUser>('User');
       const userWithGallery = await User.findOne({ userId: req.user.userId })
@@ -178,30 +167,19 @@ export function createUserRoutes(deps: Dependencies = {}) {
         gallery: userWithGallery?.gallery || []
       });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Gallery fetch error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch gallery'
-      });
+      logger.error('Gallery fetch error:', { error: (error as Error).message });
+      sendServerError(res, error as Error, req.requestId);
     }
   });
 
   /**
    * Save to gallery
    * POST /api/user/gallery/save OR /api/gallery/save
-   * SECURITY FIX: Only allows saving to authenticated user's gallery
+   * SECURITY: Only allows saving to authenticated user's gallery
    */
   router.post('/gallery/save', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      // SECURITY: Only allow saving to authenticated user's gallery
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required'
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const { imageUrl, prompt, model } = req.body as {
         imageUrl?: string;
@@ -210,10 +188,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
       };
       
       if (!imageUrl) {
-        res.status(400).json({
-          success: false,
-          error: 'Image URL required'
-        });
+        sendError(res, 'Image URL required', 400, req.requestId);
         return;
       }
 
@@ -230,23 +205,16 @@ export function createUserRoutes(deps: Dependencies = {}) {
                 style: model,
                 timestamp: new Date()
               }],
-              $slice: -100
+              $slice: -GALLERY_MAX_ITEMS
             }
           }
         }
       );
 
-      res.json({
-        success: true,
-        message: 'Saved to gallery'
-      });
+      res.json({ success: true, message: 'Saved to gallery' });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Gallery save error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to save to gallery'
-      });
+      logger.error('Gallery save error:', { error: (error as Error).message });
+      sendServerError(res, error as Error, req.requestId);
     }
   });
 
@@ -263,10 +231,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
       };
 
       if (!walletAddress || !contractAddress) {
-        res.status(400).json({
-          success: false,
-          error: 'Wallet address and contract address required'
-        });
+        sendError(res, 'Wallet address and contract address required', 400);
         return;
       }
 
@@ -278,12 +243,8 @@ export function createUserRoutes(deps: Dependencies = {}) {
         balance
       });
     } catch (error) {
-      const err = error as Error;
-      logger.error('NFT verification error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to verify NFT'
-      });
+      logger.error('NFT verification error:', { error: (error as Error).message });
+      sendServerError(res, error as Error);
     }
   });
 
@@ -302,6 +263,11 @@ export function createUserRoutes(deps: Dependencies = {}) {
     try {
       const { walletAddress } = req.params;
 
+      if (!isValidWalletAddress(walletAddress)) {
+        sendError(res, 'Invalid wallet address format', 400, req.requestId);
+        return;
+      }
+
       // Normalize address
       const isSolanaAddress = !walletAddress.startsWith('0x');
       const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
@@ -319,10 +285,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
             path: req.path,
             ip: req.ip
           });
-          res.status(403).json({
-            success: false,
-            error: 'You can only access your own account data'
-          });
+          sendError(res, 'You can only access your own account data', 403, req.requestId);
           return;
         }
       }
@@ -344,7 +307,6 @@ export function createUserRoutes(deps: Dependencies = {}) {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
       res.setHeader('Pragma', 'no-cache');
 
-      // Return user data
       res.json({
         success: true,
         credits: user.credits || 0,
@@ -352,36 +314,22 @@ export function createUserRoutes(deps: Dependencies = {}) {
         totalCreditsSpent: user.totalCreditsSpent || 0,
         walletAddress: user.walletAddress,
         isNFTHolder,
-        pricing: {
-          costPerCredit: isNFTHolder ? 0.06 : 0.15,
-          creditsPerUSDC: isNFTHolder ? 16.67 : 6.67
-        }
+        pricing: getPricing(isNFTHolder)
       });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Get user by wallet error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to get user'
-      });
+      logger.error('Get user by wallet error:', { error: (error as Error).message });
+      sendServerError(res, error as Error, req.requestId);
     }
   });
 
   /**
    * Check NFT holder credits
    * POST /api/nft/check-credits
-   * SECURITY FIX: Requires authentication and only returns authenticated user's credits
+   * SECURITY: Requires authentication and only returns authenticated user's credits
    */
   router.post('/check-credits', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      // SECURITY: Only return credits for authenticated user
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required'
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const isNFTHolder = req.user.nftCollections && req.user.nftCollections.length > 0;
 
@@ -391,42 +339,25 @@ export function createUserRoutes(deps: Dependencies = {}) {
         totalCreditsEarned: req.user.totalCreditsEarned || 0,
         totalCreditsSpent: req.user.totalCreditsSpent || 0,
         isNFTHolder,
-        pricing: {
-          costPerCredit: isNFTHolder ? 0.06 : 0.15,
-          creditsPerUSDC: isNFTHolder ? 16.67 : 6.67
-        }
+        pricing: getPricing(isNFTHolder)
       });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Check credits error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to check credits'
-      });
+      logger.error('Check credits error:', { error: (error as Error).message });
+      sendServerError(res, error as Error, req.requestId);
     }
   });
 
   /**
    * Check NFT holdings for wallet
    * POST /api/nft/check-holdings
-   * SECURITY FIX: Requires authentication and only operates on authenticated user's wallet
+   * SECURITY: Requires authentication and only operates on authenticated user's wallet
    */
   router.post('/check-holdings', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      // SECURITY: Only check holdings for authenticated user
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required'
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       if (!req.user.walletAddress) {
-        res.status(400).json({
-          success: false,
-          error: 'No wallet address associated with this account'
-        });
+        sendError(res, 'No wallet address associated with this account', 400, req.requestId);
         return;
       }
 
@@ -439,7 +370,6 @@ export function createUserRoutes(deps: Dependencies = {}) {
         userId: req.user.userId
       });
 
-      // Use authenticated user's data
       const user = req.user;
       const ownedCollections = user.nftCollections || [];
       const isHolder = ownedCollections.length > 0;
@@ -451,7 +381,6 @@ export function createUserRoutes(deps: Dependencies = {}) {
         const currentCredits = user.credits || 0;
         const nftGrantTxHash = `NFT_GRANT_${normalizedAddress}`;
 
-        // Check if already granted
         const hasBeenGranted = user.paymentHistory?.some(
           (p: { txHash?: string }) => p.txHash === nftGrantTxHash
         );
@@ -473,10 +402,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
               }
             }
           );
-          logger.info('NFT credits granted', { 
-            userId: user.userId, 
-            credits: creditsToGrant 
-          });
+          logger.info('NFT credits granted', { userId: user.userId, credits: creditsToGrant });
         }
       }
 
@@ -484,18 +410,11 @@ export function createUserRoutes(deps: Dependencies = {}) {
         success: true,
         isHolder,
         collections: ownedCollections,
-        pricing: {
-          costPerCredit: isHolder ? 0.06 : 0.15,
-          creditsPerUSDC: isHolder ? 16.67 : 6.67
-        }
+        pricing: getPricing(isHolder)
       });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Check holdings error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to check NFT holdings'
-      });
+      logger.error('Check holdings error:', { error: (error as Error).message });
+      sendServerError(res, error as Error, req.requestId);
     }
   });
 
@@ -509,20 +428,22 @@ export function createUserRoutes(deps: Dependencies = {}) {
       const { walletAddress } = req.params;
       const { settings } = req.body as { settings?: Record<string, unknown> };
       
+      if (!isValidWalletAddress(walletAddress)) {
+        sendError(res, 'Invalid wallet address format', 400, req.requestId);
+        return;
+      }
+      
       // Normalize address for comparison
       const isSolanaAddress = !walletAddress.startsWith('0x');
       const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
       
-      // SECURITY: Verify user owns this wallet address
+      // Verify user owns this wallet address
       if (!req.user || req.user.walletAddress !== normalizedAddress) {
         logger.warn('Unauthorized settings update attempt', {
           requestedWallet: normalizedAddress,
           authenticatedUser: req.user?.userId || req.user?.email
         });
-        res.status(403).json({
-          success: false,
-          error: 'You can only update your own settings'
-        });
+        sendError(res, 'You can only update your own settings', 403, req.requestId);
         return;
       }
       
@@ -542,9 +463,8 @@ export function createUserRoutes(deps: Dependencies = {}) {
         message: 'Settings updated'
       });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Error updating settings:', { error: err.message });
-      res.status(500).json({ success: false, error: 'Failed to update settings' });
+      logger.error('Error updating settings:', { error: (error as Error).message });
+      sendServerError(res, error as Error, req.requestId);
     }
   });
 
@@ -552,4 +472,3 @@ export function createUserRoutes(deps: Dependencies = {}) {
 }
 
 export default createUserRoutes;
-

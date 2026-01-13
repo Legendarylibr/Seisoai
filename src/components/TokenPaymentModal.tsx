@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { ethers } from 'ethers';
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import { 
   getAvailableTokens, 
   getTokenBalance, 
@@ -767,9 +767,14 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
           // Reconcile frontend vs backend payment address for safety
           let solanaPaymentAddress = getPaymentWallet('solana', 'solana');
           try {
+            const csrfToken = await ensureCSRFToken();
             const resp = await fetch(`${API_URL}/api/payment/get-address`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+              },
+              credentials: 'include',
               body: JSON.stringify({ walletAddress: address })
             });
             if (resp.ok) {
@@ -817,11 +822,14 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
           
           // Credit after confirmation
           try {
+            const creditCsrfToken = await ensureCSRFToken();
             const creditResponse = await fetch(`${API_URL}/api/payments/credit`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                ...(creditCsrfToken && { 'X-CSRF-Token': creditCsrfToken }),
               },
+              credentials: 'include',
               body: JSON.stringify({
                 txHash: txSignature,
                 walletAddress: address,
@@ -1094,11 +1102,14 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
             
             // Credit after confirmation (transaction is guaranteed to be on-chain)
             try {
+              const evmCsrfToken = await ensureCSRFToken();
               const creditResponse = await fetch(`${API_URL}/api/payments/credit`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
+                  ...(evmCsrfToken && { 'X-CSRF-Token': evmCsrfToken }),
                 },
+                credentials: 'include',
                 body: JSON.stringify({
                   txHash: tx.hash,
                   walletAddress: address,
@@ -1207,11 +1218,14 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
     try {
       
       // Use instant-check endpoint to detect ANY USDC transfer
+      const instantCheckCsrfToken = await ensureCSRFToken();
       const response = await fetch(`${API_URL}/api/payment/instant-check`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(instantCheckCsrfToken && { 'X-CSRF-Token': instantCheckCsrfToken }),
         },
+        credentials: 'include',
         body: JSON.stringify({
           walletAddress: address,
           expectedAmount: numAmount,

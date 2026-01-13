@@ -24,15 +24,85 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
-// Store OAuth state tokens (in production, use Redis)
-const oauthStates = new Map<string, { userId: string; expiresAt: number }>();
+interface OAuthStateData {
+  userId: string;
+  expiresAt: number;
+}
 
-// Clean up expired states periodically
+// SECURITY: Store OAuth state tokens in Redis for production (persists across restarts, works with multiple instances)
+// Fallback to in-memory Map for development/testing
+const oauthStatesMemory = new Map<string, OAuthStateData>();
+
+// Lazy import Redis to avoid circular dependencies
+let redisService: typeof import('../services/redis.js') | null = null;
+async function getRedisService() {
+  if (!redisService) {
+    redisService = await import('../services/redis.js');
+  }
+  return redisService;
+}
+
+/**
+ * Store OAuth state in Redis (primary) or memory (fallback)
+ */
+async function setOAuthState(state: string, data: OAuthStateData): Promise<void> {
+  const ttlSeconds = Math.floor((data.expiresAt - Date.now()) / 1000);
+  
+  try {
+    const redis = await getRedisService();
+    if (redis && redis.isRedisConnected()) {
+      await redis.cacheSet(`oauth:state:${state}`, data, { prefix: '', ttl: ttlSeconds });
+      return;
+    }
+  } catch (error) {
+    logger.debug('Redis OAuth state storage failed, using in-memory fallback', { error: (error as Error).message });
+  }
+  
+  // Fallback to in-memory
+  oauthStatesMemory.set(state, data);
+}
+
+/**
+ * Get OAuth state from Redis (primary) or memory (fallback)
+ */
+async function getOAuthState(state: string): Promise<OAuthStateData | null> {
+  try {
+    const redis = await getRedisService();
+    if (redis && redis.isRedisConnected()) {
+      const data = await redis.cacheGet<OAuthStateData>(`oauth:state:${state}`, { prefix: '' });
+      return data;
+    }
+  } catch (error) {
+    logger.debug('Redis OAuth state retrieval failed, using in-memory fallback', { error: (error as Error).message });
+  }
+  
+  // Fallback to in-memory
+  return oauthStatesMemory.get(state) || null;
+}
+
+/**
+ * Delete OAuth state from Redis (primary) and memory (fallback)
+ */
+async function deleteOAuthState(state: string): Promise<void> {
+  try {
+    const redis = await getRedisService();
+    if (redis && redis.isRedisConnected()) {
+      await redis.cacheDelete(`oauth:state:${state}`, { prefix: '' });
+    }
+  } catch (error) {
+    logger.debug('Redis OAuth state deletion failed', { error: (error as Error).message });
+  }
+  
+  // Also delete from memory fallback
+  oauthStatesMemory.delete(state);
+}
+
+// Clean up expired states from in-memory fallback periodically
 setInterval(() => {
   const now = Date.now();
-  for (const [state, data] of oauthStates.entries()) {
+  for (const [state, data] of oauthStatesMemory.entries()) {
     if (data.expiresAt < now) {
-      oauthStates.delete(state);
+      oauthStatesMemory.delete(state);
     }
   }
 }, 60 * 1000); // Every minute
@@ -68,7 +138,7 @@ export function createDiscordRoutes(deps: Dependencies = {}) {
 
       // Generate state token for CSRF protection
       const state = crypto.randomBytes(32).toString('hex');
-      oauthStates.set(state, {
+      await setOAuthState(state, {
         userId: req.user.userId,
         expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes
       });
@@ -115,15 +185,22 @@ export function createDiscordRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      // Validate state
-      if (!state || !oauthStates.has(state)) {
-        logger.warn('Invalid OAuth state');
+      // Validate state - retrieve from Redis/memory
+      if (!state) {
+        logger.warn('Missing OAuth state');
+        res.redirect('/?discord=error&message=invalid_state');
+        return;
+      }
+      
+      const stateData = await getOAuthState(state);
+      if (!stateData) {
+        logger.warn('Invalid OAuth state - not found');
         res.redirect('/?discord=error&message=invalid_state');
         return;
       }
 
-      const stateData = oauthStates.get(state)!;
-      oauthStates.delete(state); // One-time use
+      // Delete state immediately (one-time use) to prevent replay attacks
+      await deleteOAuthState(state);
 
       // Check expiration
       if (stateData.expiresAt < Date.now()) {

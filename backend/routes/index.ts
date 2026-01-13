@@ -27,6 +27,7 @@ import createModel3dRoutes from './model3d';
 import createGDPRRoutes from './gdpr';
 import createSessionRoutes from './sessions';
 import createAuditRoutes from './audit';
+import createCoworkRoutes from './cowork';
 import { adminIPAllowlist } from '../middleware/ipAllowlist';
 import { getCSRFToken } from '../middleware/csrf';
 
@@ -88,6 +89,7 @@ export function createApiRoutes(deps: Dependencies) {
   router.use('/workflows', createWorkflowRoutes(deps));
   router.use('/model3d', createModel3dRoutes(deps));
   router.use('/wan-animate', createWanAnimateRoutes(deps));
+  router.use('/cowork', createCoworkRoutes(deps));
 
   // ============================================
   // Payments

@@ -5,7 +5,7 @@ import SubscriptionManagement from './SubscriptionManagement';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { CheckCircle, AlertCircle, X, CreditCard } from 'lucide-react';
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 
 /**
  * PricingPage Component
@@ -60,15 +60,22 @@ const PricingPage: React.FC = () => {
             body.userId = userId;
           }
 
-          const headers = { 'Content-Type': 'application/json' };
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
           const token = localStorage.getItem('authToken');
           if (token) {
             headers['Authorization'] = `Bearer ${token}`;
+          }
+          
+          // Add CSRF token for secure API call
+          const csrfToken = await ensureCSRFToken();
+          if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
           }
 
           const response = await fetch(`${API_URL}/api/subscription/verify`, {
             method: 'POST',
             headers,
+            credentials: 'include',
             body: JSON.stringify(body)
           });
 

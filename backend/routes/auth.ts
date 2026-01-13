@@ -688,10 +688,35 @@ export function createAuthRoutes(deps: Dependencies = {}) {
    * POST /api/auth/verify-discord-link
    * 
    * Called by Discord bot to verify a linking code and complete the link.
-   * Requires API key or internal auth (not user JWT).
+   * SECURITY: Requires bot API key authentication to prevent brute force attacks.
    */
-  router.post('/verify-discord-link', async (req: Request, res: Response) => {
+  router.post('/verify-discord-link', limiter, async (req: Request, res: Response) => {
     try {
+      // SECURITY: Verify bot API key to prevent unauthorized access
+      const botApiKey = process.env.DISCORD_BOT_API_KEY;
+      const providedKey = req.headers['x-bot-api-key'] as string;
+      
+      if (!botApiKey || botApiKey.length < 32) {
+        logger.error('DISCORD_BOT_API_KEY not configured or too short');
+        res.status(503).json({
+          success: false,
+          error: 'Discord linking service not available'
+        });
+        return;
+      }
+      
+      if (!providedKey || providedKey !== botApiKey) {
+        logger.warn('Discord link verification: invalid or missing API key', {
+          ip: req.ip,
+          hasKey: !!providedKey
+        });
+        res.status(401).json({
+          success: false,
+          error: 'Unauthorized'
+        });
+        return;
+      }
+      
       const { code, discordId, discordUsername } = req.body as {
         code?: string;
         discordId?: string;
@@ -712,6 +737,15 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         res.status(400).json({
           success: false,
           error: 'Invalid code format'
+        });
+        return;
+      }
+      
+      // SECURITY: Validate discordId format (snowflake - 17-19 digit number)
+      if (!/^\d{17,19}$/.test(discordId)) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid Discord ID format'
         });
         return;
       }

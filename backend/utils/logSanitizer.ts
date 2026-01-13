@@ -27,7 +27,22 @@ const SENSITIVE_FIELDS = [
   'credit_card',
   'cvv',
   'ssn',
-  'socialSecurityNumber'
+  'socialSecurityNumber',
+  // SECURITY: Additional sensitive fields
+  'email',
+  'userEmail',
+  'user_email',
+  'encryptionKey',
+  'encryption_key',
+  'cookie',
+  'sessionId',
+  'session_id',
+  'discordLinkCode',
+  'discordToken',
+  'oauthToken',
+  'oauth_token',
+  'botApiKey',
+  'bot_api_key'
 ];
 
 // Patterns to detect and redact
@@ -36,6 +51,17 @@ const SENSITIVE_PATTERNS = [
   /token\s*[:=]\s*['"]?[^'",\s}]+['"]?/gi,
   /secret\s*[:=]\s*['"]?[^'",\s}]+['"]?/gi,
   /authorization\s*[:=]\s*['"]?[^'",\s}]+['"]?/gi,
+  // SECURITY: Email address pattern - redact full emails
+  /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+  // SECURITY: Bearer tokens
+  /Bearer\s+[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+/gi,
+  // SECURITY: API keys (common patterns)
+  /api[_-]?key\s*[:=]\s*['"]?[^'",\s}]+['"]?/gi,
+  /x-[a-z]+-api-key\s*[:=]\s*['"]?[^'",\s}]+['"]?/gi,
+  // SECURITY: MongoDB connection strings
+  /mongodb(\+srv)?:\/\/[^@]+@[^\s]+/gi,
+  // SECURITY: Redis connection strings
+  /redis:\/\/[^@]*@?[^\s]+/gi,
 ];
 
 /**
@@ -86,15 +112,34 @@ export function sanitizeLogObject(obj: unknown, depth: number = 0): unknown {
 }
 
 /**
+ * Mask an email address for logging (show first 2 chars + domain)
+ * e.g., "user@example.com" -> "us***@example.com"
+ */
+function maskEmail(email: string): string {
+  const atIndex = email.indexOf('@');
+  if (atIndex <= 0) return '[REDACTED_EMAIL]';
+  const localPart = email.substring(0, atIndex);
+  const domain = email.substring(atIndex);
+  if (localPart.length <= 2) return localPart + '***' + domain;
+  return localPart.substring(0, 2) + '***' + domain;
+}
+
+/**
  * Sanitize a log message string
  */
 export function sanitizeLogMessage(message: string): string {
   let sanitized = message;
   
-  for (const pattern of SENSITIVE_PATTERNS) {
+  // First, mask emails (special handling to keep partial info for debugging)
+  const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  sanitized = sanitized.replace(emailPattern, (match) => maskEmail(match));
+  
+  // Then handle other sensitive patterns
+  const nonEmailPatterns = SENSITIVE_PATTERNS.filter(p => !p.source.includes('@'));
+  for (const pattern of nonEmailPatterns) {
     sanitized = sanitized.replace(pattern, (match) => {
       const field = match.split(/[:=]/)[0]?.trim();
-      return `${field}=[REDACTED]`;
+      return field ? `${field}=[REDACTED]` : '[REDACTED]';
     });
   }
   

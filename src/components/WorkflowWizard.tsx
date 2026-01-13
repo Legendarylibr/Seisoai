@@ -5,7 +5,7 @@ import {
   Sparkles, User, Mic, Film, Music, Upload, X, Check, ChevronRight, 
   Play, Download, AlertCircle, RefreshCw, Wand2, Video, Volume2
 } from 'lucide-react';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 import workflowService from '../services/workflowService';
 import StemMixer from './StemMixer';
@@ -225,9 +225,14 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({
     const endpoint = type === 'audio' ? '/api/audio/upload' : '/api/wan-animate/upload-image';
     const bodyKey = type === 'audio' ? 'audioDataUri' : 'imageDataUri';
     
+    const csrfToken = await ensureCSRFToken();
     const response = await fetch(`${API_URL}${endpoint}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+      },
+      credentials: 'include',
       body: JSON.stringify({ [bodyKey]: dataUri })
     });
     
@@ -301,13 +306,21 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({
     const step = selectedWorkflow.steps[currentStep];
     
     try {
+      // Get CSRF token for all API calls
+      const csrfToken = await ensureCSRFToken();
+      const csrfHeaders = {
+        'Content-Type': 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+      };
+      
       // AI Influencer workflow
       if (selectedWorkflow.id === 'ai-influencer') {
         if (step.id === 'voice') {
           // Generate voice from script
           const response = await fetch(`${API_URL}/api/audio/voice-clone`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: csrfHeaders,
+            credentials: 'include',
             body: JSON.stringify({
               text: scriptText,
               language: 'en',
@@ -326,7 +339,8 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({
           // Generate lip sync video
           const response = await fetch(`${API_URL}/api/audio/lip-sync`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: csrfHeaders,
+            credentials: 'include',
             body: JSON.stringify({
               image_url: portraitUrl,
               audio_url: voiceAudioUrl,
@@ -354,7 +368,8 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({
           // Generate music
           const response = await fetch(`${API_URL}/api/generate/music`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: csrfHeaders,
+            credentials: 'include',
             body: JSON.stringify({
               prompt: musicPrompt,
               duration: 30,
@@ -373,7 +388,8 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({
           // Generate video
           const response = await fetch(`${API_URL}/api/generate/video`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: csrfHeaders,
+            credentials: 'include',
             body: JSON.stringify({
               prompt: visualPrompt || musicPrompt,
               duration: '8s',
@@ -402,7 +418,8 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({
           // Generate base character
           const response = await fetch(`${API_URL}/api/generate/image`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: csrfHeaders,
+            credentials: 'include',
             body: JSON.stringify({
               prompt: `portrait of ${characterDescription}, centered, high quality, detailed face`,
               aspect_ratio: '1:1',
@@ -425,7 +442,8 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({
           for (const pose of poses) {
             const response = await fetch(`${API_URL}/api/generate/image`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: csrfHeaders,
+              credentials: 'include',
               body: JSON.stringify({
                 prompt: `${characterDescription}, ${pose}, same person, consistent appearance`,
                 image_url: baseCharacterUrl,
@@ -455,7 +473,8 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({
           // Separate stems
           const response = await fetch(`${API_URL}/api/audio/separate`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: csrfHeaders,
+            credentials: 'include',
             body: JSON.stringify({
               audio_url: remixSourceUrl,
               walletAddress: walletContext.address,
