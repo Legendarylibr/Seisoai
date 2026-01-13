@@ -1,9 +1,12 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { Brain, Wand2, Sparkles } from 'lucide-react';
 import { WIN95 } from '../utils/buttonStyles';
 
 interface PromptOptimizerProps {
+  /** Current prompt value (controlled) */
+  value?: string;
+  /** Callback when prompt changes */
   onPromptChange?: (prompt: string) => void;
 }
 
@@ -11,18 +14,18 @@ interface PromptOptimizerProps {
  * PromptOptimizer Component
  * Provides prompt input field and toggle for LLM-based prompt optimization
  */
-const PromptOptimizer: React.FC<PromptOptimizerProps> = ({ onPromptChange }) => {
+const PromptOptimizer: React.FC<PromptOptimizerProps> = ({ value = '', onPromptChange }) => {
   const { 
     optimizePrompt, 
     setOptimizePrompt, 
     multiImageModel
   } = useImageGenerator();
   
-  const [prompt, setPrompt] = useState<string>('');
+  // Use controlled value from parent when provided
+  const prompt = value;
 
   const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newPrompt = e.target.value;
-    setPrompt(newPrompt);
     onPromptChange?.(newPrompt);
   }, [onPromptChange]);
 

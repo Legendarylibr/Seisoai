@@ -240,7 +240,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   {/* Left Column - Controls */}
                   <div className="space-y-3">
-                    <PromptOptimizer onPromptChange={setUserPrompt} />
+                    <PromptOptimizer value={userPrompt} onPromptChange={setUserPrompt} />
                     <StyleSelector />
                     <ReferenceImageInput />
                     <MultiImageModelSelector />
