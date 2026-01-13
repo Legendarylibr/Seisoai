@@ -487,6 +487,210 @@ export function createImageToolsRoutes(deps: Dependencies) {
   });
 
   // ============================================================================
+  // BATCH VARIATION (Describe + Variate Flow)
+  // Analyze image with vision model, then create variation prompts
+  // ============================================================================
+
+  /**
+   * Batch variation - analyze image and create varied prompts for generation
+   * POST /api/image-tools/batch-variate
+   * 
+   * Inputs:
+   * - image_url: Source image to analyze and variate
+   * - num_outputs: Number of output images to generate (1-100)
+   * 
+   * Flow:
+   * 1. Use LLaVA to describe the image
+   * 2. Use LLM to create varied prompts based on description
+   * 3. Return the description and variation prompts for the frontend to generate
+   */
+  router.post('/batch-variate', limiter, requireCredits(0.5), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({ success: false, error: 'User authentication required' });
+        return;
+      }
+
+      const FAL_API_KEY = getFalApiKey();
+      if (!FAL_API_KEY) {
+        res.status(500).json({ success: false, error: 'AI service not configured' });
+        return;
+      }
+
+      const { image_url, num_outputs = 4 } = req.body as {
+        image_url?: string;
+        num_outputs?: number;
+      };
+
+      if (!image_url) {
+        res.status(400).json({ success: false, error: 'image_url is required' });
+        return;
+      }
+
+      const validNumOutputs = Math.min(Math.max(1, num_outputs), 100);
+      const creditsRequired = 0.5; // Just for the analysis, generation costs are separate
+
+      // Deduct credits
+      const User = mongoose.model<IUser>('User');
+      const updateQuery = buildUserUpdateQuery(user);
+      
+      if (!updateQuery) {
+        res.status(400).json({ success: false, error: 'User account required' });
+        return;
+      }
+
+      const updateResult = await User.findOneAndUpdate(
+        { ...updateQuery, credits: { $gte: creditsRequired } },
+        { $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired } },
+        { new: true }
+      );
+
+      if (!updateResult) {
+        res.status(402).json({ success: false, error: 'Insufficient credits' });
+        return;
+      }
+
+      logger.info('Batch variation request', { userId: user.userId, num_outputs: validNumOutputs });
+
+      // Step 1: Describe the image using LLaVA - focus on character details and pose
+      const describeResponse = await fetch('https://fal.run/fal-ai/llavav15-13b', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          image_url,
+          prompt: `Analyze this image for AI image generation. Describe separately:
+1. CHARACTER: Subject's pose, position, body language, facial expression, physical features (face shape, skin tone, eye color, etc.)
+2. CLOTHING: What they're wearing, style, colors
+3. HAIR: Hairstyle, color, length
+4. BACKGROUND: Setting, environment, scenery
+5. OBJECTS: Items, props, accessories
+6. STYLE: Art style, lighting, mood, color palette
+
+Be specific and detailed about each element.`,
+          max_tokens: 600
+        })
+      });
+
+      if (!describeResponse.ok) {
+        const errorText = await describeResponse.text();
+        logger.error('Image describe API error', { status: describeResponse.status, error: errorText });
+        await refundCredits(user, creditsRequired, `API error: ${describeResponse.status}`);
+        res.status(500).json({ success: false, error: 'Image analysis failed' });
+        return;
+      }
+
+      const describeData = await describeResponse.json() as { output?: string; text?: string; response?: string };
+      const description = describeData.output || describeData.text || describeData.response || '';
+
+      if (!description) {
+        await refundCredits(user, creditsRequired, 'No description generated');
+        res.status(500).json({ success: false, error: 'Failed to analyze image' });
+        return;
+      }
+
+      logger.debug('Image described for batch variation', { descriptionLength: description.length });
+
+      // Step 2: Generate variation prompts using LLM - preserve pose/character, vary everything else
+      const variationSystemPrompt = `You are an expert at creating creative variations of image prompts for AI image generation.
+
+CRITICAL RULES - MUST PRESERVE:
+- Character's POSE (body position, angle, stance)
+- Character's POSITION in frame (centered, left, right, etc.)
+- Character's PHYSICAL FEATURES (face shape, facial features, skin tone, body type)
+- Character's EXPRESSION (facial expression, emotion)
+
+MUST VARY (pick different combinations for each prompt):
+- CLOTHING: Different outfits, styles (casual, formal, fantasy, streetwear, etc.)
+- HAIR: Different hairstyles, colors, lengths
+- BACKGROUND: Different settings (urban, nature, abstract, fantasy, indoor, etc.)
+- OBJECTS/ACCESSORIES: Different items, props
+- LIGHTING: Different lighting styles (dramatic, soft, neon, golden hour, etc.)
+- COLOR PALETTE: Different color schemes
+- ART STYLE: Different visual styles (photorealistic, anime, oil painting, etc.)
+
+Given the image description, create ${validNumOutputs} unique variation prompts. Each prompt MUST:
+1. Start with the exact same pose/position/character description
+2. Then add completely different clothing, hair, background, objects, and style
+3. Be self-contained and complete for image generation
+4. Be creative and diverse - make each variation distinctly different
+
+Respond with a JSON array of prompt strings only.
+
+Example format:
+["A woman in the same seated pose with legs crossed, wearing a red evening gown, long flowing black hair, in an elegant ballroom with chandeliers, dramatic lighting", "A woman in the same seated pose with legs crossed, wearing a cyberpunk jacket and neon accessories, short blue pixie cut, in a futuristic city at night with holographic ads, neon lighting"]`;
+
+      const variationResponse = await fetch('https://fal.run/fal-ai/any-llm', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'anthropic/claude-3-haiku',
+          prompt: `Based on this image analysis, create ${validNumOutputs} variation prompts that KEEP the same pose and character but CHANGE clothing, hair, background, and style:\n\n${description}`,
+          system_prompt: variationSystemPrompt,
+          max_tokens: 3000
+        })
+      });
+
+      if (!variationResponse.ok) {
+        // Fallback: return the description as the prompt for all variations
+        logger.warn('Variation prompt generation failed, using description as fallback');
+        res.json({
+          success: true,
+          description,
+          prompts: Array(validNumOutputs).fill(description),
+          remainingCredits: updateResult.credits,
+          creditsDeducted: creditsRequired
+        });
+        return;
+      }
+
+      const variationData = await variationResponse.json() as { output?: string; text?: string; response?: string };
+      const variationOutput = variationData.output || variationData.text || variationData.response || '';
+
+      // Parse JSON array from response
+      let prompts: string[] = [];
+      try {
+        const jsonMatch = variationOutput.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          prompts = JSON.parse(jsonMatch[0]) as string[];
+        }
+      } catch {
+        logger.warn('Failed to parse variation prompts, using description');
+      }
+
+      // Ensure we have the right number of prompts
+      if (prompts.length < validNumOutputs) {
+        // Pad with the original description
+        while (prompts.length < validNumOutputs) {
+          prompts.push(description);
+        }
+      } else if (prompts.length > validNumOutputs) {
+        prompts = prompts.slice(0, validNumOutputs);
+      }
+
+      logger.info('Batch variation completed', { userId: user.userId, promptCount: prompts.length });
+
+      res.json({
+        success: true,
+        description,
+        prompts,
+        remainingCredits: updateResult.credits,
+        creditsDeducted: creditsRequired
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Batch variation error:', { error: err.message });
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ============================================================================
   // OUTPAINTING
   // Extend an image beyond its borders
   // ============================================================================

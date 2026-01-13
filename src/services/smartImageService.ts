@@ -7,6 +7,50 @@ import type { VisualStyle } from '../types';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
+/**
+ * Response from batch variation analysis
+ */
+export interface BatchVariateResult {
+  success: boolean;
+  description?: string;
+  prompts?: string[];
+  remainingCredits?: number;
+  creditsDeducted?: number;
+  error?: string;
+}
+
+/**
+ * Analyze an image and generate variation prompts
+ * Uses AI to describe the image and create prompts that preserve pose/character
+ * while varying clothes, hair, background, etc.
+ */
+export const batchVariate = async (
+  imageUrl: string,
+  numOutputs: number
+): Promise<BatchVariateResult> => {
+  const csrfToken = await ensureCSRFToken();
+  
+  const response = await fetch(`${API_URL}/api/image-tools/batch-variate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+    },
+    credentials: 'include',
+    body: JSON.stringify({
+      image_url: imageUrl,
+      num_outputs: numOutputs
+    })
+  });
+
+  const data = await response.json();
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || 'Failed to analyze image for variations');
+  }
+
+  return data as BatchVariateResult;
+};
+
 // Types
 interface AdvancedSettings {
   multiImageModel?: string;

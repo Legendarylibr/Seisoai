@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain, Sparkles, Grid, Image, Zap } from 'lucide-react';
+import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain, Sparkles, Image, Zap } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
-import { generateImage } from '../services/smartImageService';
+import { generateImage, batchVariate } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
 import { WIN95, BTN, hoverHandlers } from '../utils/buttonStyles';
 import logger from '../utils/logger';
@@ -28,10 +28,7 @@ const MAX_VARIATIONS = 100;
 // Max source images in queue
 const MAX_BATCH_SIZE = 100;
 
-// Preset options for quick selection
-const VARIATION_PRESETS = [1, 4, 10, 25, 50, 100];
-
-const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, onShowStripePayment }) => {
+const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment: _onShowTokenPayment, onShowStripePayment }) => {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -144,6 +141,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
     setIsProcessing(true);
     setIsPaused(false);
     abortRef.current = false;
+    setProgressCount(0);
 
     // Calculate credits per image (inside function to avoid stale closures)
     const BATCH_PREMIUM = 0.15;
@@ -153,12 +151,15 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
     for (const item of pendingItems) {
       if (abortRef.current || isPaused) break;
 
-      // Determine numImages: use item's numImages if single image queue, otherwise 1
-      const isSingleImageQueue = queue.length === 1;
-      const imagesToGenerate = isSingleImageQueue && item.numImages ? item.numImages : 1;
+      // Determine if this is single image batch mode (AI variation flow)
+      const batchCount = (queue.length === 1 && item.numImages && item.numImages > 1) ? item.numImages : 0;
+      const isSingleImageBatch = batchCount > 1;
+      const imagesToGenerate = isSingleImageBatch ? batchCount : 1;
       
-      // Check credits for this specific item (accounting for numImages)
-      const itemCost = imagesToGenerate * creditsPerImageWithPremium;
+      // Check credits: image generation cost + analysis cost (0.5) for batch mode
+      const analysisCost = isSingleImageBatch ? 0.5 : 0;
+      const itemCost = (imagesToGenerate * creditsPerImageWithPremium) + analysisCost;
+      
       if (availableCredits < itemCost) {
         setQueue(prev => prev.map(i => 
           i.id === item.id ? { ...i, status: 'failed' as const, error: 'Insufficient credits' } : i
@@ -172,39 +173,104 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
       ));
 
       try {
-        // Use prompt if provided, otherwise empty string (will be handled by backend for variation)
-        const promptToUse = prompt.trim();
-        
-        const result = await generateImage(
-          selectedStyle,
-          promptToUse,
-          {
-            walletAddress: isEmailAuth ? undefined : address,
-            userId: isEmailAuth ? emailContext.userId : undefined,
-            email: isEmailAuth ? emailContext.email : undefined,
-            isNFTHolder: isNFTHolder || false,
-            multiImageModel: multiImageModel || 'flux',
-            numImages: imagesToGenerate
-          },
-          item.imageDataUrl
-        );
-
-        // Extract all images from result
         let imageUrls: string[] = [];
-        if (Array.isArray(result)) {
-          imageUrls = result;
-        } else if (result.images && Array.isArray(result.images)) {
-          imageUrls = result.images;
-        } else if (result.imageUrl) {
-          imageUrls = [result.imageUrl];
+        let lastRemainingCredits: number | undefined;
+
+        if (isSingleImageBatch) {
+          // AI-powered batch variation flow
+          logger.info('Starting AI batch variation', { numOutputs: imagesToGenerate });
+          
+          // Step 1: Get AI-generated variation prompts
+          const variateResult = await batchVariate(item.imageDataUrl, imagesToGenerate);
+          
+          if (!variateResult.prompts || variateResult.prompts.length === 0) {
+            throw new Error('Failed to generate variation prompts');
+          }
+          
+          logger.info('Got variation prompts', { count: variateResult.prompts.length });
+          lastRemainingCredits = variateResult.remainingCredits;
+          
+          // Step 2: Generate each image with its unique prompt
+          for (let i = 0; i < variateResult.prompts.length; i++) {
+            if (abortRef.current || isPaused) break;
+            
+            const variationPrompt = variateResult.prompts[i];
+            setProgressCount(i + 1);
+            
+            try {
+              const result = await generateImage(
+                selectedStyle,
+                variationPrompt,
+                {
+                  walletAddress: isEmailAuth ? undefined : (address || undefined),
+                  userId: isEmailAuth ? (emailContext.userId || undefined) : undefined,
+                  email: isEmailAuth ? (emailContext.email || undefined) : undefined,
+                  isNFTHolder: isNFTHolder || false,
+                  multiImageModel: multiImageModel || 'flux',
+                  numImages: 1
+                },
+                item.imageDataUrl
+              );
+              
+              // Extract image URL
+              if (Array.isArray(result)) {
+                imageUrls.push(...result);
+              } else if (result.images && Array.isArray(result.images)) {
+                imageUrls.push(...result.images);
+              } else if (result.imageUrl) {
+                imageUrls.push(result.imageUrl);
+              }
+              
+              if (result.remainingCredits !== undefined) {
+                lastRemainingCredits = result.remainingCredits;
+              }
+
+              // Update display after each image
+              setGeneratedImage(imageUrls.length > 1 ? [...imageUrls] : imageUrls[0]);
+              
+              // Small delay between generations
+              if (i < variateResult.prompts.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+              }
+            } catch (genError) {
+              logger.warn('Single variation failed, continuing', { index: i, error: (genError as Error).message });
+            }
+          }
+        } else {
+          // Standard single image generation (no batch)
+          const promptToUse = prompt.trim();
+          
+          const result = await generateImage(
+            selectedStyle,
+            promptToUse,
+            {
+              walletAddress: isEmailAuth ? undefined : (address || undefined),
+              userId: isEmailAuth ? (emailContext.userId || undefined) : undefined,
+              email: isEmailAuth ? (emailContext.email || undefined) : undefined,
+              isNFTHolder: isNFTHolder || false,
+              multiImageModel: multiImageModel || 'flux',
+              numImages: 1
+            },
+            item.imageDataUrl
+          );
+
+          if (Array.isArray(result)) {
+            imageUrls = result;
+          } else if (result.images && Array.isArray(result.images)) {
+            imageUrls = result.images;
+          } else if (result.imageUrl) {
+            imageUrls = [result.imageUrl];
+          }
+          
+          lastRemainingCredits = result.remainingCredits;
         }
         
         // Get the first image for the queue item display
         const imageUrl = imageUrls[0] || '';
         
         // Update credits
-        if (result.remainingCredits !== undefined) {
-          const validated = Math.max(0, Math.floor(Number(result.remainingCredits) || 0));
+        if (lastRemainingCredits !== undefined) {
+          const validated = Math.max(0, Math.floor(Number(lastRemainingCredits) || 0));
           if (isEmailAuth && emailContext.setCreditsManually) {
             emailContext.setCreditsManually(validated);
           } else if (setCreditsManually) {
@@ -217,30 +283,25 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
           i.id === item.id ? { ...i, status: 'completed' as const, resultUrl: imageUrl } : i
         ));
 
-        // Update the main image display with all results (array if multiple, single if one)
+        // Update the main image display with all results
         setGeneratedImage(imageUrls.length > 1 ? imageUrls : imageUrls[0]);
         setCurrentGeneration({
-          prompt: prompt.trim(),
+          prompt: isSingleImageBatch ? 'AI-powered variations' : prompt.trim(),
           style: selectedStyle || undefined,
           timestamp: new Date().toISOString()
         });
 
         // Save all images to gallery (non-blocking)
-        const promptForDisplay = promptToUse || (selectedStyle?.prompt || 'No prompt');
-        const userIdentifier = isEmailAuth ? emailContext.userId : address || '';
-        const BATCH_PREMIUM = 0.15;
-        const baseCreditsPerImage = multiImageModel === 'nano-banana-pro' ? 1.25 : 0.6;
-        const creditsPerImage = baseCreditsPerImage * (1 + BATCH_PREMIUM);
+        const userIdentifier = isEmailAuth ? (emailContext.userId || '') : (address || '');
         
-        // Save each image to gallery
         imageUrls.forEach((imgUrl) => {
           addGeneration(userIdentifier, {
-            prompt: promptForDisplay,
+            prompt: isSingleImageBatch ? 'AI variation' : (prompt.trim() || selectedStyle?.prompt || 'No prompt'),
             style: selectedStyle?.name || 'No Style',
             imageUrl: imgUrl,
-            creditsUsed: creditsPerImage,
-            userId: isEmailAuth ? emailContext.userId : undefined,
-            email: isEmailAuth ? emailContext.email : undefined
+            creditsUsed: creditsPerImageWithPremium,
+            userId: isEmailAuth ? (emailContext.userId || undefined) : undefined,
+            email: isEmailAuth ? (emailContext.email || undefined) : undefined
           }).catch(e => logger.debug('Gallery save failed', { error: e instanceof Error ? e.message : 'Unknown error' }));
         });
 
@@ -260,6 +321,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
     }
 
     setIsProcessing(false);
+    setProgressCount(0);
     
     // Refresh credits after processing
     if (isEmailAuth && emailContext.refreshCredits) {
@@ -292,11 +354,13 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
   const baseCreditsPerImage = multiImageModel === 'nano-banana-pro' ? 1.25 : 0.6;
   const creditsPerImageWithPremium = baseCreditsPerImage * (1 + BATCH_PREMIUM);
   
-  // Calculate total cost: for single image with numImages > 1, multiply by numImages
-  const totalImagesToGenerate = queue.length === 1 && queue[0]?.numImages 
+  // Calculate total cost: for single image with numImages > 1, multiply by numImages + analysis cost
+  const isSingleImageBatchMode = queue.length === 1 && queue[0]?.numImages && queue[0].numImages > 1;
+  const totalImagesToGenerate = isSingleImageBatchMode && queue[0]?.numImages
     ? queue[0].numImages 
     : pendingCount;
-  const totalBatchCost = totalImagesToGenerate * creditsPerImageWithPremium;
+  const analysisCost = isSingleImageBatchMode ? 0.5 : 0;
+  const totalBatchCost = (totalImagesToGenerate * creditsPerImageWithPremium) + analysisCost;
   const hasEnoughCredits = availableCredits >= totalBatchCost;
 
   return (
@@ -357,230 +421,121 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
 
       {isExpanded && (
         <div className="p-2 space-y-2">
-          {/* Prompt Input */}
-          <div>
-            <label className="text-[10px] font-bold block mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-              Prompt for all images:
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe how to transform all uploaded images..."
-              className="w-full h-16 p-1.5 resize-none text-[11px] focus:outline-none"
-              style={{ 
-                background: WIN95.inputBg,
-                boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`,
-                border: 'none',
-                color: WIN95.text,
-                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-              }}
-              disabled={isProcessing}
-            />
-            {/* AI Enhance Toggle */}
-            <div className="flex justify-between items-center mt-1">
-              <span 
-                className="text-[9px] px-1.5 py-0.5"
+          {/* Prompt Input - Only show for multi-image queue (not single image batch) */}
+          {queue.length !== 1 && (
+            <div>
+              <label className="text-[10px] font-bold block mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                Prompt for all images:
+              </label>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe how to transform all uploaded images..."
+                className="w-full h-16 p-1.5 resize-none text-[11px] focus:outline-none"
                 style={{ 
-                  color: WIN95.textDisabled, 
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                  background: WIN95.bg,
-                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                  background: WIN95.inputBg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`,
+                  border: 'none',
+                  color: WIN95.text,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
-              >
-                {prompt.length} chars
-              </span>
-              <div className="flex items-center gap-2">
-                <label 
-                  onClick={() => setOptimizePrompt(!optimizePrompt)}
-                  className="flex items-center gap-1.5 cursor-pointer select-none px-1 py-0.5 hover:bg-[#d0d0d0]"
-                  style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
-                  title="Enhance your prompt with AI for better results"
+                disabled={isProcessing}
+              />
+              {/* AI Enhance Toggle */}
+              <div className="flex justify-between items-center mt-1">
+                <span 
+                  className="text-[9px] px-1.5 py-0.5"
+                  style={{ 
+                    color: WIN95.textDisabled, 
+                    fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+                    background: WIN95.bg,
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                  }}
                 >
-                  <div 
-                    className="w-3.5 h-3.5 flex items-center justify-center"
-                    style={{
-                      background: WIN95.inputBg,
-                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`
-                    }}
+                  {prompt.length} chars
+                </span>
+                <div className="flex items-center gap-2">
+                  <label 
+                    onClick={() => setOptimizePrompt(!optimizePrompt)}
+                    className="flex items-center gap-1.5 cursor-pointer select-none px-1 py-0.5 hover:bg-[#d0d0d0]"
+                    style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
+                    title="Enhance your prompt with AI for better results"
                   >
-                    {optimizePrompt && (
-                      <span className="text-[10px] font-bold" style={{ color: WIN95.text }}>✓</span>
-                    )}
-                  </div>
-                  <Brain className="w-3 h-3" style={{ color: optimizePrompt ? '#800080' : WIN95.textDisabled }} />
-                  <span className="text-[10px]" style={{ color: WIN95.text }}>AI Enhance</span>
-                </label>
+                    <div 
+                      className="w-3.5 h-3.5 flex items-center justify-center"
+                      style={{
+                        background: WIN95.inputBg,
+                        boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`
+                      }}
+                    >
+                      {optimizePrompt && (
+                        <span className="text-[10px] font-bold" style={{ color: WIN95.text }}>✓</span>
+                      )}
+                    </div>
+                    <Brain className="w-3 h-3" style={{ color: optimizePrompt ? '#800080' : WIN95.textDisabled }} />
+                    <span className="text-[10px]" style={{ color: WIN95.text }}>AI Enhance</span>
+                  </label>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Enhanced Variation Count Selector - Only show when single image is in queue */}
+          {/* Simple Variation UI - Only show when single image is in queue */}
           {queue.length === 1 && (() => {
             const singleItem = queue[0];
             const currentNumImages = singleItem.numImages || numImages;
-            const estimatedTime = Math.ceil(currentNumImages * 8); // ~8 seconds per image
-            const estimatedMinutes = Math.floor(estimatedTime / 60);
-            const estimatedSeconds = estimatedTime % 60;
+            const totalCost = currentNumImages * creditsPerImageWithPremium + 0.5; // +0.5 for AI analysis
             
             return (
               <div 
                 className="p-3 space-y-3"
                 style={{
-                  background: 'linear-gradient(180deg, #e8e8f0 0%, #d0d0e0 100%)',
-                  boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 rgba(255,255,255,0.5)`
+                  background: 'linear-gradient(180deg, #f5f5f5 0%, #e8e8e8 100%)',
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
                 }}
               >
-                {/* Header with icon */}
-                <div className="flex items-center gap-2">
-                  <div 
-                    className="w-6 h-6 flex items-center justify-center"
-                    style={{
-                      background: 'linear-gradient(180deg, #6366f1 0%, #4f46e5 100%)',
-                      boxShadow: `1px 1px 0 #000, inset 1px 1px 0 rgba(255,255,255,0.3)`
-                    }}
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-white" />
+                {/* Source image + number input row */}
+                <div className="flex items-center gap-3">
+                  {/* Source thumbnail */}
+                  <div className="relative flex-shrink-0">
+                    <img 
+                      src={singleItem.imageDataUrl} 
+                      alt="Source"
+                      className="w-14 h-14 object-cover"
+                      style={{ boxShadow: `2px 2px 0 ${WIN95.border.darker}` }}
+                    />
+                    <button
+                      onClick={() => setQueue([])}
+                      className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center"
+                      style={{ background: '#c00', color: '#fff', fontSize: '10px', lineHeight: 1 }}
+                      title="Remove"
+                    >
+                      ×
+                    </button>
                   </div>
-                  <div>
-                    <span className="text-[11px] font-bold block" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                      # of Output Images
-                    </span>
-                    <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>
-                      Generate up to {MAX_VARIATIONS} output images
-                    </span>
-                  </div>
-                </div>
 
-                {/* Visual preview grid - shows expected output */}
-                <div 
-                  className="p-2"
-                  style={{
-                    background: WIN95.inputBg,
-                    boxShadow: `inset 2px 2px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Source image thumbnail */}
-                    <div className="relative flex-shrink-0">
-                      <img 
-                        src={singleItem.imageDataUrl} 
-                        alt="Source"
-                        className="w-16 h-16 object-cover"
-                        style={{ 
-                          boxShadow: `2px 2px 0 ${WIN95.border.darker}`
-                        }}
-                      />
-                      <div 
-                        className="absolute -top-1 -left-1 px-1 text-[8px] font-bold"
-                        style={{
-                          background: '#000080',
-                          color: '#fff'
-                        }}
-                      >
-                        SOURCE
-                      </div>
-                    </div>
-                    
-                    {/* Arrow */}
-                    <div className="flex flex-col items-center">
-                      <Zap className="w-5 h-5" style={{ color: '#000080' }} />
-                      <span className="text-[8px] font-bold" style={{ color: WIN95.text }}>→</span>
-                    </div>
-                    
-                    {/* Output preview grid */}
-                    <div className="flex-1">
-                      <div 
-                        className="grid gap-0.5 p-1"
-                        style={{
-                          gridTemplateColumns: `repeat(${Math.min(currentNumImages, 10)}, 1fr)`,
-                          background: WIN95.bgDark,
-                          maxWidth: '120px'
-                        }}
-                      >
-                        {Array.from({ length: Math.min(currentNumImages, 20) }).map((_, i) => (
-                          <div 
-                            key={i}
-                            className="aspect-square"
-                            style={{
-                              background: `hsl(${(i * 15) % 360}, 60%, 75%)`,
-                              minWidth: '8px',
-                              minHeight: '8px'
-                            }}
-                          />
-                        ))}
-                        {currentNumImages > 20 && (
-                          <div 
-                            className="aspect-square flex items-center justify-center text-[6px] font-bold col-span-2"
-                            style={{ background: WIN95.bg, color: WIN95.text }}
-                          >
-                            +{currentNumImages - 20}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-[10px] font-bold mt-1" style={{ color: WIN95.highlight }}>
-                        {currentNumImages} output image{currentNumImages !== 1 ? 's' : ''}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  {/* Arrow */}
+                  <Zap className="w-4 h-4 flex-shrink-0" style={{ color: '#000080' }} />
 
-                {/* Quick preset buttons */}
-                <div>
-                  <label className="text-[9px] font-bold block mb-1.5" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                    Quick Select:
-                  </label>
-                  <div className="flex flex-wrap gap-1">
-                    {VARIATION_PRESETS.map((preset) => (
-                      <button
-                        key={preset}
-                        onClick={() => {
-                          setNumImages(preset);
-                          setQueue(prev => prev.map(item => 
-                            item.id === singleItem.id ? { ...item, numImages: preset } : item
-                          ));
-                        }}
-                        disabled={isProcessing}
-                        className="px-2 py-1 text-[10px] font-bold transition-all"
-                        style={currentNumImages === preset ? {
-                          background: 'linear-gradient(180deg, #1084d0 0%, #000080 100%)',
-                          color: '#ffffff',
-                          border: 'none',
-                          boxShadow: `inset 1px 1px 0 #4090e0, inset -1px -1px 0 #000040`,
-                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                        } : {
-                          ...BTN.base,
-                          opacity: isProcessing ? 0.5 : 1
-                        }}
-                        {...(currentNumImages !== preset ? hoverHandlers : {})}
-                      >
-                        {preset === 1 ? '1x' : `${preset}x`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Slider for fine control */}
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-[9px] font-bold" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                      Fine Tune:
+                  {/* Number of outputs */}
+                  <div className="flex-1">
+                    <label className="text-[10px] font-bold block mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                      How many variations?
                     </label>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
                       <input
                         type="number"
                         min="1"
                         max={MAX_VARIATIONS}
                         value={currentNumImages}
                         onChange={(e) => {
-                          const value = parseInt(e.target.value, 10);
-                          if (!isNaN(value) && value >= 1 && value <= MAX_VARIATIONS) {
-                            setNumImages(value);
-                            setQueue(prev => prev.map(item => 
-                              item.id === singleItem.id ? { ...item, numImages: value } : item
-                            ));
-                          }
+                          const value = Math.min(MAX_VARIATIONS, Math.max(1, parseInt(e.target.value, 10) || 1));
+                          setNumImages(value);
+                          setQueue(prev => prev.map(item => 
+                            item.id === singleItem.id ? { ...item, numImages: value } : item
+                          ));
                         }}
-                        className="w-14 px-1.5 py-0.5 text-[11px] text-center focus:outline-none"
+                        className="w-16 px-2 py-1 text-[12px] text-center focus:outline-none"
                         style={{ 
                           background: WIN95.inputBg,
                           boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
@@ -590,126 +545,35 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                         }}
                         disabled={isProcessing}
                       />
-                      <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>/ {MAX_VARIATIONS}</span>
+                      <span className="text-[10px]" style={{ color: WIN95.textDisabled }}>
+                        (1-{MAX_VARIATIONS})
+                      </span>
                     </div>
                   </div>
-                  
-                  {/* Win95 styled slider */}
-                  <div className="relative">
-                    <input
-                      type="range"
-                      min="1"
-                      max={MAX_VARIATIONS}
-                      value={currentNumImages}
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value, 10);
-                        setNumImages(value);
-                        setQueue(prev => prev.map(item => 
-                          item.id === singleItem.id ? { ...item, numImages: value } : item
-                        ));
-                      }}
-                      className="win95-slider w-full"
-                      disabled={isProcessing}
-                    />
-                    
-                    {/* Progress fill indicator */}
-                    <div 
-                      className="absolute top-1/2 left-0 h-1 pointer-events-none"
-                      style={{
-                        width: `${(currentNumImages / MAX_VARIATIONS) * 100}%`,
-                        background: 'linear-gradient(90deg, #000080, #1084d0)',
-                        transform: 'translateY(-50%)',
-                        marginTop: '1px'
-                      }}
-                    />
-                  </div>
-                  
-                  {/* Scale markers */}
-                  <div className="flex justify-between mt-1 px-1">
-                    {[1, 25, 50, 75, 100].map((mark) => (
-                      <button
-                        key={mark}
-                        onClick={() => {
-                          setNumImages(mark);
-                          setQueue(prev => prev.map(item => 
-                            item.id === singleItem.id ? { ...item, numImages: mark } : item
-                          ));
-                        }}
-                        className="text-[8px] hover:underline cursor-pointer"
-                        style={{ 
-                          color: currentNumImages === mark ? WIN95.highlight : WIN95.textDisabled,
-                          fontWeight: currentNumImages === mark ? 'bold' : 'normal',
-                          background: 'none',
-                          border: 'none',
-                          padding: 0
-                        }}
-                        disabled={isProcessing}
-                      >
-                        {mark}
-                      </button>
-                    ))}
+
+                  {/* Cost display */}
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-[9px]" style={{ color: WIN95.textDisabled }}>Total cost</div>
+                    <div className="text-[12px] font-bold" style={{ color: availableCredits >= totalCost ? '#008000' : '#c00' }}>
+                      {totalCost.toFixed(1)} ⭐
+                    </div>
                   </div>
                 </div>
 
-                {/* Estimated time and cost summary */}
+                {/* Info text */}
                 <div 
-                  className="flex items-center justify-between p-2 gap-2"
-                  style={{
-                    background: WIN95.bg,
+                  className="p-2 text-[9px]"
+                  style={{ 
+                    background: '#e3f2fd', 
+                    color: '#1565c0',
                     boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
                   }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="text-center">
-                      <div className="text-[8px]" style={{ color: WIN95.textDisabled }}>Images</div>
-                      <div className="text-[12px] font-bold" style={{ color: WIN95.highlight }}>
-                        {currentNumImages}
-                      </div>
-                    </div>
-                    <div className="w-px h-6" style={{ background: WIN95.bgDark }} />
-                    <div className="text-center">
-                      <div className="text-[8px]" style={{ color: WIN95.textDisabled }}>Est. Time</div>
-                      <div className="text-[11px] font-bold" style={{ color: WIN95.text }}>
-                        {estimatedMinutes > 0 ? `${estimatedMinutes}m ${estimatedSeconds}s` : `${estimatedSeconds}s`}
-                      </div>
-                    </div>
-                    <div className="w-px h-6" style={{ background: WIN95.bgDark }} />
-                    <div className="text-center">
-                      <div className="text-[8px]" style={{ color: WIN95.textDisabled }}>Credits</div>
-                      <div className="text-[11px] font-bold" style={{ color: hasEnoughCredits ? '#008000' : '#800000' }}>
-                        {(currentNumImages * creditsPerImageWithPremium).toFixed(1)}
-                      </div>
-                    </div>
-                  </div>
-                  <Grid className="w-5 h-5" style={{ color: WIN95.textDisabled }} />
+                  <strong>AI-powered variations:</strong> Same pose & character, different outfits, hair, backgrounds, and styles
                 </div>
               </div>
             );
           })()}
-          
-          {/* Info about variation mode */}
-          {queue.length > 0 && (
-            <div 
-              className="p-2 flex items-start gap-2"
-              style={{
-                background: 'linear-gradient(180deg, #e8f5e9 0%, #c8e6c9 100%)',
-                boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
-                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-              }}
-            >
-              <Sparkles className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#2e7d32' }} />
-              <div>
-                <span className="text-[10px] font-bold block" style={{ color: '#1b5e20' }}>
-                  Variation Mode Active
-                </span>
-                <span className="text-[9px]" style={{ color: '#388e3c' }}>
-                  {prompt.trim() 
-                    ? 'Creates variations based on your prompt while preserving pose and position'
-                    : 'Creates variations of all features except pose and position'}
-                </span>
-              </div>
-            </div>
-          )}
 
           {/* Enhanced Drop Zone */}
           <div
@@ -1049,11 +913,14 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                 <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#000080' }} />
                 <div className="flex-1">
                   <span className="text-[10px] font-bold block" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                    Generating: {processingItem.fileName}
+                    {queue.length === 1 && processingItem.numImages && processingItem.numImages > 1 
+                      ? (progressCount === 0 ? 'Analyzing image with AI...' : `Generating variation ${progressCount}/${processingItem.numImages}`)
+                      : `Generating: ${processingItem.fileName}`
+                    }
                   </span>
                   {queue.length === 1 && processingItem.numImages && processingItem.numImages > 1 && (
                     <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>
-                      Generating {processingItem.numImages} output images...
+                      {progressCount === 0 ? 'Creating unique prompts for each variation...' : 'Same pose, different style/outfit/background'}
                     </span>
                   )}
                 </div>
@@ -1069,40 +936,30 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment, o
                       boxShadow: `inset 2px 2px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
                     }}
                   >
-                    {/* Animated progress bar segments */}
+                    {/* Actual progress bar */}
                     <div 
-                      className="h-full transition-all duration-300 flex"
+                      className="h-full transition-all duration-300"
                       style={{
-                        width: '100%',
-                        background: `repeating-linear-gradient(
-                          90deg,
-                          #000080 0px,
-                          #000080 8px,
-                          #1084d0 8px,
-                          #1084d0 16px
-                        )`,
-                        animation: 'slide 0.5s linear infinite',
-                        opacity: 0.8
+                        width: `${(progressCount / processingItem.numImages) * 100}%`,
+                        background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
+                        minWidth: progressCount > 0 ? '20px' : '0'
                       }}
                     />
                     {/* Overlay text */}
                     <div 
                       className="absolute inset-0 flex items-center justify-center text-[9px] font-bold"
                       style={{ 
-                        color: '#fff', 
-                        textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                        color: progressCount > 0 ? '#fff' : '#333', 
+                        textShadow: progressCount > 0 ? '0 1px 2px rgba(0,0,0,0.5)' : 'none',
                         fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                       }}
                     >
-                      Processing batch of {processingItem.numImages} images...
+                      {progressCount === 0 
+                        ? '🔍 Analyzing image...' 
+                        : `${progressCount} of ${processingItem.numImages} complete`
+                      }
                     </div>
                   </div>
-                  <style>{`
-                    @keyframes slide {
-                      0% { background-position: 0 0; }
-                      100% { background-position: 16px 0; }
-                    }
-                  `}</style>
                 </div>
               )}
             </div>
