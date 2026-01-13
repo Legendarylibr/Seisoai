@@ -11,7 +11,6 @@ import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { getStripe, calculateCredits } from '../services/stripe';
 import { findUserByIdentifier } from '../services/user';
-import { createEmailHash } from '../utils/emailHash';
 import config from '../config/env';
 import User, { type IUser } from '../models/User';
 import Payment from '../models/Payment';
@@ -39,8 +38,8 @@ export function createStripeRoutes(deps: Dependencies = {}) {
   const router = Router();
   const { paymentLimiter, authenticateToken } = deps;
 
-  const limiter = paymentLimiter || ((req: Request, res: Response, next: () => void) => next());
-  const authMiddleware = authenticateToken || ((req: Request, res: Response, next: () => void) => next());
+  const limiter = paymentLimiter || ((_req: Request, _res: Response, next: () => void) => next());
+  const authMiddleware = authenticateToken || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Create payment intent
@@ -57,12 +56,11 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const { amount, currency = 'usd', userId, walletAddress, preferCrypto } = req.body as {
+      const { amount, currency = 'usd', userId, walletAddress } = req.body as {
         amount?: number;
         currency?: string;
         userId?: string;
         walletAddress?: string;
-        preferCrypto?: boolean;
       };
 
       if (!amount || amount < 1) {
@@ -190,8 +188,8 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         }
       });
 
-      const latestInvoice = subscription.latest_invoice as Stripe.Invoice;
-      const paymentIntent = latestInvoice?.payment_intent as Stripe.PaymentIntent;
+      const latestInvoice = subscription.latest_invoice as Stripe.Invoice & { payment_intent?: Stripe.PaymentIntent };
+      const paymentIntent = latestInvoice?.payment_intent as Stripe.PaymentIntent | undefined;
 
       res.json({
         success: true,
@@ -511,17 +509,19 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       });
       
       // Return the subscription data in a format the frontend expects
+      // Cast subscription to access properties (Stripe types may vary)
+      const subData = subscription as Stripe.Subscription;
       res.json({
         success: true,
         hasSubscription: true,
         subscription: {
-          id: subscription.id,
-          status: subscription.status,
-          current_period_start: subscription.current_period_start,
-          current_period_end: subscription.current_period_end,
-          cancel_at_period_end: subscription.cancel_at_period_end,
-          plan: subscription.metadata?.planType || 'unknown',
-          items: subscription.items
+          id: subData.id,
+          status: subData.status,
+          current_period_start: (subData as unknown as { current_period_start: number }).current_period_start,
+          current_period_end: (subData as unknown as { current_period_end: number }).current_period_end,
+          cancel_at_period_end: subData.cancel_at_period_end,
+          plan: subData.metadata?.planType || 'unknown',
+          items: subData.items
         }
       });
     } catch (error) {
@@ -597,7 +597,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
           id: updatedSubscription.id,
           status: updatedSubscription.status,
           cancelAtPeriodEnd: updatedSubscription.cancel_at_period_end,
-          currentPeriodEnd: new Date((updatedSubscription.current_period_end as number) * 1000)
+          currentPeriodEnd: new Date(((updatedSubscription as unknown as { current_period_end: number }).current_period_end) * 1000)
         }
       });
     } catch (error) {
@@ -631,7 +631,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const baseUrl = process.env.FRONTEND_URL || (config.isProduction ? 'https://seisoai.com' : 'http://localhost:5173');
+      const baseUrl = config.FRONTEND_URL || (config.isProduction ? 'https://seisoai.com' : 'http://localhost:5173');
 
       const customers = await stripe.customers.list({
         email: user.email,

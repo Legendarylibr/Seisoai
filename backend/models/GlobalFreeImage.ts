@@ -1,7 +1,7 @@
 /**
  * Global free image counter for all users (drainable pools)
  */
-import mongoose, { type Document, type Model } from 'mongoose';
+import mongoose, { type Document } from 'mongoose';
 
 // Types
 export interface IGlobalFreeImage extends Document {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
@@ -28,7 +28,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
   const { isConnected, address, credits, isLoading: walletLoading, isNFTHolder, refreshCredits, setCreditsManually } = useSimpleWallet();
   const emailContext = useEmailAuth();
   const isEmailAuth = emailContext.isAuthenticated;
-  const availableCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
+  const _availableCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
 
   const [progress, setProgress] = useState<number>(0);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
@@ -73,7 +73,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
       if (model === 'nano-banana-pro') return 1.25;
       return 0.6; // flux, flux-multi
     };
-    const creditsToDeduct = getCreditsForModel(multiImageModel);
+    const creditsToDeduct = getCreditsForModel(multiImageModel ?? undefined);
     const currentCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
     const newCredits = Math.max(0, currentCredits - creditsToDeduct);
     
@@ -88,17 +88,18 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
       setGenerationStartTime(Date.now());
 
       const advancedSettings = {
-        guidanceScale, imageSize, numImages, enableSafetyChecker, generationMode, multiImageModel,
+        guidanceScale, imageSize, numImages, enableSafetyChecker, generationMode, 
+        multiImageModel: multiImageModel,
         walletAddress: isEmailAuth ? undefined : address,
-        userId: isEmailAuth ? emailContext.userId : undefined,
-        email: isEmailAuth ? emailContext.email : undefined,
+        userId: isEmailAuth ? emailContext.userId : null,
+        email: isEmailAuth ? emailContext.email : null,
         isNFTHolder: isNFTHolder || false,
         referenceImageDimensions: controlNetImageDimensions,
         optimizePrompt
       };
 
       const trimmedPrompt = (customPrompt || '').trim();
-      const imageResult = await generateImage(selectedStyle || null, trimmedPrompt, advancedSettings, controlNetImage);
+      const imageResult = await generateImage(selectedStyle ?? null, trimmedPrompt, advancedSettings, controlNetImage ?? null);
 
       if (!imageResult?.images?.length) throw new Error('Invalid response from generation service');
       
@@ -112,7 +113,11 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
         img.src = url;
       });
       
-      if (imageResult.promptOptimization) setPromptOptimizationResult(imageResult.promptOptimization);
+      if (imageResult.promptOptimization) setPromptOptimizationResult({
+        ...imageResult.promptOptimization,
+        original: imageResult.promptOptimization.original || '',
+        optimized: imageResult.promptOptimization.optimized || ''
+      });
       else setPromptOptimizationResult(null);
       
       // Update credits from response
@@ -136,12 +141,12 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
       
       // Save all images to gallery (non-blocking)
       const promptForDisplay = trimmedPrompt || (selectedStyle?.prompt || 'No prompt');
-      const userIdentifier = isEmailAuth ? emailContext.userId : address || '';
-      const creditsPerImage = getCreditsForModel(multiImageModel);
+      const userIdentifier = isEmailAuth ? emailContext.userId : (address ?? '');
+      const creditsPerImage = getCreditsForModel(multiImageModel ?? undefined);
       
       // Save each image to gallery
       imageUrls.forEach((imgUrl) => {
-        addGeneration(userIdentifier, {
+        addGeneration(userIdentifier || '', {
           prompt: promptForDisplay,
           style: selectedStyle?.name || 'No Style',
           imageUrl: imgUrl,
@@ -155,9 +160,9 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
         setGeneratedImage(imageUrls.length > 1 ? imageUrls : imageUrls[0]);
         setIsLoading(false);
         setCurrentGeneration({
-          image: imageUrls[0], prompt: promptForDisplay, style: selectedStyle,
+          image: imageUrls[0], prompt: promptForDisplay, style: selectedStyle ?? undefined,
           referenceImage: controlNetImage, guidanceScale, imageSize, numImages,
-          enableSafetyChecker, generationMode, multiImageModel, timestamp: new Date().toISOString()
+          enableSafetyChecker, generationMode, multiImageModel: multiImageModel ?? undefined, timestamp: new Date().toISOString()
         });
       });
     } catch (error) {
@@ -196,7 +201,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
     if (model === 'nano-banana-pro') return 1.25;
     return 0.6;
   };
-  const creditsNeeded = getCreditsNeeded(multiImageModel);
+  const creditsNeeded = getCreditsNeeded(multiImageModel ?? undefined);
   const isLayerExtract = multiImageModel === 'qwen-image-layered';
   
   // Determine button text

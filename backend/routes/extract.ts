@@ -78,7 +78,7 @@ export function createExtractRoutes(deps: Dependencies) {
    * POST /api/extract-layers
    */
   router.post('/extract-layers', 
-    freeImageRateLimiter || ((req: Request, res: Response, next: () => void) => next()), 
+    freeImageRateLimiter || ((_req: Request, _res: Response, next: () => void) => next()), 
     requireCredits(1), 
     async (req: AuthenticatedRequest, res: Response) => {
       try {
@@ -119,7 +119,7 @@ export function createExtractRoutes(deps: Dependencies) {
           return;
         }
 
-        const { image_url, prompt } = req.body as { image_url?: string; prompt?: string };
+        const { image_url } = req.body as { image_url?: string; prompt?: string };
 
         if (!image_url) {
           res.status(400).json({ 

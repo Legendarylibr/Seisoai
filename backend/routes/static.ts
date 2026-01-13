@@ -26,7 +26,7 @@ interface MetricsResponse {
   userCount?: number | string;
 }
 
-export function createStaticRoutes(deps: Dependencies = {}) {
+export function createStaticRoutes(_deps: Dependencies = {}) {
   const router = Router();
 
   /**

@@ -4,7 +4,6 @@
  * Uses sharp library if available, otherwise returns original
  */
 import logger from './logger';
-import type { Sharp } from 'sharp';
 
 // Types
 interface StripImageMetadataOptions {
@@ -12,12 +11,14 @@ interface StripImageMetadataOptions {
   quality?: number;
 }
 
-let sharp: typeof Sharp | null = null;
+// Sharp type - using any since sharp is an optional dependency
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let sharp: any = null;
 
 try {
   // Dynamic import for sharp
   const sharpModule = await import('sharp');
-  sharp = sharpModule.default as typeof Sharp;
+  sharp = sharpModule.default;
   logger.info('Sharp library loaded - metadata cleaning enabled');
 } catch (error) {
   const err = error as Error;

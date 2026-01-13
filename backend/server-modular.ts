@@ -30,7 +30,7 @@ import { createOpenApiRoutes } from './services/openapi.js';
 import { deepHealthCheck, livenessCheck, readinessCheck } from './services/healthCheck.js';
 import { setupGracefulShutdown, requestTrackingMiddleware, getInFlightCount } from './services/gracefulShutdown.js';
 import correlationIdMiddleware from './middleware/correlationId.js';
-import { adminIPAllowlist, getIPAllowlistConfig } from './middleware/ipAllowlist.js';
+import { getIPAllowlistConfig } from './middleware/ipAllowlist.js';
 import { tieredGeneralLimiter, tieredGenerationLimiter } from './middleware/tieredRateLimiter.js';
 
 // Middleware
@@ -133,18 +133,6 @@ app.use(helmet({
   } : false, // Disable HSTS in development
   noSniff: true, // X-Content-Type-Options: nosniff
   referrerPolicy: { policy: config.isProduction ? "strict-origin-when-cross-origin" : "no-referrer-when-downgrade" },
-  permissionsPolicy: {
-    features: {
-      geolocation: '()',
-      microphone: '()',
-      camera: '()',
-      payment: '()',
-      usb: '()',
-      magnetometer: '()',
-      gyroscope: '()',
-      accelerometer: '()'
-    }
-  },
   // Use 'credentialless' for COEP to enable SharedArrayBuffer (needed for FFmpeg.wasm)
   // while still allowing cross-origin resources from CDNs without CORP headers
   crossOriginEmbedderPolicy: { policy: "credentialless" },
@@ -258,7 +246,7 @@ app.use(cors({
 }));
 
 // Add CORP headers to all API responses to prevent COEP blocking
-app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+app.use('/api', (_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
 });
@@ -379,14 +367,14 @@ const routeDeps = {
 };
 
 // Static routes at root level (robots.txt, favicon)
-app.get('/robots.txt', (req: Request, res: Response) => {
+app.get('/robots.txt', (_req: Request, res: Response) => {
   res.type('text/plain');
   res.send(`User-agent: *
 Allow: /
 Sitemap: https://seisoai.com/sitemap.xml`);
 });
 
-app.get('/favicon.ico', (req: Request, res: Response) => {
+app.get('/favicon.ico', (_req: Request, res: Response) => {
   res.redirect(301, '/1d1c7555360a737bb22bbdfc2784655f.png');
 });
 
@@ -403,7 +391,7 @@ if (fs.existsSync(openapiPath)) {
       app.get('/api/docs', swaggerUi.setup(null, {
         swaggerUrl: '/api/openapi.yaml'
       }));
-      app.get('/api/openapi.yaml', (req, res) => {
+      app.get('/api/openapi.yaml', (_req, res) => {
         res.type('text/yaml').send(yamlContent);
       });
       logger.info('API documentation available at /api/docs');
@@ -420,7 +408,7 @@ app.use('/api', createVersionedRoutes(routeDeps));
 app.get('/api/metrics', metricsHandler);
 
 // Circuit breaker stats endpoint
-app.get('/api/circuit-stats', (req: Request, res: Response) => {
+app.get('/api/circuit-stats', (_req: Request, res: Response) => {
   res.json({
     success: true,
     circuits: getAllCircuitStats()
@@ -428,7 +416,7 @@ app.get('/api/circuit-stats', (req: Request, res: Response) => {
 });
 
 // ENTERPRISE: Key rotation status endpoint (for monitoring)
-app.get('/api/key-rotation-status', (req: Request, res: Response) => {
+app.get('/api/key-rotation-status', (_req: Request, res: Response) => {
   res.json({
     success: true,
     keyRotation: getKeyRotationStatus()
@@ -436,7 +424,7 @@ app.get('/api/key-rotation-status', (req: Request, res: Response) => {
 });
 
 // ENTERPRISE: Security.txt (RFC 9116)
-app.get('/.well-known/security.txt', (req: Request, res: Response) => {
+app.get('/.well-known/security.txt', (_req: Request, res: Response) => {
   res.type('text/plain');
   res.send(`# SeisoAI Security Policy
 # https://securitytxt.org/
@@ -450,7 +438,7 @@ Expires: 2027-01-11T00:00:00.000Z
 `);
 });
 
-app.get('/security.txt', (req: Request, res: Response) => {
+app.get('/security.txt', (_req: Request, res: Response) => {
   res.redirect(301, '/.well-known/security.txt');
 });
 
@@ -458,7 +446,7 @@ app.get('/security.txt', (req: Request, res: Response) => {
 app.use('/api', createOpenApiRoutes());
 
 // ENTERPRISE: Deep health check (verifies all dependencies)
-app.get('/api/health/deep', async (req: Request, res: Response) => {
+app.get('/api/health/deep', async (_req: Request, res: Response) => {
   try {
     const health = await deepHealthCheck();
     const statusCode = health.status === 'healthy' ? 200 : 
@@ -478,7 +466,7 @@ app.get('/api/health/deep', async (req: Request, res: Response) => {
 });
 
 // Kubernetes-style liveness probe
-app.get('/api/health/live', (req: Request, res: Response) => {
+app.get('/api/health/live', (_req: Request, res: Response) => {
   const liveness = livenessCheck();
   res.json({
     success: true,
@@ -487,7 +475,7 @@ app.get('/api/health/live', (req: Request, res: Response) => {
 });
 
 // Kubernetes-style readiness probe
-app.get('/api/health/ready', async (req: Request, res: Response) => {
+app.get('/api/health/ready', async (_req: Request, res: Response) => {
   const readiness = await readinessCheck();
   res.status(readiness.ready ? 200 : 503).json({
     success: readiness.ready,
@@ -496,7 +484,7 @@ app.get('/api/health/ready', async (req: Request, res: Response) => {
 });
 
 // Simple health check with memory stats
-app.get('/api/health', (req: Request, res: Response) => {
+app.get('/api/health', (_req: Request, res: Response) => {
   const memUsage = process.memoryUsage();
   res.json({
     success: true,

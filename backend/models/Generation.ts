@@ -3,7 +3,7 @@
  * Separated from User model to prevent document bloat
  * Includes field-level encryption for prompts (sensitive user content)
  */
-import mongoose, { type Document, type Model } from 'mongoose';
+import mongoose from 'mongoose';
 import { encrypt, decrypt, isEncryptionConfigured } from '../utils/encryption.js';
 import logger from '../utils/logger.js';
 
@@ -15,12 +15,13 @@ interface GenerationMetadata {
   numImages?: number;
 }
 
-export interface IGeneration extends Document {
+export interface IGeneration {
+  _id?: mongoose.Types.ObjectId;
   userId: string;
   generationId: string;
   prompt: string;
   style?: string;
-  model?: string;
+  modelType?: string;
   imageUrl?: string;
   videoUrl?: string;
   requestId?: string;
@@ -46,7 +47,7 @@ const generationSchema = new mongoose.Schema<IGeneration>({
     required: true
   },
   style: String,
-  model: String,
+  modelType: String,
   imageUrl: String,
   videoUrl: String,
   requestId: {

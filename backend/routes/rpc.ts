@@ -21,7 +21,7 @@ export function createRpcRoutes(deps: Dependencies = {}) {
   const router = Router();
   const { blockchainRpcLimiter } = deps;
 
-  const limiter = blockchainRpcLimiter || ((req: Request, res: Response, next: () => void) => next());
+  const limiter = blockchainRpcLimiter || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Solana RPC proxy
@@ -121,7 +121,7 @@ export function createRpcRoutes(deps: Dependencies = {}) {
    * RPC configuration
    * GET /api/rpc/config
    */
-  router.get('/rpc/config', limiter, (req: Request, res: Response) => {
+  router.get('/rpc/config', limiter, (_req: Request, res: Response) => {
     res.json({
       success: true,
       chains: {

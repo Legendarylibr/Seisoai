@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
-import { Sparkles, Zap, Layers, Cpu, Wand2, type LucideIcon } from 'lucide-react';
-import { WIN95, BTN } from '../utils/buttonStyles';
+import { Sparkles, Zap, Layers, Wand2, Cpu, type LucideIcon } from 'lucide-react';
+import { WIN95 } from '../utils/buttonStyles';
 import logger from '../utils/logger';
 
 // Model configuration for cleaner code
@@ -61,7 +61,7 @@ interface MultiImageModelSelectorProps {
   customPrompt?: string;
 }
 
-const MultiImageModelSelector: React.FC<MultiImageModelSelectorProps> = ({ customPrompt = '' }) => {
+const MultiImageModelSelector: React.FC<MultiImageModelSelectorProps> = () => {
   const { controlNetImage, multiImageModel, setMultiImageModel } = useImageGenerator();
 
   const getImageCount = (): number => {

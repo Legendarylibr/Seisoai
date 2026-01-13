@@ -1,9 +1,20 @@
+/**
+ * VideoGenerator - Video generation component
+ * 
+ * TODO: This file is 1200+ lines and should be split into:
+ * - VideoGenerator.tsx (main component, ~400 lines)
+ * - hooks/useVideoGeneration.ts (generation logic hook)
+ * - components/video/VideoPreview.tsx (video player/preview)
+ * - components/video/FrameUploader.tsx (first/last frame upload)
+ * - components/video/GenerationModeSelector.tsx (mode selection)
+ * - components/video/VideoControls.tsx (playback controls)
+ */
 import React, { useState, useRef, useCallback, memo, useEffect, ReactNode, ChangeEvent } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateVideo } from '../services/videoService';
 import { addGeneration } from '../services/galleryService';
-import { Film, Upload, Play, X, Clock, Monitor, Volume2, VolumeX, Sparkles, Download, AlertCircle, ChevronDown, Square, Zap, Image, Layers } from 'lucide-react';
+import { Film, Upload, Play, X, Clock, Monitor, Volume2, VolumeX, Sparkles, AlertCircle, ChevronDown, Zap, Image, Layers } from 'lucide-react';
 import logger from '../utils/logger';
 import { WIN95 } from '../utils/buttonStyles';
 
@@ -108,7 +119,7 @@ const calculateVideoCredits = (duration: string, generateAudio: boolean, quality
 /**
  * Calculate cost in dollars based on duration, audio, and quality
  */
-const calculateVideoCost = (duration: string, generateAudio: boolean, quality: string = 'fast'): string => {
+const _calculateVideoCost = (duration: string, generateAudio: boolean, quality: string = 'fast'): string => {
   const seconds = parseInt(duration) || 8;
   const qualityConfig = QUALITY_OPTIONS.find(q => q.value === quality) || QUALITY_OPTIONS[0];
   const pricePerSec = generateAudio ? qualityConfig.pricePerSecWithAudio : qualityConfig.pricePerSecNoAudio;
@@ -238,7 +249,10 @@ const FrameUpload = memo<FrameUploadProps>(({ label, frameUrl, onUpload, onRemov
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      onUpload(event.target.result);
+      const result = event.target?.result;
+      if (typeof result === 'string') {
+        onUpload(result);
+      }
     };
     reader.readAsDataURL(file);
   }, [onUpload]);
@@ -411,7 +425,7 @@ interface VideoGeneratorProps {
   onShowStripePayment?: () => void;
 }
 
-const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onShowTokenPayment, onShowStripePayment }) {
+const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onShowTokenPayment: _onShowTokenPayment, onShowStripePayment: _onShowStripePayment }) {
   const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   
@@ -631,17 +645,17 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
         // Standard video generation
         result = await generateVideo({
           prompt,
-          firstFrameUrl: currentMode.requiresFirstFrame ? firstFrameUrl : null,
-          lastFrameUrl: currentMode.requiresLastFrame ? lastFrameUrl : null,
-          aspectRatio,
-          duration,
-          resolution,
+          firstFrameUrl: currentMode.requiresFirstFrame ? firstFrameUrl ?? undefined : undefined,
+          lastFrameUrl: currentMode.requiresLastFrame ? lastFrameUrl ?? undefined : undefined,
+          aspectRatio: aspectRatio as '16:9' | '9:16' | 'auto',
+          duration: duration as '4s' | '6s' | '8s',
+          resolution: resolution as '720p' | '1080p',
           generateAudio,
-          generationMode,
-          quality,
-          userId: emailContext.userId,
-          walletAddress: walletContext.address,
-          email: emailContext.email
+          generationMode: generationMode as 'text-to-video' | 'image-to-video' | 'first-last-frame',
+          quality: quality as 'fast' | 'quality',
+          userId: emailContext.userId ?? undefined,
+          walletAddress: walletContext.address ?? undefined,
+          email: emailContext.email ?? undefined
         });
       }
 
@@ -696,7 +710,8 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      logger.error('Download failed', { error: err.message });
+      const error = err as Error;
+      logger.error('Download failed', { error: error.message });
     }
   }, [generatedVideoUrl]);
 
@@ -1182,7 +1197,8 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
                       }
                     }}
                     onError={(e) => {
-                      logger.error('Video playback error', { error: e.target?.error?.message });
+                      const videoEl = e.target as HTMLVideoElement;
+                      logger.error('Video playback error', { error: videoEl?.error?.message });
                       setError('Failed to load video. Please try downloading instead.');
                       setVideoReady(true);
                     }}

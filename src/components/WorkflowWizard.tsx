@@ -2,12 +2,11 @@ import React, { useState, useCallback, useRef, ChangeEvent, memo } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { 
-  Sparkles, User, Mic, Film, Music, Upload, X, Check, ChevronRight, 
-  Play, Download, AlertCircle, RefreshCw, Wand2, Video, Volume2
+  Sparkles, User, Film, Music, Upload, X, Check, ChevronRight, 
+  Download, AlertCircle, RefreshCw, Wand2, Video, Volume2
 } from 'lucide-react';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
-import workflowService from '../services/workflowService';
 import StemMixer from './StemMixer';
 
 // Win95 styling constants
@@ -179,8 +178,8 @@ interface WorkflowWizardProps {
 
 const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ 
   onClose, 
-  onShowTokenPayment, 
-  onShowStripePayment 
+  onShowTokenPayment: _onShowTokenPayment, 
+  onShowStripePayment: _onShowStripePayment 
 }) => {
   const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
@@ -193,7 +192,7 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({
   const [currentStep, setCurrentStep] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stepResults, setStepResults] = useState<Record<string, unknown>>({});
+  const [, setStepResults] = useState<Record<string, unknown>>({});
   
   // AI Influencer specific state
   const [portraitUrl, setPortraitUrl] = useState<string | null>(null);

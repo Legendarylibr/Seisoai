@@ -72,7 +72,7 @@ export async function initializeStripe(): Promise<Stripe | null> {
   try {
     const StripeModule = (await import('stripe')).default;
     stripe = new StripeModule(secretKey, {
-      apiVersion: '2024-12-18.acacia',
+      apiVersion: '2025-09-30.clover' as const,
       maxNetworkRetries: 3,
       timeout: 30000, // 30 seconds
     });

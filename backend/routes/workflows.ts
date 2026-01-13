@@ -134,10 +134,10 @@ export function createWorkflowRoutes(deps: Dependencies) {
   const router = Router();
   const { rateLimiter, requireCredits } = deps;
   
-  const limiter = rateLimiter || ((req: Request, res: Response, next: () => void) => next());
+  const limiter = rateLimiter || ((_req: Request, _res: Response, next: () => void) => next());
   
   // Get available workflows
-  router.get('/list', (req: Request, res: Response) => {
+  router.get('/list', (_req: Request, res: Response) => {
     const workflows = Object.values(WORKFLOW_DEFINITIONS).map(w => ({
       id: w.id,
       name: w.name,

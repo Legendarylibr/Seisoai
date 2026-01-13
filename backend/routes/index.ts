@@ -31,10 +31,10 @@ import createPromptLabRoutes from './promptLab';
 import { adminIPAllowlist } from '../middleware/ipAllowlist';
 import { getCSRFToken } from '../middleware/csrf';
 
-// Types
-interface Dependencies {
-  [key: string]: unknown;
-}
+// Types - generic interface that accepts any deps object
+// Each route module defines its own specific Dependencies interface
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Dependencies = Record<string, any>;
 
 /**
  * Create and configure all API routes
@@ -50,10 +50,10 @@ export function createApiRoutes(deps: Dependencies) {
   // ============================================
   // Static & Utility Routes (mounted at root)
   // ============================================
-  router.use('/', createStaticRoutes(deps));
-  router.use('/', createUtilityRoutes(deps));
-  router.use('/', createExtractRoutes(deps));
-  router.use('/', createRpcRoutes(deps));
+  router.use('/', createStaticRoutes(deps as never));
+  router.use('/', createUtilityRoutes(deps as never));
+  router.use('/', createExtractRoutes(deps as never));
+  router.use('/', createRpcRoutes(deps as never));
 
   // ============================================
   // Authentication
@@ -76,20 +76,20 @@ export function createApiRoutes(deps: Dependencies) {
   // Content Generation
   // Primary: /generate, Alias: /generations
   // ============================================
-  const generationRoutes = createGenerationRoutes(deps);
+  const generationRoutes = createGenerationRoutes(deps as never);
   router.use('/generate', generationRoutes);
   router.use('/generations', generationRoutes);
 
   // ============================================
   // Media & Content Routes
   // ============================================
-  router.use('/gallery', createGalleryRoutes(deps));
-  router.use('/audio', createAudioRoutes(deps));
-  router.use('/image-tools', createImageToolsRoutes(deps));
-  router.use('/workflows', createWorkflowRoutes(deps));
-  router.use('/model3d', createModel3dRoutes(deps));
-  router.use('/wan-animate', createWanAnimateRoutes(deps));
-  router.use('/prompt-lab', createPromptLabRoutes(deps));
+  router.use('/gallery', createGalleryRoutes(deps as never));
+  router.use('/audio', createAudioRoutes(deps as never));
+  router.use('/image-tools', createImageToolsRoutes(deps as never));
+  router.use('/workflows', createWorkflowRoutes(deps as never));
+  router.use('/model3d', createModel3dRoutes(deps as never));
+  router.use('/wan-animate', createWanAnimateRoutes(deps as never));
+  router.use('/prompt-lab', createPromptLabRoutes(deps as never));
 
   // ============================================
   // Payments
@@ -118,19 +118,19 @@ export function createApiRoutes(deps: Dependencies) {
   // GDPR Compliance (Enterprise)
   // Data export, deletion, rectification
   // ============================================
-  router.use('/gdpr', createGDPRRoutes(deps));
+  router.use('/gdpr', createGDPRRoutes(deps as never));
 
   // ============================================
   // Session Management (Enterprise)
   // View/revoke active sessions
   // ============================================
-  router.use('/sessions', createSessionRoutes(deps));
+  router.use('/sessions', createSessionRoutes(deps as never));
 
   // ============================================
   // Audit Logs (Enterprise - Admin only with IP allowlist)
   // Query, export, verify audit logs
   // ============================================
-  router.use('/audit', adminIPAllowlist, createAuditRoutes(deps));
+  router.use('/audit', adminIPAllowlist, createAuditRoutes(deps as never));
 
   // ============================================
   // 404 Handler

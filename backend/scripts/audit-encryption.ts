@@ -285,7 +285,7 @@ async function audit(): Promise<void> {
   }
 
   try {
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI || '');
     console.log('\n✅ Connected to MongoDB\n');
 
     // Run all audits

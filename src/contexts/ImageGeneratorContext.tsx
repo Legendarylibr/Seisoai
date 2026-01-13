@@ -70,13 +70,24 @@ interface GenerationHistoryItem {
   image: string;
   style: VisualStyle | null;
   timestamp: string;
+  prompt?: string;
+  videoUrl?: string;
 }
 
 interface CurrentGeneration {
-  prompt: string;
+  prompt?: string;
   style?: VisualStyle;
   model?: string;
   timestamp?: string;
+  image?: string;
+  images?: string[];
+  guidanceScale?: number;
+  imageSize?: string;
+  numImages?: number;
+  enableSafetyChecker?: boolean;
+  generationMode?: string;
+  referenceImage?: string | string[] | null;
+  multiImageModel?: string;
 }
 
 interface PromptOptimizationResult {
@@ -101,7 +112,7 @@ interface ImageGeneratorState {
   generationMode: string;
   multiImageModel: string | null;
   controlNetType: string | null;
-  controlNetImage: string | null;
+  controlNetImage: string | string[] | null;
   controlNetImageDimensions: ImageDimensions | null;
   optimizePrompt: boolean;
   promptOptimizationResult: PromptOptimizationResult | null;
@@ -130,7 +141,7 @@ type ImageGeneratorAction =
 
 interface ImageGeneratorContextValue extends ImageGeneratorState {
   selectStyle: (style: VisualStyle | null) => void;
-  setControlNetImage: (image: string | null, dimensions?: ImageDimensions | null) => void;
+  setControlNetImage: (image: string | string[] | null, dimensions?: ImageDimensions | null) => void;
   setControlNetType: (type: string | null) => void;
   setGenerating: (isGenerating: boolean) => void;
   setGeneratedImage: (image: string | string[]) => void;
@@ -172,7 +183,8 @@ const getInitialState = (): ImageGeneratorState => ({
   promptOptimizationResult: null
 });
 
-const initialState: ImageGeneratorState = getInitialState();
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _initialState: ImageGeneratorState = getInitialState();
 
 const imageGeneratorReducer = (state: ImageGeneratorState, action: ImageGeneratorAction): ImageGeneratorState => {
   switch (action.type) {
@@ -194,7 +206,7 @@ const imageGeneratorReducer = (state: ImageGeneratorState, action: ImageGenerato
       const isArray = Array.isArray(action.payload);
       const images = isArray ? action.payload : [action.payload];
       
-      const newHistoryItems = images.map((image, index) => ({
+      const newHistoryItems = images.map((image: string, index: number) => ({
         id: Date.now() + index,
         image: image,
         style: state.selectedStyle,

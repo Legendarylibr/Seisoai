@@ -71,7 +71,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
   const router = Router();
   const { rateLimiter, requireCredits } = deps;
 
-  const limiter = rateLimiter || ((req: Request, res: Response, next: () => void) => next());
+  const limiter = rateLimiter || ((_req: Request, _res: Response, next: () => void) => next());
 
   // ============================================================================
   // FACE SWAP
@@ -431,11 +431,6 @@ export function createImageToolsRoutes(deps: Dependencies) {
       }
 
       logger.info('Image describe request', { userId: user.userId, detail_level });
-
-      // Build prompt based on detail level
-      const systemPrompt = detail_level === 'brief'
-        ? 'You are an expert at describing images for AI image generation. Provide a brief, single-sentence description suitable as a generation prompt.'
-        : 'You are an expert at describing images for AI image generation. Provide a detailed description including: subject, composition, lighting, colors, style, mood, and any notable details. Format as a comprehensive prompt suitable for regenerating this image.';
 
       // Use LLaVA for image understanding
       const response = await fetch('https://fal.run/fal-ai/llavav15-13b', {

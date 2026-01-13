@@ -1,8 +1,5 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import logger from './utils/logger';
-
-// Build version - check console to verify deployment
-logger.info('[SEISOAI BUILD] v2026.01.06.1');
 import { ImageGeneratorProvider } from './contexts/ImageGeneratorContext';
 import { SimpleWalletProvider } from './contexts/SimpleWalletContext';
 import { EmailAuthProvider, useEmailAuth } from './contexts/EmailAuthContext';
@@ -18,9 +15,11 @@ import AuthGuard from './components/AuthGuard';
 import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
 import PromptLab from './components/PromptLab';
-import { Grid, Sparkles, Film, Music, Layers, Box, type LucideIcon } from 'lucide-react';
-import logger from './utils/logger';
+import { Grid, Sparkles, Film, Music, Layers, type LucideIcon } from 'lucide-react';
 import { API_URL, ensureCSRFToken } from './utils/apiConfig';
+
+// Build version - check console to verify deployment
+logger.info('[SEISOAI BUILD] v2026.01.06.1');
 
 // PERFORMANCE: Lazy load heavy modals and gallery - not needed on initial render
 // StripePaymentModal handles both card and stablecoin payments (USDC on Ethereum, Solana, Polygon, Base)
@@ -29,7 +28,7 @@ const PaymentSuccessModal = lazy(() => import('./components/PaymentSuccessModal'
 const ImageGallery = lazy(() => import('./components/ImageGallery'));
 const VideoGenerator = lazy(() => import('./components/VideoGenerator'));
 const MusicGenerator = lazy(() => import('./components/MusicGenerator'));
-const CharacterGenerator = lazy(() => import('./components/CharacterGenerator'));
+const _CharacterGenerator = lazy(() => import('./components/CharacterGenerator'));
 const TermsModal = lazy(() => import('./components/TermsModal'));
 import Footer from './components/Footer';
 import type { LegalPage } from './components/TermsModal';

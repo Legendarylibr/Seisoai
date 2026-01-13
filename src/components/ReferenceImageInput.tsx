@@ -1,8 +1,7 @@
-import React, { useRef, useState, ChangeEvent } from 'react';
+import { useRef, useState, ChangeEvent } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { X, Upload, Image as ImageIcon } from 'lucide-react';
 import { WIN95, BTN } from '../utils/buttonStyles';
-import logger from '../utils/logger';
 
 interface ReferenceImageInputProps {
   singleImageOnly?: boolean;
@@ -65,7 +64,8 @@ const ReferenceImageInput: React.FC<ReferenceImageInputProps> = ({ singleImageOn
             if (loadedCount + errorCount === filesToProcess.length) {
               const successful = imageArray.filter((i): i is ImageWithDimensions => i !== null);
               if (successful.length > 0) {
-                setControlNetImage(successful.map(i => i.url), successful[0].dimensions);
+                const urls = successful.map(i => i.url);
+                setControlNetImage(urls.length === 1 ? urls[0] : urls, successful[0].dimensions);
               }
             }
           };
@@ -143,7 +143,7 @@ const ReferenceImageInput: React.FC<ReferenceImageInputProps> = ({ singleImageOn
         <div className="flex items-center gap-2 p-1 flex-1">
           {isMultiple ? (
             <div className="flex gap-1 h-full overflow-x-auto flex-1" style={{ maxWidth: 'calc(100% - 70px)' }}>
-              {Array.isArray(controlNetImage) && controlNetImage.slice(0, 3).map((url, i) => (
+              {Array.isArray(controlNetImage) && controlNetImage.slice(0, 3).map((url: string, i: number) => (
                 <div 
                   key={i} 
                   className="flex-shrink-0 cursor-pointer" 

@@ -1,6 +1,11 @@
 /**
  * SeisoAI Discord Bot
  * Main entry point - handles client setup and event handling
+ * 
+ * Production Features:
+ * - Graceful shutdown with connection draining
+ * - Health check HTTP server for container orchestration
+ * - Proper database connection management
  */
 import {
   Client,
@@ -11,14 +16,75 @@ import {
   EmbedBuilder,
   ChannelType
 } from 'discord.js';
-import config, { validateConfig } from './config/index.js';
-import { connectDatabase, ensureConnected } from './database/index.js';
+import http from 'http';
+import config, { validateConfig, isProduction } from './config/index.js';
+import { connectDatabase, ensureConnected, disconnectDatabase } from './database/index.js';
 import commands, { handleLinkButton, handleHelpSelect } from './commands/index.js';
 import { getOrCreatePrivateChannel } from './services/channels.js';
 import management from './services/management.js';
 import roles from './services/roles.js';
 import DiscordUser from './database/models/DiscordUser.js';
 import logger from './utils/logger.js';
+
+// ============================================================================
+// Health Check Server
+// ============================================================================
+
+let healthCheckServer: http.Server | null = null;
+let isShuttingDown = false;
+let botReady = false;
+
+/**
+ * Start the health check HTTP server
+ * Used by container orchestration (K8s, Railway) to check if the bot is healthy
+ */
+function startHealthCheckServer(): void {
+  if (!config.healthCheck.enabled) {
+    logger.info('Health check server disabled');
+    return;
+  }
+
+  healthCheckServer = http.createServer((req, res) => {
+    // Basic routing
+    const url = new URL(req.url || '/', `http://localhost:${config.healthCheck.port}`);
+    
+    if (url.pathname === '/health' || url.pathname === '/') {
+      // Liveness check - is the process running?
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: isShuttingDown ? 'shutting_down' : 'alive',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+      }));
+    } else if (url.pathname === '/ready') {
+      // Readiness check - can the bot accept traffic?
+      if (botReady && !isShuttingDown) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'ready',
+          timestamp: new Date().toISOString()
+        }));
+      } else {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: isShuttingDown ? 'shutting_down' : 'not_ready',
+          timestamp: new Date().toISOString()
+        }));
+      }
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+    }
+  });
+
+  healthCheckServer.listen(config.healthCheck.port, () => {
+    logger.info(`🏥 Health check server running on port ${config.healthCheck.port}`);
+  });
+
+  healthCheckServer.on('error', (error) => {
+    logger.error('Health check server error', { error: error.message });
+  });
+}
 
 // Generation commands that need rate limiting
 const GENERATION_COMMANDS = ['imagine', 'video', 'music', '3d'];
@@ -67,6 +133,11 @@ client.once(Events.ClientReady, async (readyClient) => {
     logger.info('📦 Database connected');
   } catch (error) {
     logger.error('Failed to connect to database', { error: (error as Error).message });
+    // In production, database is required - exit if it fails
+    if (isProduction) {
+      logger.error('Database connection required in production - exiting');
+      process.exit(1);
+    }
   }
 
   // Check permissions in all guilds
@@ -84,6 +155,10 @@ client.once(Events.ClientReady, async (readyClient) => {
   // Start maintenance tasks
   management.startMaintenanceTasks(client);
   logger.info('🔧 Maintenance tasks started');
+  
+  // Mark bot as ready for health checks
+  botReady = true;
+  logger.info('✅ Bot is ready and accepting commands');
 });
 
 // Slash command handler
@@ -390,24 +465,113 @@ process.on('unhandledRejection', (error) => {
 });
 
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught exception', { error: error.message });
-  process.exit(1);
+  logger.error('Uncaught exception', { error: error.message, stack: error.stack });
+  // In production, attempt graceful shutdown on uncaught exception
+  if (isProduction) {
+    gracefulShutdown('uncaughtException');
+  } else {
+    process.exit(1);
+  }
 });
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  logger.info('Shutting down...');
-  client.destroy();
-  process.exit(0);
-});
+// ============================================================================
+// Graceful Shutdown
+// ============================================================================
 
-process.on('SIGTERM', async () => {
-  logger.info('Shutting down...');
-  client.destroy();
-  process.exit(0);
-});
+/**
+ * Perform graceful shutdown
+ * - Stop accepting new commands
+ * - Wait for in-flight operations
+ * - Close database connections
+ * - Destroy Discord client
+ */
+async function gracefulShutdown(signal: string): Promise<void> {
+  if (isShuttingDown) {
+    logger.warn('Shutdown already in progress, ignoring signal', { signal });
+    return;
+  }
 
-// Login
+  isShuttingDown = true;
+  botReady = false;
+  logger.info(`🛑 Graceful shutdown initiated (${signal})`);
+
+  // Set a hard timeout for shutdown
+  const forceExitTimeout = setTimeout(() => {
+    logger.error('Shutdown timeout exceeded, forcing exit');
+    process.exit(1);
+  }, config.shutdown.timeoutMs);
+
+  try {
+    // Step 1: Update presence to show maintenance
+    try {
+      client.user?.setPresence({
+        activities: [{ name: 'Shutting down...', type: ActivityType.Playing }],
+        status: 'dnd'
+      });
+    } catch {
+      // Ignore presence update errors during shutdown
+    }
+
+    // Step 2: Close health check server
+    if (healthCheckServer) {
+      logger.info('Closing health check server...');
+      await new Promise<void>((resolve) => {
+        healthCheckServer?.close(() => {
+          logger.info('Health check server closed');
+          resolve();
+        });
+        // Don't wait too long for health check server
+        setTimeout(resolve, 2000);
+      });
+    }
+
+    // Step 3: Stop maintenance tasks
+    try {
+      management.stopMaintenanceTasks();
+      logger.info('Maintenance tasks stopped');
+    } catch {
+      // Ignore errors
+    }
+
+    // Step 4: Close database connection
+    logger.info('Closing database connection...');
+    try {
+      await disconnectDatabase();
+      logger.info('Database connection closed');
+    } catch (dbError) {
+      logger.error('Error closing database', { error: (dbError as Error).message });
+    }
+
+    // Step 5: Destroy Discord client
+    logger.info('Destroying Discord client...');
+    client.destroy();
+    logger.info('Discord client destroyed');
+
+    clearTimeout(forceExitTimeout);
+    logger.info('✅ Graceful shutdown complete');
+    process.exit(0);
+  } catch (error) {
+    logger.error('Error during shutdown', { error: (error as Error).message });
+    clearTimeout(forceExitTimeout);
+    process.exit(1);
+  }
+}
+
+// Register shutdown handlers
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // nodemon restart
+
+// ============================================================================
+// Startup
+// ============================================================================
+
 logger.info('🚀 Starting SeisoAI Discord Bot...');
+logger.info(`📍 Environment: ${isProduction ? 'production' : 'development'}`);
+
+// Start health check server before connecting to Discord
+startHealthCheckServer();
+
+// Login to Discord
 client.login(config.discord.token);
 

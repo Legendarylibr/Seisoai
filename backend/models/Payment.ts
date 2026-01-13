@@ -2,7 +2,7 @@
  * Payment Model - Stores user payment/transaction history
  * Separated from User model to prevent document bloat
  */
-import mongoose, { type Document, type Model } from 'mongoose';
+import mongoose, { type Document } from 'mongoose';
 
 // Types
 interface PaymentMetadata {

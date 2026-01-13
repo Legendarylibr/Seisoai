@@ -71,7 +71,7 @@ export const createGeneralLimiter = (): RateLimitRequestHandler => createLimiter
   },
   skip: (req) => req.path === '/api/health',
   // ENTERPRISE: Custom handler to include Retry-After header
-  handler: (req, res, next, options) => {
+  handler: (_req, res, _next, options) => {
     const retryAfterSeconds = Math.ceil(options.windowMs / 1000);
     res.setHeader('Retry-After', retryAfterSeconds);
     res.setHeader('X-RateLimit-Reset', new Date(Date.now() + options.windowMs).toISOString());
@@ -97,7 +97,7 @@ export const createAuthLimiter = (): RateLimitRequestHandler => createLimiter({
     retryAfter: '15 minutes'
   },
   skipSuccessfulRequests: false,
-  handler: (req, res, next, options) => {
+  handler: (_req, res, _next, options) => {
     const retryAfterSeconds = Math.ceil(options.windowMs / 1000);
     res.setHeader('Retry-After', retryAfterSeconds);
     res.status(429).json({

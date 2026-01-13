@@ -6,12 +6,13 @@ import { getAuthToken } from './emailAuthService';
 // Types
 export interface GenerationData {
   imageUrl?: string;
+  videoUrl?: string;
   prompt?: string;
   style?: string;
   model?: string;
   creditsUsed?: number;
-  userId?: string;
-  email?: string;
+  userId?: string | null;
+  email?: string | null;
   settings?: Record<string, unknown>;
   // 3D model fields
   modelType?: '3d' | 'image' | 'video';

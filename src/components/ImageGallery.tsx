@@ -72,7 +72,7 @@ const ImageGallery: React.FC = () => {
     }));
 
     setGalleryItems(sessionItems.sort((a, b) => 
-      new Date(b.timestamp) - new Date(a.timestamp)
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     ));
     setLoading(false);
   }, [generationHistory]);
@@ -80,7 +80,7 @@ const ImageGallery: React.FC = () => {
   const filteredHistory = galleryItems;
 
 
-  const handleDownload = async (url: string, styleName: string | undefined, isVideo: boolean = false): Promise<void> => {
+  const handleDownload = async (url: string, _styleName: string | undefined, isVideo: boolean = false): Promise<void> => {
     if (!url) return;
     
     try {
@@ -111,7 +111,7 @@ const ImageGallery: React.FC = () => {
       }
       
       const blobUrl = window.URL.createObjectURL(blob);
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as unknown as { MSStream?: unknown }).MSStream;
       
       if (isIOS) {
         const link = document.createElement('a');
@@ -396,10 +396,10 @@ const ImageGallery: React.FC = () => {
                       muted
                       playsInline
                       preload="metadata"
-                      onMouseEnter={(e) => e.target.play().catch(() => {})}
+                      onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
                       onMouseLeave={(e) => {
-                        e.target.pause();
-                        e.target.currentTime = 0;
+                        (e.target as HTMLVideoElement).pause();
+                        (e.target as HTMLVideoElement).currentTime = 0;
                       }}
                     />
                   ) : (
@@ -410,7 +410,7 @@ const ImageGallery: React.FC = () => {
                       loading="lazy"
                       decoding="async"
                       onError={(e) => {
-                        e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Crect fill="%23c0c0c0" width="400" height="400"/%3E%3Ctext fill="%23808080" x="50%25" y="50%25" text-anchor="middle" dy=".3em" font-family="sans-serif" font-size="12"%3EUnavailable%3C/text%3E%3C/svg%3E';
+                        (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Crect fill="%23c0c0c0" width="400" height="400"/%3E%3Ctext fill="%23808080" x="50%25" y="50%25" text-anchor="middle" dy=".3em" font-family="sans-serif" font-size="12"%3EUnavailable%3C/text%3E%3C/svg%3E';
                       }}
                     />
                   )}
@@ -543,7 +543,7 @@ const ImageGallery: React.FC = () => {
                     alt="Generated content"
                     className="max-w-full max-h-[60vh] mx-auto block"
                     decoding="async"
-                    fetchpriority="high"
+                    fetchPriority="high"
                   />
                 )}
               </div>

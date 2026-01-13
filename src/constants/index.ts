@@ -51,3 +51,25 @@ export const CACHE_TTL = {
   NFT_CHECK_MS: 5 * 60 * 1000, // 5 minutes
   USER_DATA_MS: 30 * 1000, // 30 seconds
 } as const;
+
+// Blockchain network configuration
+export const EVM_CHAINS = {
+  1: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
+  137: { name: 'Polygon', symbol: 'MATIC', decimals: 18 },
+  42161: { name: 'Arbitrum', symbol: 'ETH', decimals: 18 },
+  10: { name: 'Optimism', symbol: 'ETH', decimals: 18 },
+  8453: { name: 'Base', symbol: 'ETH', decimals: 18 },
+} as const;
+
+// Solana configuration
+export const SOLANA_CONFIG = {
+  USDC_MINT: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  USDC_DECIMALS: 6,
+} as const;
+
+// UI size constants
+export const UI_SIZES = {
+  MODAL_MAX_WIDTH: 640,
+  MODAL_MAX_HEIGHT_RATIO: 0.9,
+  THUMBNAIL_SIZE: 128,
+} as const;

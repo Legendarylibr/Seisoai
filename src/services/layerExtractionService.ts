@@ -15,9 +15,9 @@ export interface LayerExtractionOptions {
   enable_safety_checker?: boolean;
   output_format?: 'png' | 'webp';
   acceleration?: 'none' | 'regular' | 'high';
-  walletAddress?: string;
-  userId?: string;
-  email?: string;
+  walletAddress?: string | null;
+  userId?: string | null;
+  email?: string | null;
 }
 
 export interface LayerExtractionResult {

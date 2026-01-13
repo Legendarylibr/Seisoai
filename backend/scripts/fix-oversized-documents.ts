@@ -138,7 +138,7 @@ async function main(): Promise<void> {
   console.log(`  - paymentHistory: max ${LIMITS.paymentHistory} items`);
   console.log('');
   
-  await mongoose.connect(MONGODB_URI, {
+  await mongoose.connect(MONGODB_URI || '', {
     maxPoolSize: 5,
     serverSelectionTimeoutMS: 30000,
   });

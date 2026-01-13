@@ -116,7 +116,7 @@ export function setCSRFToken(req: Request, res: Response, next: NextFunction): v
  * Get CSRF token endpoint (for clients that need it)
  * GET /api/csrf-token
  */
-export function getCSRFToken(req: Request, res: Response): void {
+export function getCSRFToken(_req: Request, res: Response): void {
   const token = generateCSRFToken();
 
   res.cookie(CSRF_TOKEN_COOKIE, token, {

@@ -3,7 +3,7 @@
 import { VISUAL_STYLES } from '../utils/styles';
 import logger from '../utils/logger';
 import { optimizeImages, stripImagesMetadataToDataUri } from '../utils/imageOptimizer';
-import { API_URL, getCSRFToken, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import type { VisualStyle } from '../types';
 
 // Types
@@ -11,15 +11,17 @@ export interface AdvancedSettings {
   guidanceScale?: number;
   imageSize?: string;
   numImages?: number;
-  walletAddress?: string;
-  userId?: string;
-  email?: string;
-  multiImageModel?: string;
+  walletAddress?: string | null;
+  userId?: string | null;
+  email?: string | null;
+  multiImageModel?: string | null;
   optimizePrompt?: boolean;
   [key: string]: unknown;
 }
 
 export interface PromptOptimizationResult {
+  original?: string;
+  optimized?: string;
   originalPrompt?: string;
   optimizedPrompt?: string;
   reasoning?: string;
@@ -55,7 +57,7 @@ interface RequestBody {
 /**
  * Get the correct FLUX Kontext endpoint based on image count
  */
-const getFluxEndpoint = (hasReferenceImage: boolean = false, isMultipleImages: boolean = false): string => {
+const _getFluxEndpoint = (hasReferenceImage: boolean = false, isMultipleImages: boolean = false): string => {
   if (!hasReferenceImage) {
     // 0 images - text-to-image
     return 'https://fal.run/fal-ai/flux-pro/kontext/text-to-image';
@@ -89,10 +91,10 @@ const ASPECT_RATIO_MAP: Record<string, string> = {
 };
 
 export const generateImage = async (
-  style: VisualStyle | null, 
+  style: VisualStyle | null | undefined = null, 
   customPrompt: string = '', 
   advancedSettings: AdvancedSettings = {}, 
-  referenceImage: string | string[] | null = null
+  referenceImage: string | string[] | null | undefined = null
 ): Promise<ImageGenerationResult> => {
   // Input validation - style is now optional
   if (style && typeof style !== 'object') {

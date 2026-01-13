@@ -3,7 +3,7 @@
  * Separated from User model to prevent document bloat
  * Includes field-level encryption for prompts (sensitive user content)
  */
-import mongoose, { type Document, type Model } from 'mongoose';
+import mongoose from 'mongoose';
 import { encrypt, decrypt, isEncryptionConfigured } from '../utils/encryption.js';
 import logger from '../utils/logger.js';
 
@@ -15,14 +15,15 @@ interface GalleryItemMetadata {
   height?: number;
 }
 
-export interface IGalleryItem extends Document {
+export interface IGalleryItem {
+  _id?: mongoose.Types.ObjectId;
   userId: string;
   itemId: string;
   imageUrl: string;
   videoUrl?: string;
   prompt?: string;
   style?: string;
-  model?: string;
+  modelType?: string;
   creditsUsed: number;
   metadata?: GalleryItemMetadata;
   createdAt: Date;
@@ -46,7 +47,7 @@ const galleryItemSchema = new mongoose.Schema<IGalleryItem>({
   videoUrl: String,
   prompt: String,
   style: String,
-  model: String,
+  modelType: String,
   creditsUsed: {
     type: Number,
     default: 0

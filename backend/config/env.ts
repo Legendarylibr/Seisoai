@@ -111,6 +111,8 @@ export interface Config {
   DISCORD_CLIENT_ID?: string;
   DISCORD_CLIENT_SECRET?: string;
   DISCORD_REDIRECT_URI?: string;
+  // Frontend URL
+  FRONTEND_URL?: string;
   isProduction: boolean;
   isDevelopment: boolean;
 }
@@ -165,6 +167,10 @@ export const config: Config = {
     (process.env.NODE_ENV === 'production' 
       ? 'https://seisoai.com/api/auth/discord/callback'
       : 'http://localhost:3001/api/auth/discord/callback'),
+  
+  // Frontend URL
+  FRONTEND_URL: process.env.FRONTEND_URL || 
+    (process.env.NODE_ENV === 'production' ? 'https://seisoai.com' : 'http://localhost:5173'),
   
   // Flags
   isProduction: process.env.NODE_ENV === 'production',

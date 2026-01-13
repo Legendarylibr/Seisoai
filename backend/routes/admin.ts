@@ -72,7 +72,7 @@ const adminRateLimiter: RequestHandler = rateLimit({
   }
 });
 
-export function createAdminRoutes(deps: Dependencies = {}) {
+export function createAdminRoutes(_deps: Dependencies = {}) {
   const router = Router();
   
   // Apply rate limiting to all admin routes
@@ -476,7 +476,7 @@ export function createAdminRoutes(deps: Dependencies = {}) {
    * Fix all oversized documents
    * POST /api/admin/fix-all-oversized
    */
-  router.post('/fix-all-oversized', requireAdmin, async (req: Request, res: Response) => {
+  router.post('/fix-all-oversized', requireAdmin, async (_req: Request, res: Response) => {
     try {
       const User = mongoose.model<IUser>('User');
       

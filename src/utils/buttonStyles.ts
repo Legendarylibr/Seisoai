@@ -1,5 +1,4 @@
-import type { MouseEventHandler } from '../types';
-import React from 'react';
+// Windows 95 style button utilities
 
 // Windows 95 style constants - shared across all components
 // Now using CSS variables for automatic dark mode support

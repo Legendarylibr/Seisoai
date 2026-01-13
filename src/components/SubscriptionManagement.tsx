@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, CreditCard, Calendar, DollarSign, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { X, CreditCard, Calendar, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import logger from '../utils/logger';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
@@ -9,13 +9,23 @@ interface SubscriptionManagementProps {
   onClose: () => void;
 }
 
+interface SubscriptionData {
+  id: string;
+  status: string;
+  plan?: string;
+  current_period_start?: number;
+  current_period_end?: number;
+  cancel_at_period_end?: boolean;
+  items?: { data: Array<{ price: { unit_amount: number; nickname?: string } }> };
+}
+
 const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({ isOpen, onClose }) => {
-  const { email, refreshCredits } = useEmailAuth();
-  const [subscription, setSubscription] = useState(null);
+  const { email, refreshCredits: _refreshCredits } = useEmailAuth();
+  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [openingPortal, setOpeningPortal] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && email) {
@@ -54,7 +64,8 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({ isOpen,
         }
       }
     } catch (err) {
-      logger.error('Error fetching subscription:', { error: err.message });
+      const error = err as Error;
+      logger.error('Error fetching subscription:', { error: error.message });
       setError('Failed to load subscription');
     } finally {
       setLoading(false);
@@ -93,14 +104,15 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({ isOpen,
         setError(data.error || 'Failed to open billing portal');
       }
     } catch (err) {
-      logger.error('Error opening billing portal:', { error: err.message });
+      const error = err as Error;
+      logger.error('Error opening billing portal:', { error: error.message });
       setError('Failed to open billing portal');
     } finally {
       setOpeningPortal(false);
     }
   };
 
-  const formatDate = (timestamp) => {
+  const formatDate = (timestamp: number | undefined) => {
     if (!timestamp) return 'N/A';
     return new Date(timestamp * 1000).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -109,8 +121,8 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = ({ isOpen,
     });
   };
 
-  const formatAmount = (amount) => {
-    return `$${(amount / 100).toFixed(2)}`;
+  const formatAmount = (amount: number | undefined) => {
+    return `$${((amount || 0) / 100).toFixed(2)}`;
   };
 
   if (!isOpen) return null;

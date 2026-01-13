@@ -1,3 +1,14 @@
+/**
+ * CharacterGenerator - 3D model generation component
+ * 
+ * TODO: This file is 1400+ lines and should be split into:
+ * - CharacterGenerator.tsx (main component, ~400 lines)
+ * - hooks/use3DGeneration.ts (generation logic hook)
+ * - components/3d/ModelPreview.tsx (3D model preview)
+ * - components/3d/TextureUploader.tsx (texture upload UI)
+ * - components/3d/GenerationControls.tsx (controls panel)
+ * - components/3d/GenerationQueue.tsx (queue display)
+ */
 import React, { useState, useRef, useCallback, memo, ReactNode, ChangeEvent, useEffect } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';

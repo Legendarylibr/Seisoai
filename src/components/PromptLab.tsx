@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
+import { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { 
   MessageCircle, Send, X, Minimize2, Maximize2, 
-  Sparkles, Lightbulb, Check, Copy, ChevronDown
+  Sparkles, Lightbulb, Check, Copy
 } from 'lucide-react';
 import { WIN95, BTN, PANEL } from '../utils/buttonStyles';
 import { sendPromptLabMessage, getPromptLabSuggestions, type ChatMessage, type PromptLabContext } from '../services/promptLabService';

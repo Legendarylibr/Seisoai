@@ -1,17 +1,27 @@
 import React, { useState, useEffect } from 'react';
+import type { Stripe as StripeType } from '@stripe/stripe-js';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { 
   createPaymentIntent, 
-  verifyStripePayment, 
   getStripe, 
   calculateCreditsFromUSD,
   getCreditPackages,
-  getEnhancedStripeError
+  getEnhancedStripeError,
+  verifyStripePayment
 } from '../services/stripeService';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { X, CreditCard, Coins, RefreshCw, Check, Star, Zap } from 'lucide-react';
 import logger from '../utils/logger';
+
+interface CreditPackage {
+  id: string;
+  name: string;
+  price: number;
+  credits: number;
+  bonus?: number;
+  popular?: boolean;
+}
 
 // Inner component that uses Stripe hooks
 interface PaymentFormProps {
@@ -38,7 +48,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!stripe || !elements || !clientSecret) {
@@ -79,7 +89,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
       const status = paymentIntent.status;
       
       // If payment requires additional action (3D Secure), handle it
-      if (status === 'requires_action' || status === 'requires_source_action') {
+      if (status === 'requires_action') {
         // Stripe will handle the redirect or show the challenge
         // The payment will be completed after the action
         throw new Error('Payment requires additional authentication. Please complete the verification.');
@@ -133,11 +143,12 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
         throw new Error(`Payment ${status}. Please try again.`);
       }
     } catch (err) {
-      logger.error('Payment error:', { error: err.message });
-      const originalMessage = err.message || 'Payment failed. Please try again.';
+      const errorObj = err as Error;
+      logger.error('Payment error:', { error: errorObj.message });
+      const originalMessage = errorObj.message || 'Payment failed. Please try again.';
       const errorMessage = getEnhancedStripeError(originalMessage);
-      setError(errorMessage);
-      onError(errorMessage);
+      setError(errorMessage || '');
+      onError(errorMessage || '');
     } finally {
       setIsProcessing(false);
     }
@@ -202,12 +213,12 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
   const isNFTHolder = hasWallet ? (walletContext.isNFTHolder || false) : false;
   const fetchCredits = hasEmailAuth ? emailContext.refreshCredits : walletContext.refreshCredits;
 
-  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
   const [customAmount, setCustomAmount] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [stripe, setStripe] = useState(null);
-  const [clientSecret, setClientSecret] = useState(null);
+  const [stripe, setStripe] = useState<StripeType | null>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
 
   const packages = getCreditPackages();
@@ -231,20 +242,20 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
         setError('Stripe payment is not configured. Please contact support or use token payment instead.');
         return;
       }
-      setStripe(stripeInstance);
+      setStripe(stripeInstance as StripeType);
     } catch (error) {
       logger.error('Error initializing Stripe:', { error: (error as Error).message });
       setError('Failed to initialize payment system. Please use token payment instead.');
     }
   };
 
-  const handlePackageSelect = (pkg) => {
+  const handlePackageSelect = (pkg: CreditPackage) => {
     setSelectedPackage(pkg);
     setCustomAmount('');
     setError('');
   };
 
-  const handleCustomAmountChange = (value) => {
+  const handleCustomAmountChange = (value: string) => {
     setCustomAmount(value);
     setSelectedPackage(null);
     setError('');
@@ -312,17 +323,18 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
         creditsToPurchase, 
         'usd', 
         userId,
-        isWalletPayment // preferCrypto: wallet users get stablecoin options
+        isWalletPayment || false // preferCrypto: wallet users get stablecoin options
       );
       
       if (!intentResponse.success || !intentResponse.clientSecret) {
         throw new Error('Failed to create payment intent');
       }
 
-      setClientSecret(intentResponse.clientSecret);
+      setClientSecret(intentResponse.clientSecret ?? null);
     } catch (error) {
-      logger.error('Error creating payment intent:', { error: error.message });
-      setError(error.message || 'Failed to initialize payment');
+      const err = error as Error;
+      logger.error('Error creating payment intent:', { error: err.message });
+      setError(err.message || 'Failed to initialize payment');
       setShowPaymentForm(false);
     }
   };
@@ -339,7 +351,7 @@ const StripePaymentModal: React.FC<StripePaymentModalProps> = ({ isOpen, onClose
     }, 2000);
   };
 
-  const handlePaymentError = (errorMessage) => {
+  const handlePaymentError = (errorMessage: string) => {
     setError(errorMessage);
   };
 

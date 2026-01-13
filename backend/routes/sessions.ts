@@ -15,6 +15,7 @@ import logger from '../utils/logger.js';
 import type { IUser } from '../models/User.js';
 import { logAuditEvent, AuditEventType, AuditSeverity } from '../services/auditLog.js';
 import { blacklistToken } from '../middleware/auth.js';
+import { requireAuth } from '../utils/responses.js';
 
 // Types
 interface Dependencies {
@@ -48,10 +49,7 @@ export function createSessionRoutes(deps: Dependencies) {
    */
   router.get('/current', limiter, authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      if (!req.user) {
-        res.status(401).json({ success: false, error: 'Authentication required' });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       // Return current session info from the authenticated user
       res.json({
@@ -88,10 +86,7 @@ export function createSessionRoutes(deps: Dependencies) {
    */
   router.post('/revoke', limiter, authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      if (!req.user) {
-        res.status(401).json({ success: false, error: 'Authentication required' });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       // Get the token from the authorization header
       const authHeader = req.headers.authorization;
@@ -150,10 +145,7 @@ export function createSessionRoutes(deps: Dependencies) {
    */
   router.post('/revoke-all', limiter, authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      if (!req.user) {
-        res.status(401).json({ success: false, error: 'Authentication required' });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       // Get the token from the authorization header
       const authHeader = req.headers.authorization;

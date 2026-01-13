@@ -5,6 +5,17 @@
  */
 import mongoose, { Document, Schema, Model } from 'mongoose';
 
+interface DiscordGeneration {
+  id?: string;
+  type?: 'image' | 'video' | 'music' | '3d';
+  prompt?: string;
+  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  resultUrl?: string;
+  creditsUsed?: number;
+  messageId?: string;
+  timestamp?: Date;
+}
+
 export interface IDiscordUser extends Document {
   discordId: string;
   discordUsername: string;
@@ -23,6 +34,9 @@ export interface IDiscordUser extends Document {
   privateChannelId?: string;
   activeGenerations: number;
   lastGeneration?: Date;
+  
+  // Generation history
+  generations?: DiscordGeneration[];
   
   // Settings
   settings: {
@@ -165,7 +179,7 @@ discordUserSchema.statics.syncFromMainUser = async function(mainUser: {
   }
   
   // Create new record
-  return await this.create({
+  const newUser = new this({
     discordId: mainUser.discordId,
     discordUsername: mainUser.discordUsername,
     seisoUserId: mainUser.userId,
@@ -180,6 +194,8 @@ discordUserSchema.statics.syncFromMainUser = async function(mainUser: {
       autoThread: true
     }
   });
+  await newUser.save();
+  return newUser;
 };
 
 /**

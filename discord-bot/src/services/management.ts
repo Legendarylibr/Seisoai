@@ -38,6 +38,10 @@ const COOLDOWN_TIMES: Record<string, number> = {
   '3d': 30000       // 30 seconds (long generation)
 };
 
+// Track maintenance intervals for cleanup
+const maintenanceIntervals: NodeJS.Timeout[] = [];
+const maintenanceTimeouts: NodeJS.Timeout[] = [];
+
 /**
  * Required bot permissions for full functionality
  */
@@ -428,8 +432,11 @@ export function createMissingPermissionsEmbed(missing: string[]): EmbedBuilder {
  * Run periodic maintenance tasks
  */
 export function startMaintenanceTasks(client: Client): void {
+  // Clear any existing intervals/timeouts
+  stopMaintenanceTasks();
+
   // Clean up rate limits every hour
-  setInterval(() => {
+  const rateLimitInterval = setInterval(() => {
     const now = Date.now();
     for (const [userId, limit] of rateLimits.entries()) {
       if (now > limit.resetAt) {
@@ -438,9 +445,10 @@ export function startMaintenanceTasks(client: Client): void {
     }
     logger.debug('Cleaned up expired rate limits');
   }, 60 * 60 * 1000);
+  maintenanceIntervals.push(rateLimitInterval);
 
   // Clean up cooldowns every 10 minutes
-  setInterval(() => {
+  const cooldownInterval = setInterval(() => {
     const now = Date.now();
     for (const [command, userCooldowns] of cooldowns.entries()) {
       const cooldownTime = COOLDOWN_TIMES[command] || 5000;
@@ -452,6 +460,7 @@ export function startMaintenanceTasks(client: Client): void {
     }
     logger.debug('Cleaned up expired cooldowns');
   }, 10 * 60 * 1000);
+  maintenanceIntervals.push(cooldownInterval);
 
   // Clean up inactive channels weekly (Sunday at 3 AM)
   const scheduleWeeklyCleanup = () => {
@@ -466,16 +475,41 @@ export function startMaintenanceTasks(client: Client): void {
 
     const delay = nextSunday.getTime() - now.getTime();
     
-    setTimeout(async () => {
+    const timeout = setTimeout(async () => {
       logger.info('Starting weekly channel cleanup');
       const result = await cleanupInactiveChannels(client, 30);
       logger.info('Weekly channel cleanup complete', result);
       scheduleWeeklyCleanup(); // Schedule next cleanup
     }, delay);
+    maintenanceTimeouts.push(timeout);
   };
 
   scheduleWeeklyCleanup();
   logger.info('Maintenance tasks scheduled');
+}
+
+/**
+ * Stop all maintenance tasks (for graceful shutdown)
+ */
+export function stopMaintenanceTasks(): void {
+  // Clear all intervals
+  for (const interval of maintenanceIntervals) {
+    clearInterval(interval);
+  }
+  maintenanceIntervals.length = 0;
+
+  // Clear all timeouts
+  for (const timeout of maintenanceTimeouts) {
+    clearTimeout(timeout);
+  }
+  maintenanceTimeouts.length = 0;
+
+  // Clear in-memory caches
+  rateLimits.clear();
+  cooldowns.clear();
+  activeGenerations.clear();
+
+  logger.debug('Maintenance tasks stopped and caches cleared');
 }
 
 export default {
@@ -495,6 +529,7 @@ export default {
   createConcurrentLimitEmbed,
   createMissingPermissionsEmbed,
   startMaintenanceTasks,
+  stopMaintenanceTasks,
   REQUIRED_PERMISSIONS
 };
 

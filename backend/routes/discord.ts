@@ -111,7 +111,7 @@ export function createDiscordRoutes(deps: Dependencies = {}) {
   const router = Router();
   const { authenticateToken } = deps;
 
-  const authMiddleware = authenticateToken || ((req: Request, res: Response, next: () => void) => next());
+  const authMiddleware = authenticateToken || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Initiate Discord OAuth flow

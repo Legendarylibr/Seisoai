@@ -42,7 +42,7 @@ async function checkEmails(): Promise<void> {
   console.log('='.repeat(70));
 
   try {
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI || '');
     console.log('\n✅ Connected to MongoDB\n');
 
     // Access raw collection to see actual stored values (bypass Mongoose decryption)

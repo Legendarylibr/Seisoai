@@ -129,7 +129,7 @@ function parseAddressList(filePath: string): AddressEntry[] {
   const lines = raw.split(/\r?\n/);
   const entries: AddressEntry[] = [];
   const stripQuotes = (s: string | null | undefined): string | null => {
-    if (s == null) return s;
+    if (s == null) return null;
     const t = s.trim();
     if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith('\'') && t.endsWith('\''))) {
       return t.slice(1, -1);
@@ -206,7 +206,7 @@ async function main(): Promise<void> {
       if (!isDryRun) {
         // Connect lazily only when we need to write
         if (mongoose.connection.readyState === 0) {
-          await mongoose.connect(MONGODB_URI, {
+          await mongoose.connect(MONGODB_URI || '', {
             maxPoolSize: 5,
             serverSelectionTimeoutMS: 8000,
           });
@@ -214,7 +214,7 @@ async function main(): Promise<void> {
         }
         // Ensure address is normalized (lowercase for EVM addresses)
         const normalizedAddr = address.toLowerCase();
-        const result = await User.findOneAndUpdate(
+        await User.findOneAndUpdate(
           { walletAddress: normalizedAddr },
           {
             $setOnInsert: { walletAddress: normalizedAddr },
@@ -259,7 +259,7 @@ async function main(): Promise<void> {
   }
 
   // NFT mode: Find users that have at least one ETH NFT
-  await mongoose.connect(MONGODB_URI, {
+  await mongoose.connect(MONGODB_URI || '', {
     maxPoolSize: 5,
     serverSelectionTimeoutMS: 8000,
   });

@@ -78,10 +78,10 @@ export function createWanAnimateRoutes(deps: Dependencies) {
   const router = Router();
   const { wanSubmitLimiter, wanStatusLimiter, wanResultLimiter, requireCredits, authenticateToken } = deps;
 
-  const submitLimiter = wanSubmitLimiter || ((req: Request, res: Response, next: () => void) => next());
-  const statusLimiter = wanStatusLimiter || ((req: Request, res: Response, next: () => void) => next());
-  const resultLimiter = wanResultLimiter || ((req: Request, res: Response, next: () => void) => next());
-  const authMiddleware = authenticateToken || ((req: Request, res: Response, next: () => void) => next());
+  const submitLimiter = wanSubmitLimiter || ((_req: Request, _res: Response, next: () => void) => next());
+  const statusLimiter = wanStatusLimiter || ((_req: Request, _res: Response, next: () => void) => next());
+  const resultLimiter = wanResultLimiter || ((_req: Request, _res: Response, next: () => void) => next());
+  const authMiddleware = authenticateToken || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Upload video (direct multipart form data)
@@ -600,7 +600,7 @@ export function createWanAnimateRoutes(deps: Dependencies) {
    */
   router.post('/complete', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { requestId, duration } = req.body as {
+      const { duration } = req.body as {
         requestId?: string;
         duration?: number;
       };

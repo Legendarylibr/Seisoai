@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { 
   signUp, signIn, signOut as signOutService, 
   getAuthToken, getAuthType, verifyToken,
-  AuthUser, AuthResponse
+  AuthResponse
 } from '../services/emailAuthService';
 import logger from '../utils/logger';
 import { API_URL } from '../utils/apiConfig';

@@ -36,8 +36,8 @@ const ImageOutput: React.FC = () => {
   const { 
     generatedImage, generatedImages, isGenerating, error, clearGeneration, clearAll,
     currentGeneration, setCurrentGeneration, setGenerating, setGeneratedImage, setError,
-    selectedStyle, guidanceScale, imageSize, numImages, enableSafetyChecker,
-    generationMode, controlNetImage, multiImageModel
+    selectedStyle: _selectedStyle, guidanceScale, imageSize, numImages, enableSafetyChecker,
+    generationMode, controlNetImage: _controlNetImage, multiImageModel
   } = useImageGenerator();
 
   const { isConnected, address, credits, isNFTHolder, refreshCredits, setCreditsManually } = useSimpleWallet();
@@ -148,7 +148,7 @@ const ImageOutput: React.FC = () => {
         const canvas = document.createElement('canvas');
         canvas.width = img.width;
         canvas.height = img.height;
-        canvas.getContext('2d').drawImage(img, 0, 0);
+        canvas.getContext('2d')?.drawImage(img, 0, 0);
         canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Blob conversion failed')), 'image/png');
       } catch (e) { reject(e); }
     };
@@ -192,7 +192,7 @@ const ImageOutput: React.FC = () => {
     try {
       setGenerating(true);
       const result = await generateImage(
-        currentGeneration.style,
+        currentGeneration.style ?? null,
         currentGeneration.prompt || '',
         {
           guidanceScale: currentGeneration.guidanceScale || guidanceScale,
@@ -200,17 +200,17 @@ const ImageOutput: React.FC = () => {
           numImages: currentGeneration.numImages || numImages,
           enableSafetyChecker: currentGeneration.enableSafetyChecker || enableSafetyChecker,
           generationMode: currentGeneration.generationMode || generationMode,
-          walletAddress: isEmailAuth ? undefined : address,
-          userId: isEmailAuth ? emailContext.userId : undefined,
-          email: isEmailAuth ? emailContext.email : undefined,
+          walletAddress: isEmailAuth ? null : address,
+          userId: isEmailAuth ? emailContext.userId : null,
+          email: isEmailAuth ? emailContext.email : null,
           isNFTHolder: isNFTHolder || false
         },
-        currentGeneration.referenceImage
+        currentGeneration.referenceImage ?? null
       );
       
-      const imageUrl = Array.isArray(result) ? result[0] : result;
+      const imageUrl = Array.isArray(result?.images) ? result.images[0] : (typeof result === 'string' ? result : '');
       setError(null);
-      setGeneratedImage(result);
+      setGeneratedImage(result?.images || imageUrl);
       setCurrentGeneration({ ...currentGeneration, image: imageUrl, timestamp: new Date().toISOString() });
     } catch (e) {
       logger.error('Regeneration failed', { error: e instanceof Error ? e.message : 'Unknown error' });
@@ -266,16 +266,17 @@ const ImageOutput: React.FC = () => {
       
       let result;
       if (isQwen) {
-        result = await extractLayers(refImage, {
+        const singleRefImage = Array.isArray(refImage) ? refImage[0] : refImage;
+        result = await extractLayers(singleRefImage, {
           prompt: trimmedPrompt || undefined,
           num_layers: 4,
-          walletAddress: isEmailAuth ? undefined : address,
-          userId: isEmailAuth ? emailContext.userId : undefined,
-          email: isEmailAuth ? emailContext.email : undefined
+          walletAddress: isEmailAuth ? null : address,
+          userId: isEmailAuth ? emailContext.userId : null,
+          email: isEmailAuth ? emailContext.email : null
         });
       } else {
         result = await generateImage(
-          currentGeneration?.style,
+          currentGeneration?.style ?? null,
           trimmedPrompt,
           {
             guidanceScale: currentGeneration?.guidanceScale || guidanceScale,
@@ -284,13 +285,13 @@ const ImageOutput: React.FC = () => {
             enableSafetyChecker: currentGeneration?.enableSafetyChecker || enableSafetyChecker,
             generationMode: currentGeneration?.generationMode || generationMode,
             multiImageModel: selectedModel || multiImageModel,
-            walletAddress: isEmailAuth ? undefined : address,
-            userId: isEmailAuth ? emailContext.userId : undefined,
-            email: isEmailAuth ? emailContext.email : undefined,
+            walletAddress: isEmailAuth ? null : address,
+            userId: isEmailAuth ? emailContext.userId : null,
+            email: isEmailAuth ? emailContext.email : null,
             isNFTHolder: isNFTHolder || false,
             optimizePrompt: optimizePromptEnabled
           },
-          refImage
+          refImage ?? null
         );
       }
       
@@ -305,14 +306,14 @@ const ImageOutput: React.FC = () => {
       if (!imageUrls?.length || !imageUrls[0]) throw new Error('No image returned');
       
       // Save and deduct credits
-      const userIdentifier = isEmailAuth ? emailContext.userId : address;
+      const userIdentifier = isEmailAuth ? emailContext.userId : (address ?? '');
       // 20% above cost pricing
       const modelUsed = selectedModel || multiImageModel || 'flux';
       const creditsUsed = getCreditsForModel(modelUsed);
       const promptForHistory = trimmedPrompt || (currentGeneration?.style?.prompt || 'No prompt');
       
       try {
-        const deductResult = await addGeneration(userIdentifier, {
+        const deductResult = await addGeneration(userIdentifier || '', {
           prompt: promptForHistory,
           style: currentGeneration?.style?.name || 'No Style',
           imageUrl: imageUrls[0],
@@ -340,7 +341,7 @@ const ImageOutput: React.FC = () => {
         image: imageUrls[0],
         prompt: trimmedPrompt,
         referenceImage: imageUrls[0],
-        multiImageModel: selectedModel || multiImageModel,
+        multiImageModel: (selectedModel || multiImageModel) ?? undefined,
         timestamp: new Date().toISOString()
       });
       setNewPrompt('');
@@ -348,7 +349,7 @@ const ImageOutput: React.FC = () => {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error';
       logger.error('Regeneration with prompt failed', { error: errorMessage });
       setError(errorMessage.includes('credits') ? errorMessage : 'Failed to regenerate. Please try again.');
-      setSelectedModel(multiImageModel || currentGeneration?.multiImageModel || 'flux');
+      setSelectedModel((multiImageModel || currentGeneration?.multiImageModel) ?? 'flux');
       setShowPromptModal(true);
     } finally {
       setIsRegenerating(false);
@@ -768,7 +769,7 @@ const ImageOutput: React.FC = () => {
                       className="w-full h-full object-cover transition-transform group-hover:scale-105"
                       decoding="async"
                       loading={i < 20 ? "eager" : "lazy"}
-                      fetchpriority={i === 0 ? "high" : "low"}
+                      fetchPriority={i === 0 ? "high" : "low"}
                       onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { (e.target as HTMLImageElement).style.display = 'none'; }} 
                     />
                     {/* Hover overlay with image number */}
@@ -803,7 +804,7 @@ const ImageOutput: React.FC = () => {
               className="object-contain"
               style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' }}
               decoding="async"
-              fetchpriority="high"
+              fetchPriority="high"
               onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { setError('Failed to load image'); (e.target as HTMLImageElement).style.display = 'none'; }} 
             />
           )}

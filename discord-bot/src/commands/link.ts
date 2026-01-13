@@ -9,6 +9,11 @@
  * 
  * This ensures only the owner of a SeisoAI account can link it
  * to their Discord - codes expire in 5 minutes and are single-use.
+ * 
+ * SECURITY FEATURES:
+ * - Rate limiting: 5 attempts per 5 minutes per user
+ * - Exponential backoff on network failures
+ * - Cooldown after failed attempts
  */
 import {
   SlashCommandBuilder,
@@ -24,6 +29,107 @@ import { getUserModel, IUser } from '../database/models/User.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { ensureConnected } from '../database/index.js';
+
+// ============================================================================
+// Rate Limiting for Link Command
+// ============================================================================
+
+interface RateLimitEntry {
+  attempts: number;
+  firstAttempt: number;
+  lastAttempt: number;
+  blockedUntil?: number;
+}
+
+// Rate limit: 5 attempts per 5 minutes per user
+const RATE_LIMIT_MAX_ATTEMPTS = 5;
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const RATE_LIMIT_BLOCK_MS = 15 * 60 * 1000; // 15 minute block after exceeding
+
+// In-memory rate limit store (cleared on bot restart)
+const rateLimitStore = new Map<string, RateLimitEntry>();
+
+// Clean up old entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, entry] of rateLimitStore.entries()) {
+    // Remove entries that are past the window and not blocked
+    if (now - entry.firstAttempt > RATE_LIMIT_WINDOW_MS && (!entry.blockedUntil || now > entry.blockedUntil)) {
+      rateLimitStore.delete(userId);
+    }
+  }
+}, 60 * 1000); // Clean every minute
+
+/**
+ * Check rate limit for a user
+ * Returns { allowed: boolean, remainingAttempts: number, blockedUntil?: number }
+ */
+function checkRateLimit(userId: string): { allowed: boolean; remainingAttempts: number; blockedUntil?: number; retryAfterMs?: number } {
+  const now = Date.now();
+  const entry = rateLimitStore.get(userId);
+
+  if (!entry) {
+    return { allowed: true, remainingAttempts: RATE_LIMIT_MAX_ATTEMPTS };
+  }
+
+  // Check if user is blocked
+  if (entry.blockedUntil && now < entry.blockedUntil) {
+    return {
+      allowed: false,
+      remainingAttempts: 0,
+      blockedUntil: entry.blockedUntil,
+      retryAfterMs: entry.blockedUntil - now
+    };
+  }
+
+  // Check if window has passed (reset)
+  if (now - entry.firstAttempt > RATE_LIMIT_WINDOW_MS) {
+    rateLimitStore.delete(userId);
+    return { allowed: true, remainingAttempts: RATE_LIMIT_MAX_ATTEMPTS };
+  }
+
+  // Check attempts within window
+  const remaining = RATE_LIMIT_MAX_ATTEMPTS - entry.attempts;
+  return {
+    allowed: remaining > 0,
+    remainingAttempts: Math.max(0, remaining),
+    retryAfterMs: remaining <= 0 ? (entry.firstAttempt + RATE_LIMIT_WINDOW_MS) - now : undefined
+  };
+}
+
+/**
+ * Record an attempt for rate limiting
+ */
+function recordAttempt(userId: string, success: boolean): void {
+  const now = Date.now();
+  const entry = rateLimitStore.get(userId);
+
+  if (!entry || now - entry.firstAttempt > RATE_LIMIT_WINDOW_MS) {
+    // New window
+    rateLimitStore.set(userId, {
+      attempts: 1,
+      firstAttempt: now,
+      lastAttempt: now
+    });
+    return;
+  }
+
+  // Update existing entry
+  entry.attempts++;
+  entry.lastAttempt = now;
+
+  // Block user if they exceeded attempts and failed
+  if (!success && entry.attempts >= RATE_LIMIT_MAX_ATTEMPTS) {
+    entry.blockedUntil = now + RATE_LIMIT_BLOCK_MS;
+    logger.warn('User blocked from /link due to rate limit', {
+      userId,
+      attempts: entry.attempts,
+      blockedUntil: new Date(entry.blockedUntil).toISOString()
+    });
+  }
+
+  rateLimitStore.set(userId, entry);
+}
 
 // Interface for main User model (matches IUser from User model)
 interface IMainUser {
@@ -52,6 +158,82 @@ interface VerifyLinkResponse {
   };
 }
 
+// ============================================================================
+// Retry with Exponential Backoff
+// ============================================================================
+
+interface RetryOptions {
+  maxRetries?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+  backoffMultiplier?: number;
+}
+
+/**
+ * Sleep for a given number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Fetch with exponential backoff retry
+ * Only retries on network errors, not on HTTP errors (4xx, 5xx)
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retryOptions: RetryOptions = {}
+): Promise<Response> {
+  const {
+    maxRetries = 3,
+    initialDelayMs = 500,
+    maxDelayMs = 5000,
+    backoffMultiplier = 2
+  } = retryOptions;
+
+  let lastError: Error | null = null;
+  let delay = initialDelayMs;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: AbortSignal.timeout(10000) // 10 second timeout per request
+      });
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      
+      // Don't retry if we've exhausted attempts
+      if (attempt === maxRetries) {
+        break;
+      }
+
+      // Only retry on network errors (fetch failures), not HTTP errors
+      const isNetworkError = lastError.name === 'TypeError' || 
+                             lastError.name === 'AbortError' ||
+                             lastError.message.includes('fetch');
+
+      if (!isNetworkError) {
+        throw lastError;
+      }
+
+      logger.warn('Fetch failed, retrying...', {
+        attempt: attempt + 1,
+        maxRetries,
+        delay,
+        error: lastError.message
+      });
+
+      await sleep(delay);
+      delay = Math.min(delay * backoffMultiplier, maxDelayMs);
+    }
+  }
+
+  throw lastError || new Error('Fetch failed after retries');
+}
+
 export const data = new SlashCommandBuilder()
   .setName('link')
   .setDescription('Link your Discord account to SeisoAI')
@@ -67,6 +249,7 @@ export const data = new SlashCommandBuilder()
 /**
  * Call backend API to verify Discord link code
  * SECURITY: Uses API key authentication to prevent unauthorized access
+ * RELIABILITY: Uses exponential backoff retry for network failures
  */
 async function verifyLinkCode(
   code: string,
@@ -76,9 +259,9 @@ async function verifyLinkCode(
   const apiUrl = process.env.API_URL || config.urls.website;
   const botApiKey = process.env.DISCORD_BOT_API_KEY;
   
-  // SECURITY: Ensure API key is configured
-  if (!botApiKey) {
-    logger.error('DISCORD_BOT_API_KEY not configured - cannot verify link codes');
+  // SECURITY: Ensure API key is configured and meets minimum length
+  if (!botApiKey || botApiKey.length < 32) {
+    logger.error('DISCORD_BOT_API_KEY not configured or too short - cannot verify link codes');
     return {
       success: false,
       error: 'Bot configuration error. Please contact support.'
@@ -86,27 +269,38 @@ async function verifyLinkCode(
   }
   
   try {
-    const response = await fetch(`${apiUrl}/api/auth/verify-discord-link`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Bot-API-Key': botApiKey
+    const response = await fetchWithRetry(
+      `${apiUrl}/api/auth/verify-discord-link`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Bot-API-Key': botApiKey
+        },
+        body: JSON.stringify({
+          code,
+          discordId,
+          discordUsername
+        })
       },
-      body: JSON.stringify({
-        code,
-        discordId,
-        discordUsername
-      })
-    });
+      {
+        maxRetries: 3,
+        initialDelayMs: 500,
+        maxDelayMs: 3000
+      }
+    );
 
     const data = await response.json() as VerifyLinkResponse;
     return data;
   } catch (error) {
     const err = error as Error;
-    logger.error('API call to verify-discord-link failed', { error: err.message });
+    logger.error('API call to verify-discord-link failed after retries', { 
+      error: err.message,
+      discordId 
+    });
     return {
       success: false,
-      error: 'Unable to connect to SeisoAI servers. Please try again.'
+      error: 'Unable to connect to SeisoAI servers. Please try again in a moment.'
     };
   }
 }
@@ -131,8 +325,35 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
     // If a code was provided, verify it
     if (code) {
+      // SECURITY: Check rate limit before processing code verification
+      const rateLimit = checkRateLimit(discordId);
+      if (!rateLimit.allowed) {
+        const retryMinutes = Math.ceil((rateLimit.retryAfterMs || 0) / 60000);
+        const embed = new EmbedBuilder()
+          .setColor(0xE74C3C)
+          .setTitle('⏳ Too Many Attempts')
+          .setDescription('You\'ve made too many link attempts. Please wait before trying again.')
+          .addFields({
+            name: '⏰ Try again in',
+            value: `${retryMinutes} minute${retryMinutes !== 1 ? 's' : ''}`
+          })
+          .setFooter({ text: 'This limit helps protect your account' });
+
+        await interaction.editReply({ embeds: [embed] });
+        
+        logger.warn('Rate limited /link attempt', {
+          discordId,
+          remainingAttempts: rateLimit.remainingAttempts,
+          blockedUntil: rateLimit.blockedUntil ? new Date(rateLimit.blockedUntil).toISOString() : null
+        });
+        return;
+      }
+
       // Validate code format
       if (!/^\d{6}$/.test(code)) {
+        // Record failed attempt (invalid format)
+        recordAttempt(discordId, false);
+        
         const embed = new EmbedBuilder()
           .setColor(0xE74C3C)
           .setTitle('❌ Invalid Code')
@@ -154,6 +375,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       );
 
       if (result.success && result.user) {
+        // Record successful attempt (clears rate limit)
+        recordAttempt(discordId, true);
+        
         // Sync to local DiscordUser for quick access (if DB available)
         if (dbAvailable) {
           try {
@@ -212,6 +436,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         });
         return;
       } else {
+        // Record failed attempt for rate limiting
+        recordAttempt(discordId, false);
+        
+        // Check remaining attempts
+        const newRateLimit = checkRateLimit(discordId);
+        
         // Code verification failed
         const embed = new EmbedBuilder()
           .setColor(0xE74C3C)
@@ -221,6 +451,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
             name: '💡 What to do',
             value: `• Make sure you copied the code correctly\n• Codes expire after 5 minutes\n• Generate a new code at [SeisoAI Settings](${config.urls.website}/settings)`
           });
+
+        // Warn user if approaching rate limit
+        if (newRateLimit.remainingAttempts <= 2 && newRateLimit.remainingAttempts > 0) {
+          embed.addFields({
+            name: '⚠️ Rate Limit Warning',
+            value: `You have ${newRateLimit.remainingAttempts} attempt${newRateLimit.remainingAttempts !== 1 ? 's' : ''} remaining before temporary lockout.`
+          });
+        }
 
         await interaction.editReply({ embeds: [embed] });
         return;

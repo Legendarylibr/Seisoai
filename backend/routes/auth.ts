@@ -43,8 +43,8 @@ export function createAuthRoutes(deps: Dependencies = {}) {
   const router = Router();
   const { authRateLimiter, authenticateToken, JWT_SECRET = config.JWT_SECRET, JWT_REFRESH_SECRET = config.JWT_REFRESH_SECRET } = deps;
 
-  const limiter = authRateLimiter || ((req: Request, res: Response, next: () => void) => next());
-  const authMiddleware = authenticateToken || ((req: Request, res: Response, next: () => void) => next());
+  const limiter = authRateLimiter || ((_req: Request, _res: Response, next: () => void) => next());
+  const authMiddleware = authenticateToken || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Sign up with email and password

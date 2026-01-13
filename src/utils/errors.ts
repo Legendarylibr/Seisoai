@@ -50,7 +50,7 @@ export class AuthError extends AppError {
 export class SessionExpiredError extends AuthError {
   constructor(message: string = 'Session expired. Please sign in again.') {
     super(message);
-    this.code = 'SESSION_EXPIRED';
+    Object.assign(this, { code: 'SESSION_EXPIRED' });
   }
 }
 

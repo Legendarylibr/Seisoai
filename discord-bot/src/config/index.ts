@@ -58,11 +58,30 @@ export const config = {
   // URLs
   urls: {
     website: process.env.WEBSITE_URL || 'https://seisoai.com',
-  }
+    api: process.env.API_URL || process.env.WEBSITE_URL || 'https://seisoai.com',
+  },
+  
+  // Health Check Server
+  healthCheck: {
+    port: parseInt(process.env.HEALTH_CHECK_PORT || '3002', 10),
+    enabled: process.env.HEALTH_CHECK_ENABLED !== 'false',
+  },
+  
+  // Shutdown
+  shutdown: {
+    timeoutMs: parseInt(process.env.SHUTDOWN_TIMEOUT_MS || '10000', 10),
+  },
 } as const;
+
+// Environment type
+export const isProduction = process.env.NODE_ENV === 'production';
 
 // Validate required config
 export function validateConfig(): boolean {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Required in all environments
   const required = [
     { name: 'DISCORD_TOKEN', value: config.discord.token },
     { name: 'DISCORD_CLIENT_ID', value: config.discord.clientId },
@@ -70,10 +89,49 @@ export function validateConfig(): boolean {
   ];
   
   const missing = required.filter(r => !r.value);
-  
   if (missing.length > 0) {
-    console.error('Missing required environment variables:');
-    missing.forEach(m => console.error(`  - ${m.name}`));
+    missing.forEach(m => errors.push(`Missing required: ${m.name}`));
+  }
+
+  // Required in production
+  if (isProduction) {
+    const botApiKey = process.env.DISCORD_BOT_API_KEY;
+    if (!botApiKey || botApiKey.length < 32) {
+      errors.push('DISCORD_BOT_API_KEY is required in production (minimum 32 characters)');
+    }
+
+    if (!process.env.API_URL) {
+      errors.push('API_URL is required in production');
+    }
+
+    if (!process.env.MONGODB_URI) {
+      errors.push('MONGODB_URI is required in production');
+    }
+  }
+
+  // Validate encryption key format if provided
+  if (config.encryption.key) {
+    if (!/^[0-9a-fA-F]{64}$/.test(config.encryption.key)) {
+      warnings.push('ENCRYPTION_KEY should be 64 hex characters (256 bits)');
+    }
+    // Check if it's the default placeholder
+    if (config.encryption.key === '0000000000000000000000000000000000000000000000000000000000000000') {
+      warnings.push('ENCRYPTION_KEY is set to default placeholder - change for production');
+    }
+  } else if (isProduction) {
+    warnings.push('ENCRYPTION_KEY not set - field-level encryption disabled');
+  }
+
+  // Print warnings
+  if (warnings.length > 0) {
+    console.warn('⚠️  Configuration warnings:');
+    warnings.forEach(w => console.warn(`  - ${w}`));
+  }
+
+  // Print errors and fail if any
+  if (errors.length > 0) {
+    console.error('❌ Configuration errors:');
+    errors.forEach(e => console.error(`  - ${e}`));
     return false;
   }
   

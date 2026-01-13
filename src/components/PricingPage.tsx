@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import SubscriptionCheckout from './SubscriptionCheckout';
 import PaymentSuccessModal from './PaymentSuccessModal';
 import SubscriptionManagement from './SubscriptionManagement';
@@ -6,6 +6,12 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { CheckCircle, AlertCircle, X, CreditCard } from 'lucide-react';
 import logger from '../utils/logger';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+
+interface SuccessState {
+  sessionId: string;
+  planName: string;
+  planPrice: string;
+}
 
 /**
  * PricingPage Component
@@ -23,12 +29,12 @@ const PricingPage: React.FC = () => {
   const studioPriceLookupKey = 'studio_pack_monthly'; // Replace with your actual lookup key
 
   const { refreshCredits, userId, isAuthenticated } = useEmailAuth();
-  const [successState, setSuccessState] = useState(null);
-  const [errorMessage, setErrorMessage] = useState(null);
+  const [successState, setSuccessState] = useState<SuccessState | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showSubscriptionManagement, setShowSubscriptionManagement] = useState(false);
 
   // Check for success in URL params when component mounts
-  const handleSuccess = useCallback((sessionId, planName, planPrice) => {
+  const handleSuccess = useCallback((sessionId: string, planName: string, planPrice: string) => {
     setSuccessState({
       sessionId,
       planName: planName || 'Subscription',
@@ -55,7 +61,7 @@ const PricingPage: React.FC = () => {
     if (sessionId) {
       const verifySubscription = async () => {
         try {
-          const body = { sessionId };
+          const body: { sessionId: string; userId?: string } = { sessionId };
           if (userId) {
             body.userId = userId;
           }
@@ -90,8 +96,9 @@ const PricingPage: React.FC = () => {
             data.planPrice || (data.amount ? `$${data.amount}/month` : 'Activated')
           );
         } catch (error) {
-          logger.error('Subscription verification failed:', { error: error.message });
-          const message = error.message || 'Failed to verify subscription payment. Please contact support.';
+          const err = error as Error;
+          logger.error('Subscription verification failed:', { error: err.message });
+          const message = err.message || 'Failed to verify subscription payment. Please contact support.';
           setErrorMessage(message);
           setTimeout(() => setErrorMessage(null), 6000);
         } finally {
@@ -107,7 +114,7 @@ const PricingPage: React.FC = () => {
     }
   }, [userId, handleSuccess]);
 
-  const handleError = (error) => {
+  const handleError = (error: string) => {
     setErrorMessage(error);
     setTimeout(() => setErrorMessage(null), 5000);
   };
@@ -254,8 +261,8 @@ const PricingPage: React.FC = () => {
             planPrice="$20/month"
             description="Great for regular creators"
             credits="110 credits/month (10% savings)"
-            highlight="Popular"
-            savePercentage="Save 10%"
+            highlight={true}
+            savePercentage={10}
             onSuccess={(sessionId) => handleSuccess(sessionId, 'Creator Pack', '$20/month')}
             onError={handleError}
             compact={true}
@@ -268,7 +275,7 @@ const PricingPage: React.FC = () => {
             planPrice="$40/month"
             description="Best value for power users"
             credits="240 credits/month (20% savings)"
-            savePercentage="Save 20%"
+            savePercentage={20}
             onSuccess={(sessionId) => handleSuccess(sessionId, 'Pro Pack', '$40/month')}
             onError={handleError}
             compact={true}
@@ -281,7 +288,7 @@ const PricingPage: React.FC = () => {
             planPrice="$80/month"
             description="For professional studios"
             credits="520 credits/month (30% savings)"
-            savePercentage="Save 30%"
+            savePercentage={30}
             onSuccess={(sessionId) => handleSuccess(sessionId, 'Studio Pack', '$80/month')}
             onError={handleError}
             compact={true}

@@ -81,7 +81,7 @@ const Win95Button = memo<{
   );
 });
 
-const StemMixer: React.FC<StemMixerProps> = ({ stems, onClose }) => {
+const StemMixer: React.FC<StemMixerProps> = ({ stems }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -488,8 +488,7 @@ const StemMixer: React.FC<StemMixerProps> = ({ stems, onClose }) => {
               <Win95Button 
                 onClick={() => toggleSolo(stemName)}
                 active={state.solo}
-                className="w-6 h-6 flex items-center justify-center p-0"
-                style={state.solo ? { background: '#FFD700', color: '#000' } : {}}
+                className={`w-6 h-6 flex items-center justify-center p-0 ${state.solo ? 'stem-solo-active' : ''}`}
               >
                 S
               </Win95Button>

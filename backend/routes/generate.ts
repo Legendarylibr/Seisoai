@@ -8,7 +8,7 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
-import { requireAuth, sendServerError } from '../utils/responses';
+import { requireAuth } from '../utils/responses';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed, normalizeStatus, FAL_STATUS } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 // createEmailHash import removed - SECURITY: Use authenticated user from JWT instead

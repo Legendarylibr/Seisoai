@@ -9,6 +9,7 @@ import logger from '../utils/logger';
 // findUserByIdentifier import removed - SECURITY: Use authenticated user from JWT instead
 import type { IUser } from '../models/User';
 import { encrypt, isEncryptionConfigured } from '../utils/encryption';
+import { requireAuth } from '../utils/responses';
 
 // Types
 interface Dependencies {
@@ -32,13 +33,7 @@ export function createGalleryRoutes(deps: Dependencies) {
   router.get('/:identifier', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       // SECURITY: Only allow users to access their own gallery
-      if (!req.user) {
-        res.status(401).json({ 
-          success: false, 
-          error: 'Authentication required' 
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const { identifier } = req.params;
       
@@ -121,13 +116,7 @@ export function createGalleryRoutes(deps: Dependencies) {
   router.get('/:walletAddress/stats', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       // SECURITY: Only allow users to access their own stats
-      if (!req.user) {
-        res.status(401).json({ 
-          success: false, 
-          error: 'Authentication required' 
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const { walletAddress } = req.params;
       
@@ -235,13 +224,7 @@ export function createGalleryRoutes(deps: Dependencies) {
   router.post('/save', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       // SECURITY: Only allow saving to authenticated user's gallery
-      if (!req.user) {
-        res.status(401).json({ 
-          success: false, 
-          error: 'Authentication required' 
-        });
-        return;
-      }
+      if (!requireAuth(req, res)) return;
 
       const { 
         imageUrl, prompt, model, generationId,

@@ -112,7 +112,8 @@ export class ValidationError extends AppError {
 export class InvalidInputError extends ValidationError {
   constructor(field: string, message?: string) {
     super(message || `Invalid value for ${field}`, field);
-    this.code = 'INVALID_INPUT';
+    // Override code via Object.assign since base class has readonly code
+    Object.assign(this, { code: 'INVALID_INPUT' });
   }
 }
 

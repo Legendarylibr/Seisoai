@@ -2,7 +2,7 @@
  * IP-based free image tracking to prevent abuse
  * Tracks how many free images have been used from each IP address
  */
-import mongoose, { type Document, type Model } from 'mongoose';
+import mongoose, { type Document } from 'mongoose';
 
 // Types
 export interface IIPFreeImage extends Document {

@@ -1,7 +1,7 @@
 // Smart Image Generation Service
 // Routes all users to FAL.ai, handles Qwen layer extraction, Face Swap, etc.
 
-import { generateImage as generateWithFAL, ImageGenerationResult } from './falService';
+import { generateImage as generateWithFAL, ImageGenerationResult, type AdvancedSettings } from './falService';
 import { extractLayers } from './layerExtractionService';
 import type { VisualStyle } from '../types';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
@@ -58,14 +58,8 @@ export const batchVariate = async (
   return data as BatchVariateResult;
 };
 
-// Types
-interface AdvancedSettings {
-  multiImageModel?: string;
-  walletAddress?: string;
-  userId?: string;
-  email?: string;
-  [key: string]: unknown;
-}
+// Re-export AdvancedSettings from falService for type consistency
+export type { AdvancedSettings };
 
 /**
  * Face swap between two images

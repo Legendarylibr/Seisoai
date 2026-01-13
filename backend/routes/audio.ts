@@ -71,7 +71,7 @@ export function createAudioRoutes(deps: Dependencies) {
   const router = Router();
   const { rateLimiter, requireCredits } = deps;
 
-  const limiter = rateLimiter || ((req: Request, res: Response, next: () => void) => next());
+  const limiter = rateLimiter || ((_req: Request, _res: Response, next: () => void) => next());
 
   // ============================================================================
   // VOICE CLONE / TEXT-TO-SPEECH
@@ -662,7 +662,7 @@ export function createAudioRoutes(deps: Dependencies) {
       const { promisify } = await import('util');
       const { createWriteStream, unlink } = await import('fs');
       const { tmpdir } = await import('os');
-      const { join, resolve } = await import('path');
+      const { resolve } = await import('path');
       const execFileAsync = promisify(execFile);
       const unlinkAsync = promisify(unlink);
       const fs = await import('fs/promises');

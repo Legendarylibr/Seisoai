@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   console.log(`🔍 Checking wallet: ${walletAddress}`);
   console.log(`   Normalized: ${normalizedAddress}\n`);
 
-  await mongoose.connect(MONGODB_URI, {
+  await mongoose.connect(MONGODB_URI || '', {
     maxPoolSize: 5,
     serverSelectionTimeoutMS: 8000,
   });

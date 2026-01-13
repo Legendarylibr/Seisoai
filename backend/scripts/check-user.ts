@@ -46,7 +46,7 @@ const userSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 async function main(): Promise<void> {
-  await mongoose.connect(MONGODB_URI, {
+  await mongoose.connect(MONGODB_URI || '', {
     maxPoolSize: 5,
     serverSelectionTimeoutMS: 8000,
   });

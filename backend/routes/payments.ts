@@ -35,8 +35,8 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
   const router = Router();
   const { paymentLimiter, authenticateFlexible, processedTransactions } = deps;
 
-  const limiter = paymentLimiter || ((req: Request, res: Response, next: () => void) => next());
-  const flexibleAuth = authenticateFlexible || ((req: Request, res: Response, next: () => void) => next());
+  const limiter = paymentLimiter || ((_req: Request, _res: Response, next: () => void) => next());
+  const flexibleAuth = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Get payment address

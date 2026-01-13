@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, memo, useCallback, ReactNode } from 'react';
+import { useState, useEffect, useRef, memo, useCallback, ReactNode } from 'react';
 import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard, Mail, Settings, Clock, type LucideIcon } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import SubscriptionManagement from './SubscriptionManagement';
-import { WIN95, BTN, PANEL, TITLEBAR, TEXT } from '../utils/buttonStyles';
+import { WIN95, BTN, PANEL, TITLEBAR } from '../utils/buttonStyles';
 import logger from '../utils/logger';
 
 // System tray clock component
