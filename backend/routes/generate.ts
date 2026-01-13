@@ -668,7 +668,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       let endpoint: string;
       if (isControlNet && hasImages) {
         // ControlNet Canny - uses edge detection to preserve structure
-        endpoint = 'https://fal.run/fal-ai/flux-lora-canny';
+        endpoint = 'https://fal.run/fal-ai/flux-control-lora-canny';
       } else if (isNanoBananaPro) {
         endpoint = hasImages 
           ? 'https://fal.run/fal-ai/nano-banana-pro/edit'
@@ -692,13 +692,15 @@ export function createGenerationRoutes(deps: Dependencies) {
       
       if (isControlNet && hasImages) {
         // ControlNet Canny - preserves edges/structure from control image
+        // Using high controlnet_conditioning_scale (0.9) for strict pose matching
         const controlImageUrl = image_url || (image_urls && image_urls[0]);
         requestBody = {
           prompt: finalPrompt,
           control_image_url: controlImageUrl,
+          controlnet_conditioning_scale: 0.95, // High value for strict structure matching (0-1)
           num_images: 1, // ControlNet generates one at a time
           guidance_scale: guidanceScale || 3.5,
-          num_inference_steps: 28,
+          num_inference_steps: 35, // More steps for better quality
           output_format: 'jpeg',
           enable_safety_checker: false
         };
