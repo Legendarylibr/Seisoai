@@ -55,7 +55,16 @@ export interface InputStyle {
 }
 
 // CSS variable references - automatically adapt to dark mode
-export const WIN95: Win95Colors = {
+export const WIN95: Win95Colors & {
+  panelBg: string;
+  windowContentBg: string;
+  errorBg: string;
+  errorText: string;
+  successText: string;
+  warningText: string;
+  activeTitle: string;
+  inactiveTitle: string;
+} = {
   bg: 'var(--win95-bg)',
   bgLight: 'var(--win95-bg-light)',
   bgDark: 'var(--win95-bg-dark)',
@@ -69,7 +78,16 @@ export const WIN95: Win95Colors = {
   highlight: 'var(--win95-highlight)',
   highlightText: 'var(--win95-highlight-text)',
   inputBg: 'var(--win95-input-bg)',
-  buttonFace: 'var(--win95-button-face)'
+  buttonFace: 'var(--win95-button-face)',
+  // New dark mode aware colors
+  panelBg: 'var(--win95-panel-bg)',
+  windowContentBg: 'var(--win95-window-content-bg)',
+  errorBg: 'var(--win95-error-bg)',
+  errorText: 'var(--win95-error-text)',
+  successText: 'var(--win95-success-text)',
+  warningText: 'var(--win95-warning-text)',
+  activeTitle: 'var(--win95-active-title)',
+  inactiveTitle: 'var(--win95-inactive-title)'
 };
 
 export const BTN: Record<string, ButtonStyle> = {
@@ -131,7 +149,7 @@ export const PANEL: Record<string, PanelStyle> = {
 export const TITLEBAR: Record<string, TitlebarStyle> = {
   active: {
     background: 'var(--win95-active-title)',
-    color: 'var(--win95-highlight-text)',
+    color: '#ffffff',
     fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
     fontWeight: 'bold'
   },
@@ -141,6 +159,14 @@ export const TITLEBAR: Record<string, TitlebarStyle> = {
     fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
     fontWeight: 'bold'
   }
+};
+
+// Standard window title bar style (use instead of hardcoded gradients)
+export const WINDOW_TITLE_STYLE = {
+  background: 'var(--win95-active-title)',
+  color: '#ffffff',
+  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+  fontWeight: 'bold' as const
 };
 
 export const TEXT: Record<string, TextStyle> = {

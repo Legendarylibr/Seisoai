@@ -38,35 +38,54 @@
 
 /* Windows 95 Dark Mode - Authentic Dark Theme */
 /* Inspired by high-contrast mode and dark shell themes */
+/* Enhanced for better text contrast and visibility */
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Dark Windows 95 Color Palette */
-    --win95-bg: #2d2d2d;
-    --win95-bg-light: #404040;
-    --win95-bg-dark: #1a1a1a;
-    --win95-border-light: #505050;
-    --win95-border-dark: #1a1a1a;
+    /* Dark Windows 95 Color Palette - Enhanced Contrast */
+    --win95-bg: #3a3a3a;
+    --win95-bg-light: #505050;
+    --win95-bg-dark: #252525;
+    --win95-border-light: #606060;
+    --win95-border-dark: #252525;
     --win95-border-darker: #000000;
-    --win95-text: #e0e0e0;
-    --win95-text-disabled: #666666;
-    --win95-highlight: #4080c0;
+    --win95-text: #f0f0f0;
+    --win95-text-disabled: #909090;
+    --win95-highlight: #5090d0;
     --win95-highlight-text: #ffffff;
-    --win95-input-bg: #1a1a1a;
-    --win95-button-face: #2d2d2d;
+    --win95-input-bg: #2a2a2a;
+    --win95-button-face: #3a3a3a;
     
-    /* Dark Mode Accent Colors */
-    --win95-teal: #0a2a3e;
-    --win95-green: #00a000;
-    --win95-red: #c04040;
-    --win95-yellow: #c0c000;
-    --win95-purple: #a040a0;
-    --win95-cyan: #40e0e0;
-    --win95-active-title: linear-gradient(90deg, #1a4a6e 0%, #2090d0 100%);
-    --win95-inactive-title: linear-gradient(90deg, #404040 0%, #505050 100%);
+    /* Dark Mode Accent Colors - Brighter for visibility */
+    --win95-teal: #0d3a4e;
+    --win95-green: #20c020;
+    --win95-red: #e05050;
+    --win95-yellow: #e0e000;
+    --win95-purple: #c060c0;
+    --win95-cyan: #60f0f0;
+    --win95-active-title: linear-gradient(90deg, #2a5a7e 0%, #3090d0 100%);
+    --win95-inactive-title: linear-gradient(90deg, #505050 0%, #606060 100%);
     
     /* Dark CRT Effects */
-    --crt-glow: 0 0 4px rgba(64, 128, 192, 0.2);
+    --crt-glow: 0 0 4px rgba(80, 144, 208, 0.25);
+    
+    /* Dark mode specific panel colors for better contrast */
+    --win95-panel-bg: #404040;
+    --win95-window-content-bg: #333333;
+    --win95-error-bg: #4a2020;
+    --win95-error-text: #ff8080;
+    --win95-success-text: #60e060;
+    --win95-warning-text: #e0e060;
   }
+}
+
+/* Light mode panel colors (defaults) */
+:root {
+  --win95-panel-bg: var(--win95-bg);
+  --win95-window-content-bg: #ffffff;
+  --win95-error-bg: #ffcccc;
+  --win95-error-text: #800000;
+  --win95-success-text: #008000;
+  --win95-warning-text: #808000;
 }
 
 @layer base {

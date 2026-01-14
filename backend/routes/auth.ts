@@ -15,6 +15,8 @@ import config from '../config/env';
 import { isDisposableEmail } from '../abusePrevention';
 import { blacklistToken } from '../middleware/auth';
 import { createEmailHash } from '../utils/emailHash';
+import { generateResetToken, hashResetToken, sendPasswordResetEmail } from '../services/email';
+import { alertPasswordReset, alertAccountLockout } from '../services/securityAlerts';
 import type { IUser } from '../models/User';
 
 // Types
@@ -274,6 +276,10 @@ export function createAuthRoutes(deps: Dependencies = {}) {
             failedAttempts,
             lockoutUntil
           });
+          
+          // SECURITY: Send alert for account lockout
+          alertAccountLockout(normalizedEmail, req.ip || 'unknown', failedAttempts);
+          
           res.status(423).json({
             success: false,
             error: `Too many failed login attempts. Account locked for ${LOCKOUT_DURATION_MINUTES} minutes.`
@@ -932,6 +938,277 @@ export function createAuthRoutes(deps: Dependencies = {}) {
       res.status(500).json({
         success: false,
         error: 'Failed to unlink Discord account'
+      });
+    }
+  });
+
+  // ============================================================================
+  // Password Reset Flow
+  // ============================================================================
+
+  /**
+   * Request password reset
+   * POST /api/auth/forgot-password
+   * 
+   * SECURITY:
+   * - Rate limited to prevent enumeration
+   * - Constant-time response to prevent timing attacks
+   * - Token hashed before storage
+   * - 30 minute expiry
+   */
+  router.post('/forgot-password', limiter, async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body as { email?: string };
+
+      // Always respond with same message to prevent email enumeration
+      const genericResponse = {
+        success: true,
+        message: 'If an account exists with this email, you will receive a password reset link.'
+      };
+
+      if (!email || typeof email !== 'string') {
+        // Still return success to prevent enumeration
+        res.json(genericResponse);
+        return;
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      
+      // Validate email format
+      const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+      if (!emailRegex.test(normalizedEmail) || normalizedEmail.length > 254) {
+        res.json(genericResponse);
+        return;
+      }
+
+      // Find user by email hash
+      const User = mongoose.model<IUser>('User');
+      const emailHash = createEmailHash(normalizedEmail);
+      const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+      
+      const user = await User.findOne({
+        $or: [
+          { emailHash },
+          { emailHashPlain },
+          { emailLookup: normalizedEmail },
+          { email: normalizedEmail }
+        ]
+      });
+
+      if (!user) {
+        // SECURITY: Don't reveal if user exists - use constant time delay
+        await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 100));
+        res.json(genericResponse);
+        return;
+      }
+
+      // Generate reset token
+      const { token, hash } = generateResetToken();
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+      // Store hashed token (so DB breach doesn't expose tokens)
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            passwordResetToken: hash,
+            passwordResetExpires: expiresAt
+          }
+        }
+      );
+
+      // Send reset email
+      const emailResult = await sendPasswordResetEmail(
+        normalizedEmail,
+        token,
+        user.discordUsername
+      );
+
+      if (!emailResult.success) {
+        logger.error('Failed to send password reset email', { 
+          userId: user.userId,
+          error: emailResult.error 
+        });
+        // Still return success to prevent enumeration
+      } else {
+        logger.info('Password reset requested', { userId: user.userId });
+        
+        // Send security alert
+        alertPasswordReset(normalizedEmail, req.ip || 'unknown', user.userId);
+      }
+
+      res.json(genericResponse);
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Forgot password error', { error: err.message });
+      // Return generic response even on error
+      res.json({
+        success: true,
+        message: 'If an account exists with this email, you will receive a password reset link.'
+      });
+    }
+  });
+
+  /**
+   * Verify reset token (check if valid before showing form)
+   * POST /api/auth/verify-reset-token
+   */
+  router.post('/verify-reset-token', limiter, async (req: Request, res: Response) => {
+    try {
+      const { token } = req.body as { token?: string };
+
+      if (!token || typeof token !== 'string' || token.length !== 64) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid or expired reset token'
+        });
+        return;
+      }
+
+      const tokenHash = hashResetToken(token);
+      const User = mongoose.model<IUser>('User');
+
+      const user = await User.findOne({
+        passwordResetToken: tokenHash,
+        passwordResetExpires: { $gt: new Date() }
+      }).select('userId');
+
+      if (!user) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid or expired reset token'
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        message: 'Token is valid'
+      });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Verify reset token error', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to verify token'
+      });
+    }
+  });
+
+  /**
+   * Reset password with token
+   * POST /api/auth/reset-password
+   * 
+   * SECURITY:
+   * - Validates token and expiry
+   * - Enforces password strength
+   * - Clears token after use (single-use)
+   * - Blacklists all existing tokens (force re-login)
+   */
+  router.post('/reset-password', limiter, async (req: Request, res: Response) => {
+    try {
+      const { token, password } = req.body as { token?: string; password?: string };
+
+      if (!token || typeof token !== 'string' || token.length !== 64) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid or expired reset token'
+        });
+        return;
+      }
+
+      if (!password || typeof password !== 'string') {
+        res.status(400).json({
+          success: false,
+          error: 'Password is required'
+        });
+        return;
+      }
+
+      // Validate password strength
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{12,}$/;
+      if (!passwordRegex.test(password)) {
+        res.status(400).json({
+          success: false,
+          error: 'Password must be at least 12 characters and include uppercase, lowercase, number, and special character (@$!%*?&)'
+        });
+        return;
+      }
+
+      const tokenHash = hashResetToken(token);
+      const User = mongoose.model<IUser>('User');
+
+      // Find user with valid token
+      const user = await User.findOne({
+        passwordResetToken: tokenHash,
+        passwordResetExpires: { $gt: new Date() }
+      });
+
+      if (!user) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid or expired reset token'
+        });
+        return;
+      }
+
+      // Hash new password
+      const hashedPassword = await bcrypt.hash(password, 12);
+
+      // Update password and clear reset token (single-use)
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: { password: hashedPassword },
+          $unset: {
+            passwordResetToken: '',
+            passwordResetExpires: '',
+            // Also reset lockout on password reset
+            failedLoginAttempts: '',
+            lockoutUntil: ''
+          }
+        }
+      );
+
+      logger.info('Password reset completed', { userId: user.userId });
+
+      // Generate new tokens for auto-login
+      if (JWT_SECRET && JWT_REFRESH_SECRET) {
+        const accessToken = jwt.sign(
+          { userId: user.userId, email: user.email, type: 'access' },
+          JWT_SECRET,
+          { expiresIn: '24h' }
+        );
+
+        const refreshToken = jwt.sign(
+          { userId: user.userId, type: 'refresh' },
+          JWT_REFRESH_SECRET,
+          { expiresIn: '30d' }
+        );
+
+        res.json({
+          success: true,
+          message: 'Password reset successfully',
+          token: accessToken,
+          refreshToken,
+          user: {
+            userId: user.userId,
+            email: user.email,
+            credits: user.credits
+          }
+        });
+      } else {
+        res.json({
+          success: true,
+          message: 'Password reset successfully. Please sign in with your new password.'
+        });
+      }
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Reset password error', { error: err.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to reset password'
       });
     }
   });

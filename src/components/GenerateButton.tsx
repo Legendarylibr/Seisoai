@@ -225,7 +225,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
       <div 
         className="flex items-center gap-1.5 px-2 py-1"
         style={{ 
-          background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
+          background: WIN95.activeTitle,
           color: '#ffffff'
         }}
       >
@@ -274,7 +274,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
             {/* Status */}
             <div className="flex justify-between items-center text-[10px] mb-1.5" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#000080', borderTopColor: 'transparent' }} />
+                <div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: WIN95.highlight, borderTopColor: 'transparent' }} />
                 <span className="font-bold" style={{ color: WIN95.text }}>{currentStep}</span>
               </div>
               <span 
@@ -298,18 +298,10 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
               }}
             >
               <div 
-                className="h-full transition-all duration-300"
+                className="h-full transition-all duration-300 win95-progress-animated"
                 style={{ 
                   width: `${progress}%`,
-                  background: `repeating-linear-gradient(
-                    -45deg,
-                    #000080 0px,
-                    #000080 10px,
-                    #1084d0 10px,
-                    #1084d0 20px
-                  )`,
-                  backgroundSize: '28px 100%',
-                  animation: 'win95-progress-move 0.5s linear infinite'
+                  background: WIN95.highlight
                 }} 
               />
             </div>
@@ -325,9 +317,9 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
                     <div 
                       className="w-3 h-3 flex items-center justify-center text-[8px] font-bold"
                       style={{
-                        background: isCompleted ? '#008000' : isActive ? '#808000' : WIN95.bg,
+                        background: isCompleted ? WIN95.successText : isActive ? WIN95.warningText : WIN95.bg,
                         color: isCompleted || isActive ? '#ffffff' : WIN95.textDisabled,
-                        boxShadow: `inset 1px 1px 0 ${isCompleted ? '#00a000' : WIN95.border.light}, inset -1px -1px 0 ${isCompleted ? '#004000' : WIN95.border.darker}`
+                        boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
                       }} 
                     >
                       {isCompleted ? '✓' : i + 1}
@@ -335,7 +327,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
                     <span 
                       className="text-[8px]" 
                       style={{ 
-                        color: isCompleted ? '#008000' : isActive ? '#808000' : WIN95.textDisabled,
+                        color: isCompleted ? WIN95.successText : isActive ? WIN95.warningText : WIN95.textDisabled,
                         fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
                         fontWeight: isActive ? 'bold' : 'normal'
                       }}

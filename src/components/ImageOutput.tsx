@@ -381,12 +381,12 @@ const ImageOutput: React.FC = () => {
   // Loading state
   if (isGenerating) {
     return (
-      <div className="h-full flex flex-col" style={{ background: '#c0c0c0' }}>
+      <div className="h-full flex flex-col" style={{ background: WIN95.bg }}>
       {/* Title bar - Loading */}
       <div 
         className="flex items-center gap-1.5 px-2 py-1"
         style={{ 
-          background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
+          background: WIN95.activeTitle,
           color: '#ffffff'
         }}
       >
@@ -405,11 +405,11 @@ const ImageOutput: React.FC = () => {
                 boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
               }}
             >
-              <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#000080', borderTopColor: 'transparent' }} />
+              <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: WIN95.highlight, borderTopColor: 'transparent' }} />
             </div>
           </div>
-          <p className="text-[11px] font-bold" style={{ color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Creating your masterpiece...</p>
-          <p className="text-[10px] mt-1" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>This may take a few moments</p>
+          <p className="text-[11px] font-bold" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Creating your masterpiece...</p>
+          <p className="text-[10px] mt-1" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>This may take a few moments</p>
           {/* Progress dots */}
           <div className="flex gap-1 mt-3">
             {[0, 1, 2].map((i) => (
@@ -417,7 +417,7 @@ const ImageOutput: React.FC = () => {
                 key={i}
                 className="w-2 h-2 rounded-full animate-pulse"
                 style={{ 
-                  background: '#000080',
+                  background: WIN95.highlight,
                   animationDelay: `${i * 0.2}s`
                 }}
               />
@@ -431,12 +431,12 @@ const ImageOutput: React.FC = () => {
   // Error state (only if no image)
   if (error && !hasImages) {
     return (
-      <div className="h-full flex flex-col" style={{ background: '#c0c0c0' }}>
+      <div className="h-full flex flex-col" style={{ background: WIN95.bg }}>
         {/* Title bar - Error */}
         <div 
           className="flex items-center gap-1.5 px-2 py-1"
           style={{ 
-            background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
+            background: WIN95.activeTitle,
             color: '#ffffff'
           }}
         >
@@ -453,10 +453,10 @@ const ImageOutput: React.FC = () => {
               boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
             }}
           >
-            <X className="w-6 h-6" style={{ color: '#800000' }} />
+            <X className="w-6 h-6" style={{ color: WIN95.errorText }} />
           </div>
-          <p className="text-[11px] font-bold mb-1" style={{ color: '#800000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Something went wrong</p>
-          <p className="text-[10px] mb-4 text-center max-w-xs" style={{ color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{error}</p>
+          <p className="text-[11px] font-bold mb-1" style={{ color: WIN95.errorText, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Something went wrong</p>
+          <p className="text-[10px] mb-4 text-center max-w-xs" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{error}</p>
           <div className="flex gap-2">
             <ActionButton onClick={clearGeneration}>Try Again</ActionButton>
             <ActionButton onClick={clearAll}>Start Over</ActionButton>
@@ -469,12 +469,12 @@ const ImageOutput: React.FC = () => {
   // Empty state
   if (!hasImages) {
     return (
-      <div className="h-full w-full flex flex-col" style={{ background: '#c0c0c0' }}>
+      <div className="h-full w-full flex flex-col" style={{ background: WIN95.bg }}>
         {/* Title bar - Empty */}
         <div 
           className="flex items-center gap-1.5 px-2 py-1"
           style={{ 
-            background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
+            background: WIN95.activeTitle,
             color: '#ffffff'
           }}
         >
@@ -493,8 +493,8 @@ const ImageOutput: React.FC = () => {
           >
             <ImageIcon className="w-8 h-8" style={{ color: WIN95.textDisabled }} />
           </div>
-          <p className="text-[11px] font-bold" style={{ color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Your creation awaits</p>
-          <p className="text-[10px] mt-1" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Enter a prompt and click Generate</p>
+          <p className="text-[11px] font-bold" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Your creation awaits</p>
+          <p className="text-[10px] mt-1" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Enter a prompt and click Generate</p>
           {/* Decorative dotted line */}
           <div className="w-32 mt-4 border-t border-dashed" style={{ borderColor: WIN95.textDisabled }} />
         </div>
@@ -517,7 +517,7 @@ const ImageOutput: React.FC = () => {
       <div 
         className="flex items-center gap-1.5 px-2 py-1 flex-shrink-0"
         style={{ 
-          background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
+          background: WIN95.activeTitle,
           color: '#ffffff'
         }}
       >
@@ -534,12 +534,12 @@ const ImageOutput: React.FC = () => {
       {/* Error banner */}
       {error && hasImages && (
         <div className="p-1 flex items-center justify-between gap-1.5 flex-shrink-0" style={{ 
-          background: '#ffcccc',
+          background: WIN95.errorBg,
           boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
         }}>
           <div className="flex items-center gap-1 flex-1 px-1">
-            <AlertTriangle className="w-3 h-3" style={{ color: '#800000' }} />
-            <p className="text-[10px] flex-1" style={{ color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{error}</p>
+            <AlertTriangle className="w-3 h-3" style={{ color: WIN95.errorText }} />
+            <p className="text-[10px] flex-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{error}</p>
           </div>
           <button onClick={() => setError(null)} className="px-1.5 py-0.5 text-[10px]" style={BTN.base} {...hoverHandlers}>
             <X className="w-3 h-3" />
@@ -668,19 +668,19 @@ const ImageOutput: React.FC = () => {
       </div>
       
       {/* Image Display - fills all remaining space with fixed container */}
-      <div className="flex-1 min-h-0 p-1 overflow-hidden" style={{ background: '#c0c0c0', maxHeight: 'calc(100% - 40px)' }}>
+      <div className="flex-1 min-h-0 p-1 overflow-hidden" style={{ background: WIN95.bg, maxHeight: 'calc(100% - 40px)' }}>
         <div 
           className="w-full h-full overflow-hidden flex items-center justify-center relative"
           style={{ 
-            background: '#ffffff',
-            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040'
+            background: WIN95.windowContentBg,
+            boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`
           }}
         >
           {/* Regeneration loading overlay */}
           {isRegenerating && (
             <div 
               className="absolute inset-0 flex flex-col items-center justify-center z-10"
-              style={{ background: 'rgba(192, 192, 192, 0.9)' }}
+              style={{ background: WIN95.panelBg, opacity: 0.95 }}
             >
               <div className="relative mb-3">
                 <div 
@@ -690,11 +690,11 @@ const ImageOutput: React.FC = () => {
                     boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
                   }}
                 >
-                  <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#000080', borderTopColor: 'transparent' }} />
+                  <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: WIN95.highlight, borderTopColor: 'transparent' }} />
                 </div>
               </div>
-              <p className="text-[11px] font-bold" style={{ color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Regenerating...</p>
-              <p className="text-[10px] mt-1" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Please wait</p>
+              <p className="text-[11px] font-bold" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Regenerating...</p>
+              <p className="text-[10px] mt-1" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Please wait</p>
               {/* Progress dots */}
               <div className="flex gap-1 mt-3">
                 {[0, 1, 2].map((i) => (
@@ -702,7 +702,7 @@ const ImageOutput: React.FC = () => {
                     key={i}
                     className="w-2 h-2 rounded-full animate-pulse"
                     style={{ 
-                      background: '#000080',
+                      background: WIN95.highlight,
                       animationDelay: `${i * 0.2}s`
                     }}
                   />
@@ -821,12 +821,12 @@ const ImageOutput: React.FC = () => {
           <div 
             className="w-full max-w-md mx-2 sm:mx-4 max-h-[95vh] sm:max-h-[90vh] flex flex-col"
             style={{
-              background: '#c0c0c0',
-              boxShadow: 'inset 1px 1px 0 #ffffff, inset -1px -1px 0 #000000, inset 2px 2px 0 #dfdfdf, inset -2px -2px 0 #808080, 4px 4px 0 rgba(0,0,0,0.3)'
+              background: WIN95.bg,
+              boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}, 4px 4px 0 rgba(0,0,0,0.3)`
             }}
           >
             {/* Title Bar */}
-            <div className="flex items-center justify-between px-1 py-0.5" style={{ background: 'linear-gradient(90deg, #000080, #1084d0)' }}>
+            <div className="flex items-center justify-between px-1 py-0.5" style={{ background: WIN95.activeTitle }}>
               <div className="flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-white" />
                 <span className="text-[11px] font-bold text-white" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>New Prompt</span>
@@ -835,17 +835,17 @@ const ImageOutput: React.FC = () => {
             </div>
             
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-2" style={{ background: '#c0c0c0' }}>
+            <div className="flex-1 overflow-y-auto p-2 space-y-2" style={{ background: WIN95.bg }}>
               {error && (
-                <div className="p-1.5 flex items-start gap-1.5" style={{ background: '#ffcccc', boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff' }}>
+                <div className="p-1.5 flex items-start gap-1.5" style={{ background: WIN95.errorBg, boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}` }}>
                   <span className="text-[10px]">⚠️</span>
-                  <p className="text-[10px] flex-1" style={{ color: '#800000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{error}</p>
+                  <p className="text-[10px] flex-1" style={{ color: WIN95.errorText, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>{error}</p>
                 </div>
               )}
 
               {/* Model Selection */}
               <div>
-                <label className="text-[10px] font-bold block mb-1" style={{ color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Select Model:</label>
+                <label className="text-[10px] font-bold block mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Select Model:</label>
                 <div className="flex flex-wrap gap-1">
                   {[
                     { id: 'flux', name: 'FLUX', desc: '1 credit' },
@@ -860,8 +860,8 @@ const ImageOutput: React.FC = () => {
                         onClick={() => { setSelectedModel(model.id); setError(null); }}
                         className="flex-1 min-w-[80px] px-2 py-1.5 text-[10px]"
                         style={isSelected ? {
-                          background: '#000080', color: '#ffffff', border: 'none',
-                          boxShadow: 'inset 1px 1px 0 #000040, inset -1px -1px 0 #4040c0',
+                          background: WIN95.highlight, color: WIN95.highlightText, border: 'none',
+                          boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
                           fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                         } : BTN.base}
                       >
@@ -876,52 +876,52 @@ const ImageOutput: React.FC = () => {
               {/* Prompt input */}
               {selectedModel !== 'qwen-image-layered' && (
                 <div>
-                  <label className="text-[10px] font-bold block mb-1" style={{ color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Your New Prompt:</label>
+                  <label className="text-[10px] font-bold block mb-1" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Your New Prompt:</label>
                   <textarea
                     value={newPrompt}
                     onChange={(e: ChangeEvent<HTMLTextAreaElement>) => { setNewPrompt(e.target.value); setError(null); }}
                     placeholder="Describe how you want to transform this image..."
                     className="w-full h-20 sm:h-24 p-1.5 resize-none text-[11px] focus:outline-none"
                     style={{ 
-                      background: '#ffffff',
-                      boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040',
-                      border: 'none', color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                      background: WIN95.inputBg,
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`,
+                      border: 'none', color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                     }}
                     autoFocus
                   />
                   <div className="flex justify-between items-center mt-1">
-                    <p className="text-[9px]" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Current output becomes reference image</p>
+                    <p className="text-[9px]" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Current output becomes reference image</p>
                     {/* AI Enhance Toggle */}
                     <label 
                       onClick={() => setOptimizePromptEnabled(!optimizePromptEnabled)}
-                      className="flex items-center gap-1.5 cursor-pointer select-none px-1 py-0.5 hover:bg-[#d0d0d0]"
+                      className="flex items-center gap-1.5 cursor-pointer select-none px-1 py-0.5"
                       style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
                     >
                       <div 
                         className="w-3.5 h-3.5 flex items-center justify-center"
                         style={{
-                          background: '#ffffff',
-                          boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff, inset 2px 2px 0 #404040'
+                          background: WIN95.inputBg,
+                          boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.bgDark}`
                         }}
                       >
                         {optimizePromptEnabled && (
-                          <span className="text-[10px] font-bold" style={{ color: '#000' }}>✓</span>
+                          <span className="text-[10px] font-bold" style={{ color: WIN95.text }}>✓</span>
                         )}
                       </div>
-                      <Brain className="w-3 h-3" style={{ color: optimizePromptEnabled ? '#800080' : '#808080' }} />
-                      <span className="text-[10px]" style={{ color: '#000' }}>AI Enhance</span>
+                      <Brain className="w-3 h-3" style={{ color: optimizePromptEnabled ? WIN95.highlight : WIN95.textDisabled }} />
+                      <span className="text-[10px]" style={{ color: WIN95.text }}>AI Enhance</span>
                     </label>
                   </div>
                 </div>
               )}
 
               {selectedModel === 'qwen-image-layered' && (
-                <div className="p-2" style={{ background: '#c0c0c0', boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff' }}>
+                <div className="p-2" style={{ background: WIN95.panelBg, boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}` }}>
                   <div className="flex items-start gap-2">
-                    <Layers className="w-4 h-4" style={{ color: '#008000' }} />
+                    <Layers className="w-4 h-4" style={{ color: WIN95.successText }} />
                     <div>
-                      <p className="text-[10px] font-bold" style={{ color: '#000', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Layer Extraction Mode</p>
-                      <p className="text-[9px] mt-0.5" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Extract image into separate RGBA layers.</p>
+                      <p className="text-[10px] font-bold" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Layer Extraction Mode</p>
+                      <p className="text-[9px] mt-0.5" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Extract image into separate RGBA layers.</p>
                     </div>
                   </div>
                 </div>
@@ -929,14 +929,14 @@ const ImageOutput: React.FC = () => {
             </div>
             
             {/* Footer */}
-            <div className="flex gap-2 p-2 justify-end" style={{ background: '#c0c0c0', borderTop: '1px solid #808080' }}>
+            <div className="flex gap-2 p-2 justify-end" style={{ background: WIN95.bg, borderTop: `1px solid ${WIN95.border.dark}` }}>
               <button
                 onClick={handleRegenerateWithPrompt}
                 disabled={(!newPrompt.trim() && selectedModel !== 'qwen-image-layered') || isRegenerating || isGenerating}
                 className="flex items-center gap-1 px-4 py-1.5 text-[11px] font-bold min-w-[100px] justify-center"
                 style={((!newPrompt.trim() && selectedModel !== 'qwen-image-layered') || isRegenerating || isGenerating) ? BTN.disabled : {
-                  background: '#000080', color: '#ffffff', border: 'none',
-                  boxShadow: 'inset 1px 1px 0 #4040c0, inset -1px -1px 0 #000040',
+                  background: WIN95.highlight, color: WIN95.highlightText, border: 'none',
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif', cursor: 'pointer'
                 }}
               >

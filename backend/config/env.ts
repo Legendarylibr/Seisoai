@@ -113,6 +113,11 @@ export interface Config {
   DISCORD_REDIRECT_URI?: string;
   // Frontend URL
   FRONTEND_URL?: string;
+  // Email service
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
+  // Security alerts
+  SECURITY_DISCORD_WEBHOOK?: string;
   isProduction: boolean;
   isDevelopment: boolean;
 }

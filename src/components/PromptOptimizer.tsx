@@ -53,7 +53,7 @@ const PromptOptimizer: React.FC<PromptOptimizerProps> = ({ value = '', onPromptC
       <div 
         className="flex items-center gap-1.5 px-2 py-1"
         style={{ 
-          background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
+          background: WIN95.activeTitle,
           color: '#ffffff'
         }}
       >

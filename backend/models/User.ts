@@ -96,6 +96,9 @@ export interface IUser extends Document {
   // SECURITY: Account lockout fields for brute force protection
   failedLoginAttempts?: number;
   lockoutUntil?: Date;
+  // Password reset fields
+  passwordResetToken?: string;
+  passwordResetExpires?: Date;
   // Virtual field to track if email was decrypted
   _emailDecrypted?: boolean;
 }
@@ -284,7 +287,10 @@ const userSchema = new mongoose.Schema<IUser>({
   discordLinkCodeExpires: { type: Date },
   // SECURITY: Account lockout fields for brute force protection
   failedLoginAttempts: { type: Number, default: 0, min: 0 },
-  lockoutUntil: { type: Date, required: false }
+  lockoutUntil: { type: Date, required: false },
+  // Password reset fields
+  passwordResetToken: { type: String, sparse: true, select: false },
+  passwordResetExpires: { type: Date, select: false }
 }, {
   timestamps: true
 });

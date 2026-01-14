@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
 import { createEmailHash } from '../utils/emailHash';
+import { alertAdminAction } from '../services/securityAlerts';
 import rateLimit from 'express-rate-limit';
 
 // SECURITY: Admin secret must be configured - no default allowed
@@ -253,6 +254,14 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         newBalance: user.credits,
         reason: reason || 'not specified'
       });
+      
+      // SECURITY: Send alert for admin action
+      alertAdminAction(
+        `Added ${credits} credits to user`,
+        req.ip || 'unknown',
+        user.userId,
+        { credits, newBalance: user.credits, identifier: walletAddress || email || userId }
+      );
 
       res.json({
         success: true,
@@ -340,6 +349,14 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         difference,
         reason: reason || 'not specified'
       });
+      
+      // SECURITY: Send alert for admin action
+      alertAdminAction(
+        `Set credits from ${previousCredits} to ${credits}`,
+        req.ip || 'unknown',
+        user!.userId,
+        { previousCredits, newCredits: credits, difference, identifier: walletAddress || email || userId }
+      );
 
       res.json({
         success: true,
@@ -423,6 +440,14 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         newCredits: user!.credits,
         reason: reason || 'not specified'
       });
+      
+      // SECURITY: Send alert for admin action
+      alertAdminAction(
+        `Subtracted ${credits} credits from user`,
+        req.ip || 'unknown',
+        user!.userId,
+        { previousCredits, subtracted: credits, newCredits: user!.credits, identifier: walletAddress || email || userId }
+      );
 
       res.json({
         success: true,

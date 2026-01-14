@@ -118,25 +118,66 @@ The API will be available at `http://localhost:3001`
 
 ## API Endpoints
 
+### Authentication
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/auth/signup` | Create account with email/password | None |
+| POST | `/api/auth/signin` | Sign in with email/password | None |
+| POST | `/api/auth/refresh` | Refresh access token | Refresh Token |
+| POST | `/api/auth/logout` | Logout and blacklist token | JWT |
+| POST | `/api/auth/forgot-password` | Request password reset | None |
+| POST | `/api/auth/verify-reset-token` | Verify reset token validity | None |
+| POST | `/api/auth/reset-password` | Reset password with token | None |
+
 ### User Management
 
-- `GET /api/users/:walletAddress` - Get user data
-- `POST /api/nft/check-credits` - Check user credits
-- `PUT /api/users/:walletAddress/settings` - Update user settings
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/users/:walletAddress` | Get user data | JWT |
+| PUT | `/api/users/:walletAddress/settings` | Update user settings | JWT |
+| POST | `/api/nft/check-credits` | Check user credits | JWT |
 
 ### Payments
 
-- `POST /api/payments/verify` - Verify payment transaction
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/payments/verify` | Verify blockchain payment | JWT |
+| POST | `/api/stripe/create-payment-intent` | Create Stripe payment | JWT |
+| POST | `/api/stripe/webhook` | Stripe webhook handler | Stripe Sig |
 
 ### Generations
 
-- `POST /api/generations/add` - Add generation to history
-- `GET /api/gallery/:walletAddress` - Get user gallery
-- `DELETE /api/gallery/:walletAddress/:generationId` - Delete generation
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/generate` | Generate image | JWT |
+| POST | `/api/generations/add` | Add to history | JWT |
+| GET | `/api/gallery/:walletAddress` | Get user gallery | JWT |
+| DELETE | `/api/gallery/:id` | Delete from gallery | JWT |
+
+### Discord Integration
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/auth/discord` | Start Discord OAuth | None |
+| GET | `/api/auth/discord/callback` | Discord OAuth callback | None |
+| POST | `/api/auth/discord-link-code` | Generate link code | JWT |
+| POST | `/api/auth/verify-discord-link` | Verify link code | Bot API Key |
+
+### GDPR Compliance
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/gdpr/export` | Export user data | JWT |
+| POST | `/api/gdpr/rectify` | Update user data | JWT |
+| DELETE | `/api/gdpr/delete` | Delete user account | JWT |
 
 ### System
 
-- `GET /api/health` - Health check
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/health` | Health check | None |
+| GET | `/api/version` | API version info | None |
 
 ## Database Schema
 
@@ -211,11 +252,41 @@ The backend verifies blockchain transactions by:
 
 ## Security Features
 
-- **Input Validation**: All inputs are validated and sanitized
-- **Rate Limiting**: Prevents abuse (configurable)
-- **Transaction Verification**: Blockchain-level verification
-- **Duplicate Prevention**: Prevents double-spending
-- **Auto-cleanup**: No permanent data storage
+See [SECURITY.md](./SECURITY.md) for comprehensive security documentation.
+
+### Authentication & Authorization
+- **JWT Authentication**: Access tokens (15min) + Refresh tokens (7d)
+- **Token Blacklisting**: Redis/in-memory blacklist for logout
+- **Account Lockout**: 5 failed attempts → 15min lockout with exponential backoff
+- **Password Requirements**: 12+ chars, uppercase, lowercase, number, special char
+
+### Input Validation & Sanitization
+- **NoSQL Injection Prevention**: Deep sanitization of all inputs
+- **XSS Prevention**: HTML entity encoding, script tag removal
+- **Prototype Pollution Prevention**: Blocks `__proto__`, `constructor`, `prototype`
+- **Email Validation**: RFC-compliant regex with disposable domain blocking
+
+### Rate Limiting
+- **IP-based Rate Limiting**: Configurable limits per endpoint
+- **Browser Fingerprinting**: Additional client identification
+- **Exponential Backoff**: Increasing delays on repeated failures
+
+### Cryptographic Security
+- **AES-256-GCM Encryption**: For sensitive data at rest
+- **Timing-Safe Comparisons**: Prevents timing attacks on secrets
+- **Secure Token Generation**: `crypto.randomBytes` for all tokens
+- **Password Hashing**: bcrypt with configurable rounds
+
+### API Security
+- **CSRF Protection**: Double-submit cookie pattern
+- **Security Headers**: CSP, HSTS, X-Frame-Options, etc.
+- **RPC Proxy Whitelist**: Only read-only blockchain methods allowed
+- **Redirect URL Validation**: Prevents open redirect attacks
+
+### Monitoring & Alerting
+- **Security Event Alerts**: Real-time Discord webhook notifications
+- **Request ID Tracing**: Every request has unique ID for debugging
+- **Structured Logging**: JSON logs with security context
 
 ## Deployment
 
