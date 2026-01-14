@@ -176,6 +176,7 @@ export interface VideoGenerationOptions {
   resolution?: '720p' | '1080p';
   generateAudio?: boolean;
   mode?: 'text-to-video' | 'image-to-video' | 'first-last-frame';
+  model?: 'veo' | 'ltx';
 }
 
 export interface MusicGenerationOptions {
@@ -377,7 +378,7 @@ export async function generateImage(options: ImageGenerationOptions): Promise<{
 }
 
 /**
- * Generate video using Veo 3.1
+ * Generate video using Veo 3.1 (quality) or LTX-2 19B (cheap)
  */
 export async function generateVideo(options: VideoGenerationOptions): Promise<{
   requestId: string;
@@ -391,40 +392,72 @@ export async function generateVideo(options: VideoGenerationOptions): Promise<{
     duration = '8s',
     resolution = '720p',
     generateAudio = true,
-    mode = 'text-to-video'
+    mode = 'text-to-video',
+    model = 'veo'
   } = options;
 
-  // Determine endpoint based on mode
   let endpoint: string;
   let modelPath: string;
-  
-  if (mode === 'text-to-video') {
-    endpoint = 'https://queue.fal.run/fal-ai/veo3.1';
-    modelPath = 'fal-ai/veo3.1';
-  } else if (mode === 'image-to-video') {
-    endpoint = 'https://queue.fal.run/fal-ai/veo3.1/fast/image-to-video';
-    modelPath = 'fal-ai/veo3.1/fast/image-to-video';
+  let body: Record<string, unknown>;
+
+  if (model === 'ltx') {
+    // LTX-2 19B model - cheaper option
+    // Convert aspect ratio to video_size format for LTX-2
+    const ltxVideoSizeMap: Record<string, string> = {
+      '16:9': 'landscape_16_9',
+      '9:16': 'portrait_16_9',
+      '1:1': 'square',
+      '4:3': 'landscape_4_3',
+      '3:4': 'portrait_4_3'
+    };
+    const ltxVideoSize = ltxVideoSizeMap[aspectRatio] || 'landscape_16_9';
+
+    // Convert duration to num_frames (25 fps)
+    const durationSeconds = parseInt(duration.replace('s', '')) || 5;
+    const numFrames = Math.min(121, Math.max(25, durationSeconds * 25));
+
+    body = {
+      prompt,
+      video_size: ltxVideoSize,
+      num_frames: numFrames,
+      generate_audio: generateAudio
+    };
+
+    // LTX-2 only supports text-to-video and image-to-video
+    if (mode === 'image-to-video' && firstFrameUrl) {
+      body.image_url = firstFrameUrl;
+      endpoint = 'https://queue.fal.run/fal-ai/ltx-2-19b/image-to-video';
+      modelPath = 'fal-ai/ltx-2-19b/image-to-video';
+    } else {
+      endpoint = 'https://queue.fal.run/fal-ai/ltx-2-19b/text-to-video';
+      modelPath = 'fal-ai/ltx-2-19b/text-to-video';
+    }
   } else {
-    endpoint = 'https://queue.fal.run/fal-ai/veo3.1/fast/first-last-frame-to-video';
-    modelPath = 'fal-ai/veo3.1/fast/first-last-frame-to-video';
+    // Veo 3.1 model - quality option (existing)
+    body = {
+      prompt,
+      aspect_ratio: aspectRatio,
+      duration,
+      resolution,
+      generate_audio: generateAudio
+    };
+
+    if (mode === 'image-to-video' && firstFrameUrl) {
+      body.image_url = firstFrameUrl;
+      endpoint = 'https://queue.fal.run/fal-ai/veo3.1/fast/image-to-video';
+      modelPath = 'fal-ai/veo3.1/fast/image-to-video';
+    } else if (mode === 'first-last-frame') {
+      if (firstFrameUrl) body.first_frame_url = firstFrameUrl;
+      if (lastFrameUrl) body.last_frame_url = lastFrameUrl;
+      endpoint = 'https://queue.fal.run/fal-ai/veo3.1/fast/first-last-frame-to-video';
+      modelPath = 'fal-ai/veo3.1/fast/first-last-frame-to-video';
+    } else {
+      endpoint = 'https://queue.fal.run/fal-ai/veo3.1';
+      modelPath = 'fal-ai/veo3.1';
+    }
   }
 
-  const body: Record<string, unknown> = {
-    prompt,
-    aspect_ratio: aspectRatio,
-    duration,
-    resolution,
-    generate_audio: generateAudio
-  };
-
-  if (mode === 'image-to-video' && firstFrameUrl) {
-    body.image_url = firstFrameUrl;
-  } else if (mode === 'first-last-frame') {
-    if (firstFrameUrl) body.first_frame_url = firstFrameUrl;
-    if (lastFrameUrl) body.last_frame_url = lastFrameUrl;
-  }
-
-  logger.debug('Video generation request', { endpoint, mode });
+  logger.debug('Video generation request', { endpoint, mode, model });
 
   const result = await submitToQueue<{ request_id: string }>(endpoint, body);
 

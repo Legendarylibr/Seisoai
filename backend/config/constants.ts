@@ -11,6 +11,8 @@ export interface CreditsConfig {
   IMAGE_GENERATION_MULTI: number;
   VIDEO_GENERATION_PER_SECOND: number;
   VIDEO_GENERATION_MINIMUM: number;
+  VIDEO_LTX_PER_SECOND: number;
+  VIDEO_LTX_MINIMUM: number;
   MUSIC_GENERATION_PER_MINUTE: number;
   VIDEO_TO_AUDIO: number;
   LAYER_EXTRACTION: number;
@@ -81,6 +83,8 @@ export const CREDITS: CreditsConfig = {
   IMAGE_GENERATION_MULTI: 0.6,   // Multi-image (same as Flux Pro)
   VIDEO_GENERATION_PER_SECOND: 2,
   VIDEO_GENERATION_MINIMUM: 2,
+  VIDEO_LTX_PER_SECOND: 1.0,     // LTX-2 19B - Budget video ($0.04/s API, priced at $0.10/s for ~150% margin)
+  VIDEO_LTX_MINIMUM: 3,          // LTX-2 minimum credits
   MUSIC_GENERATION_PER_MINUTE: 0.25, // Music ($0.02/min API × 1.2 = $0.024/min)
   VIDEO_TO_AUDIO: 0.5,           // MMAudio V2 - Video to synced audio ($0.04 API × 1.2 ≈ $0.05)
   LAYER_EXTRACTION: 0.3,         // Same as Flux 2

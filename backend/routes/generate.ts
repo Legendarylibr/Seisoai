@@ -1259,7 +1259,8 @@ export function createGenerationRoutes(deps: Dependencies) {
         resolution = '720p',
         generate_audio = true,
         generation_mode = 'first-last-frame',
-        quality = 'fast'
+        quality = 'fast',
+        model = 'veo'
       } = req.body as {
         prompt?: string;
         first_frame_url?: string;
@@ -1270,6 +1271,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         generate_audio?: boolean;
         generation_mode?: string;
         quality?: string;
+        model?: string;
       };
 
       // Generation mode configurations for Veo 3.1
@@ -1293,8 +1295,21 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       const modeConfig = VIDEO_GENERATION_MODES[generation_mode] || VIDEO_GENERATION_MODES['first-last-frame'];
 
-      // Calculate credits based on duration, audio, and quality using shared utility
-      const creditsToDeduct = calculateVideoCredits(duration, generate_audio, quality);
+      // Validate model parameter
+      const validModels = ['veo', 'ltx'];
+      if (!validModels.includes(model)) {
+        res.status(400).json({ success: false, error: 'model must be veo (quality) or ltx (cheap)' });
+        return;
+      }
+
+      // LTX-2 doesn't support first-last-frame mode
+      if (model === 'ltx' && generation_mode === 'first-last-frame') {
+        res.status(400).json({ success: false, error: 'LTX-2 model only supports text-to-video and image-to-video modes' });
+        return;
+      }
+
+      // Calculate credits based on duration, audio, quality, and model using shared utility
+      const creditsToDeduct = calculateVideoCredits(duration, generate_audio, quality, model);
 
       // Deduct credits atomically
       const User = mongoose.model<IUser>('User');
@@ -1352,9 +1367,16 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      const validDurations = ['4s', '6s', '8s'];
-      if (!validDurations.includes(duration)) {
-        res.status(400).json({ success: false, error: 'duration must be 4s, 6s, or 8s' });
+      // Validate duration based on model
+      const validVeoDurations = ['4s', '6s', '8s'];
+      if (model === 'veo' && !validVeoDurations.includes(duration)) {
+        res.status(400).json({ success: false, error: 'duration must be 4s, 6s, or 8s for Veo model' });
+        return;
+      }
+      // LTX-2 accepts duration in seconds (we'll convert '4s' format to number)
+      const ltxDurationSeconds = parseInt(duration.replace('s', '')) || 5;
+      if (model === 'ltx' && (ltxDurationSeconds < 1 || ltxDurationSeconds > 10)) {
+        res.status(400).json({ success: false, error: 'duration must be between 1-10 seconds for LTX model' });
         return;
       }
 
@@ -1370,31 +1392,77 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Build request body for Veo 3.1 API
+      // Build request body based on model
       const apiAspectRatio = aspect_ratio === 'auto' ? '16:9' : aspect_ratio;
-      
-      const requestBody: Record<string, unknown> = {
-        prompt: prompt.trim(),
-        aspect_ratio: apiAspectRatio,
-        duration,
-        resolution,
-        generate_audio
-      };
+      let requestBody: Record<string, unknown>;
+      let endpoint: string;
+      let modelPath: string;
 
-      // Add frame URLs based on mode
-      if (modeConfig.requiresFirstFrame && first_frame_url) {
-        if (generation_mode === 'image-to-video') {
+      if (model === 'ltx') {
+        // LTX-2 19B model - cheaper option
+        // Convert aspect ratio to video_size format for LTX-2
+        const ltxVideoSizeMap: Record<string, string> = {
+          '16:9': 'landscape_16_9',
+          '9:16': 'portrait_16_9',
+          '1:1': 'square',
+          '4:3': 'landscape_4_3',
+          '3:4': 'portrait_4_3'
+        };
+        const ltxVideoSize = ltxVideoSizeMap[apiAspectRatio] || 'landscape_16_9';
+
+        // Convert duration to num_frames (25 fps)
+        const numFrames = Math.min(121, Math.max(25, ltxDurationSeconds * 25));
+
+        requestBody = {
+          prompt: prompt.trim(),
+          video_size: ltxVideoSize,
+          num_frames: numFrames,
+          generate_audio
+        };
+
+        // LTX-2 endpoints
+        if (generation_mode === 'image-to-video' && first_frame_url) {
           requestBody.image_url = first_frame_url;
+          endpoint = 'https://queue.fal.run/fal-ai/ltx-2-19b/image-to-video';
+          modelPath = 'fal-ai/ltx-2-19b/image-to-video';
         } else {
-          requestBody.first_frame_url = first_frame_url;
+          endpoint = 'https://queue.fal.run/fal-ai/ltx-2-19b/text-to-video';
+          modelPath = 'fal-ai/ltx-2-19b/text-to-video';
         }
-      }
-      if (modeConfig.requiresLastFrame && last_frame_url) {
-        requestBody.last_frame_url = last_frame_url;
+      } else {
+        // Veo 3.1 model - quality option (existing)
+        requestBody = {
+          prompt: prompt.trim(),
+          aspect_ratio: apiAspectRatio,
+          duration,
+          resolution,
+          generate_audio
+        };
+
+        // Add frame URLs based on mode for Veo
+        if (modeConfig.requiresFirstFrame && first_frame_url) {
+          if (generation_mode === 'image-to-video') {
+            requestBody.image_url = first_frame_url;
+          } else {
+            requestBody.first_frame_url = first_frame_url;
+          }
+        }
+        if (modeConfig.requiresLastFrame && last_frame_url) {
+          requestBody.last_frame_url = last_frame_url;
+        }
+
+        // Veo 3.1 endpoints
+        if (generation_mode === 'text-to-video') {
+          endpoint = 'https://queue.fal.run/fal-ai/veo3.1';
+          modelPath = 'fal-ai/veo3.1';
+        } else {
+          endpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/${modeConfig.endpoint}`;
+          modelPath = `fal-ai/veo3.1/fast/${modeConfig.endpoint}`;
+        }
       }
 
       logger.info('Video generation request', {
-        model: 'veo3.1',
+        model: model === 'ltx' ? 'ltx-2-19b' : 'veo3.1',
         mode: generation_mode,
         quality,
         duration,
@@ -1405,14 +1473,6 @@ export function createGenerationRoutes(deps: Dependencies) {
         hasLastFrame: !!last_frame_url,
         userId: user.userId
       });
-
-      // Build endpoint URL based on mode and quality
-      let endpoint: string;
-      if (generation_mode === 'text-to-video') {
-        endpoint = 'https://queue.fal.run/fal-ai/veo3.1';
-      } else {
-        endpoint = `https://queue.fal.run/fal-ai/veo3.1/fast/${modeConfig.endpoint}`;
-      }
 
       // Submit to FAL queue
       const submitResponse = await fetch(endpoint, {
@@ -1476,12 +1536,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      logger.info('Video generation submitted', { requestId, endpoint, hasProvidedStatusUrl: !!providedStatusUrl });
-
-      // Determine model path for polling
-      const modelPath = generation_mode === 'text-to-video' 
-        ? 'fal-ai/veo3.1'
-        : `fal-ai/veo3.1/fast/${modeConfig.endpoint}`;
+      logger.info('Video generation submitted', { requestId, endpoint, modelPath, hasProvidedStatusUrl: !!providedStatusUrl });
 
       // Log polling endpoints for debugging
       logger.debug('Polling endpoints will be', { 
@@ -1747,12 +1802,13 @@ export function createGenerationRoutes(deps: Dependencies) {
       // Refund credits on unexpected error
       const user = req.user;
       // Calculate credits for refund using shared utility
-      const { duration = '8s', generate_audio = true, quality = 'fast' } = req.body as {
+      const { duration = '8s', generate_audio = true, quality = 'fast', model = 'veo' } = req.body as {
         duration?: string;
         generate_audio?: boolean;
         quality?: string;
+        model?: string;
       };
-      const creditsToRefund = calculateVideoCredits(duration, generate_audio, quality);
+      const creditsToRefund = calculateVideoCredits(duration, generate_audio, quality, model);
       if (user) {
         await refundCredits(user, creditsToRefund, `Video generation error: ${err.message}`);
       }

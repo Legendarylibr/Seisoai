@@ -5,19 +5,32 @@
 import { CREDITS } from '../config/constants';
 
 /**
- * Calculate credits for video generation based on duration, audio, and quality
- * @param duration - Duration string like '4s', '6s', '8s'
+ * Calculate credits for video generation based on duration, audio, quality, and model
+ * @param duration - Duration string like '4s', '6s', '8s' or number of seconds
  * @param hasAudio - Whether audio is generated
  * @param quality - 'fast' or 'quality'
+ * @param model - 'veo' (quality) or 'ltx' (cheap) - defaults to 'veo'
  * @returns Number of credits required
  */
 export function calculateVideoCredits(
-  duration: string,
+  duration: string | number,
   hasAudio: boolean,
-  quality: string
+  quality: string,
+  model: string = 'veo'
 ): number {
-  const durationSeconds = parseInt(duration.replace('s', '')) || 8;
+  const durationSeconds = typeof duration === 'number' 
+    ? duration 
+    : parseInt(duration.replace('s', '')) || 8;
   
+  // LTX-2 model - budget pricing with good margin
+  if (model === 'ltx') {
+    // LTX-2: 1 credit/s base, 1.25 credits/s with audio (API cost is ~$0.04/s)
+    const creditsPerSecond = hasAudio ? 1.25 : 1.0;
+    const totalCredits = durationSeconds * creditsPerSecond;
+    return Math.max(CREDITS.VIDEO_LTX_MINIMUM, Math.ceil(totalCredits));
+  }
+  
+  // Veo 3.1 model - quality pricing (existing)
   let pricePerSecond: number;
   if (quality === 'quality') {
     pricePerSecond = hasAudio ? 0.825 : 0.55;

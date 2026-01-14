@@ -18,6 +18,7 @@ export interface PromptLabAction {
   type: 'suggest_prompt' | 'suggest_style' | 'suggest_mode' | 'tip';
   value?: string;
   label?: string;
+  negativePrompt?: string; // Hidden from user, used for quality enhancement
 }
 
 export interface PromptLabContext {
@@ -68,10 +69,13 @@ export async function sendPromptLabMessage(
 
     // Parse any suggested prompts from the response
     const action = parseActionFromResponse(data.response);
+    
+    // Clean the response to hide [NEGATIVE] tags from user display
+    const cleanedResponse = cleanResponseForDisplay(data.response);
 
     return {
       success: true,
-      response: data.response,
+      response: cleanedResponse,
       action,
       timestamp: data.timestamp
     };
@@ -109,15 +113,21 @@ export async function getPromptLabSuggestions(mode: string): Promise<string[]> {
 /**
  * Parse any actionable suggestions from Claude's response
  * Looks for [PROMPT]...[/PROMPT] tags or quoted prompts
+ * Also extracts [NEGATIVE]...[/NEGATIVE] tags for quality enhancement (hidden from user)
  */
 function parseActionFromResponse(response: string): PromptLabAction | undefined {
   // Primary: Look for [PROMPT]...[/PROMPT] tags (most reliable)
   const tagMatch = response.match(/\[PROMPT\]([\s\S]*?)\[\/PROMPT\]/i);
   if (tagMatch && tagMatch[1] && tagMatch[1].trim().length > 5) {
+    // Also extract negative prompt if present (for video quality)
+    const negativeMatch = response.match(/\[NEGATIVE\]([\s\S]*?)\[\/NEGATIVE\]/i);
+    const negativePrompt = negativeMatch && negativeMatch[1] ? negativeMatch[1].trim() : undefined;
+    
     return {
       type: 'suggest_prompt',
       value: tagMatch[1].trim(),
-      label: 'Use Prompt'
+      label: 'Use Prompt',
+      negativePrompt // Hidden from display, used internally for video generation
     };
   }
 
@@ -142,7 +152,15 @@ function parseActionFromResponse(response: string): PromptLabAction | undefined 
   return undefined;
 }
 
+/**
+ * Clean response text by removing [NEGATIVE] tags (user should never see these)
+ */
+export function cleanResponseForDisplay(response: string): string {
+  return response.replace(/\[NEGATIVE\][\s\S]*?\[\/NEGATIVE\]/gi, '').trim();
+}
+
 export default {
   sendPromptLabMessage,
-  getPromptLabSuggestions
+  getPromptLabSuggestions,
+  cleanResponseForDisplay
 };

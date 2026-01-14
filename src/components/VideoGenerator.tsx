@@ -60,7 +60,29 @@ const GENERATION_MODES = [
   }
 ];
 
-// Quality tier options
+// Model options - LTX-2 (budget) vs Veo 3.1 (quality)
+const MODEL_OPTIONS = [
+  {
+    value: 'ltx',
+    label: 'LTX-2 ⚡',
+    description: 'Fast & affordable',
+    // LTX-2 pricing: 1 credit/s base, 1.25 credits/s with audio
+    creditsPerSecNoAudio: 1.0,
+    creditsPerSecWithAudio: 1.25,
+    supportedModes: ['text-to-video', 'image-to-video']
+  },
+  {
+    value: 'veo',
+    label: 'Veo 3.1 ✨',
+    description: 'Premium quality',
+    // Veo 3.1 fast pricing: $0.20/sec no audio, $0.40/sec with audio
+    pricePerSecNoAudio: 0.22,
+    pricePerSecWithAudio: 0.44,
+    supportedModes: ['text-to-video', 'image-to-video', 'first-last-frame']
+  }
+];
+
+// Quality tier options (only for Veo model)
 const QUALITY_OPTIONS = [
   { 
     value: 'fast', 
@@ -103,12 +125,21 @@ const ASPECT_RATIO_OPTIONS = [
 ];
 
 /**
- * Calculate video generation credits based on duration, audio, and quality
- * Pricing based on FAL rates with 10% upcharge
+ * Calculate video generation credits based on duration, audio, quality, and model
  * 1 credit = $0.10
  */
-const calculateVideoCredits = (duration: string, generateAudio: boolean, quality: string = 'fast'): number => {
+const calculateVideoCredits = (duration: string, generateAudio: boolean, quality: string = 'fast', model: string = 'veo'): number => {
   const seconds = parseInt(duration) || 8;
+  
+  // LTX-2 model - budget pricing with good margin
+  if (model === 'ltx') {
+    // 1 credit/s base, 1.25 credits/s with audio
+    const creditsPerSec = generateAudio ? 1.25 : 1.0;
+    // Minimum 3 credits
+    return Math.max(3, Math.ceil(seconds * creditsPerSec));
+  }
+  
+  // Veo model - use quality tier pricing
   const qualityConfig = QUALITY_OPTIONS.find(q => q.value === quality) || QUALITY_OPTIONS[0];
   const pricePerSec = generateAudio ? qualityConfig.pricePerSecWithAudio : qualityConfig.pricePerSecNoAudio;
   // Convert dollars to credits (1 credit = $0.10)
@@ -116,15 +147,6 @@ const calculateVideoCredits = (duration: string, generateAudio: boolean, quality
   return Math.ceil(seconds * creditsPerSecond);
 };
 
-/**
- * Calculate cost in dollars based on duration, audio, and quality
- */
-const _calculateVideoCost = (duration: string, generateAudio: boolean, quality: string = 'fast'): string => {
-  const seconds = parseInt(duration) || 8;
-  const qualityConfig = QUALITY_OPTIONS.find(q => q.value === quality) || QUALITY_OPTIONS[0];
-  const pricePerSec = generateAudio ? qualityConfig.pricePerSecWithAudio : qualityConfig.pricePerSecNoAudio;
-  return (seconds * pricePerSec).toFixed(2);
-};
 
 // Windows 95 style button component
 interface Win95ButtonProps {
@@ -433,7 +455,8 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
   const isConnected = isEmailAuth || walletContext.isConnected;
   
   // State
-  const [generationMode, setGenerationMode] = useState<string>('first-last-frame');
+  const [generationMode, setGenerationMode] = useState<string>('text-to-video');
+  const [model, setModel] = useState<string>('ltx');
   const [quality, setQuality] = useState<string>('fast');
   const [firstFrameUrl, setFirstFrameUrl] = useState<string | null>(null);
   const [lastFrameUrl, setLastFrameUrl] = useState<string | null>(null);
@@ -653,6 +676,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
           generateAudio,
           generationMode: generationMode as 'text-to-video' | 'image-to-video' | 'first-last-frame',
           quality: quality as 'fast' | 'quality',
+          model: model as 'veo' | 'ltx',
           userId: emailContext.userId ?? undefined,
           walletAddress: walletContext.address ?? undefined,
           email: emailContext.email ?? undefined
@@ -669,7 +693,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
       }
       
       // Save to gallery (non-blocking)
-      const creditsUsed = result.creditsDeducted || (isLipSyncMode ? 3 : calculateVideoCredits(duration, generateAudio, quality));
+      const creditsUsed = result.creditsDeducted || (isLipSyncMode ? 3 : calculateVideoCredits(duration, generateAudio, quality, model));
       const identifier = isEmailAuth ? emailContext.userId : walletContext.address;
       if (identifier) {
         addGeneration(identifier, {
@@ -693,7 +717,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
     } finally {
       setIsGenerating(false);
     }
-  }, [canGenerate, prompt, firstFrameUrl, lastFrameUrl, audioUrl, aspectRatio, duration, resolution, generateAudio, generationMode, quality, currentMode, emailContext, walletContext, isEmailAuth, isLipSyncMode]);
+  }, [canGenerate, prompt, firstFrameUrl, lastFrameUrl, audioUrl, aspectRatio, duration, resolution, generateAudio, generationMode, quality, model, currentMode, emailContext, walletContext, isEmailAuth, isLipSyncMode]);
 
   const handleDownload = useCallback(async () => {
     if (!generatedVideoUrl) return;
@@ -724,54 +748,96 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
       <div className="flex-1 min-h-0 p-2 lg:p-2 flex flex-col lg:flex-row gap-2 lg:gap-3 overflow-auto lg:overflow-hidden">
         {/* Left panel - Controls */}
         <div className="lg:w-[45%] flex flex-col gap-2 min-h-0 overflow-auto lg:overflow-hidden">
-          {/* Generation Mode & Quality - combined row */}
-          <Win95GroupBox title="Mode & Quality" className="flex-shrink-0" icon={<Layers className="w-3.5 h-3.5" />}>
-            <div className="flex gap-2 items-start">
-              {/* Mode Selector */}
-              <div className="flex-1">
+          {/* Model & Mode Selection */}
+          <Win95GroupBox title="Model & Mode" className="flex-shrink-0" icon={<Layers className="w-3.5 h-3.5" />}>
+            <div className="flex flex-col gap-1.5">
+              {/* Model Selector - LTX-2 (cheap) vs Veo (quality) */}
+              <div>
                 <label className="text-[8px] font-bold flex items-center gap-1 mb-0.5" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                  <Layers className="w-2.5 h-2.5" /> Mode
+                  <Zap className="w-2.5 h-2.5" /> Model
                 </label>
-                <Win95Panel sunken className="px-1 py-0.5">
-                  <select 
-                    value={generationMode}
-                    onChange={(e) => {
-                      const newMode = e.target.value;
-                      setGenerationMode(newMode);
-                      if (newMode === 'text-to-video') {
-                        setQuality('quality');
-                      }
-                    }}
-                    className="w-full text-[9px] bg-transparent focus:outline-none"
-                    style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
-                  >
-                    {GENERATION_MODES.map(mode => (
-                      <option key={mode.value} value={mode.value}>{mode.icon} {mode.label}</option>
-                    ))}
-                  </select>
-                </Win95Panel>
+                <div className="flex gap-0.5">
+                  {MODEL_OPTIONS.map((opt) => (
+                    <Win95Button
+                      key={opt.value}
+                      onClick={() => {
+                        setModel(opt.value);
+                        // If switching to LTX and current mode not supported, switch to text-to-video
+                        if (opt.value === 'ltx' && !opt.supportedModes.includes(generationMode)) {
+                          setGenerationMode('text-to-video');
+                        }
+                      }}
+                      active={model === opt.value}
+                      className="flex-1 text-[9px]"
+                    >
+                      {opt.label}
+                    </Win95Button>
+                  ))}
+                </div>
+                <div className="text-[7px] mt-0.5 text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                  {model === 'ltx' ? '💰 Budget-friendly, fast generation' : '✨ Premium quality, all modes'}
+                </div>
               </div>
-              
-              {/* Quality Selector - hide for lip sync mode */}
-              {generationMode !== 'text-to-video' && !isLipSyncMode && (
+
+              <div className="flex gap-2 items-start">
+                {/* Mode Selector */}
                 <div className="flex-1">
                   <label className="text-[8px] font-bold flex items-center gap-1 mb-0.5" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                    <Zap className="w-2.5 h-2.5" /> Quality
+                    <Layers className="w-2.5 h-2.5" /> Mode
                   </label>
-                  <div className="flex gap-0.5">
-                    {QUALITY_OPTIONS.map((opt) => (
-                      <Win95Button
-                        key={opt.value}
-                        onClick={() => setQuality(opt.value)}
-                        active={quality === opt.value}
-                        className="flex-1 text-[9px]"
-                      >
-                        {opt.label}
-                      </Win95Button>
-                    ))}
-                  </div>
+                  <Win95Panel sunken className="px-1 py-0.5">
+                    <select 
+                      value={generationMode}
+                      onChange={(e) => {
+                        const newMode = e.target.value;
+                        setGenerationMode(newMode);
+                        // If selecting a mode not supported by LTX, switch to Veo
+                        const ltxModel = MODEL_OPTIONS.find(m => m.value === 'ltx')!;
+                        if (model === 'ltx' && !ltxModel.supportedModes.includes(newMode)) {
+                          setModel('veo');
+                        }
+                      }}
+                      className="w-full text-[9px] bg-transparent focus:outline-none"
+                      style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}
+                    >
+                      {GENERATION_MODES.map(mode => {
+                        const ltxModel = MODEL_OPTIONS.find(m => m.value === 'ltx')!;
+                        const isDisabledForLtx = model === 'ltx' && !ltxModel.supportedModes.includes(mode.value);
+                        return (
+                          <option 
+                            key={mode.value} 
+                            value={mode.value}
+                            disabled={isDisabledForLtx}
+                          >
+                            {mode.icon} {mode.label} {isDisabledForLtx ? '(Veo only)' : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </Win95Panel>
                 </div>
-              )}
+                
+                {/* Quality Selector - only for Veo model, hide for lip sync */}
+                {model === 'veo' && generationMode !== 'text-to-video' && !isLipSyncMode && (
+                  <div className="flex-1">
+                    <label className="text-[8px] font-bold flex items-center gap-1 mb-0.5" style={{ color: WIN95.text, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                      <Zap className="w-2.5 h-2.5" /> Quality
+                    </label>
+                    <div className="flex gap-0.5">
+                      {QUALITY_OPTIONS.map((opt) => (
+                        <Win95Button
+                          key={opt.value}
+                          onClick={() => setQuality(opt.value)}
+                          active={quality === opt.value}
+                          className="flex-1 text-[9px]"
+                        >
+                          {opt.label}
+                        </Win95Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </Win95GroupBox>
 
@@ -981,7 +1047,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
                 {isGenerating ? '⏳ Generating...' : isLipSyncMode ? '🗣️ Generate Lip Sync' : '▶ Generate'}
               </button>
               <div className="text-[9px] text-center" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                {isLipSyncMode ? '3' : calculateVideoCredits(duration, generateAudio, quality)} credits per generation
+                {isLipSyncMode ? '3' : calculateVideoCredits(duration, generateAudio, quality, model)} credits • {model === 'ltx' ? 'LTX-2' : 'Veo 3.1'}
               </div>
             </div>
             {!canGenerate && !isGenerating && (

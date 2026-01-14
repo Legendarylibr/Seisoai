@@ -20,6 +20,7 @@ export interface VideoGenerationOptions {
   generateAudio?: boolean;
   generationMode?: GenerationMode;
   quality?: 'fast' | 'quality';
+  model?: 'veo' | 'ltx';
   userId?: string;
   walletAddress?: string;
   email?: string;
@@ -51,7 +52,7 @@ const GENERATION_MODES: Record<GenerationMode, ModeConfig> = {
 };
 
 /**
- * Generate video using Veo 3.1 (multiple modes supported)
+ * Generate video using Veo 3.1 (quality) or LTX-2 (cheap)
  */
 export const generateVideo = async ({
   prompt,
@@ -61,8 +62,9 @@ export const generateVideo = async ({
   duration = '8s',
   resolution = '720p',
   generateAudio = true,
-  generationMode = 'first-last-frame',
+  generationMode = 'text-to-video',
   quality = 'fast',
+  model = 'ltx',
   userId,
   walletAddress,
   email
@@ -94,7 +96,8 @@ export const generateVideo = async ({
       duration,
       resolution,
       generationMode,
-      quality
+      quality,
+      model
     });
 
     const requestBody = {
@@ -107,6 +110,7 @@ export const generateVideo = async ({
       generate_audio: generateAudio,
       generation_mode: generationMode,
       quality,
+      model,
       userId,
       walletAddress,
       email

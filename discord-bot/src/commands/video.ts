@@ -19,16 +19,22 @@ import { getOrCreatePrivateChannel } from '../services/channels.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 
-// Credit calculation based on duration and audio
-function calculateVideoCredits(duration: string, hasAudio: boolean): number {
-  const baseCredits: Record<string, number> = {
-    '4s': 4,
-    '6s': 6,
-    '8s': 8
-  };
-  let credits = baseCredits[duration] || 8;
-  if (hasAudio) credits += 2;
-  return credits;
+// Credit calculation based on duration, audio, and model
+function calculateVideoCredits(duration: string, hasAudio: boolean, model: 'veo' | 'ltx' = 'ltx'): number {
+  const durationSeconds = parseInt(duration.replace('s', '')) || 8;
+  
+  // LTX-2 model - budget pricing with good margin
+  if (model === 'ltx') {
+    // 1 credit/s base, 1.25 credits/s with audio
+    const creditsPerSecond = hasAudio ? 1.25 : 1.0;
+    return Math.max(3, Math.ceil(durationSeconds * creditsPerSecond));
+  }
+  
+  // Veo model - quality pricing
+  const pricePerSecond = hasAudio ? 0.44 : 0.22;
+  const totalCost = durationSeconds * pricePerSecond;
+  // Convert dollars to credits (1 credit = $0.10), minimum 2
+  return Math.max(2, Math.ceil(totalCost / 0.10));
 }
 
 export const data = new SlashCommandBuilder()
@@ -100,6 +106,16 @@ export const data = new SlashCommandBuilder()
       .setName('last_frame')
       .setDescription('Last frame image (for first-last-frame mode)')
       .setRequired(false)
+  )
+  .addStringOption(option =>
+    option
+      .setName('model')
+      .setDescription('Video model to use')
+      .setRequired(false)
+      .addChoices(
+        { name: '⚡ LTX-2 (Cheap & Fast)', value: 'ltx' },
+        { name: '🎬 Veo 3.1 (Quality)', value: 'veo' }
+      )
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -107,13 +123,19 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   try {
     const prompt = interaction.options.getString('prompt', true);
-    const mode = (interaction.options.getString('mode') || 'text-to-video') as 'text-to-video' | 'image-to-video' | 'first-last-frame';
+    let mode = (interaction.options.getString('mode') || 'text-to-video') as 'text-to-video' | 'image-to-video' | 'first-last-frame';
     const duration = (interaction.options.getString('duration') || '8s') as '4s' | '6s' | '8s';
     const aspect = interaction.options.getString('aspect') || '16:9';
     const resolution = (interaction.options.getString('resolution') || '720p') as '720p' | '1080p';
     const generateAudio = interaction.options.getBoolean('audio') ?? true;
+    const model = (interaction.options.getString('model') || 'ltx') as 'veo' | 'ltx';
     const firstFrameAttachment = interaction.options.getAttachment('first_frame');
     const lastFrameAttachment = interaction.options.getAttachment('last_frame');
+
+    // LTX-2 doesn't support first-last-frame mode
+    if (model === 'ltx' && mode === 'first-last-frame') {
+      mode = 'image-to-video';
+    }
 
     // Validate mode requirements
     if (mode === 'image-to-video' && !firstFrameAttachment) {
@@ -178,7 +200,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     });
 
     // Calculate credits
-    const creditsRequired = calculateVideoCredits(duration, generateAudio);
+    const creditsRequired = calculateVideoCredits(duration, generateAudio, model);
 
     // Check credits
     if (discordUser.credits < creditsRequired) {
@@ -262,7 +284,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       resolution,
       generateAudio,
       firstFrameUrl,
-      lastFrameUrl
+      lastFrameUrl,
+      model
     });
 
     // Poll for result with progress updates
