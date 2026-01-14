@@ -420,12 +420,15 @@ export async function generateVideo(options: VideoGenerationOptions): Promise<{
       prompt,
       video_size: ltxVideoSize,
       num_frames: numFrames,
-      generate_audio: generateAudio
+      generate_audio: generateAudio,
+      guidance_scale: 10, // High for strong prompt adherence
+      num_inference_steps: 50 // More steps for better quality (default was 40)
     };
 
     // LTX-2 only supports text-to-video and image-to-video
     if (mode === 'image-to-video' && firstFrameUrl) {
       body.image_url = firstFrameUrl;
+      body.strength = 0.4; // Prompt-driven: 40% image, 60% prompt influence
       endpoint = 'https://queue.fal.run/fal-ai/ltx-2-19b/image-to-video';
       modelPath = 'fal-ai/ltx-2-19b/image-to-video';
     } else {

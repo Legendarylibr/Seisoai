@@ -592,36 +592,36 @@ Be specific and detailed about each element.`,
       logger.debug('Image described for batch variation', { descriptionLength: description.length });
 
       // Step 2: Generate variation prompts using LLM - preserve pose/character, vary only surface details
-      const variationSystemPrompt = `You create variations of image prompts that ONLY change clothing, hair color, and background.
+      const variationSystemPrompt = `You create STRUCTURED variation prompts for image generation that ONLY change surface details.
 
-ABSOLUTE RULES - NEVER CHANGE:
-- GENDER (if female, ALL outputs must be female; if male, ALL must be male)
-- EXACT POSE and body position
-- FACE and facial features
+OUTPUT FORMAT - Use this EXACT structure for each prompt:
+"[PRESERVED: gender, exact pose, facial features, expression, body type, age, hair style] [OUTFIT: specific clothing description] [HAIR COLOR: specific color] [BACKGROUND: scene description] [LIGHTING: mood/style]"
+
+ABSOLUTE RULES - COPY EXACTLY FROM ORIGINAL:
+- GENDER (if female, ALL outputs MUST say female/woman; if male, ALL MUST say male/man)
+- EXACT POSE and body position (copy the pose description word-for-word)
+- FACE and facial features (copy exactly)
 - BODY TYPE and proportions
-- EXPRESSION
+- EXPRESSION (copy exactly)
 - AGE
+- HAIR STYLE/LENGTH (only change COLOR, keep style the same)
 
-ONLY CHANGE THESE SURFACE DETAILS:
-- Outfit/clothing style and color
-- Hair color (keep same length/style)
-- Background scene
-- Lighting mood
-- Color palette
+ONLY CHANGE THESE SURFACE DETAILS (make each variation DISTINCTLY different):
+- Outfit/clothing: different styles, colors, formality levels
+- Hair COLOR only: blonde, brunette, auburn, black, platinum, red, etc.
+- Background: completely different scenes/settings
+- Lighting: warm, cool, dramatic, soft, golden hour, studio, etc.
 
-For each of the ${validNumOutputs} prompts:
-1. Start by repeating the EXACT character description (gender, pose, features)
-2. Then add different clothing, hair color, and background
+EXAMPLE INPUT: "A young woman with fair skin, blue eyes, light brown hair in an updo, serene expression, looking slightly to the left"
 
-Example for female character:
-["A woman with the same pose and features, wearing a red dress, blonde hair, city background at night",
-"A woman with the same pose and features, wearing casual jeans and white top, brunette hair, park background"]
+EXAMPLE OUTPUT (3 variations):
+[
+  "A young woman with fair skin, blue eyes, hair in an updo, serene expression, looking slightly to the left. Wearing an elegant red evening gown with gold accessories. Platinum blonde hair color. Urban rooftop at sunset background. Warm golden hour lighting.",
+  "A young woman with fair skin, blue eyes, hair in an updo, serene expression, looking slightly to the left. Wearing a casual white linen blouse and high-waisted jeans. Rich auburn hair color. Cozy cafe interior background. Soft natural window lighting.",
+  "A young woman with fair skin, blue eyes, hair in an updo, serene expression, looking slightly to the left. Wearing a sleek black leather jacket over a band t-shirt. Jet black hair color. Neon-lit city street at night background. Cool blue and pink neon lighting."
+]
 
-Example for male character:  
-["A man with the same pose and features, wearing a suit, dark hair, office background",
-"A man with the same pose and features, wearing casual hoodie, light brown hair, street background"]
-
-Respond with a JSON array of ${validNumOutputs} prompts. PRESERVE THE GENDER AND CHARACTER.`;
+Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must be detailed and specific.`;
 
       // Calculate max_tokens based on number of outputs (each prompt ~200 tokens + overhead)
       const tokensNeeded = Math.max(3000, validNumOutputs * 250 + 500);

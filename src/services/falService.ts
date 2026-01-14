@@ -244,7 +244,7 @@ export const generateImage = async (
 
     // SECURITY: Route through backend to ensure credit checks
     // Extract user identification from advancedSettings
-    const { walletAddress, userId, email, multiImageModel, optimizePrompt = false } = advancedSettings;
+    const { walletAddress, userId, email, multiImageModel, optimizePrompt = false, enhancePrompt = true } = advancedSettings;
     
     if (!walletAddress && !userId && !email) {
       throw new Error('User identification required. Please provide walletAddress, userId, or email in advancedSettings.');
@@ -280,7 +280,8 @@ export const generateImage = async (
         userId,
         email,
         model, // Pass model selection to backend
-        optimizePrompt // Pass prompt optimization toggle to backend
+        optimizePrompt, // Pass prompt optimization toggle to backend
+        enhancePrompt // Disable for batch variations to preserve exact prompts
       })
     });
 

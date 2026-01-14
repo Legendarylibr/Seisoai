@@ -232,7 +232,8 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment: _
                   isNFTHolder: isNFTHolder || false,
                   multiImageModel: variateResult.useControlNet ? 'controlnet-canny' : (multiImageModel || 'flux'),
                   numImages: 1,
-                  seed: uniqueSeed // Unique seed per variation
+                  seed: uniqueSeed, // Unique seed per variation
+                  enhancePrompt: false // Disable prompt enhancement to preserve exact variation prompts
                 },
                 item.imageDataUrl
               );

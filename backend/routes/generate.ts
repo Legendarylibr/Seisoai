@@ -592,7 +592,8 @@ export function createGenerationRoutes(deps: Dependencies) {
         aspect_ratio,
         seed,
         model,
-        optimizePrompt = false
+        optimizePrompt = false,
+        enhancePrompt = true // Default to true, but can be disabled for batch variations
       } = req.body as {
         prompt?: string;
         guidanceScale?: number;
@@ -604,6 +605,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         seed?: number;
         model?: string;
         optimizePrompt?: boolean;
+        enhancePrompt?: boolean;
       };
       
       // Use either naming convention, defaulting to 1
@@ -705,7 +707,7 @@ export function createGenerationRoutes(deps: Dependencies) {
           prompt: finalPrompt,
           control_lora_image_url: controlImageUrl, // Correct parameter name for flux-control-lora-canny
           num_images: 1,
-          guidance_scale: guidanceScale || 3.5,
+          guidance_scale: guidanceScale || 6.0, // Higher for better prompt adherence
           num_inference_steps: 28,
           output_format: 'jpeg',
           enable_safety_checker: false
@@ -796,7 +798,7 @@ export function createGenerationRoutes(deps: Dependencies) {
           output_format: 'jpeg',
           safety_tolerance: '6',
           prompt_safety_tolerance: '6',
-          enhance_prompt: true,
+          enhance_prompt: enhancePrompt, // Can be disabled for batch variations with custom prompts
           seed: seed ?? Math.floor(Math.random() * 2147483647)
         };
 
@@ -1417,12 +1419,15 @@ export function createGenerationRoutes(deps: Dependencies) {
           prompt: prompt.trim(),
           video_size: ltxVideoSize,
           num_frames: numFrames,
-          generate_audio
+          generate_audio,
+          guidance_scale: 10, // High for strong prompt adherence
+          num_inference_steps: 50 // More steps for better quality (default was 40)
         };
 
         // LTX-2 endpoints
         if (generation_mode === 'image-to-video' && first_frame_url) {
           requestBody.image_url = first_frame_url;
+          requestBody.strength = 0.4; // Prompt-driven: 40% image, 60% prompt influence
           endpoint = 'https://queue.fal.run/fal-ai/ltx-2-19b/image-to-video';
           modelPath = 'fal-ai/ltx-2-19b/image-to-video';
         } else {
