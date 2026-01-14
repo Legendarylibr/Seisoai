@@ -56,8 +56,20 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
   // Get token from header
   const headerToken = req.headers[CSRF_TOKEN_HEADER.toLowerCase()] as string | undefined;
 
+  // SECURITY FIX: Use constant-time comparison to prevent timing attacks
+  let tokensMatch = false;
+  if (cookieToken && headerToken && cookieToken.length === headerToken.length) {
+    try {
+      const cookieBuffer = Buffer.from(cookieToken, 'utf8');
+      const headerBuffer = Buffer.from(headerToken, 'utf8');
+      tokensMatch = crypto.timingSafeEqual(cookieBuffer, headerBuffer);
+    } catch {
+      tokensMatch = false;
+    }
+  }
+
   // Verify tokens match
-  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+  if (!cookieToken || !headerToken || !tokensMatch) {
     logger.warn('CSRF token validation failed', {
       path: req.path,
       method: req.method,

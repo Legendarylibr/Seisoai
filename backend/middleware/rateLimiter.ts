@@ -175,11 +175,24 @@ export const createBlockchainRpcLimiter = (): RateLimitRequestHandler => createL
 
 /**
  * Create free image rate limiter with browser fingerprinting
- * SECURITY FIX: Only skip rate limiting for requests with valid JWT tokens,
- * not just presence of wallet/userId/email in body (which could be faked)
+ * SECURITY FIX: Only skip rate limiting for requests with VERIFIED JWT tokens,
+ * not just tokens that match the JWT structure pattern
  */
 export const createFreeImageLimiter = (): RateLimitRequestHandler => {
   const store = getRedisStore('free-image');
+  
+  // Lazy load JWT verification to avoid circular dependencies
+  let jwtVerify: typeof import('jsonwebtoken').verify | null = null;
+  let jwtSecret: string | undefined;
+  
+  const getJwtVerify = async () => {
+    if (!jwtVerify) {
+      const jwt = await import('jsonwebtoken');
+      jwtVerify = jwt.default.verify;
+      jwtSecret = process.env.JWT_SECRET;
+    }
+    return { verify: jwtVerify, secret: jwtSecret };
+  };
   
   return rateLimit({
     ...(store && { store }),
@@ -196,22 +209,38 @@ export const createFreeImageLimiter = (): RateLimitRequestHandler => {
       const fingerprint = generateBrowserFingerprint(req);
       return `${req.ip || 'unknown'}-${fingerprint}`;
     },
-    // SECURITY FIX: Only skip for valid JWT authentication, not body params
-    // Body params (walletAddress, userId, email) can be faked to bypass rate limits
+    // SECURITY FIX: Actually verify JWT tokens, not just check structure
+    // Fake tokens matching xxx.yyy.zzz pattern will now fail verification
     skip: (req) => {
-      // Check for valid JWT token in Authorization header
       const authHeader = req.headers['authorization'];
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.split(' ')[1];
-        // SECURITY: Validate JWT structure (3 base64url parts separated by dots)
-        // This prevents attackers from using long garbage strings to bypass rate limits
-        // Regex: base64url characters (A-Za-z0-9_-) with dots separating 3 parts
-        const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-        if (token && jwtPattern.test(token)) {
-          return true;
-        }
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return false;
       }
-      return false;
+      
+      const token = authHeader.split(' ')[1];
+      if (!token) return false;
+      
+      // SECURITY: Validate JWT structure first (cheap check)
+      const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+      if (!jwtPattern.test(token)) {
+        return false;
+      }
+      
+      // SECURITY FIX: Actually verify the JWT signature
+      // This is synchronous in the skip function, so we use try-catch
+      try {
+        const jwt = require('jsonwebtoken');
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return false;
+        
+        const decoded = jwt.verify(token, secret);
+        // Token is valid - skip rate limiting for authenticated users
+        return !!decoded;
+      } catch {
+        // Invalid token - do NOT skip rate limiting
+        logger.debug('Rate limiter: Invalid JWT token, applying rate limit');
+        return false;
+      }
     }
   });
 };

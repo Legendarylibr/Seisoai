@@ -240,10 +240,10 @@ export const data = new SlashCommandBuilder()
   .addStringOption(option =>
     option
       .setName('code')
-      .setDescription('6-digit linking code from the SeisoAI website')
+      .setDescription('8-character linking code from the SeisoAI website')
       .setRequired(false)
-      .setMinLength(6)
-      .setMaxLength(6)
+      .setMinLength(6)  // Support both legacy 6-digit and new 8-char codes
+      .setMaxLength(8)
   );
 
 /**
@@ -349,27 +349,31 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         return;
       }
 
-      // Validate code format
-      if (!/^\d{6}$/.test(code)) {
+      // SECURITY FIX: Validate code format (8 alphanumeric OR legacy 6 digits)
+      const isValidCode = /^[A-Z2-9]{8}$/i.test(code) || /^\d{6}$/.test(code);
+      if (!isValidCode) {
         // Record failed attempt (invalid format)
         recordAttempt(discordId, false);
         
         const embed = new EmbedBuilder()
           .setColor(0xE74C3C)
           .setTitle('❌ Invalid Code')
-          .setDescription('Please enter a valid 6-digit code from the SeisoAI website.')
+          .setDescription('Please enter a valid 8-character code from the SeisoAI website.')
           .addFields({
             name: '💡 How to get a code',
-            value: `1. Go to [SeisoAI Settings](${config.urls.website}/settings)\n2. Click "Link Discord"\n3. Copy the 6-digit code\n4. Run \`/link code:XXXXXX\``
+            value: `1. Go to [SeisoAI Settings](${config.urls.website}/settings)\n2. Click "Link Discord"\n3. Copy the 8-character code\n4. Run \`/link code:XXXXXXXX\``
           });
 
         await interaction.editReply({ embeds: [embed] });
         return;
       }
+      
+      // Normalize code to uppercase for consistent matching
+      const normalizedCode = code.toUpperCase();
 
-      // Call backend API to verify the code
+      // Call backend API to verify the code (use normalized code)
       const result = await verifyLinkCode(
-        code,
+        normalizedCode,
         discordId,
         interaction.user.username
       );

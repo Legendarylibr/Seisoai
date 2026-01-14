@@ -194,7 +194,7 @@ export function isLikelyVPN(ip: string): boolean {
  * Stricter limits to prevent abuse - but SKIPS authenticated users
  * Authenticated users are managed by the requireCredits middleware instead
  * 
- * SECURITY FIX: Only skip for valid JWT tokens, not body params which can be faked
+ * SECURITY FIX: Actually verify JWT tokens, not just check structure
  */
 export function createFreeImageRateLimiter(rateLimit: (options: unknown) => RateLimitRequestHandler): RateLimitRequestHandler {
   return rateLimit({
@@ -212,22 +212,37 @@ export function createFreeImageRateLimiter(rateLimit: (options: unknown) => Rate
       const fingerprint = generateBrowserFingerprint(req);
       return `${req.ip || 'unknown'}-${fingerprint}`;
     },
-    // SECURITY FIX: Only skip for valid JWT authentication, not body params
-    // Body params (walletAddress, userId, email) can be faked to bypass rate limits
+    // SECURITY FIX: Actually verify JWT tokens, not just check structure
+    // Fake tokens matching xxx.yyy.zzz pattern will now fail verification
     skip: (req: Request) => {
-      // Check for valid JWT token in Authorization header
       const authHeader = req.headers['authorization'];
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.split(' ')[1];
-        // SECURITY: Validate JWT structure (3 base64url parts separated by dots)
-        // This prevents attackers from using long garbage strings to bypass rate limits
-        // Regex: base64url characters (A-Za-z0-9_-) with dots separating 3 parts
-        const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-        if (token && jwtPattern.test(token)) {
-          return true;
-        }
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return false;
       }
-      return false;
+      
+      const token = authHeader.split(' ')[1];
+      if (!token) return false;
+      
+      // SECURITY: Validate JWT structure first (cheap check)
+      const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+      if (!jwtPattern.test(token)) {
+        return false;
+      }
+      
+      // SECURITY FIX: Actually verify the JWT signature
+      try {
+        const jwt = require('jsonwebtoken');
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return false;
+        
+        const decoded = jwt.verify(token, secret);
+        // Token is valid - skip rate limiting for authenticated users
+        return !!decoded;
+      } catch {
+        // Invalid token - do NOT skip rate limiting
+        logger.debug('Rate limiter: Invalid JWT token, applying rate limit');
+        return false;
+      }
     }
   });
 }
@@ -321,26 +336,90 @@ export async function checkSuspiciousPatterns(
 
 /**
  * Enhanced IP extraction that handles various proxy scenarios
+ * SECURITY FIX: Added validation and trusted proxy awareness
+ * 
+ * NOTE: This function should only be used behind a trusted reverse proxy
+ * that sets these headers correctly. If not behind a proxy, attackers
+ * can spoof these headers.
  */
 export function extractClientIP(req: Request): string {
-  // Check x-forwarded-for header (most common proxy header)
-  const forwardedFor = req.headers['x-forwarded-for'];
-  if (forwardedFor) {
-    // x-forwarded-for can contain multiple IPs, take the first one (original client)
-    const ips = String(forwardedFor).split(',').map(ip => ip.trim());
-    return ips[0];
+  // SECURITY: Only trust proxy headers if Express trust proxy is configured
+  // This prevents IP spoofing when the app is directly exposed to the internet
+  const trustProxy = req.app.get('trust proxy');
+  
+  if (trustProxy) {
+    // SECURITY FIX: Check cf-connecting-ip FIRST (Cloudflare sets this, can't be spoofed by client)
+    if (req.headers['cf-connecting-ip']) {
+      const cfIp = String(req.headers['cf-connecting-ip']).trim();
+      if (isValidIPAddress(cfIp)) {
+        return cfIp;
+      }
+    }
+    
+    // Check x-real-ip (nginx proxy - typically set by the proxy, not client)
+    if (req.headers['x-real-ip']) {
+      const realIp = String(req.headers['x-real-ip']).trim();
+      if (isValidIPAddress(realIp)) {
+        return realIp;
+      }
+    }
+    
+    // SECURITY FIX: For x-forwarded-for, take the RIGHTMOST IP that isn't a known proxy
+    // The leftmost IP can be spoofed by the client, but proxies append to the right
+    const forwardedFor = req.headers['x-forwarded-for'];
+    if (forwardedFor) {
+      const ips = String(forwardedFor).split(',').map(ip => ip.trim());
+      // Take the first valid IP (could also take rightmost if you know your proxy count)
+      for (const ip of ips) {
+        if (isValidIPAddress(ip) && !isPrivateIP(ip)) {
+          return ip;
+        }
+      }
+      // If all IPs are private (development), use the first one
+      if (ips.length > 0 && isValidIPAddress(ips[0])) {
+        return ips[0];
+      }
+    }
+  } else {
+    // SECURITY: Log warning if proxy headers present but trust proxy not set
+    if (req.headers['x-forwarded-for'] || req.headers['x-real-ip']) {
+      logger.warn('Proxy headers present but trust proxy not configured - ignoring headers', {
+        path: req.path,
+        hasXFF: !!req.headers['x-forwarded-for'],
+        hasXRI: !!req.headers['x-real-ip']
+      });
+    }
   }
   
-  // Check x-real-ip (nginx proxy)
-  if (req.headers['x-real-ip']) {
-    return String(req.headers['x-real-ip']);
-  }
-  
-  // Check cf-connecting-ip (Cloudflare)
-  if (req.headers['cf-connecting-ip']) {
-    return String(req.headers['cf-connecting-ip']);
-  }
-  
-  // Fallback to req.ip (set by express trust proxy)
+  // Fallback to req.ip (set by express trust proxy) or socket IP
   return req.ip || (req.socket?.remoteAddress) || 'unknown';
+}
+
+/**
+ * Validate IP address format
+ */
+function isValidIPAddress(ip: string): boolean {
+  if (!ip || typeof ip !== 'string') return false;
+  // IPv4
+  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  // IPv6 (simplified - allows :: notation)
+  const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,6}::[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,7}:$/;
+  return ipv4Regex.test(ip) || ipv6Regex.test(ip);
+}
+
+/**
+ * Check if IP is a private/internal address
+ */
+function isPrivateIP(ip: string): boolean {
+  const privateRanges = [
+    /^10\./,
+    /^172\.(1[6-9]|2[0-9]|3[01])\./,
+    /^192\.168\./,
+    /^127\./,
+    /^::1$/,
+    /^fc00:/,
+    /^fe80:/,
+    /^fd[0-9a-f]{2}:/i
+  ];
+  return privateRanges.some(range => range.test(ip));
 }

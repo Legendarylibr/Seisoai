@@ -257,6 +257,7 @@ export function createGDPRRoutes(deps: Dependencies) {
    * PUT /api/gdpr/rectify
    * 
    * Allows users to correct their personal information
+   * SECURITY FIX: Added input sanitization and validation
    */
   router.put('/rectify', limiter, authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -275,15 +276,40 @@ export function createGDPRRoutes(deps: Dependencies) {
       const updates: Record<string, unknown> = {};
       
       if (settings) {
-        if (settings.preferredStyle) updates['settings.preferredStyle'] = settings.preferredStyle;
-        if (settings.defaultImageSize) updates['settings.defaultImageSize'] = settings.defaultImageSize;
+        // SECURITY: Sanitize and validate settings values
+        if (settings.preferredStyle && typeof settings.preferredStyle === 'string') {
+          const sanitized = settings.preferredStyle.replace(/[<>]/g, '').substring(0, 100);
+          if (sanitized) updates['settings.preferredStyle'] = sanitized;
+        }
+        if (settings.defaultImageSize && typeof settings.defaultImageSize === 'string') {
+          // Only allow valid image sizes
+          const validSizes = ['512x512', '768x768', '1024x1024', '1024x768', '768x1024'];
+          if (validSizes.includes(settings.defaultImageSize)) {
+            updates['settings.defaultImageSize'] = settings.defaultImageSize;
+          }
+        }
         if (typeof settings.enableNotifications === 'boolean') {
           updates['settings.enableNotifications'] = settings.enableNotifications;
         }
       }
       
-      if (discordUsername) {
-        updates.discordUsername = discordUsername;
+      // SECURITY FIX: Sanitize discordUsername to prevent XSS and injection
+      if (discordUsername && typeof discordUsername === 'string') {
+        // Discord usernames: 2-32 chars, alphanumeric, underscores, periods
+        const sanitized = discordUsername
+          .replace(/[<>'"&]/g, '') // Remove XSS chars
+          .substring(0, 32); // Max length
+        
+        // Validate it looks like a Discord username
+        if (/^[\w.]{2,32}$/.test(sanitized)) {
+          updates.discordUsername = sanitized;
+        } else {
+          res.status(400).json({
+            success: false,
+            error: 'Invalid Discord username format',
+          });
+          return;
+        }
       }
 
       if (Object.keys(updates).length === 0) {

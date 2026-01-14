@@ -96,6 +96,7 @@ export const blacklistToken = async (token: string | undefined, expiresAt: numbe
 
 /**
  * Create JWT authentication middleware
+ * SECURITY FIX: Now checks token blacklist to properly handle logged-out tokens
  */
 export const createAuthenticateToken = (
   jwtSecret: string | undefined, 
@@ -118,6 +119,16 @@ export const createAuthenticateToken = (
         res.status(500).json({
           success: false,
           error: 'Server configuration error'
+        });
+        return;
+      }
+
+      // SECURITY FIX: Check if token is blacklisted (logged out)
+      const blacklisted = await isTokenBlacklisted(token);
+      if (blacklisted) {
+        res.status(401).json({
+          success: false,
+          error: 'Token has been revoked. Please sign in again.'
         });
         return;
       }
@@ -173,6 +184,7 @@ export const createAuthenticateToken = (
  * 
  * Body-based authentication has been DISABLED as it allows impersonation.
  * All authenticated endpoints now require JWT tokens.
+ * SECURITY FIX: Now checks token blacklist to properly handle logged-out tokens
  */
 export const createAuthenticateFlexible = (
   jwtSecret: string | undefined, 
@@ -187,6 +199,16 @@ export const createAuthenticateFlexible = (
       // JWT authentication (required)
       if (token && jwtSecret) {
         try {
+          // SECURITY FIX: Check if token is blacklisted (logged out)
+          const blacklisted = await isTokenBlacklisted(token);
+          if (blacklisted) {
+            res.status(401).json({
+              success: false,
+              error: 'Token has been revoked. Please sign in again.'
+            });
+            return;
+          }
+
           const decoded = jwt.verify(token, jwtSecret) as JWTDecoded;
           
           if (decoded.type !== 'refresh') {

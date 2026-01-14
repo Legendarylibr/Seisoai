@@ -1044,6 +1044,47 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         }
       };
 
+      // SECURITY: Whitelist of allowed redirect domains to prevent open redirect attacks
+      const ALLOWED_REDIRECT_DOMAINS = new Set([
+        'seisoai.com',
+        'www.seisoai.com',
+        'localhost',
+        '127.0.0.1'
+      ]);
+
+      // SECURITY FIX: Validate redirect URLs to prevent open redirect vulnerability
+      const isAllowedRedirectUrl = (url: string | undefined | null): boolean => {
+        if (!url || typeof url !== 'string') return false;
+        try {
+          const parsed = new URL(url);
+          // Only allow https in production (http allowed for localhost)
+          if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+            return false;
+          }
+          // Check if hostname is in allowed list
+          const hostname = parsed.hostname.toLowerCase();
+          if (ALLOWED_REDIRECT_DOMAINS.has(hostname)) {
+            return true;
+          }
+          // Also allow subdomains of seisoai.com
+          if (hostname.endsWith('.seisoai.com')) {
+            return true;
+          }
+          // Check if it's from environment config (trusted)
+          if (config.FRONTEND_URL) {
+            try {
+              const frontendHost = new URL(config.FRONTEND_URL).hostname.toLowerCase();
+              if (hostname === frontendHost) {
+                return true;
+              }
+            } catch { /* ignore */ }
+          }
+          return false;
+        } catch {
+          return false;
+        }
+      };
+
       const fallbackFrontendUrl = 'https://seisoai.com';
       const envFrontendUrl = config.FRONTEND_URL;
       const requestOrigin = req.headers.origin as string | undefined;
@@ -1056,6 +1097,33 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         baseUrl = requestOrigin!;
       } else if (isValidHttpUrl(inferredHost)) {
         baseUrl = inferredHost!;
+      }
+
+      // SECURITY FIX: Validate user-provided redirect URLs
+      // If provided URLs are not in allowed domains, use defaults
+      let validatedSuccessUrl = `${baseUrl}?session_id={CHECKOUT_SESSION_ID}`;
+      let validatedCancelUrl = `${baseUrl}?canceled=true`;
+
+      if (success_url) {
+        if (isAllowedRedirectUrl(success_url)) {
+          validatedSuccessUrl = success_url;
+        } else {
+          logger.warn('SECURITY: Rejected invalid success_url redirect', {
+            providedUrl: success_url.substring(0, 100),
+            ip: req.ip
+          });
+        }
+      }
+
+      if (cancel_url) {
+        if (isAllowedRedirectUrl(cancel_url)) {
+          validatedCancelUrl = cancel_url;
+        } else {
+          logger.warn('SECURITY: Rejected invalid cancel_url redirect', {
+            providedUrl: cancel_url.substring(0, 100),
+            ip: req.ip
+          });
+        }
       }
 
       // Look up the price by lookup_key if it's not already a price ID
@@ -1078,7 +1146,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         priceId = prices.data[0].id;
       }
 
-      // Create checkout session
+      // Create checkout session with validated URLs
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         line_items: [
@@ -1100,8 +1168,8 @@ export function createStripeRoutes(deps: Dependencies = {}) {
             email: user.email || '',
           },
         },
-        success_url: success_url || `${baseUrl}?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: cancel_url || `${baseUrl}?canceled=true`,
+        success_url: validatedSuccessUrl,
+        cancel_url: validatedCancelUrl,
       });
 
       logger.info('Stripe checkout session created', {

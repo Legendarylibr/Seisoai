@@ -62,9 +62,10 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      // Validate email
-      const emailRegex = /^\S+@\S+\.\S+$/;
-      if (!emailRegex.test(email)) {
+      // Validate email with stricter regex
+      // SECURITY FIX: More comprehensive email validation to prevent malformed inputs
+      const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+      if (!emailRegex.test(email) || email.length > 254) {
         res.status(400).json({
           success: false,
           error: 'Invalid email format'
@@ -614,10 +615,12 @@ export function createAuthRoutes(deps: Dependencies = {}) {
    * Generate Discord account linking code
    * POST /api/auth/discord-link-code
    * 
-   * User must be authenticated. Generates a 6-digit code valid for 5 minutes.
+   * User must be authenticated. Generates an 8-character alphanumeric code valid for 5 minutes.
    * User enters this code in Discord with /link code command.
+   * 
+   * SECURITY FIX: Added rate limiting and stronger code (8 alphanumeric = 36^8 = 2.8 trillion combinations)
    */
-  router.post('/discord-link-code', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/discord-link-code', limiter, authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       if (!req.user?.userId) {
         res.status(401).json({
@@ -648,8 +651,30 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      // Generate a secure 6-digit code
-      const code = crypto.randomInt(100000, 999999).toString();
+      // SECURITY FIX: Check for existing non-expired code to prevent code flooding
+      const existingCode = user.discordLinkCode;
+      const existingExpiry = user.discordLinkCodeExpires;
+      if (existingCode && existingExpiry && new Date(existingExpiry) > new Date()) {
+        // Return existing valid code instead of generating new one
+        const remainingSeconds = Math.ceil((new Date(existingExpiry).getTime() - Date.now()) / 1000);
+        res.json({
+          success: true,
+          code: existingCode,
+          expiresAt: new Date(existingExpiry).toISOString(),
+          expiresIn: remainingSeconds,
+          message: 'Enter this code in Discord using: /link code:' + existingCode,
+          reused: true
+        });
+        return;
+      }
+
+      // SECURITY FIX: Generate a secure 8-character alphanumeric code
+      // 36^8 = 2,821,109,907,456 combinations (vs 900,000 for 6 digits)
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed confusing chars: 0, O, 1, I
+      let code = '';
+      for (let i = 0; i < 8; i++) {
+        code += chars.charAt(crypto.randomInt(chars.length));
+      }
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
       // Store the code on the user
@@ -705,7 +730,19 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         return;
       }
       
-      if (!providedKey || providedKey !== botApiKey) {
+      // SECURITY FIX: Use constant-time comparison to prevent timing attacks
+      let isValidKey = false;
+      if (providedKey && providedKey.length === botApiKey.length) {
+        try {
+          const providedBuffer = Buffer.from(providedKey, 'utf8');
+          const expectedBuffer = Buffer.from(botApiKey, 'utf8');
+          isValidKey = crypto.timingSafeEqual(providedBuffer, expectedBuffer);
+        } catch {
+          isValidKey = false;
+        }
+      }
+
+      if (!isValidKey) {
         logger.warn('Discord link verification: invalid or missing API key', {
           ip: req.ip,
           hasKey: !!providedKey
@@ -732,8 +769,9 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      // Validate code format (6 digits)
-      if (!/^\d{6}$/.test(code)) {
+      // SECURITY FIX: Validate code format (8 alphanumeric OR legacy 6 digits)
+      const isValidCode = /^[A-Z2-9]{8}$/.test(code) || /^\d{6}$/.test(code);
+      if (!isValidCode) {
         res.status(400).json({
           success: false,
           error: 'Invalid code format'

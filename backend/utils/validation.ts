@@ -74,10 +74,16 @@ export function isValidRequestId(requestId: unknown): boolean {
 
 /**
  * Validate email format
+ * SECURITY FIX: More comprehensive email validation to prevent malformed inputs
  */
 export function isValidEmail(email: unknown): boolean {
   if (!email || typeof email !== 'string') return false;
-  return /^\S+@\S+\.\S+$/.test(email);
+  if (email.length > 254) return false; // RFC 5321 max length
+  // More comprehensive regex that validates:
+  // - Local part: alphanumeric and special chars
+  // - Domain: valid hostname format
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+  return emailRegex.test(email);
 }
 
 /**

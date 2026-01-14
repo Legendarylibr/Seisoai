@@ -79,6 +79,7 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
   router.use(adminRateLimiter);
 
   // Admin authentication middleware
+  // SECURITY FIX: Use constant-time comparison to prevent timing attacks
   const requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
     // SECURITY: Fail if admin secret is not configured
     if (!ADMIN_SECRET || ADMIN_SECRET.length < 32) {
@@ -115,7 +116,20 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
       });
     }
     
-    if (!providedSecret || providedSecret !== ADMIN_SECRET) {
+    // SECURITY FIX: Use constant-time comparison to prevent timing attacks
+    // Timing attacks can leak the secret character by character by measuring response time
+    let isValid = false;
+    if (providedSecret && providedSecret.length === ADMIN_SECRET.length) {
+      try {
+        const providedBuffer = Buffer.from(providedSecret, 'utf8');
+        const secretBuffer = Buffer.from(ADMIN_SECRET, 'utf8');
+        isValid = crypto.timingSafeEqual(providedBuffer, secretBuffer);
+      } catch {
+        isValid = false;
+      }
+    }
+    
+    if (!isValid) {
       logger.warn('Failed admin authentication attempt', { 
         ip: req.ip,
         path: req.path,

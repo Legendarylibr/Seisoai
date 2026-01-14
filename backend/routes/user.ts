@@ -176,6 +176,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
    * Save to gallery
    * POST /api/user/gallery/save OR /api/gallery/save
    * SECURITY: Only allows saving to authenticated user's gallery
+   * SECURITY FIX: Added URL validation to prevent XSS and SSRF
    */
   router.post('/gallery/save', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -192,6 +193,74 @@ export function createUserRoutes(deps: Dependencies = {}) {
         return;
       }
 
+      // SECURITY FIX: Validate URL to prevent XSS (javascript:) and SSRF attacks
+      const isValidGalleryUrl = (url: string): boolean => {
+        // Allow data URIs for uploaded images
+        if (url.startsWith('data:image/')) {
+          // Validate data URI format and limit size (10MB max)
+          const base64Match = url.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,/);
+          if (!base64Match) return false;
+          const base64Data = url.substring(url.indexOf(',') + 1);
+          if (base64Data.length > 10 * 1024 * 1024 * 1.37) return false; // ~10MB in base64
+          return true;
+        }
+        
+        try {
+          const parsed = new URL(url);
+          
+          // Only allow https (no http, javascript, data with scripts, etc.)
+          if (parsed.protocol !== 'https:') {
+            logger.warn('Gallery save: rejected non-https URL', { 
+              protocol: parsed.protocol,
+              userId: req.user.userId 
+            });
+            return false;
+          }
+          
+          // Block URLs with userinfo (user:pass@host)
+          if (parsed.username || parsed.password) {
+            return false;
+          }
+          
+          // Allow only trusted domains for gallery images
+          const trustedDomains = [
+            'fal.media',
+            'fal.ai',
+            'fal.run',
+            'seisoai.com',
+            'storage.googleapis.com',
+            'cloudflare-ipfs.com'
+          ];
+          
+          const hostname = parsed.hostname.toLowerCase();
+          const isTrusted = trustedDomains.some(domain => 
+            hostname === domain || hostname.endsWith('.' + domain)
+          );
+          
+          if (!isTrusted) {
+            logger.warn('Gallery save: rejected untrusted domain', { 
+              hostname,
+              userId: req.user.userId 
+            });
+            return false;
+          }
+          
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      if (!isValidGalleryUrl(imageUrl)) {
+        sendError(res, 'Invalid image URL. Only HTTPS URLs from trusted sources are allowed.', 400, req.requestId);
+        return;
+      }
+
+      // SECURITY: Sanitize prompt to prevent stored XSS
+      const sanitizedPrompt = prompt 
+        ? prompt.replace(/[<>]/g, '').substring(0, 2000) 
+        : undefined;
+
       const User = mongoose.model<IUser>('User');
       await User.findOneAndUpdate(
         { userId: req.user.userId },
@@ -201,8 +270,8 @@ export function createUserRoutes(deps: Dependencies = {}) {
               $each: [{
                 id: `gen-${Date.now()}`,
                 imageUrl,
-                prompt,
-                style: model,
+                prompt: sanitizedPrompt,
+                style: model?.substring(0, 100), // Limit model name length
                 timestamp: new Date()
               }],
               $slice: -GALLERY_MAX_ITEMS
@@ -252,12 +321,9 @@ export function createUserRoutes(deps: Dependencies = {}) {
    * Get user by wallet address
    * GET /api/users/:walletAddress
    * 
-   * NOTE: Wallet lookups are allowed without JWT authentication since:
-   * - Wallet addresses are public (visible on blockchain)
-   * - Credit balance is not highly sensitive
-   * - This enables wallet-first user flows
-   * 
-   * If JWT authenticated, verifies the wallet matches the authenticated user.
+   * SECURITY FIX: Now requires authentication OR returns only public data
+   * - Authenticated users can only access their own wallet data
+   * - Unauthenticated users get minimal public data only (no credits, no auto-creation)
    */
   router.get('/:walletAddress', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -272,13 +338,13 @@ export function createUserRoutes(deps: Dependencies = {}) {
       const isSolanaAddress = !walletAddress.startsWith('0x');
       const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
 
-      // If authenticated via JWT, verify wallet ownership
-      if (req.user && req.user.walletAddress) {
-        const normalizedUserWallet = req.user.walletAddress.startsWith('0x') 
+      // SECURITY FIX: If authenticated, MUST be accessing own wallet
+      if (req.user) {
+        const normalizedUserWallet = req.user.walletAddress?.startsWith('0x') 
           ? req.user.walletAddress.toLowerCase() 
           : req.user.walletAddress;
 
-        if (normalizedUserWallet !== normalizedAddress) {
+        if (!normalizedUserWallet || normalizedUserWallet !== normalizedAddress) {
           logger.warn('SECURITY: Blocked user data access attempt for different wallet', {
             requestedWallet: normalizedAddress.substring(0, 10) + '...',
             authenticatedUserId: req.user.userId,
@@ -288,33 +354,64 @@ export function createUserRoutes(deps: Dependencies = {}) {
           sendError(res, 'You can only access your own account data', 403, req.requestId);
           return;
         }
+
+        // Authenticated user accessing their own wallet - return full data
+        const user = await getOrCreateUser(normalizedAddress);
+
+        // Update lastActive
+        const User = mongoose.model<IUser>('User');
+        await User.findOneAndUpdate(
+          { walletAddress: user.walletAddress },
+          { lastActive: new Date() }
+        );
+
+        const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+        
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        res.setHeader('Pragma', 'no-cache');
+
+        res.json({
+          success: true,
+          credits: user.credits || 0,
+          totalCreditsEarned: user.totalCreditsEarned || 0,
+          totalCreditsSpent: user.totalCreditsSpent || 0,
+          walletAddress: user.walletAddress,
+          isNFTHolder,
+          pricing: getPricing(isNFTHolder)
+        });
+        return;
       }
 
-      // Get or create user data for wallet
-      const user = await getOrCreateUser(normalizedAddress);
-
-      // Update lastActive
+      // SECURITY FIX: Unauthenticated - return minimal public data only
+      // Do NOT auto-create users or return credit balances
       const User = mongoose.model<IUser>('User');
-      await User.findOneAndUpdate(
-        { walletAddress: user.walletAddress },
-        { lastActive: new Date() }
-      );
+      const existingUser = await User.findOne({ walletAddress: normalizedAddress })
+        .select('walletAddress nftCollections')
+        .lean();
 
-      // Check NFT holdings
-      const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
+      if (!existingUser) {
+        // User doesn't exist - return minimal response (don't create them)
+        res.json({
+          success: true,
+          exists: false,
+          walletAddress: normalizedAddress,
+          pricing: getPricing(false)
+        });
+        return;
+      }
+
+      // Return only public data for unauthenticated requests
+      const isNFTHolder = existingUser.nftCollections && existingUser.nftCollections.length > 0;
       
-      // Set cache headers
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Cache-Control', 'public, max-age=60'); // Cache public data for 1 min
 
       res.json({
         success: true,
-        credits: user.credits || 0,
-        totalCreditsEarned: user.totalCreditsEarned || 0,
-        totalCreditsSpent: user.totalCreditsSpent || 0,
-        walletAddress: user.walletAddress,
+        exists: true,
+        walletAddress: existingUser.walletAddress,
         isNFTHolder,
         pricing: getPricing(isNFTHolder)
+        // SECURITY: Do NOT return credits, totalCreditsEarned, totalCreditsSpent for unauthed
       });
     } catch (error) {
       logger.error('Get user by wallet error:', { error: (error as Error).message });
