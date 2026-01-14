@@ -13,8 +13,10 @@ interface PromptLabProps {
   currentPrompt?: string;
   /** Selected style */
   selectedStyle?: string;
-  /** Selected model */
+  /** Selected model (e.g., flux, flux-2, ltx, veo, etc.) */
   selectedModel?: string;
+  /** Generation mode for video (text-to-video, image-to-video, lip-sync, etc.) */
+  generationMode?: string;
   /** Callback when user wants to apply a suggested prompt */
   onApplyPrompt?: (prompt: string) => void;
   /** Whether the panel is initially open */
@@ -31,6 +33,7 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
   currentPrompt = '',
   selectedStyle,
   selectedModel,
+  generationMode,
   onApplyPrompt,
   defaultOpen = false
 }) => {
@@ -50,12 +53,14 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Load suggestions when mode changes
+  // Load suggestions when mode or model changes
   useEffect(() => {
     if (isOpen && messages.length === 0) {
-      getPromptLabSuggestions(mode).then(setSuggestions);
+      // For video lip-sync, use 'lip-sync' as the model key
+      const modelKey = generationMode === 'lip-sync' ? 'lip-sync' : selectedModel;
+      getPromptLabSuggestions(mode, modelKey).then(setSuggestions);
     }
-  }, [isOpen, mode, messages.length]);
+  }, [isOpen, mode, selectedModel, generationMode, messages.length]);
 
   // Focus input when opened
   useEffect(() => {
@@ -79,11 +84,14 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
     setSuggestions([]);
 
     // Build context from current app state
+    // For video lip-sync, use 'lip-sync' as the model key for optimized prompts
+    const modelKey = generationMode === 'lip-sync' ? 'lip-sync' : selectedModel;
     const context: PromptLabContext = {
       mode,
       currentPrompt: currentPrompt || undefined,
       selectedStyle: selectedStyle || undefined,
-      selectedModel: selectedModel || undefined
+      selectedModel: modelKey || undefined,
+      generationMode: generationMode || undefined
     };
 
     const response = await sendPromptLabMessage(
@@ -111,7 +119,7 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
     }
 
     setIsLoading(false);
-  }, [inputValue, isLoading, messages, mode, currentPrompt, selectedStyle, selectedModel]);
+  }, [inputValue, isLoading, messages, mode, currentPrompt, selectedStyle, selectedModel, generationMode]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -139,8 +147,9 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
 
   const clearChat = useCallback(() => {
     setMessages([]);
-    getPromptLabSuggestions(mode).then(setSuggestions);
-  }, [mode]);
+    const modelKey = generationMode === 'lip-sync' ? 'lip-sync' : selectedModel;
+    getPromptLabSuggestions(mode, modelKey).then(setSuggestions);
+  }, [mode, selectedModel, generationMode]);
 
   // Floating button when closed
   if (!isOpen) {
@@ -235,10 +244,12 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
         }}
       >
         <span>Mode: {mode}</span>
-        {selectedStyle && <span>• Style: {selectedStyle}</span>}
+        {selectedModel && <span>• {selectedModel}</span>}
+        {generationMode && generationMode !== 'text-to-video' && <span>• {generationMode}</span>}
+        {selectedStyle && <span>• {selectedStyle}</span>}
         {currentPrompt && (
           <span className="truncate flex-1" title={currentPrompt}>
-            • Prompt: {currentPrompt.slice(0, 20)}...
+            • Prompt: {currentPrompt.slice(0, 15)}...
           </span>
         )}
       </div>
@@ -330,11 +341,12 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
                             boxShadow: '1px 1px 0 rgba(255,255,255,0.3) inset'
                           }}
                           disabled={copiedPrompt === msg.action.value}
+                          title="Fill prompt in the main input"
                         >
                           {copiedPrompt === msg.action.value ? (
-                            <><Check className="w-3 h-3" /> Applied!</>
+                            <><Check className="w-3 h-3" /> Filled!</>
                           ) : (
-                            <><Sparkles className="w-3 h-3" /> Use Prompt</>
+                            <>📝 Fill Prompt</>
                           )}
                         </button>
                         <button

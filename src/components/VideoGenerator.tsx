@@ -445,9 +445,16 @@ const CollapsibleVideoHowToUse = memo(function CollapsibleVideoHowToUse(): React
 interface VideoGeneratorProps {
   onShowTokenPayment?: () => void;
   onShowStripePayment?: () => void;
+  onModelChange?: (model: string) => void;
+  onGenerationModeChange?: (mode: string) => void;
 }
 
-const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onShowTokenPayment: _onShowTokenPayment, onShowStripePayment: _onShowStripePayment }) {
+const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ 
+  onShowTokenPayment: _onShowTokenPayment, 
+  onShowStripePayment: _onShowStripePayment,
+  onModelChange,
+  onGenerationModeChange 
+}) {
   const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   
@@ -475,6 +482,16 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ onSho
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const startTimeRef = useRef<number | null>(null);
+
+  // Notify parent when model changes (for PromptLab optimization)
+  useEffect(() => {
+    onModelChange?.(model);
+  }, [model, onModelChange]);
+
+  // Notify parent when generation mode changes (for PromptLab optimization)
+  useEffect(() => {
+    onGenerationModeChange?.(generationMode);
+  }, [generationMode, onGenerationModeChange]);
 
   // Timer for elapsed time during generation
   useEffect(() => {

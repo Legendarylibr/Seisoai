@@ -26,6 +26,7 @@ export interface PromptLabContext {
   currentPrompt?: string;
   selectedStyle?: string;
   selectedModel?: string;
+  generationMode?: string; // For video: text-to-video, image-to-video, lip-sync, etc.
 }
 
 export interface PromptLabResponse {
@@ -90,11 +91,14 @@ export async function sendPromptLabMessage(
 }
 
 /**
- * Get starter suggestions for a mode
+ * Get starter suggestions for a mode and model
  */
-export async function getPromptLabSuggestions(mode: string): Promise<string[]> {
+export async function getPromptLabSuggestions(mode: string, model?: string): Promise<string[]> {
   try {
-    const response = await fetch(`${API_URL}/api/prompt-lab/suggestions?mode=${mode}`, {
+    const params = new URLSearchParams({ mode });
+    if (model) params.append('model', model);
+    
+    const response = await fetch(`${API_URL}/api/prompt-lab/suggestions?${params.toString()}`, {
       credentials: 'include'
     });
     

@@ -15,6 +15,7 @@ import AuthGuard from './components/AuthGuard';
 import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
 import PromptLab from './components/PromptLab';
+import { useImageGenerator } from './contexts/ImageGeneratorContext';
 import { Grid, Sparkles, Film, Music, Layers, type LucideIcon } from 'lucide-react';
 import { API_URL, ensureCSRFToken } from './utils/apiConfig';
 
@@ -108,12 +109,16 @@ interface AppWithCreditsCheckProps {
 
 function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCheckProps): JSX.Element {
   const { isAuthenticated, userId, refreshCredits } = useEmailAuth();
+  const { multiImageModel } = useImageGenerator();
   // Unified payment modal - Stripe handles both cards and stablecoins (USDC)
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [subscriptionSuccess, setSubscriptionSuccess] = useState<SubscriptionSuccess | null>(null);
   const [userPrompt, setUserPrompt] = useState('');
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsPage, setTermsPage] = useState<LegalPage>('terms');
+  // Track video model and mode for PromptLab optimization
+  const [videoModel, setVideoModel] = useState<string>('ltx');
+  const [videoGenerationMode, setVideoGenerationMode] = useState<string>('text-to-video');
 
   // Initialize CSRF token on app mount to ensure it's available for POST requests
   useEffect(() => {
@@ -293,6 +298,8 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
             <VideoGenerator 
               onShowTokenPayment={handleShowTokenPayment}
               onShowStripePayment={handleShowStripePayment}
+              onModelChange={setVideoModel}
+              onGenerationModeChange={setVideoGenerationMode}
             />
           </Suspense>
         )}
@@ -358,10 +365,18 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
       )}
 
       {/* Prompt Lab - AI prompt planning assistant (only for authenticated users on generation screens) */}
-      {isAuthenticated && (activeTab === 'generate' || activeTab === 'video' || activeTab === 'music') && (
+      {isAuthenticated && (activeTab === 'generate' || activeTab === 'batch' || activeTab === 'video' || activeTab === 'music') && (
         <PromptLab
-          mode={activeTab === 'generate' ? 'image' : activeTab as 'video' | 'music'}
+          mode={activeTab === 'generate' || activeTab === 'batch' ? 'image' : activeTab as 'video' | 'music'}
           currentPrompt={userPrompt}
+          selectedModel={
+            activeTab === 'generate' || activeTab === 'batch' 
+              ? multiImageModel || 'flux'
+              : activeTab === 'video' 
+                ? videoModel 
+                : 'music'
+          }
+          generationMode={activeTab === 'video' ? videoGenerationMode : undefined}
           onApplyPrompt={setUserPrompt}
         />
       )}
