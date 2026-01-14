@@ -19,6 +19,13 @@ if (process.env.NODE_ENV !== 'production') {
   dotenv.config({ path: envPath });
 }
 
+// ============================================================================
+// Production Domain Configuration
+// Change this single value to update the domain everywhere in the codebase
+// ============================================================================
+export const PRODUCTION_DOMAIN = 'seisoai.com';
+export const PRODUCTION_URL = `https://${PRODUCTION_DOMAIN}`;
+
 // Required environment variables
 const REQUIRED_VARS = ['JWT_SECRET', 'ENCRYPTION_KEY', 'ADMIN_SECRET'];
 
@@ -170,12 +177,12 @@ export const config: Config = {
   DISCORD_CLIENT_SECRET: process.env.DISCORD_CLIENT_SECRET,
   DISCORD_REDIRECT_URI: process.env.DISCORD_REDIRECT_URI || 
     (process.env.NODE_ENV === 'production' 
-      ? 'https://seisoai.com/api/auth/discord/callback'
+      ? `${PRODUCTION_URL}/api/auth/discord/callback`
       : 'http://localhost:3001/api/auth/discord/callback'),
   
   // Frontend URL
   FRONTEND_URL: process.env.FRONTEND_URL || 
-    (process.env.NODE_ENV === 'production' ? 'https://seisoai.com' : 'http://localhost:5173'),
+    (process.env.NODE_ENV === 'production' ? PRODUCTION_URL : 'http://localhost:5173'),
   
   // Flags
   isProduction: process.env.NODE_ENV === 'production',

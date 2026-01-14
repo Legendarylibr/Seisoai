@@ -10,6 +10,7 @@ import { findUserByIdentifier, getOrCreateUser } from '../services/user';
 import { checkNFTBalance } from '../services/blockchain';
 import { isValidWalletAddress } from '../utils/validation';
 import { requireAuth, sendError, sendServerError } from '../utils/responses';
+import { PRODUCTION_DOMAIN } from '../config/env';
 import type { IUser } from '../models/User';
 
 // Constants
@@ -227,7 +228,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
             'fal.media',
             'fal.ai',
             'fal.run',
-            'seisoai.com',
+            PRODUCTION_DOMAIN,
             'storage.googleapis.com',
             'cloudflare-ipfs.com'
           ];

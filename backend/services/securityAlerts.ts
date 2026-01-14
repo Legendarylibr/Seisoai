@@ -11,7 +11,7 @@
  * - Rate limit violations
  */
 import logger from '../utils/logger.js';
-import config from '../config/env.js';
+import config, { PRODUCTION_URL } from '../config/env.js';
 
 // Discord webhook URL for security alerts
 const SECURITY_WEBHOOK_URL = process.env.SECURITY_DISCORD_WEBHOOK;
@@ -177,7 +177,7 @@ export async function sendSecurityAlert(data: AlertData): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username: 'SeisoAI Security',
-        avatar_url: 'https://seisoai.com/logo.png',
+        avatar_url: `${PRODUCTION_URL}/logo.png`,
         embeds: [embed]
       })
     });

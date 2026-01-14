@@ -11,7 +11,7 @@ import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { getStripe, calculateCredits } from '../services/stripe';
 import { findUserByIdentifier } from '../services/user';
-import config from '../config/env';
+import config, { PRODUCTION_DOMAIN, PRODUCTION_URL } from '../config/env';
 import User, { type IUser } from '../models/User';
 import Payment from '../models/Payment';
 import type Stripe from 'stripe';
@@ -631,7 +631,8 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const baseUrl = config.FRONTEND_URL || (config.isProduction ? 'https://seisoai.com' : 'http://localhost:5173');
+      // FRONTEND_URL already has production fallback in config/env.ts
+      const baseUrl = config.FRONTEND_URL!;
 
       const customers = await stripe.customers.list({
         email: user.email,
@@ -1045,12 +1046,12 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       };
 
       // SECURITY: Whitelist of allowed redirect domains to prevent open redirect attacks
-      const ALLOWED_REDIRECT_DOMAINS = new Set([
-        'seisoai.com',
-        'www.seisoai.com',
-        'localhost',
-        '127.0.0.1'
-      ]);
+      // localhost/127.0.0.1 only allowed in development
+      const ALLOWED_REDIRECT_DOMAINS = new Set(
+        config.isProduction
+          ? [PRODUCTION_DOMAIN, `www.${PRODUCTION_DOMAIN}`]
+          : [PRODUCTION_DOMAIN, `www.${PRODUCTION_DOMAIN}`, 'localhost', '127.0.0.1']
+      );
 
       // SECURITY FIX: Validate redirect URLs to prevent open redirect vulnerability
       const isAllowedRedirectUrl = (url: string | undefined | null): boolean => {
@@ -1066,8 +1067,8 @@ export function createStripeRoutes(deps: Dependencies = {}) {
           if (ALLOWED_REDIRECT_DOMAINS.has(hostname)) {
             return true;
           }
-          // Also allow subdomains of seisoai.com
-          if (hostname.endsWith('.seisoai.com')) {
+          // Also allow subdomains of production domain
+          if (hostname.endsWith(`.${PRODUCTION_DOMAIN}`)) {
             return true;
           }
           // Check if it's from environment config (trusted)
@@ -1085,7 +1086,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         }
       };
 
-      const fallbackFrontendUrl = 'https://seisoai.com';
+      const fallbackFrontendUrl = PRODUCTION_URL;
       const envFrontendUrl = config.FRONTEND_URL;
       const requestOrigin = req.headers.origin as string | undefined;
       const inferredHost = req.headers.host ? `https://${req.headers.host}` : null;

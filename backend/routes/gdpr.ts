@@ -16,6 +16,7 @@ import type { IUser } from '../models/User.js';
 // Note: decryption is handled automatically by mongoose hooks
 import { logAuditEvent, AuditEventType, AuditSeverity } from '../services/auditLog.js';
 import { requireAuth } from '../utils/responses.js';
+import { PRODUCTION_DOMAIN } from '../config/env.js';
 
 // Types
 interface Dependencies {
@@ -366,7 +367,7 @@ export function createGDPRRoutes(deps: Dependencies) {
       success: true,
       dataController: {
         name: 'SeisoAI',
-        contact: 'privacy@seisoai.com',
+        contact: `privacy@${PRODUCTION_DOMAIN}`,
       },
       dataProcessing: {
         purposes: [

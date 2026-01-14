@@ -14,7 +14,7 @@ import fs from 'fs';
 import logger from './utils/logger.js';
 
 // Config
-import config from './config/env.js';
+import config, { PRODUCTION_DOMAIN, PRODUCTION_URL } from './config/env.js';
 import { connectDatabase } from './config/database.js';
 
 // Services
@@ -172,7 +172,7 @@ const parseAllowedOrigins = (): string[] | true => {
     logger.error('🚨 Permissive CORS allows ANY website to make authenticated requests to your API!');
     logger.error('🚨 This is a CRITICAL security vulnerability!');
     logger.error('🚨 Set ALLOWED_ORIGINS environment variable immediately!');
-    logger.error('🚨 Example: ALLOWED_ORIGINS=https://seisoai.com,https://www.seisoai.com');
+    logger.error(`🚨 Example: ALLOWED_ORIGINS=${PRODUCTION_URL},https://www.${PRODUCTION_DOMAIN}`);
     logger.error('🚨 Current value:', { ALLOWED_ORIGINS: originsEnv || '(empty)' });
     logger.error('🚨 Server will NOT start until this is fixed.');
     process.exit(1); // Fail fast - do not start with insecure configuration
@@ -371,7 +371,7 @@ app.get('/robots.txt', (_req: Request, res: Response) => {
   res.type('text/plain');
   res.send(`User-agent: *
 Allow: /
-Sitemap: https://seisoai.com/sitemap.xml`);
+Sitemap: ${PRODUCTION_URL}/sitemap.xml`);
 });
 
 app.get('/favicon.ico', (_req: Request, res: Response) => {
@@ -429,11 +429,11 @@ app.get('/.well-known/security.txt', (_req: Request, res: Response) => {
   res.send(`# SeisoAI Security Policy
 # https://securitytxt.org/
 
-Contact: mailto:security@seisoai.com
+Contact: mailto:security@${PRODUCTION_DOMAIN}
 Contact: https://github.com/Legendarylibr/Seisoai/security/advisories
-Policy: https://seisoai.com/security-policy
+Policy: ${PRODUCTION_URL}/security-policy
 Preferred-Languages: en
-Canonical: https://seisoai.com/.well-known/security.txt
+Canonical: ${PRODUCTION_URL}/.well-known/security.txt
 Expires: 2027-01-11T00:00:00.000Z
 `);
 });

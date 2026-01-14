@@ -10,7 +10,7 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { Router, type Request, type Response } from 'express';
-import config from '../config/env.js';
+import config, { PRODUCTION_DOMAIN, PRODUCTION_URL } from '../config/env.js';
 
 const options: swaggerJsdoc.Options = {
   definition: {
@@ -45,23 +45,23 @@ State-changing requests (POST, PUT, DELETE) require a CSRF token:
 
 ## Support
 
-- Email: support@seisoai.com
-- Security: security@seisoai.com
+- Email: support@${PRODUCTION_DOMAIN}
+- Security: security@${PRODUCTION_DOMAIN}
       `,
       contact: {
         name: 'SeisoAI Support',
-        email: 'support@seisoai.com',
-        url: 'https://seisoai.com',
+        email: `support@${PRODUCTION_DOMAIN}`,
+        url: PRODUCTION_URL,
       },
       license: {
         name: 'Proprietary',
-        url: 'https://seisoai.com/terms',
+        url: `${PRODUCTION_URL}/terms`,
       },
     },
     servers: [
       {
         url: config.isProduction 
-          ? 'https://api.seisoai.com' 
+          ? `https://api.${PRODUCTION_DOMAIN}` 
           : 'http://localhost:3001',
         description: config.isProduction ? 'Production' : 'Development',
       },

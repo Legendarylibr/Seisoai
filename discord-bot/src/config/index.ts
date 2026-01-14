@@ -11,6 +11,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Load .env file from discord-bot directory
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
+// ============================================================================
+// Production Domain Configuration
+// Change this single value to update the domain everywhere in the codebase
+// ============================================================================
+export const PRODUCTION_DOMAIN = 'seisoai.com';
+export const PRODUCTION_URL = `https://${PRODUCTION_DOMAIN}`;
+
 export const config = {
   // Discord
   discord: {
@@ -57,8 +64,8 @@ export const config = {
   
   // URLs
   urls: {
-    website: process.env.WEBSITE_URL || 'https://seisoai.com',
-    api: process.env.API_URL || process.env.WEBSITE_URL || 'https://seisoai.com',
+    website: process.env.WEBSITE_URL || PRODUCTION_URL,
+    api: process.env.API_URL || process.env.WEBSITE_URL || PRODUCTION_URL,
   },
   
   // Health Check Server

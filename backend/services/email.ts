@@ -28,7 +28,8 @@ interface EmailResult {
 // Email provider configuration
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const EMAIL_FROM = process.env.EMAIL_FROM || 'SeisoAI <noreply@seisoai.com>';
-const FRONTEND_URL = config.FRONTEND_URL || 'https://seisoai.com';
+// FRONTEND_URL already has production fallback in config/env.ts
+const FRONTEND_URL = config.FRONTEND_URL!;
 
 /**
  * Send email via Resend API
