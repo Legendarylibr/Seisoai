@@ -1,12 +1,22 @@
 /**
  * Utility routes
- * Health checks, robots.txt, CORS info, logging
+ * Health checks, robots.txt, CORS info, logging, image proxy
  */
 import { Router, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import config from '../config/env';
+
+// Allowed image domains for proxy (security)
+const ALLOWED_IMAGE_DOMAINS = [
+  'fal.media',
+  'v3.fal.media',
+  'storage.googleapis.com',
+  'cdn.fal.ai',
+  'replicate.delivery',
+  'oaidalleapiprodscus.blob.core.windows.net'
+];
 
 // Types
 interface Dependencies {
@@ -18,6 +28,15 @@ const clientLogLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 30, // 30 logs per minute per IP
   message: { error: 'Too many log requests, please slow down' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Rate limiter for image proxy (prevent abuse)
+const imageProxyLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60, // 60 images per minute per IP
+  message: { error: 'Too many image requests' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -158,6 +177,79 @@ export function createUtilityRoutes(_deps: Dependencies = {}) {
     }
 
     res.json({ success: true });
+  });
+
+  /**
+   * Image proxy for CORS bypass (enables WebGL 360 viewer)
+   * GET /api/image-proxy?url=...
+   * Only allows whitelisted domains for security
+   */
+  router.get('/image-proxy', imageProxyLimiter, async (req: Request, res: Response) => {
+    try {
+      const imageUrl = req.query.url as string;
+      
+      if (!imageUrl) {
+        res.status(400).json({ error: 'URL parameter required' });
+        return;
+      }
+      
+      // Validate URL
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(imageUrl);
+      } catch {
+        res.status(400).json({ error: 'Invalid URL' });
+        return;
+      }
+      
+      // Security: only allow whitelisted domains
+      const isAllowed = ALLOWED_IMAGE_DOMAINS.some(domain => 
+        parsedUrl.hostname === domain || parsedUrl.hostname.endsWith('.' + domain)
+      );
+      
+      if (!isAllowed) {
+        logger.warn('Image proxy blocked domain', { domain: parsedUrl.hostname });
+        res.status(403).json({ error: 'Domain not allowed' });
+        return;
+      }
+      
+      // Fetch the image
+      const response = await fetch(imageUrl, {
+        headers: {
+          'User-Agent': 'Seiso-ImageProxy/1.0',
+          'Accept': 'image/*'
+        }
+      });
+      
+      if (!response.ok) {
+        res.status(response.status).json({ error: 'Failed to fetch image' });
+        return;
+      }
+      
+      // Get content type
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
+      
+      // Verify it's actually an image
+      if (!contentType.startsWith('image/')) {
+        res.status(400).json({ error: 'URL does not point to an image' });
+        return;
+      }
+      
+      // Stream the image with CORS headers
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache 1 day
+      
+      // Get as buffer and send
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.send(buffer);
+      
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Image proxy error:', { error: err.message });
+      res.status(500).json({ error: 'Failed to proxy image' });
+    }
   });
 
   /**
