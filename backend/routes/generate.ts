@@ -510,6 +510,133 @@ Enhance this prompt to leverage FLUX.2's strengths in photorealism, lighting, an
 // END FLUX 2 TEXT-TO-IMAGE PROMPT OPTIMIZATION SERVICE
 // ============================================================================
 
+// ============================================================================
+// 360 PANORAMA PROMPT BUILDER FOR NANO BANANA PRO
+// ============================================================================
+
+/**
+ * Build a comprehensive 360 panorama JSON prompt for Nano Banana Pro
+ * Dynamically constructs the JSON structure based on the user's scene description
+ * Triggered when user includes "360" in their prompt
+ * @param userPrompt - The user's full prompt including "360"
+ * @returns A detailed JSON prompt structure for 360 equirectangular panorama generation
+ */
+function build360PanoramaPrompt(userPrompt: string): string {
+  // Extract scene description by removing "360" keyword and cleaning up
+  const sceneDescription = userPrompt
+    .replace(/\b360\s*(degree|°|view|panorama|panoramic)?\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Build the comprehensive 360 panorama JSON structure dynamically
+  const panoramaPrompt = {
+    image_meta: {
+      type: "360-degree Equirectangular Panorama Screenshot",
+      source_aesthetic: "Google Street View Interface",
+      platform: "Desktop Browser",
+      projection: "Full spherical equirectangular",
+      aspect_ratio: "2:1",
+      resolution: "Ultra-high resolution panoramic capture"
+    },
+    interface_overlay: {
+      top_left_panel: {
+        type: "Black info card",
+        text_content: sceneDescription,
+        sub_text: "Google Street View",
+        icons: "Back arrow, Location pin, Kebab menu"
+      },
+      search_bar: {
+        position: "Top left floating",
+        content: "Search Google Maps",
+        icons: "Hamburger menu, Magnifying glass, Directions arrow"
+      },
+      bottom_left: {
+        element: "Map inset widget",
+        style: "Minimap showing current location",
+        icons: "Landmark pins, yellow humanoid pegman"
+      },
+      bottom_right: {
+        controls: "Zoom (+/-) buttons, Compass widget, Street View navigation arrows"
+      },
+      top_right: "Share button and Close (X) button pills"
+    },
+    scene_composition: {
+      location: sceneDescription,
+      camera_position: "Fixed at the exact center of the scene",
+      camera_height: "Google Street View camera height (approximately eye level)",
+      field_of_view: "360° horizontal, 180° vertical",
+      projection_behavior: "Correct equirectangular distortion near poles",
+      depth_of_field: "Infinite focus (deep focus across entire panorama)"
+    },
+    visual_elements: {
+      description: sceneDescription,
+      foreground: {
+        surface: "Ground surface appropriate to the scene",
+        shadows: "Natural shadows wrapping around the full 360 panorama"
+      },
+      midground: {
+        subjects: `Main elements from: ${sceneDescription}`,
+        people_if_present: {
+          privacy_effect: "Faces blurred with Google Street View-style gaussian blur"
+        }
+      },
+      environment: {
+        sky: "Sky visible in upper hemisphere of panorama",
+        ground: "Ground surface in lower hemisphere",
+        full_surround: "Scene elements visible in all directions around the viewer"
+      }
+    },
+    rendering_style: {
+      aesthetic: "Google Street View photography",
+      lighting: "Natural daylight",
+      color_grading: "Realistic, slightly muted colors",
+      texture_quality: {
+        stitching: "Seamless 360-degree panorama, no visible seams",
+        format: "Equirectangular projection"
+      }
+    },
+    constraints: {
+      must_include: [
+        "Google Maps UI overlay elements",
+        "Street View spherical equirectangular perspective",
+        "Privacy blur on any faces",
+        "Full 360-degree scene coverage",
+        "2:1 aspect ratio for equirectangular format"
+      ],
+      avoid: [
+        "Cinematic/dramatic lighting",
+        "Single-point perspective",
+        "Cropped or partial views",
+        "Visible panorama seams"
+      ]
+    },
+    negative_prompt: [
+      "cinematic lighting",
+      "fantasy art",
+      "illustration",
+      "painting",
+      "single perspective",
+      "cropped view",
+      "broken panorama seams",
+      "visible stitching",
+      "non-equirectangular"
+    ]
+  };
+
+  return JSON.stringify(panoramaPrompt, null, 2);
+}
+
+/**
+ * Check if prompt requests 360 panorama generation
+ */
+function is360PanoramaRequest(prompt: string): boolean {
+  return /\b360\b/i.test(prompt);
+}
+
+// ============================================================================
+// END 360 PANORAMA PROMPT BUILDER
+// ============================================================================
+
 export function createGenerationRoutes(deps: Dependencies) {
   const router = Router();
   const { 
@@ -717,8 +844,20 @@ export function createGenerationRoutes(deps: Dependencies) {
           requestBody.seed = seed;
         }
       } else if (isNanoBananaPro) {
+        // Check if this is a 360 panorama request
+        const is360Request = is360PanoramaRequest(finalPrompt);
+        const nanoBananaPrompt = is360Request 
+          ? build360PanoramaPrompt(finalPrompt)
+          : finalPrompt;
+        
+        if (is360Request) {
+          logger.info('360 panorama mode activated for Nano Banana Pro', {
+            originalPrompt: finalPrompt.substring(0, 100)
+          });
+        }
+        
         requestBody = {
-          prompt: finalPrompt,
+          prompt: nanoBananaPrompt,
           resolution: '1K'
         };
         if (isMultipleImages) {
@@ -727,7 +866,10 @@ export function createGenerationRoutes(deps: Dependencies) {
           const singleImageUrl = image_url || (image_urls && image_urls[0]);
           requestBody.image_urls = [singleImageUrl];
         }
-        if (aspect_ratio) {
+        // For 360 panoramas, force 2:1 aspect ratio for equirectangular format
+        if (is360Request) {
+          requestBody.aspect_ratio = '2:1';
+        } else if (aspect_ratio) {
           requestBody.aspect_ratio = aspect_ratio;
         }
         // Support batch output from single source or text-to-image

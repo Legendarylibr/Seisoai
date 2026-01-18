@@ -132,12 +132,12 @@ export async function getOrCreateUser(
     return user;
   }
 
-  // Create new user
+  // Create new user with 10 free credits
   user = new User({
     walletAddress: normalized,
     email: email ? email.toLowerCase() : undefined,
-    credits: 0,
-    totalCreditsEarned: 0,
+    credits: 10,
+    totalCreditsEarned: 10,
     totalCreditsSpent: 0,
     nftCollections: [],
     paymentHistory: [],
@@ -146,7 +146,7 @@ export async function getOrCreateUser(
   });
 
   await user.save();
-  logger.info('New user created', { walletAddress: normalized });
+  logger.info('New user created with 10 credits', { walletAddress: normalized });
   return user;
 }
 
@@ -170,7 +170,7 @@ export async function getOrCreateUserByEmail(email: string): Promise<IUser> {
     return user;
   }
 
-  // New email users get 2 free credits
+  // New email users get 10 free credits
   // Email will be encrypted in pre-save hook
   // Store multiple lookup fields for cross-environment compatibility
   user = new User({
@@ -178,8 +178,8 @@ export async function getOrCreateUserByEmail(email: string): Promise<IUser> {
     emailHash: emailHash,        // HMAC hash (set explicitly for safety)
     emailHashPlain: emailHashPlain, // Plain SHA-256 for cross-env compatibility
     emailLookup: normalized,     // Plain email for fallback lookup
-    credits: 2,
-    totalCreditsEarned: 2,
+    credits: 10,
+    totalCreditsEarned: 10,
     totalCreditsSpent: 0,
     nftCollections: [],
     paymentHistory: [],
@@ -188,7 +188,7 @@ export async function getOrCreateUserByEmail(email: string): Promise<IUser> {
   });
 
   await user.save();
-  logger.info('New email user created with 2 credits', { emailHash: emailHash.substring(0, 8) + '...' });
+  logger.info('New email user created with 10 credits', { emailHash: emailHash.substring(0, 8) + '...' });
   return user;
 }
 

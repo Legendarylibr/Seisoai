@@ -128,16 +128,16 @@ export function createAuthRoutes(deps: Dependencies = {}) {
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 12);
 
-      // Create user with 2 free credits
+      // Create user with 10 free credits
       const user = new User({
         email: email.toLowerCase(),
         password: hashedPassword,
-        credits: 2,
-        totalCreditsEarned: 2
+        credits: 10,
+        totalCreditsEarned: 10
       });
 
       await user.save();
-      logger.info('New user created', { email: user.email, userId: user.userId });
+      logger.info('New user created with 10 credits', { email: user.email, userId: user.userId });
 
       // Generate tokens
       const token = jwt.sign(

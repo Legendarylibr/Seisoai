@@ -28,6 +28,7 @@ import createGDPRRoutes from './gdpr';
 import createSessionRoutes from './sessions';
 import createAuditRoutes from './audit';
 import createPromptLabRoutes from './promptLab';
+import createChatAssistantRoutes from './chatAssistant';
 import { adminIPAllowlist } from '../middleware/ipAllowlist';
 import { getCSRFToken } from '../middleware/csrf';
 
@@ -90,6 +91,7 @@ export function createApiRoutes(deps: Dependencies) {
   router.use('/model3d', createModel3dRoutes(deps as never));
   router.use('/wan-animate', createWanAnimateRoutes(deps as never));
   router.use('/prompt-lab', createPromptLabRoutes(deps as never));
+  router.use('/chat-assistant', createChatAssistantRoutes(deps as never));
 
   // ============================================
   // Payments
