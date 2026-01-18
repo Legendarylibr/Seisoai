@@ -1,23 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Pause, Download, Volume2, VolumeX, RotateCcw } from 'lucide-react';
 import logger from '../utils/logger';
-
-// Win95 styling constants
-const WIN95 = {
-  bg: '#c0c0c0',
-  bgLight: '#dfdfdf',
-  bgDark: '#808080',
-  border: {
-    light: '#ffffff',
-    dark: '#404040',
-    darker: '#000000'
-  },
-  text: '#000000',
-  textDisabled: '#808080',
-  highlight: '#000080',
-  inputBg: '#ffffff',
-  buttonFace: '#c0c0c0'
-};
+import { Win95Button, WIN95_COLORS as WIN95 } from './ui/Win95';
 
 interface StemData {
   vocals?: string | null;

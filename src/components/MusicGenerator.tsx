@@ -1,27 +1,10 @@
-import React, { useState, useCallback, memo, ReactNode } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateMusic, calculateMusicCredits } from '../services/musicService';
 import { Music, Play, Pause, Download, AlertCircle, ChevronDown, Square, Brain } from 'lucide-react';
 import logger from '../utils/logger';
-
-// Windows 95 style constants
-const WIN95 = {
-  bg: '#c0c0c0',
-  bgLight: '#dfdfdf',
-  bgDark: '#808080',
-  border: {
-    light: '#ffffff',
-    dark: '#404040',
-    darker: '#000000'
-  },
-  text: '#000000',
-  textDisabled: '#808080',
-  highlight: '#000080',
-  highlightText: '#ffffff',
-  inputBg: '#ffffff',
-  buttonFace: '#c0c0c0'
-};
+import { Win95Button, Win95Panel, Win95GroupBox, WIN95_COLORS as WIN95 } from './ui/Win95';
 
 // Duration presets
 const DURATION_PRESETS = [
@@ -104,99 +87,6 @@ const STYLE_SUGGESTIONS = [
 // Get unique categories from styles
 const GENRE_CATEGORIES = [...new Set(STYLE_SUGGESTIONS.map(s => s.category))];
 
-// Windows 95 style button component
-interface Win95ButtonProps {
-  children: ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  active?: boolean;
-  className?: string;
-}
-
-const Win95Button = memo<Win95ButtonProps>(function Win95Button({ children, onClick, disabled, active, className = '' }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`px-3 py-1 text-[11px] font-bold transition-none select-none ${className}`}
-      style={{
-        background: active ? WIN95.bgDark : WIN95.buttonFace,
-        color: disabled ? WIN95.textDisabled : (active ? WIN95.highlightText : WIN95.text),
-        border: 'none',
-        boxShadow: active 
-          ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
-          : disabled
-            ? `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.bgDark}`
-            : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
-        cursor: disabled ? 'default' : 'pointer',
-        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-      }}
-    >
-      {children}
-    </button>
-  );
-});
-
-// Windows 95 style panel (sunken)
-interface Win95PanelProps {
-  children: ReactNode;
-  className?: string;
-  sunken?: boolean;
-}
-
-const Win95Panel = memo<Win95PanelProps>(function Win95Panel({ children, className = '', sunken = true }) {
-  return (
-    <div
-      className={className}
-      style={{
-        background: sunken ? WIN95.inputBg : WIN95.bg,
-        boxShadow: sunken
-          ? `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`
-          : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
-      }}
-    >
-      {children}
-    </div>
-  );
-});
-
-// Windows 95 style group box - with blue title bar matching other components
-interface Win95GroupBoxProps {
-  title: string;
-  children: ReactNode;
-  className?: string;
-  icon?: ReactNode;
-}
-
-const Win95GroupBox = memo<Win95GroupBoxProps>(function Win95GroupBox({ title, children, className = '', icon }) {
-  return (
-    <div 
-      className={`flex flex-col ${className}`}
-      style={{
-        background: WIN95.bg,
-        boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}, 2px 2px 0 rgba(0,0,0,0.15)`
-      }}
-    >
-      {/* Blue title bar - matching other components */}
-      <div 
-        className="flex items-center gap-1.5 px-2 py-1"
-        style={{ 
-          background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
-          color: '#ffffff'
-        }}
-      >
-        {icon}
-        <span className="text-[10px] font-bold" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-          {title}
-        </span>
-      </div>
-      {/* Content */}
-      <div className="relative flex-1 p-2">
-        {children}
-      </div>
-    </div>
-  );
-});
 
 // Waveform display component
 interface WaveformDisplayProps {

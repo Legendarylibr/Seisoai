@@ -9,7 +9,7 @@
  * - components/3d/GenerationControls.tsx (controls panel)
  * - components/3d/GenerationQueue.tsx (queue display)
  */
-import React, { useState, useRef, useCallback, memo, ReactNode, ChangeEvent, useEffect } from 'react';
+import React, { useState, useRef, useCallback, memo, ChangeEvent, useEffect } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generate3dModel } from '../services/model3dService';
@@ -23,7 +23,7 @@ import {
   ArrowRight, Loader2, Clock
 } from 'lucide-react';
 import logger from '../utils/logger';
-import { WIN95 } from '../utils/buttonStyles';
+import { Win95Button, Win95Panel, Win95GroupBox, WIN95_COLORS as WIN95 } from './ui/Win95';
 
 // Import model-viewer for 3D rendering
 import '@google/model-viewer';
@@ -99,36 +99,23 @@ const FACE_COUNT_OPTIONS = [
   { value: 1000000, label: 'Ultra (1M)', description: 'Maximum detail' }
 ];
 
-// Windows 95 style button component
-interface Win95ButtonProps {
-  children: ReactNode;
+// Wrapper for primary-styled button
+const PrimaryButton = memo<{
+  children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
-  active?: boolean;
   className?: string;
-  primary?: boolean;
-}
-
-const Win95Button = memo<Win95ButtonProps>(function Win95Button({ children, onClick, disabled, active, className = '', primary }) {
-  const bgColor = primary ? '#2d8a2d' : (active ? WIN95.bgDark : WIN95.buttonFace);
-  const textColor = primary ? '#ffffff' : (disabled ? WIN95.textDisabled : (active ? WIN95.highlightText : WIN95.text));
-  
+}>(function PrimaryButton({ children, onClick, disabled, className = '' }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className={`px-3 py-1 text-[11px] font-bold transition-none select-none ${className}`}
       style={{
-        background: bgColor,
-        color: textColor,
+        background: '#2d8a2d',
+        color: '#ffffff',
         border: 'none',
-        boxShadow: primary 
-          ? `inset 1px 1px 0 #4db84d, inset -1px -1px 0 #1a5c1a, inset 2px 2px 0 #3da83d, inset -2px -2px 0 #206b20`
-          : active 
-            ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
-            : disabled
-              ? `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.bgDark}`
-              : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
+        boxShadow: `inset 1px 1px 0 #4db84d, inset -1px -1px 0 #1a5c1a, inset 2px 2px 0 #3da83d, inset -2px -2px 0 #206b20`,
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.7 : 1,
         fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
@@ -136,65 +123,6 @@ const Win95Button = memo<Win95ButtonProps>(function Win95Button({ children, onCl
     >
       {children}
     </button>
-  );
-});
-
-// Windows 95 style panel (sunken)
-interface Win95PanelProps {
-  children: ReactNode;
-  className?: string;
-  sunken?: boolean;
-}
-
-const Win95Panel = memo<Win95PanelProps>(function Win95Panel({ children, className = '', sunken = true }) {
-  return (
-    <div
-      className={className}
-      style={{
-        background: sunken ? WIN95.inputBg : WIN95.bg,
-        boxShadow: sunken
-          ? `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`
-          : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
-      }}
-    >
-      {children}
-    </div>
-  );
-});
-
-// Windows 95 style group box with blue title bar
-interface Win95GroupBoxProps {
-  title: string;
-  children: ReactNode;
-  className?: string;
-  icon?: ReactNode;
-}
-
-const Win95GroupBox = memo<Win95GroupBoxProps>(function Win95GroupBox({ title, children, className = '', icon }) {
-  return (
-    <div 
-      className={`flex flex-col ${className}`}
-      style={{
-        background: WIN95.bg,
-        boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}, 2px 2px 0 rgba(0,0,0,0.15)`
-      }}
-    >
-      <div 
-        className="flex items-center gap-1.5 px-2 py-1"
-        style={{ 
-          background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
-          color: '#ffffff'
-        }}
-      >
-        {icon}
-        <span className="text-[10px] font-bold" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-          {title}
-        </span>
-      </div>
-      <div className="relative flex-1 p-2">
-        {children}
-      </div>
-    </div>
   );
 });
 
@@ -857,10 +785,9 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
                     />
                   </Win95Panel>
                   
-                  <Win95Button 
+                  <PrimaryButton 
                     onClick={handleGenerateImage}
                     disabled={!prompt.trim() || !isConnected || isGeneratingImage}
-                    primary
                     className="w-full py-2"
                   >
                     {isGeneratingImage ? (
@@ -868,7 +795,7 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
                     ) : (
                       <>🎨 Generate Image (1 credit)</>
                     )}
-                  </Win95Button>
+                  </PrimaryButton>
                 </div>
               </Win95GroupBox>
 
@@ -1032,10 +959,9 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
                     </div>
                   )}
                   
-                  <Win95Button 
+                  <PrimaryButton 
                     onClick={handleGenerate3d}
                     disabled={!imageUrl || isGenerating3d || isOptimizing}
-                    primary
                     className="w-full py-2"
                   >
                     {isUploadedImage ? (
@@ -1043,7 +969,7 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
                     ) : (
                       <>📦 Convert to 3D Model ({GENERATE_TYPE_OPTIONS.find(o => o.value === generateType)?.credits} credits)</>
                     )}
-                  </Win95Button>
+                  </PrimaryButton>
                   
                   <div className="flex gap-1">
                     <Win95Button 
@@ -1129,13 +1055,12 @@ const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGener
               <Win95GroupBox title="Download 3D Model" className="flex-shrink-0" icon={<Download className="w-3.5 h-3.5" />}>
                 <div className="space-y-2">
                   {model3dResult.model_glb?.url && (
-                    <Win95Button 
+                    <PrimaryButton 
                       onClick={() => handleDownload(model3dResult.model_glb!.url, 'glb')}
-                      primary
                       className="w-full py-2"
                     >
                       💾 Download GLB (Universal)
-                    </Win95Button>
+                    </PrimaryButton>
                   )}
                   
                   {model3dResult.model_urls?.obj?.url && (

@@ -176,11 +176,7 @@ function cleanResponseForDisplay(response: string): string {
 /**
  * Create chat assistant routes
  */
-export default function createChatAssistantRoutes(deps: { 
-  generateImage?: (params: Record<string, unknown>) => Promise<unknown>;
-  generateVideo?: (params: Record<string, unknown>) => Promise<unknown>;
-  generateMusic?: (params: Record<string, unknown>) => Promise<unknown>;
-}) {
+export default function createChatAssistantRoutes(_deps: Record<string, unknown>) {
   const router = Router();
 
   /**
@@ -209,11 +205,16 @@ export default function createChatAssistantRoutes(deps: {
 
       if (!FAL_API_KEY) {
         logger.error('FAL_API_KEY not configured for chat assistant');
-        return res.status(500).json({
+        return res.status(503).json({
           success: false,
-          error: 'AI service not configured'
+          error: 'AI service temporarily unavailable. Please try again later.'
         });
       }
+      
+      logger.debug('Chat assistant processing message', { 
+        messageLength: message.length, 
+        historyLength: history.length 
+      });
 
       // Build context info
       let contextInfo = '';
@@ -255,11 +256,11 @@ export default function createChatAssistantRoutes(deps: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'anthropic/claude-3-5-sonnet',
+          model: 'anthropic/claude-3-haiku',
           prompt: fullPrompt,
           system_prompt: SYSTEM_PROMPT + contextInfo,
           temperature: 0.7,
-          max_tokens: 800
+          max_tokens: 1000
         }),
         signal: controller.signal
       });
@@ -270,15 +271,31 @@ export default function createChatAssistantRoutes(deps: {
         const errorText = await response.text().catch(() => 'Unknown error');
         logger.error('Chat assistant LLM request failed', { 
           status: response.status, 
-          error: errorText 
+          error: errorText.substring(0, 500)
         });
         return res.status(500).json({
           success: false,
-          error: 'Failed to get AI response'
+          error: `AI service error (${response.status}). Please try again.`
         });
       }
 
-      const data = await response.json() as { output?: string; text?: string; response?: string };
+      let data: { output?: string; text?: string; response?: string };
+      try {
+        data = await response.json();
+      } catch (parseErr) {
+        logger.error('Failed to parse LLM response', { error: (parseErr as Error).message });
+        return res.status(500).json({
+          success: false,
+          error: 'Invalid response from AI service'
+        });
+      }
+      
+      logger.debug('LLM response received', { 
+        hasOutput: !!data.output, 
+        hasText: !!data.text,
+        hasResponse: !!data.response
+      });
+      
       const assistantResponse = (data.output || data.text || data.response || '').trim();
 
       if (!assistantResponse) {

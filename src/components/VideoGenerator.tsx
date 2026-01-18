@@ -16,7 +16,7 @@ import { generateVideo } from '../services/videoService';
 import { addGeneration } from '../services/galleryService';
 import { Film, Upload, Play, X, Clock, Monitor, Volume2, VolumeX, Sparkles, AlertCircle, ChevronDown, Zap, Image, Layers } from 'lucide-react';
 import logger from '../utils/logger';
-import { WIN95 } from '../utils/buttonStyles';
+import { Win95Button, Win95Panel, Win95GroupBox, WIN95_COLORS as WIN95 } from './ui/Win95';
 
 // Generation mode options - Veo 3.1 variants + Lip Sync
 // Note: Actual endpoint construction is handled by the backend
@@ -148,99 +148,6 @@ const calculateVideoCredits = (duration: string, generateAudio: boolean, quality
 };
 
 
-// Windows 95 style button component
-interface Win95ButtonProps {
-  children: ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  active?: boolean;
-  className?: string;
-}
-
-const Win95Button = memo<Win95ButtonProps>(function Win95Button({ children, onClick, disabled, active, className = '' }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`px-3 py-1 text-[11px] font-bold transition-none select-none ${className}`}
-      style={{
-        background: active ? WIN95.bgDark : WIN95.buttonFace,
-        color: disabled ? WIN95.textDisabled : (active ? WIN95.highlightText : WIN95.text),
-        border: 'none',
-        boxShadow: active 
-          ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
-          : disabled
-            ? `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.bgDark}`
-            : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
-        cursor: disabled ? 'default' : 'pointer',
-        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-      }}
-    >
-      {children}
-    </button>
-  );
-});
-
-// Windows 95 style panel (sunken)
-interface Win95PanelProps {
-  children: ReactNode;
-  className?: string;
-  sunken?: boolean;
-}
-
-const Win95Panel = memo<Win95PanelProps>(function Win95Panel({ children, className = '', sunken = true }) {
-  return (
-    <div
-      className={className}
-      style={{
-        background: sunken ? WIN95.inputBg : WIN95.bg,
-        boxShadow: sunken
-          ? `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`
-          : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
-      }}
-    >
-      {children}
-    </div>
-  );
-});
-
-// Windows 95 style group box - with blue title bar matching other components
-interface Win95GroupBoxProps {
-  title: string;
-  children: ReactNode;
-  className?: string;
-  icon?: ReactNode;
-}
-
-const Win95GroupBox = memo<Win95GroupBoxProps>(function Win95GroupBox({ title, children, className = '', icon }) {
-  return (
-    <div 
-      className={`flex flex-col ${className}`}
-      style={{
-        background: WIN95.bg,
-        boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}, 2px 2px 0 rgba(0,0,0,0.15)`
-      }}
-    >
-      {/* Blue title bar - matching other components */}
-      <div 
-        className="flex items-center gap-1.5 px-2 py-1"
-        style={{ 
-          background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
-          color: '#ffffff'
-        }}
-      >
-        {icon}
-        <span className="text-[10px] font-bold" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-          {title}
-        </span>
-      </div>
-      {/* Content */}
-      <div className="relative flex-1 p-2">
-        {children}
-      </div>
-    </div>
-  );
-});
 
 // Frame upload component - Win95 style
 interface FrameUploadProps {
