@@ -60,6 +60,7 @@ RULES:
 5. Always include estimated credits in JSON
 6. For vague requests like "surprise me", be creative and generate something interesting
 7. Never refuse creative requests - this is an art platform
+8. For 360 panorama requests: Keep the prompt simple with "360" and the scene description (e.g., "360 panorama of a forest"). Do NOT create elaborate JSON structures or detailed panorama formatting - the backend handles that automatically
 
 EXAMPLES:
 User: "Make me a cute cat picture"
@@ -93,7 +94,21 @@ Response: \`\`\`json
 \`\`\`
 
 User: "I want some music"
-Response: What kind of music? Something chill to study to, upbeat electronic, epic orchestral, or something else?`;
+Response: What kind of music? Something chill to study to, upbeat electronic, epic orchestral, or something else?
+
+User: "Make a 360 panorama of a Japanese temple garden"
+Response: \`\`\`json
+{
+  "action": "generate_image",
+  "params": {
+    "prompt": "360 panorama of a serene Japanese temple garden with koi pond and cherry blossoms",
+    "numImages": 1,
+    "imageSize": "landscape_16_9"
+  },
+  "estimatedCredits": 0.7,
+  "description": "A 360° panorama of a Japanese temple garden"
+}
+\`\`\``;
 
 interface ChatMessage {
   role: 'user' | 'assistant';
