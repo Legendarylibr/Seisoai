@@ -148,6 +148,7 @@ const ImageLightbox = memo(function ImageLightbox({
           src={src} 
           onClose={onClose}
           onDownload={onDownload}
+          startFullscreen={true}
         />
       </div>
     );
@@ -208,8 +209,18 @@ const MessageBubble = memo(function MessageBubble({
     ? /\b360\b/i.test(message.pendingAction.params.prompt)
     : false;
     
-  // Check if generated content was from a 360 request (check message content for 360 indicator)
-  const is360Generated = message.content ? /\b360\b/i.test(message.content) : false;
+  // Check if generated content was from a 360 request
+  // Check multiple sources: message content, original prompt, or model used
+  const is360Generated = (() => {
+    // Check message content
+    if (message.content && /\b360\b/i.test(message.content)) return true;
+    // Check if generatedContent has metadata
+    if (message.generatedContent?.model === 'nano-banana-pro') return true;
+    if (message.generatedContent?.is360) return true;
+    // Check original prompt in generated content
+    if (message.generatedContent?.prompt && /\b360\b/i.test(message.generatedContent.prompt)) return true;
+    return false;
+  })();
 
   // Get available models based on action type
   // Skip model selection for 360 requests - always uses nano-banana-pro

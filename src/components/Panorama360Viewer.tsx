@@ -11,6 +11,7 @@ interface Panorama360ViewerProps {
   alt?: string;
   onDownload?: () => void;
   onClose?: () => void;
+  startFullscreen?: boolean; // Start in fullscreen mode (for lightbox usage)
 }
 
 // Vertex shader
@@ -67,14 +68,15 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
   src, 
   alt = '360° Panorama',
   onDownload,
-  onClose 
+  onClose,
+  startFullscreen = false
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fallbackRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(startFullscreen);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isAutoRotating, setIsAutoRotating] = useState(false);
   const [fov, setFov] = useState(90);
