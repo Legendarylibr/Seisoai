@@ -8,11 +8,12 @@ import {
   Send, Sparkles, Image, Film, Music, Download, 
   Play, Pause, Check, X, RefreshCw, Volume2,
   Wand2, Zap, Clock, AlertCircle, Maximize2, User,
-  Upload, ImagePlus
+  Upload, ImagePlus, LogOut
 } from 'lucide-react';
 import { WIN95, BTN, PANEL, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import AuthPrompt from './AuthPrompt';
 import { 
   sendChatMessage, 
   executeGeneration, 
@@ -913,13 +914,32 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
   }, [handleSend]);
 
   return (
-    <div className="h-full flex flex-col" style={{ background: 'linear-gradient(135deg, #1a3a4a 0%, #0f2027 100%)' }}>
+    <div className="h-full flex flex-col relative" style={{ background: 'linear-gradient(135deg, #1a3a4a 0%, #0f2027 100%)' }}>
+      {/* Sign-in overlay when not connected */}
+      {!isConnected && (
+        <div 
+          className="absolute inset-0 z-50 flex items-center justify-center"
+          style={{
+            background: 'rgba(15, 32, 39, 0.85)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)'
+          }}
+        >
+          <div className="w-full h-full overflow-auto">
+            <AuthPrompt />
+          </div>
+        </div>
+      )}
+      
       {/* Main chat window */}
       <div 
         className="flex-1 mx-2 lg:mx-4 mt-2 flex flex-col min-h-0 rounded-lg overflow-hidden"
         style={{
           ...PANEL.window,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          filter: !isConnected ? 'blur(3px)' : 'none',
+          opacity: !isConnected ? 0.6 : 1,
+          transition: 'filter 0.3s ease, opacity 0.3s ease'
         }}
       >
         {/* Title bar */}
@@ -939,21 +959,36 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
           </div>
           <div className="flex items-center gap-1">
             {isConnected && (
-              <div 
-                className="flex items-center gap-1 px-2 py-1 rounded text-[10px]"
-                style={{ background: 'rgba(255,255,255,0.15)' }}
-              >
-                <Zap className="w-3 h-3" />
-                {emailContext.credits ?? walletContext.credits ?? 0} credits
-              </div>
+              <>
+                <div 
+                  className="flex items-center gap-1 px-2 py-1 rounded text-[10px]"
+                  style={{ background: 'rgba(255,255,255,0.15)' }}
+                >
+                  <Zap className="w-3 h-3" />
+                  {emailContext.credits ?? walletContext.credits ?? 0} credits
+                </div>
+                <button
+                  onClick={handleClearChat}
+                  className="p-1.5 rounded hover:bg-white/20 transition-colors"
+                  title="New conversation"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={async () => {
+                    if (isEmailAuth) {
+                      await emailContext.signOut();
+                    } else if (walletContext.disconnect) {
+                      walletContext.disconnect();
+                    }
+                  }}
+                  className="p-1.5 rounded hover:bg-white/20 transition-colors"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </>
             )}
-            <button
-              onClick={handleClearChat}
-              className="p-1.5 rounded hover:bg-white/20 transition-colors"
-              title="New conversation"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
           </div>
         </div>
 
@@ -1011,23 +1046,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
             borderTop: `1px solid ${WIN95.border.dark}`
           }}
         >
-          {!isConnected ? (
-            <div 
-              className="text-center py-6 rounded-lg"
-              style={{ 
-                background: WIN95.inputBg,
-                border: `1px dashed ${WIN95.border.dark}`
-              }}
-            >
-              <Sparkles className="w-8 h-8 mx-auto mb-2" style={{ color: WIN95.textDisabled }} />
-              <p className="text-[12px] font-medium mb-1" style={{ color: WIN95.text }}>
-                Sign in to start creating
-              </p>
-              <p className="text-[10px]" style={{ color: WIN95.textDisabled }}>
-                Generate images, videos, and music with AI
-              </p>
-            </div>
-          ) : (
+          {isConnected && (
             <>
               <QuickActions onSelect={handleQuickAction} />
               
@@ -1164,6 +1183,22 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
               </div>
             </>
           )}
+          
+          {/* Placeholder when not connected */}
+          {!isConnected && (
+            <div 
+              className="text-center py-4 rounded-lg"
+              style={{ 
+                background: WIN95.inputBg,
+                border: `1px dashed ${WIN95.border.dark}`
+              }}
+            >
+              <Sparkles className="w-6 h-6 mx-auto mb-1" style={{ color: WIN95.textDisabled }} />
+              <p className="text-[11px]" style={{ color: WIN95.textDisabled }}>
+                Sign in to start chatting
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1172,7 +1207,10 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         className="flex items-center mx-2 lg:mx-4 my-2 rounded-lg overflow-hidden flex-shrink-0"
         style={{ 
           ...PANEL.window,
-          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+          filter: !isConnected ? 'blur(3px)' : 'none',
+          opacity: !isConnected ? 0.6 : 1,
+          transition: 'filter 0.3s ease, opacity 0.3s ease'
         }}
       >
         <div 
