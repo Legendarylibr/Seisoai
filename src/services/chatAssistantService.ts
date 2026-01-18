@@ -38,15 +38,18 @@ export interface PendingAction {
 
 export interface GenerationParams {
   prompt: string;
+  // Common
+  model?: string;
   // Image params
   style?: string;
   numImages?: number;
   imageSize?: string;
   referenceImage?: string;
+  imageModel?: string; // flux, flux-2, nano-banana-pro
   // Video params
   duration?: string;
   quality?: string;
-  model?: string;
+  videoModel?: string; // ltx, veo
   generateAudio?: boolean;
   generationMode?: string;
   firstFrameUrl?: string;
@@ -55,6 +58,26 @@ export interface GenerationParams {
   musicDuration?: number;
   genre?: string;
 }
+
+// Model options for each generation type
+export const IMAGE_MODELS = [
+  { id: 'flux', name: 'FLUX', description: 'Fast & versatile', credits: 0.5 },
+  { id: 'flux-2', name: 'FLUX 2', description: 'Photorealistic + text', credits: 0.65 },
+  { id: 'nano-banana-pro', name: 'Nano Banana', description: 'Highest quality', credits: 0.7 }
+];
+
+export const VIDEO_MODELS = [
+  { id: 'ltx', name: 'LTX-2', description: 'Fast & affordable', creditsPerSec: 1.0 },
+  { id: 'veo', name: 'Veo 3.1', description: 'Cinematic quality', creditsPerSec: 2.2 }
+];
+
+export const MUSIC_GENRES = [
+  { id: 'lo-fi', name: 'Lo-Fi', description: 'Chill beats' },
+  { id: 'electronic', name: 'Electronic', description: 'EDM & synths' },
+  { id: 'orchestral', name: 'Orchestral', description: 'Epic & cinematic' },
+  { id: 'rock', name: 'Rock', description: 'Guitar-driven' },
+  { id: 'jazz', name: 'Jazz', description: 'Smooth & improvisational' }
+];
 
 export interface ChatResponse {
   success: boolean;

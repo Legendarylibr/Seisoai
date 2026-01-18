@@ -17,6 +17,8 @@ import {
   executeGeneration, 
   getWelcomeMessage,
   generateMessageId,
+  IMAGE_MODELS,
+  VIDEO_MODELS,
   type ChatMessage, 
   type PendingAction,
   type ChatContext,
@@ -172,7 +174,34 @@ const MessageBubble = memo(function MessageBubble({
   const isUser = message.role === 'user';
   const [isPlaying, setIsPlaying] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Get available models based on action type
+  const getModels = () => {
+    if (!message.pendingAction) return [];
+    if (message.pendingAction.type === 'generate_image') return IMAGE_MODELS;
+    if (message.pendingAction.type === 'generate_video') return VIDEO_MODELS;
+    return [];
+  };
+
+  // Handle confirm with selected model
+  const handleConfirmWithModel = () => {
+    if (!message.pendingAction || !onConfirmAction) return;
+    
+    const models = getModels();
+    const modelToUse = selectedModel || (models.length > 0 ? models[0].id : undefined);
+    
+    const actionWithModel: PendingAction = {
+      ...message.pendingAction,
+      params: {
+        ...message.pendingAction.params,
+        model: modelToUse
+      }
+    };
+    
+    onConfirmAction(actionWithModel);
+  };
 
   const handleDownload = async (url: string, type: string) => {
     try {
@@ -278,7 +307,7 @@ const MessageBubble = memo(function MessageBubble({
                 />
               )}
 
-              {/* Pending action confirmation - redesigned card */}
+              {/* Pending action confirmation - redesigned card with model selector */}
               {message.pendingAction && !message.generatedContent && !message.isLoading && (
                 <div 
                   className="mt-4 p-4 rounded-lg"
@@ -314,11 +343,60 @@ const MessageBubble = memo(function MessageBubble({
                       </div>
                     </div>
                   </div>
+
+                  {/* Model Selector - for images and videos */}
+                  {getModels().length > 0 && (
+                    <div className="mb-4">
+                      <div className="text-[10px] font-bold mb-2" style={{ color: WIN95.text }}>
+                        Choose Model:
+                      </div>
+                      <div className="grid gap-2">
+                        {getModels().map((model) => (
+                          <button
+                            key={model.id}
+                            onClick={() => setSelectedModel(model.id)}
+                            className="flex items-center gap-3 p-3 rounded-lg text-left transition-all"
+                            style={{
+                              background: (selectedModel || getModels()[0].id) === model.id 
+                                ? 'linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.2) 100%)'
+                                : WIN95.bgLight,
+                              border: (selectedModel || getModels()[0].id) === model.id 
+                                ? '2px solid #667eea'
+                                : `1px solid ${WIN95.border.dark}`,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <div 
+                              className="w-4 h-4 rounded-full flex items-center justify-center"
+                              style={{
+                                border: `2px solid ${(selectedModel || getModels()[0].id) === model.id ? '#667eea' : WIN95.border.dark}`,
+                                background: (selectedModel || getModels()[0].id) === model.id ? '#667eea' : 'transparent'
+                              }}
+                            >
+                              {(selectedModel || getModels()[0].id) === model.id && (
+                                <Check className="w-2.5 h-2.5 text-white" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-[11px] font-bold" style={{ color: WIN95.text }}>
+                                {model.name}
+                              </div>
+                              <div className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                                {model.description}
+                                {' • '}
+                                {'credits' in model ? `${model.credits} credits` : `${(model as { creditsPerSec: number }).creditsPerSec}/sec`}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Action buttons */}
                   <div className="flex gap-2">
                     <button
-                      onClick={() => onConfirmAction?.(message.pendingAction!)}
+                      onClick={handleConfirmWithModel}
                       disabled={isActionLoading}
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-bold rounded-lg transition-all"
                       style={{

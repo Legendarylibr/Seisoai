@@ -4,16 +4,8 @@
  * Uses Claude to understand user intent and orchestrate generation actions
  */
 import { Router, type Request, type Response } from 'express';
-import { config } from '../config/env';
 import logger from '../utils/logger';
-
-const FAL_API_KEY = config.FAL_API_KEY;
-
-// Check if FAL_API_KEY is a valid key (not a placeholder)
-const isValidFalKey = FAL_API_KEY && 
-  FAL_API_KEY.length > 20 && 
-  !FAL_API_KEY.includes('your_') && 
-  !FAL_API_KEY.includes('_here');
+import { getFalApiKey } from '../services/fal';
 
 // System prompt for the chat assistant
 const SYSTEM_PROMPT = `You are a creative AI assistant for SeisoAI, a platform that generates images, videos, and music using AI.
@@ -209,6 +201,8 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         });
       }
 
+      const FAL_API_KEY = getFalApiKey();
+      
       if (!FAL_API_KEY) {
         logger.error('FAL_API_KEY not configured for chat assistant');
         return res.status(503).json({
@@ -217,9 +211,11 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         });
       }
       
-      logger.debug('Chat assistant processing message', { 
+      logger.info('Chat assistant processing message', { 
         messageLength: message.length, 
-        historyLength: history.length 
+        historyLength: history.length,
+        hasContext: !!context,
+        hasCredits: context?.credits !== undefined
       });
 
       // Build context info
@@ -255,6 +251,11 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000);
 
+      logger.debug('Making FAL LLM request', {
+        promptLength: fullPrompt.length,
+        systemPromptLength: (SYSTEM_PROMPT + contextInfo).length
+      });
+
       const response = await fetch('https://fal.run/fal-ai/any-llm', {
         method: 'POST',
         headers: {
@@ -285,9 +286,9 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         });
       }
 
-      let data: { output?: string; text?: string; response?: string };
+      let data: Record<string, unknown>;
       try {
-        data = await response.json();
+        data = await response.json() as Record<string, unknown>;
       } catch (parseErr) {
         logger.error('Failed to parse LLM response', { error: (parseErr as Error).message });
         return res.status(500).json({
@@ -296,15 +297,17 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         });
       }
       
-      logger.debug('LLM response received', { 
+      logger.info('LLM response received', { 
         hasOutput: !!data.output, 
         hasText: !!data.text,
-        hasResponse: !!data.response
+        hasResponse: !!data.response,
+        dataKeys: Object.keys(data)
       });
       
-      const assistantResponse = (data.output || data.text || data.response || '').trim();
+      const assistantResponse = ((data.output || data.text || data.response || '') as string).trim();
 
       if (!assistantResponse) {
+        logger.warn('Empty LLM response', { data: JSON.stringify(data).substring(0, 500) });
         return res.status(500).json({
           success: false,
           error: 'Empty response from AI'
@@ -393,10 +396,16 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
       switch (actionType) {
         case 'generate_image':
           contentType = 'image';
+          logger.info('Generating image via chat', { 
+            prompt: (params.prompt as string)?.substring(0, 50),
+            model: params.model || params.imageModel || 'flux',
+            numImages: params.numImages || 1
+          });
           // Call the image generation endpoint via internal fetch
           result = await callInternalEndpoint('/api/generate/image', {
             prompt: params.prompt,
             num_images: params.numImages || 1,
+            numImages: params.numImages || 1,
             aspect_ratio: getAspectRatio(params.imageSize as string),
             guidance_scale: 7.5,
             output_format: 'jpeg',
@@ -404,17 +413,23 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
             prompt_safety_tolerance: '6',
             enhance_prompt: true,
             seed: Math.floor(Math.random() * 2147483647),
+            model: params.model || params.imageModel || 'flux',
             ...fullParams
           }, req);
           break;
 
         case 'generate_video':
           contentType = 'video';
+          logger.info('Generating video via chat', { 
+            prompt: (params.prompt as string)?.substring(0, 50),
+            model: params.model || params.videoModel || 'ltx',
+            duration: params.duration || '6s'
+          });
           // Call the video generation endpoint
           result = await callInternalEndpoint('/api/generate/video', {
             prompt: params.prompt,
             duration: params.duration || '6s',
-            model: params.model || 'ltx',
+            model: params.model || params.videoModel || 'ltx',
             quality: params.quality || 'fast',
             generate_audio: params.generateAudio !== false,
             generation_mode: params.generationMode || 'text-to-video',
@@ -428,6 +443,11 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
 
         case 'generate_music':
           contentType = 'music';
+          logger.info('Generating music via chat', { 
+            prompt: (params.prompt as string)?.substring(0, 50),
+            duration: params.musicDuration || 30,
+            genre: params.genre
+          });
           // Call the music generation endpoint
           result = await callInternalEndpoint('/api/generate/music', {
             prompt: params.prompt,
