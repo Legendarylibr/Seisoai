@@ -1182,3 +1182,14 @@ input[type="range"].win95-slider::-moz-range-thumb:active {
 .batch-progress-animated {
   animation: batch-slide 0.5s linear infinite;
 }
+
+/* ===== SCROLLBAR UTILITIES ===== */
+/* Hide scrollbar but maintain scroll functionality */
+.scrollbar-none {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}

@@ -1017,25 +1017,25 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
           ))}
           <div ref={messagesEndRef} />
 
-          {/* Suggestions */}
+          {/* Suggestions - optimized for mobile */}
           {suggestions.length > 0 && messages.length <= 1 && (
-            <div className="mt-6 mb-4">
-              <div className="text-center mb-3 text-[11px]" style={{ color: WIN95.textDisabled }}>
-                Try one of these to get started:
+            <div className="mt-4 sm:mt-6 mb-2 sm:mb-4">
+              <div className="text-center mb-2 sm:mb-3 text-[10px] sm:text-[11px]" style={{ color: WIN95.textDisabled }}>
+                Try one of these:
               </div>
-              <div className="flex flex-wrap gap-2 justify-center">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-1.5 sm:gap-2 sm:justify-center">
                 {suggestions.map((suggestion, i) => (
                   <button
                     key={i}
                     onClick={() => handleSuggestionClick(suggestion)}
-                    className="px-4 py-2.5 text-[11px] max-w-[220px] text-left rounded-xl transition-all hover:scale-[1.02] hover:shadow-lg"
+                    className="px-3 py-2 sm:px-4 sm:py-2.5 text-[10px] sm:text-[11px] sm:max-w-[220px] text-left rounded-lg sm:rounded-xl transition-all hover:scale-[1.02] hover:shadow-lg"
                     style={{
                       background: WIN95.bg,
                       border: `1px solid ${WIN95.border.dark}`,
                       boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                     }}
                   >
-                    <span className="mr-1.5">💡</span>
+                    <span className="mr-1">💡</span>
                     {suggestion}
                   </button>
                 ))}
