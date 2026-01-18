@@ -29,18 +29,16 @@ const FRAGMENT_SHADER = `
   
   varying vec2 v_texCoord;
   uniform sampler2D u_texture;
-  uniform float u_yaw;    // Horizontal rotation (radians)
-  uniform float u_pitch;  // Vertical rotation (radians)
-  uniform float u_fov;    // Field of view
-  uniform float u_aspect; // Aspect ratio
+  uniform float u_yaw;
+  uniform float u_pitch;
+  uniform float u_fov;
+  uniform float u_aspect;
   
   #define PI 3.14159265359
   
   void main() {
-    // Convert screen coords to normalized device coords
     vec2 ndc = v_texCoord * 2.0 - 1.0;
     
-    // Apply aspect ratio and FOV
     float fovScale = tan(u_fov * 0.5);
     vec3 rayDir = normalize(vec3(
       ndc.x * fovScale * u_aspect,
@@ -48,7 +46,6 @@ const FRAGMENT_SHADER = `
       -1.0
     ));
     
-    // Apply pitch rotation (around X axis)
     float cosPitch = cos(u_pitch);
     float sinPitch = sin(u_pitch);
     vec3 pitched = vec3(
@@ -57,7 +54,6 @@ const FRAGMENT_SHADER = `
       rayDir.y * sinPitch + rayDir.z * cosPitch
     );
     
-    // Apply yaw rotation (around Y axis)
     float cosYaw = cos(u_yaw);
     float sinYaw = sin(u_yaw);
     vec3 rotated = vec3(
@@ -66,9 +62,8 @@ const FRAGMENT_SHADER = `
       -pitched.x * sinYaw + pitched.z * cosYaw
     );
     
-    // Convert 3D direction to equirectangular UV
-    float theta = atan(rotated.x, -rotated.z);  // -PI to PI
-    float phi = asin(clamp(rotated.y, -1.0, 1.0));  // -PI/2 to PI/2
+    float theta = atan(rotated.x, -rotated.z);
+    float phi = asin(clamp(rotated.y, -1.0, 1.0));
     
     vec2 uv = vec2(
       (theta / PI + 1.0) * 0.5,
@@ -91,27 +86,40 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
   const programRef = useRef<WebGLProgram | null>(null);
   const textureRef = useRef<WebGLTexture | null>(null);
   const animationFrameRef = useRef<number>(0);
+  const isRunningRef = useRef(false);
   
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isAutoRotating, setIsAutoRotating] = useState(false);
-  const [fov, setFov] = useState(90); // Field of view in degrees
+  const [fov, setFov] = useState(90);
+  const [, forceUpdate] = useState(0);
   
-  // Camera state (in radians)
-  const yawRef = useRef(0);
-  const pitchRef = useRef(0);
-  const velocityXRef = useRef(0);
-  const velocityYRef = useRef(0);
+  // All animation state in refs to avoid recreating callbacks
+  const stateRef = useRef({
+    yaw: 0,
+    pitch: 0,
+    velocityX: 0,
+    velocityY: 0,
+    isDragging: false,
+    lastMouse: { x: 0, y: 0 },
+    lastPinchDist: 0,
+    fov: 90,
+    isAutoRotating: false
+  });
   
-  // Drag state
-  const isDraggingRef = useRef(false);
-  const lastMouseRef = useRef({ x: 0, y: 0 });
-  const lastPinchDistRef = useRef(0);
+  // Keep refs in sync with state
+  useEffect(() => {
+    stateRef.current.fov = fov;
+  }, [fov]);
   
-  // Initialize WebGL
-  const initWebGL = useCallback(() => {
+  useEffect(() => {
+    stateRef.current.isAutoRotating = isAutoRotating;
+  }, [isAutoRotating]);
+
+  // Initialize WebGL - only once
+  useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return null;
+    if (!canvas) return;
     
     const gl = canvas.getContext('webgl', { 
       alpha: false, 
@@ -120,31 +128,30 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     });
     if (!gl) {
       console.error('WebGL not supported');
-      return null;
+      return;
     }
     
     // Compile shaders
     const vertexShader = gl.createShader(gl.VERTEX_SHADER);
     const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-    if (!vertexShader || !fragmentShader) return null;
+    if (!vertexShader || !fragmentShader) return;
     
     gl.shaderSource(vertexShader, VERTEX_SHADER);
     gl.compileShader(vertexShader);
     if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
       console.error('Vertex shader error:', gl.getShaderInfoLog(vertexShader));
-      return null;
+      return;
     }
     
     gl.shaderSource(fragmentShader, FRAGMENT_SHADER);
     gl.compileShader(fragmentShader);
     if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
       console.error('Fragment shader error:', gl.getShaderInfoLog(fragmentShader));
-      return null;
+      return;
     }
     
-    // Link program
     const program = gl.createProgram();
-    if (!program) return null;
+    if (!program) return;
     
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
@@ -152,7 +159,7 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
       console.error('Program link error:', gl.getProgramInfoLog(program));
-      return null;
+      return;
     }
     
     // Create fullscreen quad
@@ -168,253 +175,216 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     programRef.current = program;
     glRef.current = gl;
     
-    return gl;
-  }, []);
-  
-  // Load texture from image
-  const loadTexture = useCallback((image: HTMLImageElement) => {
-    const gl = glRef.current;
-    if (!gl) return;
-    
-    const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    
-    // Set texture parameters for equirectangular wrap
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    
-    textureRef.current = texture;
-    setImageLoaded(true);
-  }, []);
-  
-  // Render frame
-  const render = useCallback(() => {
-    const gl = glRef.current;
-    const program = programRef.current;
-    const canvas = canvasRef.current;
-    
-    if (!gl || !program || !canvas || !textureRef.current) return;
-    
-    // Update canvas size
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const width = rect.width * dpr;
-    const height = rect.height * dpr;
-    
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
-      gl.viewport(0, 0, width, height);
-    }
-    
-    gl.useProgram(program);
-    
-    // Set uniforms
-    const yawLoc = gl.getUniformLocation(program, 'u_yaw');
-    const pitchLoc = gl.getUniformLocation(program, 'u_pitch');
-    const fovLoc = gl.getUniformLocation(program, 'u_fov');
-    const aspectLoc = gl.getUniformLocation(program, 'u_aspect');
-    
-    gl.uniform1f(yawLoc, yawRef.current);
-    gl.uniform1f(pitchLoc, pitchRef.current);
-    gl.uniform1f(fovLoc, (fov * Math.PI) / 180);
-    gl.uniform1f(aspectLoc, canvas.width / canvas.height);
-    
-    // Bind texture
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, textureRef.current);
-    gl.uniform1i(gl.getUniformLocation(program, 'u_texture'), 0);
-    
-    // Draw
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  }, [fov]);
-  
-  // Animation loop
-  const animate = useCallback(() => {
-    // Apply momentum/inertia
-    if (!isDraggingRef.current) {
-      yawRef.current += velocityXRef.current;
-      pitchRef.current += velocityYRef.current;
-      
-      // Damping
-      velocityXRef.current *= 0.95;
-      velocityYRef.current *= 0.95;
-      
-      // Stop when velocity is very small
-      if (Math.abs(velocityXRef.current) < 0.0001) velocityXRef.current = 0;
-      if (Math.abs(velocityYRef.current) < 0.0001) velocityYRef.current = 0;
-    }
-    
-    // Auto-rotate
-    if (isAutoRotating && !isDraggingRef.current) {
-      yawRef.current += 0.002;
-    }
-    
-    // Clamp pitch to prevent flipping
-    pitchRef.current = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitchRef.current));
-    
-    render();
-    animationFrameRef.current = requestAnimationFrame(animate);
-  }, [render, isAutoRotating]);
-  
-  // Mouse handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    isDraggingRef.current = true;
-    lastMouseRef.current = { x: e.clientX, y: e.clientY };
-    velocityXRef.current = 0;
-    velocityYRef.current = 0;
-  }, []);
-  
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDraggingRef.current) return;
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const dx = e.clientX - lastMouseRef.current.x;
-    const dy = e.clientY - lastMouseRef.current.y;
-    
-    // Sensitivity based on FOV
-    const sensitivity = (fov / 90) * 0.003;
-    
-    velocityXRef.current = -dx * sensitivity;
-    velocityYRef.current = dy * sensitivity;
-    
-    yawRef.current += velocityXRef.current;
-    pitchRef.current += velocityYRef.current;
-    
-    lastMouseRef.current = { x: e.clientX, y: e.clientY };
-  }, [fov]);
-  
-  const handleMouseUp = useCallback(() => {
-    isDraggingRef.current = false;
-  }, []);
-  
-  // Touch handlers with pinch-to-zoom
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    e.preventDefault(); // Prevent page scroll
-    
-    if (e.touches.length === 2) {
-      // Pinch start - calculate initial distance
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      lastPinchDistRef.current = Math.sqrt(dx * dx + dy * dy);
-      isDraggingRef.current = false;
-    } else if (e.touches.length === 1) {
-      isDraggingRef.current = true;
-      const touch = e.touches[0];
-      lastMouseRef.current = { x: touch.clientX, y: touch.clientY };
-      velocityXRef.current = 0;
-      velocityYRef.current = 0;
-    }
-  }, []);
-  
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault(); // Prevent page scroll
-    
-    if (e.touches.length === 2) {
-      // Pinch-to-zoom
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      
-      if (lastPinchDistRef.current > 0) {
-        const delta = (lastPinchDistRef.current - dist) * 0.2;
-        setFov(prev => Math.max(30, Math.min(120, prev + delta)));
-      }
-      lastPinchDistRef.current = dist;
-      return;
-    }
-    
-    if (!isDraggingRef.current || e.touches.length !== 1) return;
-    
-    const touch = e.touches[0];
-    const dx = touch.clientX - lastMouseRef.current.x;
-    const dy = touch.clientY - lastMouseRef.current.y;
-    
-    const sensitivity = (fov / 90) * 0.005;
-    
-    velocityXRef.current = -dx * sensitivity;
-    velocityYRef.current = dy * sensitivity;
-    
-    yawRef.current += velocityXRef.current;
-    pitchRef.current += velocityYRef.current;
-    
-    lastMouseRef.current = { x: touch.clientX, y: touch.clientY };
-  }, [fov]);
-  
-  const handleTouchEnd = useCallback(() => {
-    isDraggingRef.current = false;
-    lastPinchDistRef.current = 0;
-  }, []);
-  
-  // Wheel for zoom
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 5 : -5;
-    setFov(prev => Math.max(30, Math.min(120, prev + delta)));
-  }, []);
-  
-  // Reset view
-  const resetView = useCallback(() => {
-    yawRef.current = 0;
-    pitchRef.current = 0;
-    velocityXRef.current = 0;
-    velocityYRef.current = 0;
-    setFov(90);
-  }, []);
-  
-  // Toggle fullscreen
-  const toggleFullscreen = useCallback(() => {
-    setIsFullscreen(!isFullscreen);
-  }, [isFullscreen]);
-  
-  // Initialize on mount
-  useEffect(() => {
-    const gl = initWebGL();
-    if (!gl) return;
-    
     // Load image
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => loadTexture(img);
+    img.onload = () => {
+      if (!gl) return;
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      textureRef.current = texture;
+      setImageLoaded(true);
+    };
     img.onerror = () => console.error('Failed to load panorama image');
     img.src = src;
     
-    // Start animation loop
+    // Animation loop
+    const animate = () => {
+      if (!isRunningRef.current) return;
+      
+      const state = stateRef.current;
+      const gl = glRef.current;
+      const program = programRef.current;
+      const canvas = canvasRef.current;
+      
+      // Apply momentum when not dragging
+      if (!state.isDragging) {
+        state.yaw += state.velocityX;
+        state.pitch += state.velocityY;
+        state.velocityX *= 0.95;
+        state.velocityY *= 0.95;
+        if (Math.abs(state.velocityX) < 0.0001) state.velocityX = 0;
+        if (Math.abs(state.velocityY) < 0.0001) state.velocityY = 0;
+      }
+      
+      // Auto-rotate
+      if (state.isAutoRotating && !state.isDragging) {
+        state.yaw += 0.003;
+      }
+      
+      // Clamp pitch
+      state.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, state.pitch));
+      
+      // Render
+      if (gl && program && canvas && textureRef.current) {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const width = Math.floor(rect.width * dpr);
+        const height = Math.floor(rect.height * dpr);
+        
+        if (width > 0 && height > 0) {
+          if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+          }
+          gl.viewport(0, 0, width, height);
+          gl.useProgram(program);
+          
+          gl.uniform1f(gl.getUniformLocation(program, 'u_yaw'), state.yaw);
+          gl.uniform1f(gl.getUniformLocation(program, 'u_pitch'), state.pitch);
+          gl.uniform1f(gl.getUniformLocation(program, 'u_fov'), (state.fov * Math.PI) / 180);
+          gl.uniform1f(gl.getUniformLocation(program, 'u_aspect'), width / height);
+          
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, textureRef.current);
+          gl.uniform1i(gl.getUniformLocation(program, 'u_texture'), 0);
+          
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        }
+      }
+      
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+    
+    isRunningRef.current = true;
     animationFrameRef.current = requestAnimationFrame(animate);
     
     return () => {
+      isRunningRef.current = false;
       cancelAnimationFrame(animationFrameRef.current);
       if (glRef.current) {
         const ext = glRef.current.getExtension('WEBGL_lose_context');
         if (ext) ext.loseContext();
       }
     };
-  }, [src, initWebGL, loadTexture, animate]);
+  }, [src]);
   
-  // Restart animation when autoRotate changes
-  useEffect(() => {
-    cancelAnimationFrame(animationFrameRef.current);
-    animationFrameRef.current = requestAnimationFrame(animate);
-  }, [animate, isAutoRotating]);
+  // Mouse handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    stateRef.current.isDragging = true;
+    stateRef.current.lastMouse = { x: e.clientX, y: e.clientY };
+    stateRef.current.velocityX = 0;
+    stateRef.current.velocityY = 0;
+    forceUpdate(n => n + 1);
+  }, []);
+  
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const state = stateRef.current;
+    if (!state.isDragging) return;
+    
+    const dx = e.clientX - state.lastMouse.x;
+    const dy = e.clientY - state.lastMouse.y;
+    
+    const sensitivity = (state.fov / 90) * 0.004;
+    
+    state.velocityX = -dx * sensitivity;
+    state.velocityY = dy * sensitivity;
+    state.yaw += state.velocityX;
+    state.pitch += state.velocityY;
+    state.lastMouse = { x: e.clientX, y: e.clientY };
+  }, []);
+  
+  const handleMouseUp = useCallback(() => {
+    stateRef.current.isDragging = false;
+    forceUpdate(n => n + 1);
+  }, []);
+  
+  // Touch handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    const state = stateRef.current;
+    
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      state.lastPinchDist = Math.sqrt(dx * dx + dy * dy);
+      state.isDragging = false;
+    } else if (e.touches.length === 1) {
+      state.isDragging = true;
+      state.lastMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      state.velocityX = 0;
+      state.velocityY = 0;
+    }
+    forceUpdate(n => n + 1);
+  }, []);
+  
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    const state = stateRef.current;
+    
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (state.lastPinchDist > 0) {
+        const delta = (state.lastPinchDist - dist) * 0.3;
+        const newFov = Math.max(30, Math.min(120, state.fov + delta));
+        state.fov = newFov;
+        setFov(newFov);
+      }
+      state.lastPinchDist = dist;
+      return;
+    }
+    
+    if (!state.isDragging || e.touches.length !== 1) return;
+    
+    const touch = e.touches[0];
+    const dx = touch.clientX - state.lastMouse.x;
+    const dy = touch.clientY - state.lastMouse.y;
+    
+    const sensitivity = (state.fov / 90) * 0.006;
+    
+    state.velocityX = -dx * sensitivity;
+    state.velocityY = dy * sensitivity;
+    state.yaw += state.velocityX;
+    state.pitch += state.velocityY;
+    state.lastMouse = { x: touch.clientX, y: touch.clientY };
+  }, []);
+  
+  const handleTouchEnd = useCallback(() => {
+    stateRef.current.isDragging = false;
+    stateRef.current.lastPinchDist = 0;
+    forceUpdate(n => n + 1);
+  }, []);
+  
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 5 : -5;
+    const newFov = Math.max(30, Math.min(120, stateRef.current.fov + delta));
+    stateRef.current.fov = newFov;
+    setFov(newFov);
+  }, []);
+  
+  const resetView = useCallback(() => {
+    stateRef.current.yaw = 0;
+    stateRef.current.pitch = 0;
+    stateRef.current.velocityX = 0;
+    stateRef.current.velocityY = 0;
+    stateRef.current.fov = 90;
+    setFov(90);
+  }, []);
+  
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen(prev => !prev);
+  }, []);
 
-  const viewerContent = (
+  return (
     <div 
       ref={containerRef}
       className={`relative ${isFullscreen ? 'fixed inset-0 z-[9999]' : 'w-full h-full'}`}
-      style={{ background: '#000', minHeight: isFullscreen ? '100vh' : '300px' }}
+      style={{ background: '#000', minHeight: isFullscreen ? '100vh' : '400px' }}
     >
       {/* Toolbar */}
       <div 
         className="absolute top-0 left-0 right-0 z-10 flex items-center gap-1 p-1.5"
-        style={{ 
-          background: 'linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)'
-        }}
+        style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)' }}
       >
         <div className="flex items-center gap-1 px-2 py-1 rounded" style={{ background: 'rgba(255,255,255,0.15)' }}>
           <Move className="w-3.5 h-3.5 text-white" />
@@ -427,13 +397,11 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
         
         <div className="flex-1" />
 
-        {/* FOV indicator */}
         <div className="flex items-center gap-0.5">
           <span className="text-[9px] text-white/60 mr-1">FOV:</span>
           <span className="text-[10px] text-white/80 w-8 text-center">{Math.round(fov)}°</span>
         </div>
 
-        {/* Auto-rotate toggle */}
         <button
           onClick={() => setIsAutoRotating(!isAutoRotating)}
           className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
@@ -484,9 +452,9 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
       {/* WebGL Canvas */}
       <canvas
         ref={canvasRef}
-        className="w-full h-full"
+        className="w-full h-full block"
         style={{
-          cursor: isDraggingRef.current ? 'grabbing' : 'grab',
+          cursor: stateRef.current.isDragging ? 'grabbing' : 'grab',
           touchAction: 'none'
         }}
         onMouseDown={handleMouseDown}
@@ -512,9 +480,7 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
       {/* Bottom hint */}
       <div 
         className="absolute bottom-0 left-0 right-0 flex items-center justify-center p-2 pointer-events-none"
-        style={{ 
-          background: 'linear-gradient(0deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 100%)'
-        }}
+        style={{ background: 'linear-gradient(0deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 100%)' }}
       >
         <div className="flex items-center gap-2 text-[10px] text-white/70">
           <Move className="w-3 h-3" />
@@ -524,8 +490,6 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
       </div>
     </div>
   );
-
-  return viewerContent;
 });
 
 export default Panorama360Viewer;
