@@ -317,6 +317,12 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
       // Parse for action JSON
       const action = parseActionFromResponse(assistantResponse);
       
+      logger.info('Chat assistant response parsed', {
+        hasAction: !!action,
+        actionType: action?.action,
+        responsePreview: assistantResponse.substring(0, 200)
+      });
+      
       // Clean response for display (remove JSON)
       const cleanedResponse = action 
         ? cleanResponseForDisplay(assistantResponse) || action.description

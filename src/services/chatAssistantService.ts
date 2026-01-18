@@ -125,14 +125,36 @@ export async function sendChatMessage(
 
     const data = await response.json();
     
+    // Debug logging
+    console.log('[ChatAssistant] API Response:', {
+      success: data.success,
+      hasResponse: !!data.response,
+      hasAction: !!data.action,
+      actionType: data.action?.action,
+      error: data.error
+    });
+    
     if (!response.ok || !data.success) {
       throw new Error(data.error || 'Failed to get response');
+    }
+
+    // Map backend action format to frontend PendingAction format
+    // Backend uses 'action' field, frontend uses 'type' field
+    let mappedAction: PendingAction | undefined;
+    if (data.action) {
+      mappedAction = {
+        type: data.action.action, // Map 'action' to 'type'
+        params: data.action.params,
+        estimatedCredits: data.action.estimatedCredits,
+        description: data.action.description
+      };
+      console.log('[ChatAssistant] Mapped action:', mappedAction);
     }
 
     return {
       success: true,
       message: data.response,
-      action: data.action,
+      action: mappedAction,
       generatedContent: data.generatedContent
     };
   } catch (error) {
