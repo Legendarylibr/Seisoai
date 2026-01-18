@@ -117,6 +117,7 @@ interface ChatRequestBody {
     email?: string;
     credits?: number;
   };
+  referenceImage?: string;
 }
 
 interface GenerateRequestBody {
@@ -185,7 +186,7 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
     const startTime = Date.now();
     
     try {
-      const { message, history = [], context } = req.body as ChatRequestBody;
+      const { message, history = [], context, referenceImage } = req.body as ChatRequestBody;
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return res.status(400).json({
@@ -215,13 +216,20 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         messageLength: message.length, 
         historyLength: history.length,
         hasContext: !!context,
-        hasCredits: context?.credits !== undefined
+        hasCredits: context?.credits !== undefined,
+        hasReferenceImage: !!referenceImage
       });
 
       // Build context info
       let contextInfo = '';
       if (context?.credits !== undefined) {
         contextInfo += `\nUser has ${context.credits} credits available.`;
+      }
+      if (referenceImage) {
+        contextInfo += `\n\nIMPORTANT: User has attached a REFERENCE IMAGE to this message. When generating, you should:
+- For images: Use this as an image-to-image reference (set referenceImage in params)
+- For videos: Use this as the first frame (set firstFrameUrl in params, use image-to-video mode)
+Include the reference in your JSON response params.`;
       }
 
       // Format conversation for Claude
@@ -315,11 +323,34 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
       }
 
       // Parse for action JSON
-      const action = parseActionFromResponse(assistantResponse);
+      let action = parseActionFromResponse(assistantResponse);
+      
+      // If there's a reference image and an action, inject it into the params
+      if (action && referenceImage) {
+        if (action.action === 'generate_image') {
+          action = {
+            ...action,
+            params: {
+              ...action.params,
+              referenceImage
+            }
+          };
+        } else if (action.action === 'generate_video') {
+          action = {
+            ...action,
+            params: {
+              ...action.params,
+              firstFrameUrl: referenceImage,
+              generationMode: 'image-to-video'
+            }
+          };
+        }
+      }
       
       logger.info('Chat assistant response parsed', {
         hasAction: !!action,
         actionType: action?.action,
+        hasReferenceImage: !!referenceImage,
         responsePreview: assistantResponse.substring(0, 200)
       });
       
@@ -405,9 +436,11 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
           logger.info('Generating image via chat', { 
             prompt: (params.prompt as string)?.substring(0, 50),
             model: params.model || params.imageModel || 'flux',
-            numImages: params.numImages || 1
+            numImages: params.numImages || 1,
+            hasReferenceImage: !!params.referenceImage
           });
           // Call the image generation endpoint via internal fetch
+          // Map referenceImage to image_url for the generate endpoint
           result = await callInternalEndpoint('/api/generate/image', {
             prompt: params.prompt,
             num_images: params.numImages || 1,
@@ -420,16 +453,24 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
             enhance_prompt: true,
             seed: Math.floor(Math.random() * 2147483647),
             model: params.model || params.imageModel || 'flux',
+            // Map referenceImage to image_url for image-to-image generation
+            ...(params.referenceImage && { image_url: params.referenceImage }),
             ...fullParams
           }, req);
           break;
 
         case 'generate_video':
           contentType = 'video';
+          // Determine generation mode based on whether we have a first frame
+          const hasFirstFrame = !!params.firstFrameUrl;
+          const videoMode = hasFirstFrame ? 'image-to-video' : (params.generationMode || 'text-to-video');
+          
           logger.info('Generating video via chat', { 
             prompt: (params.prompt as string)?.substring(0, 50),
             model: params.model || params.videoModel || 'ltx',
-            duration: params.duration || '6s'
+            duration: params.duration || '6s',
+            hasFirstFrame,
+            generationMode: videoMode
           });
           // Call the video generation endpoint
           result = await callInternalEndpoint('/api/generate/video', {
@@ -438,7 +479,7 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
             model: params.model || params.videoModel || 'ltx',
             quality: params.quality || 'fast',
             generate_audio: params.generateAudio !== false,
-            generation_mode: params.generationMode || 'text-to-video',
+            generation_mode: videoMode,
             resolution: '720p',
             aspect_ratio: 'auto',
             first_frame_url: params.firstFrameUrl,

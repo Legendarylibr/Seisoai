@@ -7,7 +7,8 @@ import { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { 
   Send, Sparkles, Image, Film, Music, Download, 
   Play, Pause, Check, X, RefreshCw, Volume2,
-  Wand2, Zap, Clock, AlertCircle, Maximize2, User
+  Wand2, Zap, Clock, AlertCircle, Maximize2, User,
+  Upload, ImagePlus
 } from 'lucide-react';
 import { WIN95, BTN, PANEL, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
@@ -661,9 +662,12 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -701,14 +705,59 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     credits: emailContext.credits ?? walletContext.credits
   }), [emailContext, walletContext]);
 
+  // Handle image upload for reference
+  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+      logger.warn('Invalid file type for image upload');
+      return;
+    }
+    
+    if (file.size > 10 * 1024 * 1024) {
+      logger.warn('Image file too large');
+      return;
+    }
+    
+    setIsUploadingImage(true);
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result;
+      if (typeof result === 'string') {
+        setAttachedImage(result);
+      }
+      setIsUploadingImage(false);
+    };
+    reader.onerror = () => {
+      logger.error('Failed to read image file');
+      setIsUploadingImage(false);
+    };
+    reader.readAsDataURL(file);
+    
+    // Reset the input so the same file can be selected again
+    e.target.value = '';
+  }, []);
+
+  // Remove attached image
+  const handleRemoveImage = useCallback(() => {
+    setAttachedImage(null);
+  }, []);
+
   // Send message handler
   const handleSend = useCallback(async () => {
     if (!inputValue.trim() || isLoading || !isConnected) return;
 
+    // Build message content - include image reference indicator if attached
+    const messageContent = attachedImage 
+      ? `[Image attached] ${inputValue.trim()}`
+      : inputValue.trim();
+
     const userMessage: ChatMessage = {
       id: generateMessageId(),
       role: 'user',
-      content: inputValue.trim(),
+      content: messageContent,
       timestamp: new Date().toISOString()
     };
 
@@ -720,8 +769,12 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
       isLoading: true
     };
 
+    // Store the attached image before clearing
+    const imageToSend = attachedImage;
+
     setMessages(prev => [...prev, userMessage, loadingMessage]);
     setInputValue('');
+    setAttachedImage(null);
     setIsLoading(true);
     setSuggestions([]);
 
@@ -734,7 +787,8 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
       const response = await sendChatMessage(
         userMessage.content,
         messages,
-        getContext()
+        getContext(),
+        imageToSend || undefined
       );
 
       // Debug logging
@@ -977,7 +1031,78 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
             <>
               <QuickActions onSelect={handleQuickAction} />
               
-              <div className="flex gap-3 items-end">
+              {/* Attached image preview */}
+              {attachedImage && (
+                <div 
+                  className="mb-2 p-2 rounded-lg flex items-center gap-3"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%)',
+                    border: '1px solid rgba(102,126,234,0.3)'
+                  }}
+                >
+                  <div className="relative">
+                    <img 
+                      src={attachedImage} 
+                      alt="Attached reference"
+                      className="w-16 h-16 object-cover rounded-lg"
+                      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
+                    />
+                    <button
+                      onClick={handleRemoveImage}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
+                      style={{ 
+                        background: '#ef4444',
+                        color: '#fff',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                      }}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-[11px] font-medium" style={{ color: WIN95.text }}>
+                      📷 Reference image attached
+                    </div>
+                    <div className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                      The AI will use this for image-to-image or video generation
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex gap-2 items-end">
+                {/* Image upload button */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading || isGenerating || isUploadingImage}
+                  className="w-11 h-11 flex items-center justify-center rounded-xl transition-all flex-shrink-0"
+                  style={{
+                    background: attachedImage 
+                      ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
+                      : WIN95.bgLight,
+                    color: attachedImage ? '#fff' : WIN95.text,
+                    border: `1px solid ${WIN95.border.dark}`,
+                    cursor: (isLoading || isGenerating || isUploadingImage) ? 'default' : 'pointer',
+                    opacity: (isLoading || isGenerating) ? 0.5 : 1
+                  }}
+                  title="Attach reference image"
+                >
+                  {isUploadingImage ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : attachedImage ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <ImagePlus className="w-4 h-4" />
+                  )}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                
                 <div 
                   className="flex-1 rounded-xl overflow-hidden"
                   style={{
@@ -991,7 +1116,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Describe what you want to create..."
+                    placeholder={attachedImage ? "Describe what to do with this image..." : "Describe what you want to create..."}
                     disabled={isLoading || isGenerating}
                     rows={1}
                     className="w-full px-4 py-3 text-[13px] resize-none focus:outline-none"
@@ -1007,7 +1132,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                 <button
                   onClick={handleSend}
                   disabled={!inputValue.trim() || isLoading || isGenerating}
-                  className="w-12 h-12 flex items-center justify-center rounded-xl transition-all"
+                  className="w-11 h-11 flex items-center justify-center rounded-xl transition-all flex-shrink-0"
                   style={{
                     background: (!inputValue.trim() || isLoading || isGenerating) 
                       ? WIN95.buttonFace 

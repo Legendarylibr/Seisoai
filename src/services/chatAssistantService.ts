@@ -100,7 +100,8 @@ export interface ChatContext {
 export async function sendChatMessage(
   message: string,
   history: ChatMessage[] = [],
-  context: ChatContext
+  context: ChatContext,
+  referenceImage?: string
 ): Promise<ChatResponse> {
   try {
     const csrfToken = await ensureCSRFToken();
@@ -119,7 +120,8 @@ export async function sendChatMessage(
           content: m.content,
           hasGeneration: !!m.generatedContent
         })),
-        context
+        context,
+        referenceImage
       })
     });
 
