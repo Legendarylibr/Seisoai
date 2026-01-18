@@ -125,6 +125,21 @@ export const RATE_LIMITS: RateLimitsConfig = {
   }
 };
 
+// Pagination limits - prevent DoS via large page/offset requests
+export interface PaginationConfig {
+  DEFAULT_LIMIT: number;
+  MAX_LIMIT: number;
+  MAX_SKIP: number;
+  MAX_PAGE: number;
+}
+
+export const PAGINATION: PaginationConfig = {
+  DEFAULT_LIMIT: 50,      // Default items per page
+  MAX_LIMIT: 1000,        // Maximum items per request
+  MAX_SKIP: 100000,       // Maximum offset (prevents scanning entire collection)
+  MAX_PAGE: 1000,         // Maximum page number (with MAX_LIMIT, allows 1M records)
+};
+
 // File size limits
 export const FILE_LIMITS: FileLimits = {
   VIDEO_MAX_SIZE: 50 * 1024 * 1024, // 50MB
@@ -161,6 +176,7 @@ export default {
   CREDITS,
   FREE_IMAGE_LIMITS,
   RATE_LIMITS,
+  PAGINATION,
   FILE_LIMITS,
   CACHE,
   JWT,

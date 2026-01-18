@@ -458,9 +458,20 @@ export async function verifyAuditLogIntegrity(
   };
 }
 
+// Service-level pagination limits (defense in depth)
+const SERVICE_PAGINATION = {
+  MAX_LIMIT: 10000,     // Hard cap at service level
+  MAX_SKIP: 100000,     // Maximum offset to prevent DoS
+  DEFAULT_LIMIT: 100,
+  DEFAULT_SKIP: 0,
+} as const;
+
 /**
  * Query audit logs with filtering
  * For compliance reporting and security investigations
+ * 
+ * SECURITY: Enforces hard caps on limit/skip to prevent DoS attacks
+ * even if route-level validation is bypassed
  */
 export async function queryAuditLogs(params: {
   userId?: string;
@@ -507,13 +518,30 @@ export async function queryAuditLogs(params: {
     query['request.correlationId'] = params.correlationId;
   }
   
+  // SECURITY FIX: Enforce hard caps at service level (defense in depth)
+  // Validate and sanitize limit
+  let limit = params.limit ?? SERVICE_PAGINATION.DEFAULT_LIMIT;
+  if (typeof limit !== 'number' || isNaN(limit) || limit < 1) {
+    limit = SERVICE_PAGINATION.DEFAULT_LIMIT;
+  }
+  limit = Math.min(limit, SERVICE_PAGINATION.MAX_LIMIT);
+  
+  // Validate and sanitize skip
+  let skip = params.skip ?? SERVICE_PAGINATION.DEFAULT_SKIP;
+  if (typeof skip !== 'number' || isNaN(skip) || skip < 0) {
+    skip = SERVICE_PAGINATION.DEFAULT_SKIP;
+  }
+  skip = Math.min(skip, SERVICE_PAGINATION.MAX_SKIP);
+  
   const [logs, total] = await Promise.all([
     AuditLog.find(query)
       .sort({ timestamp: -1 })
-      .limit(params.limit || 100)
-      .skip(params.skip || 0)
-      .lean(),
-    AuditLog.countDocuments(query),
+      .limit(limit)
+      .skip(skip)
+      .lean()
+      .maxTimeMS(30000), // 30 second timeout for large queries
+    AuditLog.countDocuments(query)
+      .maxTimeMS(10000), // 10 second timeout for count
   ]);
   
   return { logs, total };

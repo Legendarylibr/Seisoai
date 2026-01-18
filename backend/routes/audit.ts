@@ -10,6 +10,7 @@
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
+import crypto from 'crypto';
 import logger from '../utils/logger.js';
 import { 
   queryAuditLogs, 
@@ -18,6 +19,15 @@ import {
   AuditSeverity,
   logAuditEvent 
 } from '../services/auditLog.js';
+
+// Pagination limits - prevent DoS via large offsets
+const PAGINATION = {
+  MAX_LIMIT: 1000,      // Maximum records per request
+  MAX_SKIP: 100000,     // Maximum offset (100k records deep)
+  DEFAULT_LIMIT: 100,
+  DEFAULT_SKIP: 0,
+  MAX_EXPORT: 10000,    // Maximum export size
+} as const;
 
 // Types
 interface Dependencies {
@@ -35,6 +45,27 @@ interface AuthenticatedRequest extends Request {
   correlationId?: string;
 }
 
+/**
+ * Safely parse pagination parameters with validation
+ */
+function parsePaginationParams(limitStr: string | undefined, skipStr: string | undefined): {
+  limit: number;
+  skip: number;
+} {
+  let limit = parseInt(limitStr || String(PAGINATION.DEFAULT_LIMIT), 10);
+  let skip = parseInt(skipStr || String(PAGINATION.DEFAULT_SKIP), 10);
+  
+  // Handle NaN and negative values
+  if (isNaN(limit) || limit < 1) limit = PAGINATION.DEFAULT_LIMIT;
+  if (isNaN(skip) || skip < 0) skip = PAGINATION.DEFAULT_SKIP;
+  
+  // Enforce maximum caps
+  limit = Math.min(limit, PAGINATION.MAX_LIMIT);
+  skip = Math.min(skip, PAGINATION.MAX_SKIP);
+  
+  return { limit, skip };
+}
+
 export function createAuditRoutes(deps: Dependencies) {
   const router = Router();
   const { authRateLimiter } = deps;
@@ -43,11 +74,45 @@ export function createAuditRoutes(deps: Dependencies) {
 
   /**
    * Admin authentication check
+   * SECURITY FIX: Use constant-time comparison to prevent timing attacks
    */
   const requireAdmin = (req: AuthenticatedRequest, res: Response, next: () => void) => {
+    const ADMIN_SECRET = process.env.ADMIN_SECRET;
     const adminSecret = req.headers['x-admin-secret'];
     
-    if (adminSecret !== process.env.ADMIN_SECRET) {
+    // SECURITY: Fail if admin secret is not configured
+    if (!ADMIN_SECRET || ADMIN_SECRET.length < 32) {
+      logger.error('Audit admin access attempted but ADMIN_SECRET is not properly configured');
+      res.status(503).json({ success: false, error: 'Admin functionality not available' });
+      return;
+    }
+    
+    if (!adminSecret || typeof adminSecret !== 'string') {
+      logger.warn('Failed audit admin authentication - no secret provided', { 
+        ip: req.ip,
+        path: req.path 
+      });
+      res.status(403).json({ success: false, error: 'Admin access required' });
+      return;
+    }
+    
+    // SECURITY FIX: Use constant-time comparison to prevent timing attacks
+    let isValid = false;
+    if (adminSecret.length === ADMIN_SECRET.length) {
+      try {
+        const providedBuffer = Buffer.from(adminSecret, 'utf8');
+        const secretBuffer = Buffer.from(ADMIN_SECRET, 'utf8');
+        isValid = crypto.timingSafeEqual(providedBuffer, secretBuffer);
+      } catch {
+        isValid = false;
+      }
+    }
+    
+    if (!isValid) {
+      logger.warn('Failed audit admin authentication', { 
+        ip: req.ip,
+        path: req.path 
+      });
       res.status(403).json({ success: false, error: 'Admin access required' });
       return;
     }
@@ -109,9 +174,12 @@ export function createAuditRoutes(deps: Dependencies) {
         severity,
         startDate,
         endDate,
-        limit = '100',
-        skip = '0',
+        limit: limitStr,
+        skip: skipStr,
       } = req.query as Record<string, string | undefined>;
+
+      // SECURITY FIX: Use safe pagination parsing with max caps
+      const { limit, skip } = parsePaginationParams(limitStr, skipStr);
 
       const result = await queryAuditLogs({
         userId,
@@ -119,16 +187,18 @@ export function createAuditRoutes(deps: Dependencies) {
         severity: severity as AuditSeverity,
         startDate: startDate ? new Date(startDate) : undefined,
         endDate: endDate ? new Date(endDate) : undefined,
-        limit: Math.min(parseInt(limit, 10), 1000),
-        skip: parseInt(skip, 10),
+        limit,
+        skip,
       });
 
       res.json({
         success: true,
         logs: result.logs,
         total: result.total,
-        limit: parseInt(limit, 10),
-        skip: parseInt(skip, 10),
+        limit,
+        skip,
+        maxSkip: PAGINATION.MAX_SKIP, // Inform client of limits
+        maxLimit: PAGINATION.MAX_LIMIT,
       });
     } catch (error) {
       const err = error as Error;
@@ -211,7 +281,7 @@ export function createAuditRoutes(deps: Dependencies) {
         severity: severity as AuditSeverity,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
-        limit: 10000, // Max export size
+        limit: PAGINATION.MAX_EXPORT, // Max export size
       });
 
       if (format === 'csv') {
