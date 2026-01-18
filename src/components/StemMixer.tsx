@@ -35,35 +35,6 @@ const STEM_ICONS: Record<string, string> = {
   other: '🎹'
 };
 
-// Win95 Button
-const Win95Button = memo<{
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  active?: boolean;
-  className?: string;
-}>(function Win95Button({ children, onClick, disabled, active, className = '' }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`px-2 py-1 text-[10px] font-bold transition-none select-none ${className}`}
-      style={{
-        background: active ? WIN95.bgDark : WIN95.buttonFace,
-        color: disabled ? WIN95.textDisabled : WIN95.text,
-        border: 'none',
-        boxShadow: active 
-          ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
-          : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.7 : 1,
-        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-      }}
-    >
-      {children}
-    </button>
-  );
-});
 
 const StemMixer: React.FC<StemMixerProps> = ({ stems }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -508,8 +479,4 @@ const StemMixer: React.FC<StemMixerProps> = ({ stems }) => {
 };
 
 export default StemMixer;
-
-
-
-
 

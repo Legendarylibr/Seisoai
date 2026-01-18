@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, ChangeEvent, memo } from 'react';
+import React, { useState, useCallback, useRef, ChangeEvent } from 'react';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { 
@@ -8,24 +8,7 @@ import {
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 import StemMixer from './StemMixer';
-
-// Win95 styling constants
-const WIN95 = {
-  bg: '#c0c0c0',
-  bgLight: '#dfdfdf',
-  bgDark: '#808080',
-  border: {
-    light: '#ffffff',
-    dark: '#404040',
-    darker: '#000000'
-  },
-  text: '#000000',
-  textDisabled: '#808080',
-  highlight: '#000080',
-  highlightText: '#ffffff',
-  inputBg: '#ffffff',
-  buttonFace: '#c0c0c0'
-};
+import { Win95Button, Win95Panel, WIN95_COLORS as WIN95 } from './ui/Win95';
 
 // Workflow definitions
 interface WorkflowStep {
@@ -103,72 +86,30 @@ const WORKFLOWS: WorkflowDefinition[] = [
   }
 ];
 
-// Win95 Button component
-interface Win95ButtonProps {
+// Primary styled button variant
+const PrimaryButton: React.FC<{
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
-  active?: boolean;
   className?: string;
-  variant?: 'default' | 'primary' | 'danger';
-}
-
-const Win95Button = memo<Win95ButtonProps>(function Win95Button({ 
-  children, onClick, disabled, active, className = '', variant = 'default' 
-}) {
-  const colors = {
-    default: { bg: WIN95.buttonFace, text: WIN95.text },
-    primary: { bg: '#2d8a2d', text: '#ffffff' },
-    danger: { bg: '#8a2d2d', text: '#ffffff' }
-  };
-  const c = colors[variant];
-  
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`px-3 py-1.5 text-[11px] font-bold transition-none select-none ${className}`}
-      style={{
-        background: active ? WIN95.bgDark : c.bg,
-        color: disabled ? WIN95.textDisabled : c.text,
-        border: 'none',
-        boxShadow: active 
-          ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
-          : disabled
-            ? `inset 1px 1px 0 ${WIN95.bgLight}, inset -1px -1px 0 ${WIN95.bgDark}`
-            : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.7 : 1,
-        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-      }}
-    >
-      {children}
-    </button>
-  );
-});
-
-// Win95 Panel
-interface Win95PanelProps {
-  children: React.ReactNode;
-  className?: string;
-  sunken?: boolean;
-}
-
-const Win95Panel = memo<Win95PanelProps>(function Win95Panel({ children, className = '', sunken = true }) {
-  return (
-    <div
-      className={className}
-      style={{
-        background: sunken ? WIN95.inputBg : WIN95.bg,
-        boxShadow: sunken
-          ? `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}, inset 2px 2px 0 ${WIN95.border.darker}`
-          : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`
-      }}
-    >
-      {children}
-    </div>
-  );
-});
+}> = ({ children, onClick, disabled, className = '' }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`px-3 py-1.5 text-[11px] font-bold transition-none select-none ${className}`}
+    style={{
+      background: '#2d8a2d',
+      color: '#ffffff',
+      border: 'none',
+      boxShadow: `inset 1px 1px 0 #4db84d, inset -1px -1px 0 #1a5c1a, inset 2px 2px 0 #3da83d, inset -2px -2px 0 #206b20`,
+      cursor: disabled ? 'default' : 'pointer',
+      opacity: disabled ? 0.7 : 1,
+      fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+    }}
+  >
+    {children}
+  </button>
+);
 
 interface WorkflowWizardProps {
   onClose?: () => void;
@@ -963,21 +904,19 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({
             
             <div className="flex gap-2">
               {currentStepData.credits > 0 ? (
-                <Win95Button
+                <PrimaryButton
                   onClick={processStep}
                   disabled={!canProceed() || isProcessing || !isConnected}
-                  variant="primary"
                 >
                   {isProcessing ? '⏳ Processing...' : `Generate (${currentStepData.credits} cr)`}
-                </Win95Button>
+                </PrimaryButton>
               ) : (
-                <Win95Button
+                <PrimaryButton
                   onClick={() => setCurrentStep(prev => prev + 1)}
                   disabled={!canProceed()}
-                  variant="primary"
                 >
                   Next →
-                </Win95Button>
+                </PrimaryButton>
               )}
             </div>
           </div>

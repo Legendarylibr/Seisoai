@@ -214,7 +214,3 @@ export const pressHandlers = {
   onMouseUp: removeHover
 };
 
-
-
-
-

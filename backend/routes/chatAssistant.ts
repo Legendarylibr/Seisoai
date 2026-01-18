@@ -9,6 +9,12 @@ import logger from '../utils/logger';
 
 const FAL_API_KEY = config.FAL_API_KEY;
 
+// Check if FAL_API_KEY is a valid key (not a placeholder)
+const isValidFalKey = FAL_API_KEY && 
+  FAL_API_KEY.length > 20 && 
+  !FAL_API_KEY.includes('your_') && 
+  !FAL_API_KEY.includes('_here');
+
 // System prompt for the chat assistant
 const SYSTEM_PROMPT = `You are a creative AI assistant for SeisoAI, a platform that generates images, videos, and music using AI.
 
