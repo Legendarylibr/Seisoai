@@ -21,6 +21,7 @@ import {
   generateMessageId,
   IMAGE_MODELS,
   VIDEO_MODELS,
+  ASPECT_RATIOS,
   type ChatMessage, 
   type PendingAction,
   type ChatContext,
@@ -177,6 +178,7 @@ const MessageBubble = memo(function MessageBubble({
   const [isPlaying, setIsPlaying] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState<string>('square');
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Check if this is a 360 panorama request
@@ -194,17 +196,18 @@ const MessageBubble = memo(function MessageBubble({
     return [];
   };
 
-  // Handle confirm with selected model
+  // Handle confirm with selected model and aspect ratio
   const handleConfirmWithModel = () => {
     if (!message.pendingAction || !onConfirmAction) return;
     
-    // For 360 requests, always use nano-banana-pro
+    // For 360 requests, always use nano-banana-pro with 16:9 landscape
     if (is360Request) {
       const actionWith360Model: PendingAction = {
         ...message.pendingAction,
         params: {
           ...message.pendingAction.params,
-          model: 'nano-banana-pro'
+          model: 'nano-banana-pro',
+          imageSize: 'landscape_16_9'
         }
       };
       onConfirmAction(actionWith360Model);
@@ -218,7 +221,9 @@ const MessageBubble = memo(function MessageBubble({
       ...message.pendingAction,
       params: {
         ...message.pendingAction.params,
-        model: modelToUse
+        model: modelToUse,
+        // Add aspect ratio for image generation
+        ...(message.pendingAction.type === 'generate_image' && { imageSize: selectedAspectRatio })
       }
     };
     
@@ -432,6 +437,38 @@ const MessageBubble = memo(function MessageBubble({
                                 {'credits' in model ? `${model.credits} cr` : `${(model as { creditsPerSec: number }).creditsPerSec}/s`}
                               </div>
                             </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Aspect Ratio Selector - for images only */}
+                  {message.pendingAction?.type === 'generate_image' && !is360Request && (
+                    <div className="mb-3 sm:mb-4">
+                      <div className="text-[9px] sm:text-[10px] font-bold mb-1.5 sm:mb-2" style={{ color: WIN95.text }}>
+                        Aspect Ratio:
+                      </div>
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-1.5">
+                        {ASPECT_RATIOS.map((ratio) => (
+                          <button
+                            key={ratio.id}
+                            onClick={() => setSelectedAspectRatio(ratio.id)}
+                            className="flex flex-col items-center p-1.5 sm:p-2 rounded-lg transition-all"
+                            style={{
+                              background: selectedAspectRatio === ratio.id 
+                                ? 'linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.2) 100%)'
+                                : WIN95.bgLight,
+                              border: selectedAspectRatio === ratio.id 
+                                ? '2px solid #667eea'
+                                : `1px solid ${WIN95.border.dark}`,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <span className="text-sm sm:text-base">{ratio.icon}</span>
+                            <span className="text-[8px] sm:text-[9px] font-bold" style={{ color: WIN95.text }}>
+                              {ratio.name}
+                            </span>
                           </button>
                         ))}
                       </div>

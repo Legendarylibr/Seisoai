@@ -9,6 +9,7 @@ import ImageOutput from './components/ImageOutput';
 import Navigation from './components/Navigation';
 import ReferenceImageInput from './components/ReferenceImageInput';
 import MultiImageModelSelector from './components/MultiImageModelSelector';
+import AspectRatioSelector from './components/AspectRatioSelector';
 import PromptOptimizer from './components/PromptOptimizer';
 import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
@@ -259,6 +260,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                   <div className="space-y-3">
                     <PromptOptimizer value={userPrompt} onPromptChange={setUserPrompt} />
                     <StyleSelector />
+                    <AspectRatioSelector />
                     <ReferenceImageInput />
                     <MultiImageModelSelector />
                     <GenerateButton 

@@ -590,8 +590,11 @@ function getAspectRatio(imageSize?: string): string {
     'square': '1:1',
     'portrait_16_9': '9:16',
     'portrait_4_3': '3:4',
+    'portrait_3_2': '2:3',
     'landscape_16_9': '16:9',
-    'landscape_4_3': '4:3'
+    'landscape_4_3': '4:3',
+    'landscape_3_2': '3:2',
+    'ultra_wide': '21:9'
   };
   return ratioMap[imageSize || 'square'] || '1:1';
 }

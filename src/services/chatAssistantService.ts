@@ -79,6 +79,16 @@ export const MUSIC_GENRES = [
   { id: 'jazz', name: 'Jazz', description: 'Smooth & improvisational' }
 ];
 
+// Aspect ratio options for image generation
+export const ASPECT_RATIOS = [
+  { id: 'square', name: '1:1', icon: '⬜', description: 'Square' },
+  { id: 'landscape_16_9', name: '16:9', icon: '🖥️', description: 'Widescreen' },
+  { id: 'landscape_4_3', name: '4:3', icon: '📺', description: 'Standard' },
+  { id: 'portrait_16_9', name: '9:16', icon: '📱', description: 'Vertical' },
+  { id: 'portrait_4_3', name: '3:4', icon: '📷', description: 'Portrait' },
+  { id: 'ultra_wide', name: '21:9', icon: '🎬', description: 'Ultrawide' }
+];
+
 export interface ChatResponse {
   success: boolean;
   message?: string;
