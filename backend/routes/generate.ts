@@ -529,42 +529,19 @@ function build360PanoramaPrompt(userPrompt: string): string {
     .trim();
 
   // Build the comprehensive 360 panorama JSON structure dynamically
+  // NOTE: Clean panorama without any UI overlays, logos, or watermarks
   const panoramaPrompt = {
     image_meta: {
-      type: "360-degree Equirectangular Panorama Screenshot",
-      source_aesthetic: "Google Street View Interface",
-      platform: "Desktop Browser",
+      type: "360-degree Equirectangular Panorama",
+      style: "Clean immersive panoramic photograph",
       projection: "Full spherical equirectangular",
-      aspect_ratio: "16:9",
-      resolution: "Ultra-high resolution panoramic capture"
-    },
-    interface_overlay: {
-      top_left_panel: {
-        type: "Black info card",
-        text_content: sceneDescription,
-        sub_text: "Google Street View",
-        icons: "Back arrow, Location pin, Kebab menu"
-      },
-      search_bar: {
-        position: "Top left floating",
-        content: "Search Google Maps",
-        icons: "Hamburger menu, Magnifying glass, Directions arrow"
-      },
-      bottom_left: {
-        element: "Map inset widget",
-        style: "Minimap showing current location",
-        icons: "Landmark pins, yellow humanoid pegman"
-      },
-      bottom_right: {
-        controls: "Zoom (+/-) buttons, Compass widget, Street View navigation arrows"
-      },
-      top_right: "Share button and Close (X) button pills"
+      aspect_ratio: "2:1 equirectangular (rendered as 16:9)",
+      resolution: "Ultra-high resolution panoramic"
     },
     scene_composition: {
       location: sceneDescription,
-      camera_position: "Fixed at the exact center of the scene",
-      camera_height: "Google Street View camera height (approximately eye level)",
-      field_of_view: "360° horizontal, 180° vertical",
+      camera_position: "Fixed at the exact center of the scene, eye level height",
+      field_of_view: "360° horizontal, 180° vertical full sphere",
       projection_behavior: "Correct equirectangular distortion near poles",
       depth_of_field: "Infinite focus (deep focus across entire panorama)"
     },
@@ -575,10 +552,7 @@ function build360PanoramaPrompt(userPrompt: string): string {
         shadows: "Natural shadows wrapping around the full 360 panorama"
       },
       midground: {
-        subjects: `Main elements from: ${sceneDescription}`,
-        people_if_present: {
-          privacy_effect: "Faces blurred with Google Street View-style gaussian blur"
-        }
+        subjects: `Main elements from: ${sceneDescription}`
       },
       environment: {
         sky: "Sky visible in upper hemisphere of panorama",
@@ -587,9 +561,9 @@ function build360PanoramaPrompt(userPrompt: string): string {
       }
     },
     rendering_style: {
-      aesthetic: "Google Street View photography",
-      lighting: "Natural daylight",
-      color_grading: "Realistic, slightly muted colors",
+      aesthetic: "Professional panoramic photography",
+      lighting: "Natural ambient lighting",
+      color_grading: "Vibrant, realistic colors",
       texture_quality: {
         stitching: "Seamless 360-degree panorama, no visible seams",
         format: "Equirectangular projection"
@@ -597,29 +571,35 @@ function build360PanoramaPrompt(userPrompt: string): string {
     },
     constraints: {
       must_include: [
-        "Google Maps UI overlay elements",
-        "Street View spherical equirectangular perspective",
-        "Privacy blur on any faces",
+        "Clean image without any UI overlays or watermarks",
+        "Spherical equirectangular perspective",
         "Full 360-degree scene coverage",
-        "Wide landscape 16:9 aspect ratio for panoramic format"
+        "Seamless edges that wrap horizontally"
       ],
       avoid: [
-        "Cinematic/dramatic lighting",
+        "Any logos, watermarks, or text overlays",
+        "UI elements, buttons, or interface graphics",
+        "Map widgets or navigation controls",
         "Single-point perspective",
         "Cropped or partial views",
         "Visible panorama seams"
       ]
     },
     negative_prompt: [
-      "cinematic lighting",
-      "fantasy art",
-      "illustration",
-      "painting",
+      "logos",
+      "watermarks", 
+      "text overlay",
+      "UI elements",
+      "interface",
+      "buttons",
+      "map",
+      "navigation arrows",
+      "google",
+      "copyright text",
       "single perspective",
       "cropped view",
       "broken panorama seams",
-      "visible stitching",
-      "non-equirectangular"
+      "visible stitching"
     ]
   };
 

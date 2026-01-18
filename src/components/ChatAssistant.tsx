@@ -27,6 +27,7 @@ import {
   type ChatContext,
 } from '../services/chatAssistantService';
 import logger from '../utils/logger';
+import Panorama360Viewer from './Panorama360Viewer';
 
 interface ChatAssistantProps {
   onShowTokenPayment?: () => void;
@@ -116,13 +117,17 @@ const GenerationProgress = memo(function GenerationProgress({ type }: { type: st
   );
 });
 
-// Lightbox for viewing images fullscreen
+// Lightbox for viewing images fullscreen (with 360 panorama support)
 const ImageLightbox = memo(function ImageLightbox({ 
   src, 
-  onClose 
+  onClose,
+  is360 = false,
+  onDownload
 }: { 
   src: string; 
   onClose: () => void;
+  is360?: boolean;
+  onDownload?: () => void;
 }) {
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -131,6 +136,22 @@ const ImageLightbox = memo(function ImageLightbox({
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
   }, [onClose]);
+
+  // For 360 panoramas, use the interactive viewer
+  if (is360) {
+    return (
+      <div 
+        className="fixed inset-0 z-[9999]"
+        style={{ background: 'rgba(0,0,0,0.95)' }}
+      >
+        <Panorama360Viewer 
+          src={src} 
+          onClose={onClose}
+          onDownload={onDownload}
+        />
+      </div>
+    );
+  }
 
   return (
     <div 
@@ -177,14 +198,18 @@ const MessageBubble = memo(function MessageBubble({
   const isUser = message.role === 'user';
   const [isPlaying, setIsPlaying] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [lightboxIs360, setLightboxIs360] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<string>('square');
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Check if this is a 360 panorama request
+  // Check if this is a 360 panorama request (for pending action)
   const is360Request = message.pendingAction?.params?.prompt 
     ? /\b360\b/i.test(message.pendingAction.params.prompt)
     : false;
+    
+  // Check if generated content was from a 360 request (check message content for 360 indicator)
+  const is360Generated = message.content ? /\b360\b/i.test(message.content) : false;
 
   // Get available models based on action type
   // Skip model selection for 360 requests - always uses nano-banana-pro
@@ -537,6 +562,19 @@ const MessageBubble = memo(function MessageBubble({
                     <div className={`grid gap-2 ${message.generatedContent.urls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                       {message.generatedContent.urls.map((url, i) => (
                         <div key={i} className="relative group rounded-lg overflow-hidden">
+                          {/* 360 Panorama badge */}
+                          {is360Generated && (
+                            <div 
+                              className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full"
+                              style={{ 
+                                background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                              }}
+                            >
+                              <span className="text-[9px]">🌐</span>
+                              <span className="text-[9px] text-white font-bold">360°</span>
+                            </div>
+                          )}
                           <img 
                             src={url} 
                             alt={`Generated ${i + 1}`}
@@ -546,15 +584,21 @@ const MessageBubble = memo(function MessageBubble({
                               objectFit: 'cover',
                               boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
                             }}
-                            onClick={() => setLightboxImage(url)}
+                            onClick={() => {
+                              setLightboxImage(url);
+                              setLightboxIs360(is360Generated);
+                            }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                           <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
-                              onClick={() => setLightboxImage(url)}
+                              onClick={() => {
+                                setLightboxImage(url);
+                                setLightboxIs360(is360Generated);
+                              }}
                               className="p-2 rounded-lg backdrop-blur-sm transition-colors"
                               style={{ background: 'rgba(255,255,255,0.9)' }}
-                              title="View fullscreen"
+                              title={is360Generated ? "View 360° panorama" : "View fullscreen"}
                             >
                               <Maximize2 className="w-4 h-4 text-gray-700" />
                             </button>
@@ -567,6 +611,12 @@ const MessageBubble = memo(function MessageBubble({
                               <Download className="w-4 h-4 text-gray-700" />
                             </button>
                           </div>
+                          {/* 360 interaction hint */}
+                          {is360Generated && (
+                            <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'rgba(0,0,0,0.7)' }}>
+                              <span className="text-[9px] text-white">Click to explore 360°</span>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -681,7 +731,15 @@ const MessageBubble = memo(function MessageBubble({
 
       {/* Lightbox */}
       {lightboxImage && (
-        <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} />
+        <ImageLightbox 
+          src={lightboxImage} 
+          onClose={() => {
+            setLightboxImage(null);
+            setLightboxIs360(false);
+          }}
+          is360={lightboxIs360}
+          onDownload={() => handleDownload(lightboxImage, 'image')}
+        />
       )}
 
       {/* CSS for animations */}
