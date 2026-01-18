@@ -313,7 +313,91 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     };
   }, [useWebGL]);
   
-  // Input handlers
+  // Store useWebGL in ref for native event handlers
+  const useWebGLRef = useRef(useWebGL);
+  useEffect(() => { useWebGLRef.current = useWebGL; }, [useWebGL]);
+  
+  // Native event handlers (to support passive: false)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const handleTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      const s = stateRef.current;
+      
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        s.lastPinchDist = Math.sqrt(dx * dx + dy * dy);
+        s.isDragging = false;
+      } else if (e.touches.length === 1) {
+        s.isDragging = true;
+        s.lastMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        s.velocityX = 0;
+        s.velocityY = 0;
+      }
+      forceRender(n => n + 1);
+    };
+    
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const s = stateRef.current;
+      const webgl = useWebGLRef.current;
+      
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (s.lastPinchDist > 0) {
+          const delta = (s.lastPinchDist - dist) * 0.3;
+          setFov(prev => Math.max(30, Math.min(120, prev + delta)));
+        }
+        s.lastPinchDist = dist;
+        return;
+      }
+      
+      if (!s.isDragging || e.touches.length !== 1) return;
+      
+      const touch = e.touches[0];
+      const dx = touch.clientX - s.lastMouse.x;
+      const dy = touch.clientY - s.lastMouse.y;
+      const sens = webgl ? (s.fov / 90) * 0.006 : 0.015;
+      
+      s.velocityX = -dx * sens;
+      s.velocityY = webgl ? dy * sens : -dy * sens * 0.3;
+      s.yaw += s.velocityX;
+      s.pitch += s.velocityY;
+      s.lastMouse = { x: touch.clientX, y: touch.clientY };
+    };
+    
+    const handleTouchEnd = () => {
+      stateRef.current.isDragging = false;
+      stateRef.current.lastPinchDist = 0;
+      forceRender(n => n + 1);
+    };
+    
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setFov(prev => Math.max(30, Math.min(120, prev + (e.deltaY > 0 ? 5 : -5))));
+    };
+    
+    // Add with passive: false to allow preventDefault
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+  
+  // Mouse handlers (these don't need passive: false)
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     stateRef.current.isDragging = true;
@@ -343,66 +427,6 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     forceRender(n => n + 1);
   }, []);
   
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    const s = stateRef.current;
-    
-    if (e.touches.length === 2) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      s.lastPinchDist = Math.sqrt(dx * dx + dy * dy);
-      s.isDragging = false;
-    } else if (e.touches.length === 1) {
-      s.isDragging = true;
-      s.lastMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      s.velocityX = 0;
-      s.velocityY = 0;
-    }
-    forceRender(n => n + 1);
-  }, []);
-  
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    const s = stateRef.current;
-    
-    if (e.touches.length === 2) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      
-      if (s.lastPinchDist > 0) {
-        const delta = (s.lastPinchDist - dist) * 0.3;
-        setFov(prev => Math.max(30, Math.min(120, prev + delta)));
-      }
-      s.lastPinchDist = dist;
-      return;
-    }
-    
-    if (!s.isDragging || e.touches.length !== 1) return;
-    
-    const touch = e.touches[0];
-    const dx = touch.clientX - s.lastMouse.x;
-    const dy = touch.clientY - s.lastMouse.y;
-    const sens = useWebGL ? (s.fov / 90) * 0.006 : 0.015;
-    
-    s.velocityX = -dx * sens;
-    s.velocityY = useWebGL ? dy * sens : -dy * sens * 0.3;
-    s.yaw += s.velocityX;
-    s.pitch += s.velocityY;
-    s.lastMouse = { x: touch.clientX, y: touch.clientY };
-  }, [useWebGL]);
-  
-  const handleTouchEnd = useCallback(() => {
-    stateRef.current.isDragging = false;
-    stateRef.current.lastPinchDist = 0;
-    forceRender(n => n + 1);
-  }, []);
-  
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    setFov(prev => Math.max(30, Math.min(120, prev + (e.deltaY > 0 ? 5 : -5))));
-  }, []);
-  
   const resetView = useCallback(() => {
     stateRef.current.yaw = 0;
     stateRef.current.pitch = 0;
@@ -427,10 +451,6 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onWheel={handleWheel}
     >
       {/* Toolbar */}
       <div 
