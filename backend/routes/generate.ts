@@ -790,10 +790,21 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
       }
 
+      // Check if 360 panorama is requested - forces Nano Banana Pro regardless of model selection
+      const is360Request = is360PanoramaRequest(finalPrompt);
+      
       // Determine endpoint based on image inputs and model selection
-      const isNanoBananaPro = model === 'nano-banana-pro';
-      const isFlux2 = isFlux2Model;
-      const isControlNet = model === 'controlnet-canny';
+      // 360 panorama requests automatically use Nano Banana Pro
+      const isNanoBananaPro = model === 'nano-banana-pro' || is360Request;
+      const isFlux2 = isFlux2Model && !is360Request; // Disable FLUX 2 if 360 request
+      const isControlNet = model === 'controlnet-canny' && !is360Request; // Disable ControlNet if 360 request
+      
+      if (is360Request && model !== 'nano-banana-pro') {
+        logger.info('360 panorama detected - switching to Nano Banana Pro', {
+          originalModel: model,
+          prompt: finalPrompt.substring(0, 100)
+        });
+      }
 
       let endpoint: string;
       if (isControlNet && hasImages) {
@@ -844,17 +855,10 @@ export function createGenerationRoutes(deps: Dependencies) {
           requestBody.seed = seed;
         }
       } else if (isNanoBananaPro) {
-        // Check if this is a 360 panorama request
-        const is360Request = is360PanoramaRequest(finalPrompt);
+        // Use 360 panorama JSON prompt if 360 was detected (is360Request already set above)
         const nanoBananaPrompt = is360Request 
           ? build360PanoramaPrompt(finalPrompt)
           : finalPrompt;
-        
-        if (is360Request) {
-          logger.info('360 panorama mode activated for Nano Banana Pro', {
-            originalPrompt: finalPrompt.substring(0, 100)
-          });
-        }
         
         requestBody = {
           prompt: nanoBananaPrompt,

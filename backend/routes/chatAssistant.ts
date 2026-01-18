@@ -500,21 +500,34 @@ async function callInternalEndpoint(
 ): Promise<unknown> {
   const baseUrl = `http://localhost:${process.env.PORT || 3001}`;
   
+  // Forward all relevant headers for authentication
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+  
+  // Forward auth headers
+  if (originalReq.headers.authorization) {
+    headers['Authorization'] = originalReq.headers.authorization as string;
+  }
+  if (originalReq.headers['x-csrf-token']) {
+    headers['X-CSRF-Token'] = originalReq.headers['x-csrf-token'] as string;
+  }
+  // Forward cookies for session-based auth
+  if (originalReq.headers.cookie) {
+    headers['Cookie'] = originalReq.headers.cookie as string;
+  }
+  
   const response = await fetch(`${baseUrl}${path}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      // Forward auth headers
-      ...(originalReq.headers.authorization && { 'Authorization': originalReq.headers.authorization as string }),
-      ...(originalReq.headers['x-csrf-token'] && { 'X-CSRF-Token': originalReq.headers['x-csrf-token'] as string })
-    },
+    headers,
     body: JSON.stringify(body)
   });
 
   const data = await response.json();
   
   if (!response.ok) {
-    throw new Error((data as { error?: string }).error || `Request failed: ${response.status}`);
+    const errorData = data as { error?: string; message?: string; detail?: string };
+    throw new Error(errorData.error || errorData.message || errorData.detail || `Request failed: ${response.status}`);
   }
   
   return data;

@@ -16,7 +16,7 @@ import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
 import PromptLab from './components/PromptLab';
 import { useImageGenerator } from './contexts/ImageGeneratorContext';
-import { Grid, Sparkles, Film, Music, Layers, type LucideIcon } from 'lucide-react';
+import { Grid, Sparkles, Film, Music, Layers, MessageCircle, type LucideIcon } from 'lucide-react';
 import { API_URL, ensureCSRFToken } from './utils/apiConfig';
 
 // Build version - check console to verify deployment
@@ -29,6 +29,7 @@ const PaymentSuccessModal = lazy(() => import('./components/PaymentSuccessModal'
 const ImageGallery = lazy(() => import('./components/ImageGallery'));
 const VideoGenerator = lazy(() => import('./components/VideoGenerator'));
 const MusicGenerator = lazy(() => import('./components/MusicGenerator'));
+const ChatAssistant = lazy(() => import('./components/ChatAssistant'));
 const _CharacterGenerator = lazy(() => import('./components/CharacterGenerator'));
 const TermsModal = lazy(() => import('./components/TermsModal'));
 import Footer from './components/Footer';
@@ -74,9 +75,10 @@ interface SubscriptionSuccess {
 }
 
 function App(): JSX.Element {
-  const [activeTab, setActiveTab] = useState('generate');
+  const [activeTab, setActiveTab] = useState('chat');
 
   const tabs: Tab[] = [
+    { id: 'chat', name: 'Chat', icon: MessageCircle },
     { id: 'generate', name: 'Image', icon: Sparkles },
     { id: 'batch', name: 'Batch', icon: Layers },
     { id: 'video', name: 'Video', icon: Film },
@@ -234,6 +236,17 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
       />
       
       <div className="flex-1 overflow-auto p-2 lg:p-3">
+        {activeTab === 'chat' && (
+          <div className="h-full">
+            <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
+              <ChatAssistant 
+                onShowTokenPayment={handleShowTokenPayment}
+                onShowStripePayment={handleShowStripePayment}
+              />
+            </Suspense>
+          </div>
+        )}
+        
         {activeTab === 'generate' && (
           <div className="container mx-auto max-w-7xl">
             <AuthGuard>
@@ -364,8 +377,8 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         </Suspense>
       )}
 
-      {/* Prompt Lab - AI prompt planning assistant (only for authenticated users on generation screens) */}
-      {isAuthenticated && (activeTab === 'generate' || activeTab === 'batch' || activeTab === 'video' || activeTab === 'music') && (
+      {/* Prompt Lab - AI prompt planning assistant (only for authenticated users on generation screens, not chat since chat IS the assistant) */}
+      {isAuthenticated && activeTab !== 'chat' && (activeTab === 'generate' || activeTab === 'batch' || activeTab === 'video' || activeTab === 'music') && (
         <PromptLab
           mode={activeTab === 'generate' || activeTab === 'batch' ? 'image' : activeTab as 'video' | 'music'}
           currentPrompt={userPrompt}
