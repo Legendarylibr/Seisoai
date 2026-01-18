@@ -664,7 +664,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
   }, [generatedVideoUrl]);
 
   return (
-    <div className="fade-in h-full flex flex-col" style={{ background: '#1a4a5e' }}>
+    <div className="fade-in h-full flex flex-col" style={{ background: WIN95.bg }}>
       {/* How to Use Guide */}
       <CollapsibleVideoHowToUse />
       

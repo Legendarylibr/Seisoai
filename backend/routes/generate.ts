@@ -535,7 +535,7 @@ function build360PanoramaPrompt(userPrompt: string): string {
       source_aesthetic: "Google Street View Interface",
       platform: "Desktop Browser",
       projection: "Full spherical equirectangular",
-      aspect_ratio: "2:1",
+      aspect_ratio: "16:9",
       resolution: "Ultra-high resolution panoramic capture"
     },
     interface_overlay: {
@@ -601,7 +601,7 @@ function build360PanoramaPrompt(userPrompt: string): string {
         "Street View spherical equirectangular perspective",
         "Privacy blur on any faces",
         "Full 360-degree scene coverage",
-        "2:1 aspect ratio for equirectangular format"
+        "Wide landscape 16:9 aspect ratio for panoramic format"
       ],
       avoid: [
         "Cinematic/dramatic lighting",
@@ -870,9 +870,9 @@ export function createGenerationRoutes(deps: Dependencies) {
           const singleImageUrl = image_url || (image_urls && image_urls[0]);
           requestBody.image_urls = [singleImageUrl];
         }
-        // For 360 panoramas, force 2:1 aspect ratio for equirectangular format
+        // For 360 panoramas, use 16:9 landscape (closest supported ratio to 2:1 equirectangular)
         if (is360Request) {
-          requestBody.aspect_ratio = '2:1';
+          requestBody.aspect_ratio = '16:9';
         } else if (aspect_ratio) {
           requestBody.aspect_ratio = aspect_ratio;
         }
