@@ -179,9 +179,16 @@ const MessageBubble = memo(function MessageBubble({
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Check if this is a 360 panorama request
+  const is360Request = message.pendingAction?.params?.prompt 
+    ? /\b360\b/i.test(message.pendingAction.params.prompt)
+    : false;
+
   // Get available models based on action type
+  // Skip model selection for 360 requests - always uses nano-banana-pro
   const getModels = () => {
     if (!message.pendingAction) return [];
+    if (is360Request) return []; // 360 requests always use nano-banana-pro, no selection needed
     if (message.pendingAction.type === 'generate_image') return IMAGE_MODELS;
     if (message.pendingAction.type === 'generate_video') return VIDEO_MODELS;
     return [];
@@ -190,6 +197,19 @@ const MessageBubble = memo(function MessageBubble({
   // Handle confirm with selected model
   const handleConfirmWithModel = () => {
     if (!message.pendingAction || !onConfirmAction) return;
+    
+    // For 360 requests, always use nano-banana-pro
+    if (is360Request) {
+      const actionWith360Model: PendingAction = {
+        ...message.pendingAction,
+        params: {
+          ...message.pendingAction.params,
+          model: 'nano-banana-pro'
+        }
+      };
+      onConfirmAction(actionWith360Model);
+      return;
+    }
     
     const models = getModels();
     const modelToUse = selectedModel || (models.length > 0 ? models[0].id : undefined);
@@ -347,6 +367,27 @@ const MessageBubble = memo(function MessageBubble({
                       </div>
                     </div>
                   </div>
+
+                  {/* 360 Panorama indicator - no model selection needed */}
+                  {is360Request && message.pendingAction?.type === 'generate_image' && (
+                    <div 
+                      className="mb-3 sm:mb-4 p-2 sm:p-3 rounded-lg flex items-center gap-2"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(22, 163, 74, 0.15) 100%)',
+                        border: '1px solid rgba(34, 197, 94, 0.3)'
+                      }}
+                    >
+                      <div className="text-lg">🌐</div>
+                      <div>
+                        <div className="text-[10px] sm:text-[11px] font-bold" style={{ color: '#16a34a' }}>
+                          360° Panorama Mode
+                        </div>
+                        <div className="text-[8px] sm:text-[9px]" style={{ color: WIN95.textDisabled }}>
+                          Using Nano Banana Pro for best results
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Model Selector - for images and videos - compact on mobile */}
                   {getModels().length > 0 && (
