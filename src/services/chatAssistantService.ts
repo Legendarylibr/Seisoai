@@ -24,6 +24,8 @@ export interface GeneratedContent {
   type: 'image' | 'video' | 'music';
   urls: string[];
   prompt?: string;
+  model?: string;
+  is360?: boolean;
   creditsUsed?: number;
   remainingCredits?: number;
   metadata?: Record<string, unknown>;
@@ -216,10 +218,21 @@ export async function executeGeneration(
       throw new Error(data.error || 'Generation failed');
     }
 
+    // Add is360 flag if this was a 360 panorama generation
+    const is360 = action.params.model === 'nano-banana-pro' || 
+                  (action.params.prompt && /\b360\b/i.test(action.params.prompt));
+    
+    const generatedContent = data.generatedContent ? {
+      ...data.generatedContent,
+      model: action.params.model,
+      prompt: action.params.prompt,
+      is360
+    } : undefined;
+
     return {
       success: true,
       message: data.message,
-      generatedContent: data.generatedContent
+      generatedContent
     };
   } catch (error) {
     const err = error as Error;
