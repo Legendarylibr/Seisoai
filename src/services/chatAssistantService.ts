@@ -177,6 +177,14 @@ export async function executeGeneration(
   try {
     const csrfToken = await ensureCSRFToken();
     
+    // Map frontend 'type' field back to backend 'action' field
+    const backendAction = {
+      action: action.type,  // Backend expects 'action', frontend uses 'type'
+      params: action.params,
+      estimatedCredits: action.estimatedCredits,
+      description: action.description
+    };
+    
     const response = await fetch(`${API_URL}/api/chat-assistant/generate`, {
       method: 'POST',
       headers: {
@@ -185,7 +193,7 @@ export async function executeGeneration(
       },
       credentials: 'include',
       body: JSON.stringify({
-        action,
+        action: backendAction,
         context
       })
     });
