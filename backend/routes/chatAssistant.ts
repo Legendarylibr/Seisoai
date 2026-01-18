@@ -103,7 +103,8 @@ Response: \`\`\`json
   "params": {
     "prompt": "360 panorama of a serene Japanese temple garden with koi pond and cherry blossoms",
     "numImages": 1,
-    "imageSize": "landscape_16_9"
+    "imageSize": "landscape_16_9",
+    "model": "nano-banana-pro"
   },
   "estimatedCredits": 0.7,
   "description": "A 360° panorama of a Japanese temple garden"
