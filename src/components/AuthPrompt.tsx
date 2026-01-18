@@ -7,179 +7,214 @@ import logger from '../utils/logger';
 const AuthPrompt: React.FC = () => {
   const [authMode, setAuthMode] = useState<'email' | 'wallet' | null>(null);
 
+  // Win95 style constants
+  const WIN95 = {
+    bg: '#c0c0c0',
+    bgLight: '#dfdfdf',
+    bgDark: '#808080',
+    border: {
+      light: '#ffffff',
+      dark: '#808080',
+      darker: '#404040'
+    },
+    text: '#000000',
+    textDisabled: '#808080',
+    highlight: '#000080'
+  };
+
   // Show auth mode selection if not selected
   if (!authMode) {
     return (
       <div className="flex items-center justify-center h-full lg:max-h-[calc(100vh-80px)] px-4 py-4 lg:py-2 overflow-auto lg:overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
+        {/* Win95 Window Container */}
         <div 
-          className="text-center max-w-5xl mx-auto slide-up p-6 lg:p-8 rounded-2xl"
+          className="text-center max-w-5xl mx-auto slide-up"
           style={{
-            background: 'rgba(20, 40, 50, 0.85)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+            background: WIN95.bg,
+            boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}, 4px 4px 8px rgba(0,0,0,0.3)`
           }}
         >
-          {/* Hero Section with Neon Effect */}
-          <div className="mb-4 lg:mb-3 relative">
-            {/* Decorative corners */}
-            <div className="absolute -top-2 -left-2 w-6 h-6 opacity-50" style={{
-              background: 'linear-gradient(90deg, #00b8a9 33%, transparent 33%), linear-gradient(180deg, #00b8a9 33%, transparent 33%)',
-              backgroundSize: '4px 4px'
-            }}></div>
-            <div className="absolute -top-2 -right-2 w-6 h-6 opacity-50" style={{
-              background: 'linear-gradient(270deg, #f59e0b 33%, transparent 33%), linear-gradient(180deg, #f59e0b 33%, transparent 33%)',
-              backgroundSize: '4px 4px'
-            }}></div>
-            <div className="text-center mb-6">
-              <h1 className="text-3xl md:text-4xl font-bold mb-3 hero-title" style={{ 
-                fontFamily: "'VT323', monospace",
-                letterSpacing: '0.1em'
+          {/* Win95 Title Bar */}
+          <div 
+            className="flex items-center gap-2 px-2 py-1.5"
+            style={{ 
+              background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
+              color: '#ffffff',
+              fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+            }}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span className="text-sm font-bold flex-1 text-left">Welcome to Seiso AI</span>
+            <div className="flex gap-0.5">
+              <div className="w-4 h-4 flex items-center justify-center text-[10px]" style={{ background: WIN95.bg, boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}` }}>_</div>
+              <div className="w-4 h-4 flex items-center justify-center text-[10px]" style={{ background: WIN95.bg, boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}` }}>□</div>
+              <div className="w-4 h-4 flex items-center justify-center text-[10px]" style={{ background: WIN95.bg, boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}` }}>×</div>
+            </div>
+          </div>
+
+          {/* Window Content */}
+          <div className="p-4 lg:p-6">
+            {/* Hero Section */}
+            <div className="mb-4 text-center">
+              <h1 className="text-2xl md:text-3xl font-bold mb-2" style={{ 
+                color: WIN95.highlight,
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
               }}>
-                WELCOME TO SEISO AI
+                🎨 AI Creative Studio
               </h1>
-              <p className="text-sm md:text-base tracking-wide" style={{ 
-                color: '#ffffff', 
-                textShadow: '0 0 12px rgba(0, 184, 169, 0.5), 2px 2px 0 rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.9)',
-                fontFamily: "'IBM Plex Mono', monospace"
+              <p className="text-sm" style={{ 
+                color: WIN95.text,
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
               }}>
-                Image • Video • Music • AI Studio
+                Image • Video • Music • AI Generation
               </p>
             </div>
-          </div>
 
-          {/* Sign In Section */}
-          <div className="mb-3 lg:mb-2">
-            <h2 className="text-lg font-bold mb-2 inline-flex items-center gap-2" style={{ 
-              color: '#ffffff', 
-              textShadow: '0 0 8px rgba(245, 158, 11, 0.5), 2px 2px 0 rgba(0, 0, 0, 0.8)',
-              fontFamily: "'VT323', monospace",
-              letterSpacing: '0.05em'
-            }}>
-              <span>▸</span> Sign In to Get Started
-            </h2>
-          </div>
-
-          {/* Auth Mode Selection */}
-          <div className="grid md:grid-cols-2 gap-3 max-w-3xl mx-auto mb-4 lg:mb-3">
-            <button
-              onClick={() => setAuthMode('email')}
-              className="w-full rounded-xl p-4 group transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1"
+            {/* Sign In Section Header */}
+            <div 
+              className="mb-3 py-1.5 px-3 inline-block"
               style={{
-                background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
-                textAlign: 'left'
+                background: WIN95.highlight,
+                color: '#ffffff',
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
               }}
             >
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg flex-shrink-0" style={{
-                  background: 'rgba(255, 255, 255, 0.2)',
-                  backdropFilter: 'blur(4px)'
-                }}>
-                  <Mail className="w-5 h-5" style={{ color: '#ffffff' }} />
-                </div>
-                <div className="flex-1">
-                  <div className="font-bold text-sm mb-0.5" style={{ color: '#ffffff' }}>
-                    Sign in with Email
-                  </div>
-                  <div className="text-xs opacity-80" style={{ color: '#ffffff' }}>
-                    Monthly subscriptions • Credit card payments
-                  </div>
-                </div>
-                <ArrowRight className="w-5 h-5 flex-shrink-0 opacity-70" style={{ color: '#ffffff' }} />
-              </div>
-            </button>
-
-            <button
-              onClick={() => setAuthMode('wallet')}
-              className="w-full rounded-xl p-4 group transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1"
-              style={{
-                background: 'linear-gradient(135deg, rgba(0, 184, 169, 0.9) 0%, rgba(0, 150, 136, 0.9) 100%)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                boxShadow: '0 4px 20px rgba(0, 184, 169, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
-                textAlign: 'left'
-              }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg flex-shrink-0" style={{
-                  background: 'rgba(255, 255, 255, 0.2)',
-                  backdropFilter: 'blur(4px)'
-                }}>
-                  <Wallet className="w-5 h-5" style={{ color: '#ffffff' }} />
-                </div>
-                <div className="flex-1">
-                  <div className="font-bold text-sm mb-0.5" style={{ color: '#ffffff' }}>
-                    Connect Crypto Wallet
-                  </div>
-                  <div className="text-xs opacity-80" style={{ color: '#ffffff' }}>
-                    Pay-per-credit • Crypto payments
-                  </div>
-                </div>
-                <ArrowRight className="w-5 h-5 flex-shrink-0 opacity-70" style={{ color: '#ffffff' }} />
-              </div>
-            </button>
-          </div>
-
-          {/* Main Content Grid */}
-          <div className="grid md:grid-cols-3 gap-3">
-            {/* Features */}
-            <div className="rounded-xl p-3 text-left" style={{ 
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(4px)'
-            }}>
-              <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#00b8a9' }}>
-                <Link2 className="w-3.5 h-3.5" />
-                Features
-              </h2>
-              <div className="space-y-1 text-[10px]" style={{ color: 'rgba(255, 255, 255, 0.85)' }}>
-                <div>• <strong>Generate</strong> from text</div>
-                <div>• <strong>Edit</strong> existing images</div>
-                <div>• <strong>Blend</strong> 2+ images</div>
-                <div>• <strong>Extract layers</strong> from images</div>
-                <div>• <strong>Multiple</strong> art styles</div>
-              </div>
+              <span className="text-sm font-bold">▸ Sign In to Get Started</span>
             </div>
 
-            {/* Free Benefits */}
-            <div className="rounded-xl p-3 text-left" style={{ 
-              background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(16, 185, 129, 0.2) 100%)',
-              border: '1px solid rgba(34, 197, 94, 0.3)',
-              backdropFilter: 'blur(4px)'
-            }}>
-              <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#22c55e' }}>
-                <Calendar className="w-3.5 h-3.5" />
-                Free Benefits
-              </h2>
-              <div className="space-y-1.5 text-[10px]" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-base">🎁</span>
-                  <strong>2 Credits</strong> for all new users
+            {/* Auth Mode Selection - Win95 Buttons */}
+            <div className="grid md:grid-cols-2 gap-3 max-w-3xl mx-auto mb-4">
+              <button
+                onClick={() => setAuthMode('email')}
+                className="w-full p-4 text-left transition-all active:translate-y-px"
+                style={{
+                  background: WIN95.bg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="p-2 flex-shrink-0"
+                    style={{
+                      background: WIN95.bgLight,
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                    }}
+                  >
+                    <Mail className="w-5 h-5" style={{ color: WIN95.highlight }} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-bold text-sm" style={{ color: WIN95.text }}>
+                      📧 Sign in with Email
+                    </div>
+                    <div className="text-xs" style={{ color: WIN95.textDisabled }}>
+                      Monthly subscriptions • Credit card
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 flex-shrink-0" style={{ color: WIN95.text }} />
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-base">✨</span>
-                  No credit card required
+              </button>
+
+              <button
+                onClick={() => setAuthMode('wallet')}
+                className="w-full p-4 text-left transition-all active:translate-y-px"
+                style={{
+                  background: WIN95.bg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="p-2 flex-shrink-0"
+                    style={{
+                      background: WIN95.bgLight,
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                    }}
+                  >
+                    <Wallet className="w-5 h-5" style={{ color: '#008000' }} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-bold text-sm" style={{ color: WIN95.text }}>
+                      💳 Connect Crypto Wallet
+                    </div>
+                    <div className="text-xs" style={{ color: WIN95.textDisabled }}>
+                      Pay-per-credit • Crypto payments
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 flex-shrink-0" style={{ color: WIN95.text }} />
                 </div>
-              </div>
+              </button>
             </div>
 
-            {/* Quick Instructions */}
-            <div className="rounded-xl p-3 text-left" style={{ 
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(4px)'
-            }}>
-              <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#f59e0b' }}>
-                <Sparkles className="w-3.5 h-3.5" />
-                How to Use
-              </h2>
-              <div className="space-y-1 text-[10px] leading-relaxed" style={{ color: 'rgba(255, 255, 255, 0.85)' }}>
-                <div><strong className="text-white">1.</strong> Type a description and click Generate</div>
-                <div><strong className="text-white">2.</strong> Upload reference images to edit</div>
-                <div><strong className="text-white">3.</strong> Blend multiple images together</div>
-                <div><strong className="text-white">4.</strong> Extract layers from any image</div>
+            {/* Main Content Grid - Win95 Group Boxes */}
+            <div className="grid md:grid-cols-3 gap-3">
+              {/* Features */}
+              <div 
+                className="p-3 text-left"
+                style={{ 
+                  background: WIN95.bg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+              >
+                <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: WIN95.highlight }}>
+                  <Link2 className="w-3.5 h-3.5" />
+                  Features
+                </h2>
+                <div className="space-y-1 text-[10px]" style={{ color: WIN95.text }}>
+                  <div>• <strong>Generate</strong> from text</div>
+                  <div>• <strong>Edit</strong> existing images</div>
+                  <div>• <strong>Blend</strong> 2+ images</div>
+                  <div>• <strong>Extract layers</strong> from images</div>
+                  <div>• <strong>Multiple</strong> art styles</div>
+                </div>
+              </div>
+
+              {/* Free Benefits */}
+              <div 
+                className="p-3 text-left"
+                style={{ 
+                  background: '#c8ffc8',
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+              >
+                <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#006400' }}>
+                  <Calendar className="w-3.5 h-3.5" />
+                  Free Benefits
+                </h2>
+                <div className="space-y-1.5 text-[10px]" style={{ color: WIN95.text }}>
+                  <div className="flex items-center gap-1.5">
+                    <span>🎁</span>
+                    <strong>2 Credits</strong> for all new users
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span>✨</span>
+                    No credit card required
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Instructions */}
+              <div 
+                className="p-3 text-left"
+                style={{ 
+                  background: WIN95.bg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+              >
+                <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#b8860b' }}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  How to Use
+                </h2>
+                <div className="space-y-1 text-[10px] leading-relaxed" style={{ color: WIN95.text }}>
+                  <div><strong>1.</strong> Type a description and Generate</div>
+                  <div><strong>2.</strong> Upload images to edit</div>
+                  <div><strong>3.</strong> Blend multiple images</div>
+                  <div><strong>4.</strong> Extract layers from images</div>
+                </div>
               </div>
             </div>
           </div>

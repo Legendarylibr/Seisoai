@@ -251,7 +251,7 @@ const MessageBubble = memo(function MessageBubble({
           </div>
         )}
 
-        <div className={`max-w-[80%] lg:max-w-[70%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+        <div className={`max-w-[88%] sm:max-w-[80%] lg:max-w-[70%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
           {/* Message bubble */}
           <div
             style={{
@@ -266,8 +266,8 @@ const MessageBubble = memo(function MessageBubble({
               borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px'
             }}
           >
-            {/* Message content */}
-            <div className="px-4 py-3">
+            {/* Message content - compact on mobile */}
+            <div className="px-3 py-2 sm:px-4 sm:py-3">
               {message.isLoading ? (
                 message.content.includes('Generating') ? (
                   <GenerationProgress type={
@@ -312,52 +312,54 @@ const MessageBubble = memo(function MessageBubble({
               {/* Pending action confirmation - redesigned card with model selector */}
               {message.pendingAction && !message.generatedContent && !message.isLoading && (
                 <div 
-                  className="mt-4 p-4 rounded-lg"
+                  className="mt-3 sm:mt-4 p-2.5 sm:p-4 rounded-lg"
                   style={{ 
                     background: 'linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%)',
                     border: '1px solid rgba(102,126,234,0.3)'
                   }}
                 >
-                  {/* Header with icon */}
-                  <div className="flex items-center gap-3 mb-3">
+                  {/* Header with icon - compact on mobile */}
+                  <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
                     <div 
-                      className="w-10 h-10 rounded-lg flex items-center justify-center"
+                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0"
                       style={{
                         background: message.pendingAction.type === 'generate_image' ? '#22c55e' :
                                    message.pendingAction.type === 'generate_video' ? '#3b82f6' : '#ec4899'
                       }}
                     >
-                      {message.pendingAction.type === 'generate_image' && <Image className="w-5 h-5 text-white" />}
-                      {message.pendingAction.type === 'generate_video' && <Film className="w-5 h-5 text-white" />}
-                      {message.pendingAction.type === 'generate_music' && <Music className="w-5 h-5 text-white" />}
+                      {message.pendingAction.type === 'generate_image' && <Image className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
+                      {message.pendingAction.type === 'generate_video' && <Film className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
+                      {message.pendingAction.type === 'generate_music' && <Music className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
                     </div>
-                    <div className="flex-1">
-                      <div className="text-[12px] font-bold">{message.pendingAction.description}</div>
-                      <div className="flex items-center gap-2 text-[10px]" style={{ color: WIN95.textDisabled }}>
-                        <Zap className="w-3 h-3" />
-                        <span>{message.pendingAction.estimatedCredits} credits</span>
-                        <span>•</span>
-                        <Clock className="w-3 h-3" />
-                        <span>
-                          {message.pendingAction.type === 'generate_video' ? '1-3 min' :
-                           message.pendingAction.type === 'generate_music' ? '~30 sec' : '~10 sec'}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11px] sm:text-[12px] font-bold truncate">{message.pendingAction.description}</div>
+                      <div className="flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px] flex-wrap" style={{ color: WIN95.textDisabled }}>
+                        <span className="flex items-center gap-0.5">
+                          <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                          {message.pendingAction.estimatedCredits} cr
+                        </span>
+                        <span className="hidden sm:inline">•</span>
+                        <span className="flex items-center gap-0.5">
+                          <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                          {message.pendingAction.type === 'generate_video' ? '1-3m' :
+                           message.pendingAction.type === 'generate_music' ? '~30s' : '~10s'}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Model Selector - for images and videos */}
+                  {/* Model Selector - for images and videos - compact on mobile */}
                   {getModels().length > 0 && (
-                    <div className="mb-4">
-                      <div className="text-[10px] font-bold mb-2" style={{ color: WIN95.text }}>
+                    <div className="mb-3 sm:mb-4">
+                      <div className="text-[9px] sm:text-[10px] font-bold mb-1.5 sm:mb-2" style={{ color: WIN95.text }}>
                         Choose Model:
                       </div>
-                      <div className="grid gap-2">
+                      <div className="grid gap-1.5 sm:gap-2">
                         {getModels().map((model) => (
                           <button
                             key={model.id}
                             onClick={() => setSelectedModel(model.id)}
-                            className="flex items-center gap-3 p-3 rounded-lg text-left transition-all"
+                            className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg text-left transition-all"
                             style={{
                               background: (selectedModel || getModels()[0].id) === model.id 
                                 ? 'linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.2) 100%)'
@@ -369,24 +371,24 @@ const MessageBubble = memo(function MessageBubble({
                             }}
                           >
                             <div 
-                              className="w-4 h-4 rounded-full flex items-center justify-center"
+                              className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full flex items-center justify-center flex-shrink-0"
                               style={{
                                 border: `2px solid ${(selectedModel || getModels()[0].id) === model.id ? '#667eea' : WIN95.border.dark}`,
                                 background: (selectedModel || getModels()[0].id) === model.id ? '#667eea' : 'transparent'
                               }}
                             >
                               {(selectedModel || getModels()[0].id) === model.id && (
-                                <Check className="w-2.5 h-2.5 text-white" />
+                                <Check className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" />
                               )}
                             </div>
-                            <div className="flex-1">
-                              <div className="text-[11px] font-bold" style={{ color: WIN95.text }}>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[10px] sm:text-[11px] font-bold truncate" style={{ color: WIN95.text }}>
                                 {model.name}
                               </div>
-                              <div className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                              <div className="text-[8px] sm:text-[9px] truncate" style={{ color: WIN95.textDisabled }}>
                                 {model.description}
                                 {' • '}
-                                {'credits' in model ? `${model.credits} credits` : `${(model as { creditsPerSec: number }).creditsPerSec}/sec`}
+                                {'credits' in model ? `${model.credits} cr` : `${(model as { creditsPerSec: number }).creditsPerSec}/s`}
                               </div>
                             </div>
                           </button>
@@ -395,12 +397,12 @@ const MessageBubble = memo(function MessageBubble({
                     </div>
                   )}
                   
-                  {/* Action buttons */}
-                  <div className="flex gap-2">
+                  {/* Action buttons - compact on mobile */}
+                  <div className="flex gap-1.5 sm:gap-2">
                     <button
                       onClick={handleConfirmWithModel}
                       disabled={isActionLoading}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-bold rounded-lg transition-all"
+                      className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-[12px] font-bold rounded-lg transition-all"
                       style={{
                         background: isActionLoading 
                           ? WIN95.buttonFace 
@@ -412,27 +414,30 @@ const MessageBubble = memo(function MessageBubble({
                     >
                       {isActionLoading ? (
                         <>
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          Generating...
+                          <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span className="hidden sm:inline">Generating...</span>
+                          <span className="sm:hidden">Wait...</span>
                         </>
                       ) : (
                         <>
-                          <Wand2 className="w-4 h-4" />
-                          Create Now
+                          <Wand2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          <span className="hidden sm:inline">Create Now</span>
+                          <span className="sm:hidden">Create</span>
                         </>
                       )}
                     </button>
                     <button
                       onClick={onCancelAction}
                       disabled={isActionLoading}
-                      className="px-4 py-2.5 text-[11px] rounded-lg transition-opacity"
+                      className="px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-[11px] rounded-lg transition-opacity"
                       style={{ 
                         ...BTN.base, 
                         opacity: isActionLoading ? 0.5 : 1,
                         borderRadius: '8px'
                       }}
                     >
-                      Cancel
+                      <span className="hidden sm:inline">Cancel</span>
+                      <X className="w-3.5 h-3.5 sm:hidden" />
                     </button>
                   </div>
                 </div>
@@ -627,12 +632,12 @@ const QuickActions = memo(function QuickActions({ onSelect }: { onSelect: (text:
   ];
 
   return (
-    <div className="flex gap-2 mb-2">
+    <div className="flex gap-1.5 sm:gap-2 mb-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
       {actions.map((action, i) => (
         <button
           key={i}
           onClick={() => onSelect(action.prompt)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] rounded-full transition-all hover:scale-105"
+          className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-[10px] rounded-full transition-all hover:scale-105 flex-shrink-0"
           style={{
             background: WIN95.bgLight,
             border: `1px solid ${WIN95.border.dark}`,
@@ -931,9 +936,9 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         </div>
       )}
       
-      {/* Main chat window */}
+      {/* Main chat window - optimized margins on mobile */}
       <div 
-        className="flex-1 mx-2 lg:mx-4 mt-2 flex flex-col min-h-0 rounded-lg overflow-hidden"
+        className="flex-1 mx-1 sm:mx-2 lg:mx-4 mt-1 sm:mt-2 flex flex-col min-h-0 rounded-lg overflow-hidden"
         style={{
           ...PANEL.window,
           boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
@@ -942,37 +947,38 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
           transition: 'filter 0.3s ease, opacity 0.3s ease'
         }}
       >
-        {/* Title bar */}
+        {/* Title bar - compact on mobile */}
         <div 
-          className="flex items-center gap-3 px-4 py-2 flex-shrink-0"
+          className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-1.5 sm:py-2 flex-shrink-0"
           style={{
             ...WINDOW_TITLE_STYLE,
             background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)'
           }}
         >
-          <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
-            <Sparkles className="w-3.5 h-3.5" />
+          <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           </div>
-          <div className="flex-1">
-            <span className="text-[13px] font-bold">AI Creative Assistant</span>
-            <span className="text-[10px] ml-2 opacity-70">Images • Videos • Music</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-[11px] sm:text-[13px] font-bold">AI Assistant</span>
+            <span className="text-[9px] sm:text-[10px] ml-1 sm:ml-2 opacity-70 hidden sm:inline">Images • Videos • Music</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
             {isConnected && (
               <>
                 <div 
-                  className="flex items-center gap-1 px-2 py-1 rounded text-[10px]"
+                  className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[9px] sm:text-[10px]"
                   style={{ background: 'rgba(255,255,255,0.15)' }}
                 >
-                  <Zap className="w-3 h-3" />
-                  {emailContext.credits ?? walletContext.credits ?? 0} credits
+                  <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                  <span className="hidden xs:inline">{emailContext.credits ?? walletContext.credits ?? 0}</span>
+                  <span className="xs:hidden">{emailContext.credits ?? walletContext.credits ?? 0}</span>
                 </div>
                 <button
                   onClick={handleClearChat}
-                  className="p-1.5 rounded hover:bg-white/20 transition-colors"
+                  className="p-1 sm:p-1.5 rounded hover:bg-white/20 transition-colors"
                   title="New conversation"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
                 <button
                   onClick={async () => {
@@ -982,19 +988,19 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                       walletContext.disconnect();
                     }
                   }}
-                  className="p-1.5 rounded hover:bg-white/20 transition-colors"
+                  className="p-1 sm:p-1.5 rounded hover:bg-white/20 transition-colors"
                   title="Sign Out"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               </>
             )}
           </div>
         </div>
 
-        {/* Messages area */}
+        {/* Messages area - compact on mobile */}
         <div 
-          className="flex-1 overflow-y-auto px-4 py-4 min-h-0"
+          className="flex-1 overflow-y-auto px-2 py-2 sm:px-4 sm:py-4 min-h-0"
           style={{ 
             background: WIN95.inputBg
           }}
@@ -1038,9 +1044,9 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
           )}
         </div>
 
-        {/* Input area */}
+        {/* Input area - compact on mobile */}
         <div 
-          className="p-4 flex-shrink-0"
+          className="p-2 sm:p-4 flex-shrink-0"
           style={{ 
             background: WIN95.bg,
             borderTop: `1px solid ${WIN95.border.dark}`
@@ -1050,51 +1056,51 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
             <>
               <QuickActions onSelect={handleQuickAction} />
               
-              {/* Attached image preview */}
+              {/* Attached image preview - compact on mobile */}
               {attachedImage && (
                 <div 
-                  className="mb-2 p-2 rounded-lg flex items-center gap-3"
+                  className="mb-2 p-1.5 sm:p-2 rounded-lg flex items-center gap-2 sm:gap-3"
                   style={{
                     background: 'linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%)',
                     border: '1px solid rgba(102,126,234,0.3)'
                   }}
                 >
-                  <div className="relative">
+                  <div className="relative flex-shrink-0">
                     <img 
                       src={attachedImage} 
                       alt="Attached reference"
-                      className="w-16 h-16 object-cover rounded-lg"
+                      className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-lg"
                       style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
                     />
                     <button
                       onClick={handleRemoveImage}
-                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
+                      className="absolute -top-1 -right-1 sm:-top-1.5 sm:-right-1.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center"
                       style={{ 
                         background: '#ef4444',
                         color: '#fff',
                         boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                       }}
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                     </button>
                   </div>
-                  <div className="flex-1">
-                    <div className="text-[11px] font-medium" style={{ color: WIN95.text }}>
-                      📷 Reference image attached
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] sm:text-[11px] font-medium truncate" style={{ color: WIN95.text }}>
+                      📷 Image attached
                     </div>
-                    <div className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                    <div className="text-[8px] sm:text-[9px] hidden sm:block" style={{ color: WIN95.textDisabled }}>
                       The AI will use this for image-to-image or video generation
                     </div>
                   </div>
                 </div>
               )}
               
-              <div className="flex gap-2 items-end">
-                {/* Image upload button */}
+              <div className="flex gap-1.5 sm:gap-2 items-end">
+                {/* Image upload button - smaller on mobile */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isLoading || isGenerating || isUploadingImage}
-                  className="w-11 h-11 flex items-center justify-center rounded-xl transition-all flex-shrink-0"
+                  className="w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center rounded-lg sm:rounded-xl transition-all flex-shrink-0"
                   style={{
                     background: attachedImage 
                       ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
@@ -1107,11 +1113,11 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                   title="Attach reference image"
                 >
                   {isUploadingImage ? (
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                   ) : attachedImage ? (
-                    <Check className="w-4 h-4" />
+                    <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   ) : (
-                    <ImagePlus className="w-4 h-4" />
+                    <ImagePlus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   )}
                 </button>
                 <input
@@ -1123,7 +1129,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                 />
                 
                 <div 
-                  className="flex-1 rounded-xl overflow-hidden"
+                  className="flex-1 rounded-lg sm:rounded-xl overflow-hidden min-w-0"
                   style={{
                     background: WIN95.inputBg,
                     boxShadow: `inset 0 2px 4px rgba(0,0,0,0.1)`,
@@ -1135,23 +1141,23 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={attachedImage ? "Describe what to do with this image..." : "Describe what you want to create..."}
+                    placeholder={attachedImage ? "Describe what to do..." : "What do you want to create?"}
                     disabled={isLoading || isGenerating}
                     rows={1}
-                    className="w-full px-4 py-3 text-[13px] resize-none focus:outline-none"
+                    className="w-full px-3 py-2.5 sm:px-4 sm:py-3 text-[12px] sm:text-[13px] resize-none focus:outline-none"
                     style={{
                       background: 'transparent',
                       color: WIN95.text,
                       fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                      minHeight: '44px',
-                      maxHeight: '120px'
+                      minHeight: '36px',
+                      maxHeight: '100px'
                     }}
                   />
                 </div>
                 <button
                   onClick={handleSend}
                   disabled={!inputValue.trim() || isLoading || isGenerating}
-                  className="w-11 h-11 flex items-center justify-center rounded-xl transition-all flex-shrink-0"
+                  className="w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center rounded-lg sm:rounded-xl transition-all flex-shrink-0"
                   style={{
                     background: (!inputValue.trim() || isLoading || isGenerating) 
                       ? WIN95.buttonFace 
@@ -1166,12 +1172,12 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                     transform: (!inputValue.trim() || isLoading || isGenerating) ? 'none' : 'translateY(-1px)'
                   }}
                 >
-                  <Send className="w-5 h-5" />
+                  <Send className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
               
-              {/* Keyboard hints */}
-              <div className="flex items-center justify-between mt-2 px-1 text-[9px]" style={{ color: WIN95.textDisabled }}>
+              {/* Keyboard hints - hidden on mobile */}
+              <div className="hidden sm:flex items-center justify-between mt-2 px-1 text-[9px]" style={{ color: WIN95.textDisabled }}>
                 <span>
                   <kbd className="px-1 py-0.5 rounded" style={{ background: WIN95.bgLight }}>Enter</kbd> to send
                   <span className="mx-2">•</span>
@@ -1202,9 +1208,9 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         </div>
       </div>
 
-      {/* Status bar */}
+      {/* Status bar - compact on mobile */}
       <div 
-        className="flex items-center mx-2 lg:mx-4 my-2 rounded-lg overflow-hidden flex-shrink-0"
+        className="flex items-center mx-2 lg:mx-4 my-1 sm:my-2 rounded-lg overflow-hidden flex-shrink-0"
         style={{ 
           ...PANEL.window,
           fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
@@ -1214,20 +1220,20 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         }}
       >
         <div 
-          className="flex items-center gap-4 px-3 py-1.5 flex-1 text-[10px]"
+          className="flex items-center gap-2 sm:gap-4 px-2 sm:px-3 py-1 sm:py-1.5 flex-1 text-[9px] sm:text-[10px]"
           style={{ 
             background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
             color: '#ffffff'
           }}
         >
-          <span className="flex items-center gap-1.5 opacity-90">
-            <Image className="w-3.5 h-3.5" /> Images
+          <span className="flex items-center gap-1 opacity-90">
+            <Image className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Images</span>
           </span>
-          <span className="flex items-center gap-1.5 opacity-90">
-            <Film className="w-3.5 h-3.5" /> Videos
+          <span className="flex items-center gap-1 opacity-90">
+            <Film className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Videos</span>
           </span>
-          <span className="flex items-center gap-1.5 opacity-90">
-            <Music className="w-3.5 h-3.5" /> Music
+          <span className="flex items-center gap-1 opacity-90">
+            <Music className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Music</span>
           </span>
           <span className="flex-1" />
           <span className="opacity-70">
