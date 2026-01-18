@@ -195,9 +195,27 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     img.onerror = () => {
       console.warn('Failed to load proxied image, using CSS fallback');
       setUseWebGL(false);
+      setImageLoaded(true); // Show CSS fallback
     };
+    
+    // Timeout - if image doesn't load in 10s, use CSS fallback
+    const timeout = setTimeout(() => {
+      if (!stateRef.current.texture) {
+        console.warn('WebGL image load timeout, using CSS fallback');
+        setUseWebGL(false);
+        setImageLoaded(true);
+      }
+    }, 10000);
+    
     // Use proxied URL for CORS bypass
     img.src = getProxiedUrl(src);
+    
+    // Cleanup timeout when texture loads
+    const origOnload = img.onload;
+    img.onload = function(e) {
+      clearTimeout(timeout);
+      if (origOnload) origOnload.call(this, e);
+    };
     
     // Animation loop
     stateRef.current.running = true;
