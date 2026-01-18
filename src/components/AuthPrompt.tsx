@@ -11,9 +11,18 @@ const AuthPrompt: React.FC = () => {
   if (!authMode) {
     return (
       <div className="flex items-center justify-center h-full lg:max-h-[calc(100vh-80px)] px-4 py-4 lg:py-2 overflow-auto lg:overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
-        <div className="text-center max-w-5xl mx-auto slide-up">
+        <div 
+          className="text-center max-w-5xl mx-auto slide-up p-6 lg:p-8 rounded-2xl"
+          style={{
+            background: 'rgba(20, 40, 50, 0.85)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+          }}
+        >
           {/* Hero Section with Neon Effect */}
-          <div className="mb-4 lg:mb-2 relative">
+          <div className="mb-4 lg:mb-3 relative">
             {/* Decorative corners */}
             <div className="absolute -top-2 -left-2 w-6 h-6 opacity-50" style={{
               background: 'linear-gradient(90deg, #00b8a9 33%, transparent 33%), linear-gradient(180deg, #00b8a9 33%, transparent 33%)',
@@ -53,136 +62,79 @@ const AuthPrompt: React.FC = () => {
           </div>
 
           {/* Auth Mode Selection */}
-          <div className="grid md:grid-cols-2 gap-2 max-w-3xl mx-auto mb-4 lg:mb-2">
+          <div className="grid md:grid-cols-2 gap-3 max-w-3xl mx-auto mb-4 lg:mb-3">
             <button
               onClick={() => setAuthMode('email')}
-              className="w-full rounded-lg p-4 group transition-all duration-300"
+              className="w-full rounded-xl p-4 group transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1"
               style={{
-                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                border: '2px outset #f0f0f0',
-                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
                 textAlign: 'left'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                e.currentTarget.style.border = '2px outset #f8f8f8';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                e.currentTarget.style.border = '2px outset #f0f0f0';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-              }}
-              onMouseDown={(e) => {
-                e.currentTarget.style.border = '2px inset #c0c0c0';
-                e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
-              }}
-              onMouseUp={(e) => {
-                e.currentTarget.style.border = '2px outset #f0f0f0';
-                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
               }}
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded flex-shrink-0" style={{
-                  background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
-                  border: '2px outset #e0e0e0',
-                  boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
+                <div className="p-2.5 rounded-lg flex-shrink-0" style={{
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  backdropFilter: 'blur(4px)'
                 }}>
-                  <Mail className="w-5 h-5" style={{ color: '#000000' }} />
+                  <Mail className="w-5 h-5" style={{ color: '#ffffff' }} />
                 </div>
                 <div className="flex-1">
-                  <div className="font-bold text-sm mb-1" style={{ 
-                    color: '#000000', 
-                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                  }}>
+                  <div className="font-bold text-sm mb-0.5" style={{ color: '#ffffff' }}>
                     Sign in with Email
                   </div>
-                  <div className="text-xs" style={{ 
-                    color: '#1a1a1a', 
-                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
-                  }}>
+                  <div className="text-xs opacity-80" style={{ color: '#ffffff' }}>
                     Monthly subscriptions • Credit card payments
                   </div>
                 </div>
-                <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
+                <ArrowRight className="w-5 h-5 flex-shrink-0 opacity-70" style={{ color: '#ffffff' }} />
               </div>
             </button>
 
             <button
               onClick={() => setAuthMode('wallet')}
-              className="w-full rounded-lg p-4 group transition-all duration-300"
+              className="w-full rounded-xl p-4 group transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1"
               style={{
-                background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                border: '2px outset #f0f0f0',
-                boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                background: 'linear-gradient(135deg, rgba(0, 184, 169, 0.9) 0%, rgba(0, 150, 136, 0.9) 100%)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                boxShadow: '0 4px 20px rgba(0, 184, 169, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
                 textAlign: 'left'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                e.currentTarget.style.border = '2px outset #f8f8f8';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 3px 6px rgba(0, 0, 0, 0.25)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                e.currentTarget.style.border = '2px outset #f0f0f0';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-              }}
-              onMouseDown={(e) => {
-                e.currentTarget.style.border = '2px inset #c0c0c0';
-                e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
-              }}
-              onMouseUp={(e) => {
-                e.currentTarget.style.border = '2px outset #f0f0f0';
-                e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
               }}
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded flex-shrink-0" style={{
-                  background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
-                  border: '2px outset #e0e0e0',
-                  boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
+                <div className="p-2.5 rounded-lg flex-shrink-0" style={{
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  backdropFilter: 'blur(4px)'
                 }}>
-                  <Wallet className="w-5 h-5" style={{ color: '#000000' }} />
+                  <Wallet className="w-5 h-5" style={{ color: '#ffffff' }} />
                 </div>
                 <div className="flex-1">
-                  <div className="font-bold text-sm mb-1" style={{ 
-                    color: '#000000', 
-                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                  }}>
+                  <div className="font-bold text-sm mb-0.5" style={{ color: '#ffffff' }}>
                     Connect Crypto Wallet
                   </div>
-                  <div className="text-xs" style={{ 
-                    color: '#1a1a1a', 
-                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
-                  }}>
+                  <div className="text-xs opacity-80" style={{ color: '#ffffff' }}>
                     Pay-per-credit • Crypto payments
                   </div>
                 </div>
-                <ArrowRight className="w-5 h-5 flex-shrink-0" style={{ color: '#000000' }} />
+                <ArrowRight className="w-5 h-5 flex-shrink-0 opacity-70" style={{ color: '#ffffff' }} />
               </div>
             </button>
           </div>
 
           {/* Main Content Grid */}
-          <div className="grid md:grid-cols-3 gap-2">
+          <div className="grid md:grid-cols-3 gap-3">
             {/* Features */}
-            <div className="rounded-lg p-2 text-left" style={{ 
-              background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
-              border: '2px outset #e8e8e8',
-              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            <div className="rounded-xl p-3 text-left" style={{ 
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              backdropFilter: 'blur(4px)'
             }}>
-              <h2 className="text-xs font-bold mb-2 flex items-center gap-1" style={{ 
-                color: '#000000', 
-                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-              }}>
-                <Link2 className="w-3 h-3" style={{ color: '#000000' }} />
+              <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#00b8a9' }}>
+                <Link2 className="w-3.5 h-3.5" />
                 Features
               </h2>
-              <div className="space-y-1 text-[10px]" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
+              <div className="space-y-1 text-[10px]" style={{ color: 'rgba(255, 255, 255, 0.85)' }}>
                 <div>• <strong>Generate</strong> from text</div>
                 <div>• <strong>Edit</strong> existing images</div>
                 <div>• <strong>Blend</strong> 2+ images</div>
@@ -192,54 +144,42 @@ const AuthPrompt: React.FC = () => {
             </div>
 
             {/* Free Benefits */}
-            <div className="rounded-lg p-2 text-left" style={{ 
-              background: 'linear-gradient(to bottom, #ecfdf5, #d1fae5, #a7f3d0)',
-              border: '2px outset #a7f3d0',
-              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.1)'
+            <div className="rounded-xl p-3 text-left" style={{ 
+              background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(16, 185, 129, 0.2) 100%)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              backdropFilter: 'blur(4px)'
             }}>
-              <h2 className="text-xs font-bold mb-2 flex items-center gap-1" style={{ 
-                color: '#000000', 
-                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-              }}>
-                <Calendar className="w-3 h-3" style={{ color: '#000000' }} />
+              <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#22c55e' }}>
+                <Calendar className="w-3.5 h-3.5" />
                 Free Benefits
               </h2>
-              <div className="space-y-1 text-[10px]" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>
-                <div>• <strong>2 Credits</strong> for all new users</div>
-                <div>• No credit card required</div>
+              <div className="space-y-1.5 text-[10px]" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base">🎁</span>
+                  <strong>2 Credits</strong> for all new users
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base">✨</span>
+                  No credit card required
+                </div>
               </div>
             </div>
 
             {/* Quick Instructions */}
-            <div className="rounded-lg p-2 text-left" style={{ 
-              background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
-              border: '2px outset #e8e8e8',
-              boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.2)'
+            <div className="rounded-xl p-3 text-left" style={{ 
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              backdropFilter: 'blur(4px)'
             }}>
-              <h2 className="text-xs font-bold mb-2 flex items-center gap-1" style={{ 
-                color: '#000000', 
-                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-              }}>
-                <Sparkles className="w-3 h-3" style={{ color: '#000000' }} />
+              <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#f59e0b' }}>
+                <Sparkles className="w-3.5 h-3.5" />
                 How to Use
               </h2>
-              <div className="space-y-0.5 text-[10px] leading-tight" style={{ color: '#000000' }}>
-                <div className="flex items-start gap-1">
-                  <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>1.</span>
-                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Text to Image:</strong> Type a description, choose a style (optional), and click Generate.</span>
-                </div>
-                <div className="flex items-start gap-1">
-                  <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>2.</span>
-                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>With Reference Image:</strong> Upload 1 image, add a prompt describing changes, and click Generate.</span>
-                </div>
-                <div className="flex items-start gap-1">
-                  <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>3.</span>
-                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Multiple Reference Images:</strong> Upload 2+ images, select a model, and click Generate to blend them.</span>
-                </div>
-                <div className="flex items-start gap-1">
-                  <span className="font-bold flex-shrink-0" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>4.</span>
-                  <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}><strong>Layer Extract:</strong> Upload an image, switch to Extract mode, and click "Extract Layers" to separate into individual layers.</span>
-                </div>
+              <div className="space-y-1 text-[10px] leading-relaxed" style={{ color: 'rgba(255, 255, 255, 0.85)' }}>
+                <div><strong className="text-white">1.</strong> Type a description and click Generate</div>
+                <div><strong className="text-white">2.</strong> Upload reference images to edit</div>
+                <div><strong className="text-white">3.</strong> Blend multiple images together</div>
+                <div><strong className="text-white">4.</strong> Extract layers from any image</div>
               </div>
             </div>
           </div>

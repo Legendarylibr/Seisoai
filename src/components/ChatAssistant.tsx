@@ -920,9 +920,9 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         <div 
           className="absolute inset-0 z-50 flex items-center justify-center"
           style={{
-            background: 'rgba(15, 32, 39, 0.85)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)'
+            background: 'rgba(15, 32, 39, 0.55)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)'
           }}
         >
           <div className="w-full h-full overflow-auto">
@@ -937,8 +937,8 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         style={{
           ...PANEL.window,
           boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-          filter: !isConnected ? 'blur(3px)' : 'none',
-          opacity: !isConnected ? 0.6 : 1,
+          filter: !isConnected ? 'blur(2px)' : 'none',
+          opacity: !isConnected ? 0.75 : 1,
           transition: 'filter 0.3s ease, opacity 0.3s ease'
         }}
       >
@@ -1208,8 +1208,8 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         style={{ 
           ...PANEL.window,
           fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-          filter: !isConnected ? 'blur(3px)' : 'none',
-          opacity: !isConnected ? 0.6 : 1,
+          filter: !isConnected ? 'blur(2px)' : 'none',
+          opacity: !isConnected ? 0.75 : 1,
           transition: 'filter 0.3s ease, opacity 0.3s ease'
         }}
       >
