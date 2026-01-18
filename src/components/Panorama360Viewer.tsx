@@ -92,6 +92,7 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isAutoRotating, setIsAutoRotating] = useState(false);
   const [fov, setFov] = useState(90);
+  const [error, setError] = useState<string | null>(null);
   const [, forceUpdate] = useState(0);
   
   // All animation state in refs to avoid recreating callbacks
@@ -119,14 +120,34 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
   // Initialize WebGL - only once
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      setError('Canvas not found');
+      return;
+    }
+    
+    // Set initial canvas size explicitly
+    const container = containerRef.current;
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      canvas.width = rect.width * (window.devicePixelRatio || 1);
+      canvas.height = rect.height * (window.devicePixelRatio || 1);
+    } else {
+      canvas.width = window.innerWidth * (window.devicePixelRatio || 1);
+      canvas.height = window.innerHeight * (window.devicePixelRatio || 1);
+    }
     
     const gl = canvas.getContext('webgl', { 
       alpha: false, 
       antialias: true,
       preserveDrawingBuffer: true 
-    });
+    }) || canvas.getContext('experimental-webgl', {
+      alpha: false,
+      antialias: true,
+      preserveDrawingBuffer: true
+    }) as WebGLRenderingContext | null;
+    
     if (!gl) {
+      setError('WebGL not supported in this browser');
       console.error('WebGL not supported');
       return;
     }
@@ -190,7 +211,10 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
       textureRef.current = texture;
       setImageLoaded(true);
     };
-    img.onerror = () => console.error('Failed to load panorama image');
+    img.onerror = () => {
+      console.error('Failed to load panorama image:', src);
+      setError('Failed to load image');
+    };
     img.src = src;
     
     // Animation loop
@@ -378,8 +402,13 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
   return (
     <div 
       ref={containerRef}
-      className={`relative ${isFullscreen ? 'fixed inset-0 z-[9999]' : 'w-full h-full'}`}
-      style={{ background: '#000', minHeight: isFullscreen ? '100vh' : '400px' }}
+      className={`relative ${isFullscreen ? 'fixed inset-0 z-[9999]' : ''}`}
+      style={{ 
+        background: '#000', 
+        width: isFullscreen ? '100vw' : '100%',
+        height: isFullscreen ? '100vh' : '100%',
+        minHeight: '400px'
+      }}
     >
       {/* Toolbar */}
       <div 
@@ -452,8 +481,13 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
       {/* WebGL Canvas */}
       <canvas
         ref={canvasRef}
-        className="w-full h-full block"
         style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          display: 'block',
           cursor: stateRef.current.isDragging ? 'grabbing' : 'grab',
           touchAction: 'none'
         }}
@@ -468,11 +502,22 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
       />
       
       {/* Loading overlay */}
-      {!imageLoaded && (
+      {!imageLoaded && !error && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ background: WIN95.bg }}>
           <div className="text-center">
             <div className="w-10 h-10 border-3 border-t-transparent rounded-full animate-spin mx-auto mb-3" style={{ borderColor: '#000080', borderTopColor: 'transparent', borderWidth: '3px' }} />
             <span className="text-[11px] font-medium" style={{ color: WIN95.text }}>Loading 360° panorama...</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Error overlay */}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center" style={{ background: WIN95.bg }}>
+          <div className="text-center p-4">
+            <div className="text-4xl mb-3">⚠️</div>
+            <span className="text-[12px] font-medium block mb-2" style={{ color: '#800000' }}>{error}</span>
+            <span className="text-[10px]" style={{ color: WIN95.textDisabled }}>Your browser may not support WebGL</span>
           </div>
         </div>
       )}
