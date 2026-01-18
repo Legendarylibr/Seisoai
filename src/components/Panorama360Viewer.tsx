@@ -1,6 +1,6 @@
 /**
- * Panorama360Viewer - True 360-degree spherical panorama viewer
- * Uses WebGL to render equirectangular images on a sphere with proper camera rotation
+ * Panorama360Viewer - Interactive 360-degree panorama viewer
+ * Uses CSS transforms for universal compatibility (no WebGL/CORS issues)
  */
 import { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { Move, Maximize2, Minimize2, RotateCcw, Download, Play, Pause } from 'lucide-react';
@@ -13,67 +13,6 @@ interface Panorama360ViewerProps {
   onClose?: () => void;
 }
 
-// Vertex shader - renders a full-screen quad
-const VERTEX_SHADER = `
-  attribute vec2 a_position;
-  varying vec2 v_texCoord;
-  void main() {
-    v_texCoord = a_position * 0.5 + 0.5;
-    gl_Position = vec4(a_position, 0.0, 1.0);
-  }
-`;
-
-// Fragment shader - projects equirectangular image onto sphere
-const FRAGMENT_SHADER = `
-  precision highp float;
-  
-  varying vec2 v_texCoord;
-  uniform sampler2D u_texture;
-  uniform float u_yaw;
-  uniform float u_pitch;
-  uniform float u_fov;
-  uniform float u_aspect;
-  
-  #define PI 3.14159265359
-  
-  void main() {
-    vec2 ndc = v_texCoord * 2.0 - 1.0;
-    
-    float fovScale = tan(u_fov * 0.5);
-    vec3 rayDir = normalize(vec3(
-      ndc.x * fovScale * u_aspect,
-      ndc.y * fovScale,
-      -1.0
-    ));
-    
-    float cosPitch = cos(u_pitch);
-    float sinPitch = sin(u_pitch);
-    vec3 pitched = vec3(
-      rayDir.x,
-      rayDir.y * cosPitch - rayDir.z * sinPitch,
-      rayDir.y * sinPitch + rayDir.z * cosPitch
-    );
-    
-    float cosYaw = cos(u_yaw);
-    float sinYaw = sin(u_yaw);
-    vec3 rotated = vec3(
-      pitched.x * cosYaw + pitched.z * sinYaw,
-      pitched.y,
-      -pitched.x * sinYaw + pitched.z * cosYaw
-    );
-    
-    float theta = atan(rotated.x, -rotated.z);
-    float phi = asin(clamp(rotated.y, -1.0, 1.0));
-    
-    vec2 uv = vec2(
-      (theta / PI + 1.0) * 0.5,
-      (phi / PI + 0.5)
-    );
-    
-    gl_FragColor = texture2D(u_texture, uv);
-  }
-`;
-
 const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewer({ 
   src, 
   alt = '360° Panorama',
@@ -81,212 +20,85 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
   onClose 
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const glRef = useRef<WebGLRenderingContext | null>(null);
-  const programRef = useRef<WebGLProgram | null>(null);
-  const textureRef = useRef<WebGLTexture | null>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const animationFrameRef = useRef<number>(0);
-  const isRunningRef = useRef(false);
   
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isAutoRotating, setIsAutoRotating] = useState(false);
-  const [fov, setFov] = useState(90);
-  const [error, setError] = useState<string | null>(null);
-  const [, forceUpdate] = useState(0);
+  const [zoom, setZoom] = useState(1);
   
-  // All animation state in refs to avoid recreating callbacks
+  // Pan state - represents position in the panorama (0-100%)
   const stateRef = useRef({
-    yaw: 0,
-    pitch: 0,
+    panX: 50, // Start centered (0-100)
+    panY: 50, // Start centered (0-100)
     velocityX: 0,
     velocityY: 0,
     isDragging: false,
     lastMouse: { x: 0, y: 0 },
     lastPinchDist: 0,
-    fov: 90,
     isAutoRotating: false
   });
   
-  // Keep refs in sync with state
-  useEffect(() => {
-    stateRef.current.fov = fov;
-  }, [fov]);
+  const [, forceRender] = useState(0);
   
+  // Sync auto-rotate state
   useEffect(() => {
     stateRef.current.isAutoRotating = isAutoRotating;
   }, [isAutoRotating]);
-
-  // Initialize WebGL - only once
+  
+  // Animation loop for momentum and auto-rotate
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      setError('Canvas not found');
-      return;
-    }
+    let running = true;
     
-    // Set initial canvas size explicitly
-    const container = containerRef.current;
-    if (container) {
-      const rect = container.getBoundingClientRect();
-      canvas.width = rect.width * (window.devicePixelRatio || 1);
-      canvas.height = rect.height * (window.devicePixelRatio || 1);
-    } else {
-      canvas.width = window.innerWidth * (window.devicePixelRatio || 1);
-      canvas.height = window.innerHeight * (window.devicePixelRatio || 1);
-    }
-    
-    const gl = canvas.getContext('webgl', { 
-      alpha: false, 
-      antialias: true,
-      preserveDrawingBuffer: true 
-    }) || canvas.getContext('experimental-webgl', {
-      alpha: false,
-      antialias: true,
-      preserveDrawingBuffer: true
-    }) as WebGLRenderingContext | null;
-    
-    if (!gl) {
-      setError('WebGL not supported in this browser');
-      console.error('WebGL not supported');
-      return;
-    }
-    
-    // Compile shaders
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-    if (!vertexShader || !fragmentShader) return;
-    
-    gl.shaderSource(vertexShader, VERTEX_SHADER);
-    gl.compileShader(vertexShader);
-    if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
-      console.error('Vertex shader error:', gl.getShaderInfoLog(vertexShader));
-      return;
-    }
-    
-    gl.shaderSource(fragmentShader, FRAGMENT_SHADER);
-    gl.compileShader(fragmentShader);
-    if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
-      console.error('Fragment shader error:', gl.getShaderInfoLog(fragmentShader));
-      return;
-    }
-    
-    const program = gl.createProgram();
-    if (!program) return;
-    
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-    
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error('Program link error:', gl.getProgramInfoLog(program));
-      return;
-    }
-    
-    // Create fullscreen quad
-    const positions = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-    
-    const positionLoc = gl.getAttribLocation(program, 'a_position');
-    gl.enableVertexAttribArray(positionLoc);
-    gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
-    
-    programRef.current = program;
-    glRef.current = gl;
-    
-    // Load image
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      if (!gl) return;
-      const texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      textureRef.current = texture;
-      setImageLoaded(true);
-    };
-    img.onerror = () => {
-      console.error('Failed to load panorama image:', src);
-      setError('Failed to load image');
-    };
-    img.src = src;
-    
-    // Animation loop
     const animate = () => {
-      if (!isRunningRef.current) return;
+      if (!running) return;
       
       const state = stateRef.current;
-      const gl = glRef.current;
-      const program = programRef.current;
-      const canvas = canvasRef.current;
       
       // Apply momentum when not dragging
       if (!state.isDragging) {
-        state.yaw += state.velocityX;
-        state.pitch += state.velocityY;
-        state.velocityX *= 0.95;
-        state.velocityY *= 0.95;
-        if (Math.abs(state.velocityX) < 0.0001) state.velocityX = 0;
-        if (Math.abs(state.velocityY) < 0.0001) state.velocityY = 0;
+        state.panX += state.velocityX;
+        state.panY += state.velocityY;
+        
+        // Damping
+        state.velocityX *= 0.92;
+        state.velocityY *= 0.92;
+        
+        if (Math.abs(state.velocityX) < 0.01) state.velocityX = 0;
+        if (Math.abs(state.velocityY) < 0.01) state.velocityY = 0;
       }
       
       // Auto-rotate
       if (state.isAutoRotating && !state.isDragging) {
-        state.yaw += 0.003;
+        state.panX += 0.1;
       }
       
-      // Clamp pitch
-      state.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, state.pitch));
+      // Wrap horizontal (infinite scroll)
+      if (state.panX > 100) state.panX -= 100;
+      if (state.panX < 0) state.panX += 100;
       
-      // Render
-      if (gl && program && canvas && textureRef.current) {
-        const rect = canvas.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
-        const width = Math.floor(rect.width * dpr);
-        const height = Math.floor(rect.height * dpr);
-        
-        if (width > 0 && height > 0) {
-          if (canvas.width !== width || canvas.height !== height) {
-            canvas.width = width;
-            canvas.height = height;
-          }
-          gl.viewport(0, 0, width, height);
-          gl.useProgram(program);
-          
-          gl.uniform1f(gl.getUniformLocation(program, 'u_yaw'), state.yaw);
-          gl.uniform1f(gl.getUniformLocation(program, 'u_pitch'), state.pitch);
-          gl.uniform1f(gl.getUniformLocation(program, 'u_fov'), (state.fov * Math.PI) / 180);
-          gl.uniform1f(gl.getUniformLocation(program, 'u_aspect'), width / height);
-          
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D, textureRef.current);
-          gl.uniform1i(gl.getUniformLocation(program, 'u_texture'), 0);
-          
-          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        }
+      // Clamp vertical
+      state.panY = Math.max(10, Math.min(90, state.panY));
+      
+      // Update image position
+      if (imageRef.current) {
+        // The image is 300% wide, so we map 0-100 to the full range
+        const xOffset = -(state.panX / 100) * 200; // -200% to 0%
+        const yOffset = -(state.panY - 50) * 0.5; // Small vertical offset
+        imageRef.current.style.transform = `translate(${xOffset}%, ${yOffset}%) scale(${zoom})`;
       }
       
       animationFrameRef.current = requestAnimationFrame(animate);
     };
     
-    isRunningRef.current = true;
     animationFrameRef.current = requestAnimationFrame(animate);
     
     return () => {
-      isRunningRef.current = false;
+      running = false;
       cancelAnimationFrame(animationFrameRef.current);
-      if (glRef.current) {
-        const ext = glRef.current.getExtension('WEBGL_lose_context');
-        if (ext) ext.loseContext();
-      }
     };
-  }, [src]);
+  }, [zoom]);
   
   // Mouse handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -295,28 +107,32 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     stateRef.current.lastMouse = { x: e.clientX, y: e.clientY };
     stateRef.current.velocityX = 0;
     stateRef.current.velocityY = 0;
-    forceUpdate(n => n + 1);
+    forceRender(n => n + 1);
   }, []);
   
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const state = stateRef.current;
     if (!state.isDragging) return;
     
+    const container = containerRef.current;
+    if (!container) return;
+    
     const dx = e.clientX - state.lastMouse.x;
     const dy = e.clientY - state.lastMouse.y;
     
-    const sensitivity = (state.fov / 90) * 0.004;
+    // Sensitivity - adjust based on container width
+    const sensitivity = 100 / container.clientWidth;
     
-    state.velocityX = -dx * sensitivity;
-    state.velocityY = dy * sensitivity;
-    state.yaw += state.velocityX;
-    state.pitch += state.velocityY;
+    state.velocityX = -dx * sensitivity * 1.5;
+    state.velocityY = dy * sensitivity * 0.8;
+    state.panX += state.velocityX;
+    state.panY += state.velocityY;
     state.lastMouse = { x: e.clientX, y: e.clientY };
   }, []);
   
   const handleMouseUp = useCallback(() => {
     stateRef.current.isDragging = false;
-    forceUpdate(n => n + 1);
+    forceRender(n => n + 1);
   }, []);
   
   // Touch handlers
@@ -325,6 +141,7 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     const state = stateRef.current;
     
     if (e.touches.length === 2) {
+      // Pinch start
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       state.lastPinchDist = Math.sqrt(dx * dx + dy * dy);
@@ -335,7 +152,7 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
       state.velocityX = 0;
       state.velocityY = 0;
     }
-    forceUpdate(n => n + 1);
+    forceRender(n => n + 1);
   }, []);
   
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
@@ -343,15 +160,14 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     const state = stateRef.current;
     
     if (e.touches.length === 2) {
+      // Pinch zoom
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
       
       if (state.lastPinchDist > 0) {
-        const delta = (state.lastPinchDist - dist) * 0.3;
-        const newFov = Math.max(30, Math.min(120, state.fov + delta));
-        state.fov = newFov;
-        setFov(newFov);
+        const scale = dist / state.lastPinchDist;
+        setZoom(prev => Math.max(0.5, Math.min(3, prev * scale)));
       }
       state.lastPinchDist = dist;
       return;
@@ -359,40 +175,42 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     
     if (!state.isDragging || e.touches.length !== 1) return;
     
+    const container = containerRef.current;
+    if (!container) return;
+    
     const touch = e.touches[0];
     const dx = touch.clientX - state.lastMouse.x;
     const dy = touch.clientY - state.lastMouse.y;
     
-    const sensitivity = (state.fov / 90) * 0.006;
+    const sensitivity = 100 / container.clientWidth;
     
-    state.velocityX = -dx * sensitivity;
+    state.velocityX = -dx * sensitivity * 2;
     state.velocityY = dy * sensitivity;
-    state.yaw += state.velocityX;
-    state.pitch += state.velocityY;
+    state.panX += state.velocityX;
+    state.panY += state.velocityY;
     state.lastMouse = { x: touch.clientX, y: touch.clientY };
   }, []);
   
   const handleTouchEnd = useCallback(() => {
     stateRef.current.isDragging = false;
     stateRef.current.lastPinchDist = 0;
-    forceUpdate(n => n + 1);
+    forceRender(n => n + 1);
   }, []);
   
+  // Wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? 5 : -5;
-    const newFov = Math.max(30, Math.min(120, stateRef.current.fov + delta));
-    stateRef.current.fov = newFov;
-    setFov(newFov);
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setZoom(prev => Math.max(0.5, Math.min(3, prev + delta)));
   }, []);
   
+  // Reset view
   const resetView = useCallback(() => {
-    stateRef.current.yaw = 0;
-    stateRef.current.pitch = 0;
+    stateRef.current.panX = 50;
+    stateRef.current.panY = 50;
     stateRef.current.velocityX = 0;
     stateRef.current.velocityY = 0;
-    stateRef.current.fov = 90;
-    setFov(90);
+    setZoom(1);
   }, []);
   
   const toggleFullscreen = useCallback(() => {
@@ -402,18 +220,30 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
   return (
     <div 
       ref={containerRef}
-      className={`relative ${isFullscreen ? 'fixed inset-0 z-[9999]' : ''}`}
+      className={`relative overflow-hidden ${isFullscreen ? 'fixed inset-0 z-[9999]' : ''}`}
       style={{ 
         background: '#000', 
         width: isFullscreen ? '100vw' : '100%',
         height: isFullscreen ? '100vh' : '100%',
-        minHeight: '400px'
+        minHeight: '400px',
+        cursor: stateRef.current.isDragging ? 'grabbing' : 'grab',
+        touchAction: 'none'
       }}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onWheel={handleWheel}
     >
       {/* Toolbar */}
       <div 
         className="absolute top-0 left-0 right-0 z-10 flex items-center gap-1 p-1.5"
         style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)' }}
+        onMouseDown={e => e.stopPropagation()}
+        onTouchStart={e => e.stopPropagation()}
       >
         <div className="flex items-center gap-1 px-2 py-1 rounded" style={{ background: 'rgba(255,255,255,0.15)' }}>
           <Move className="w-3.5 h-3.5 text-white" />
@@ -427,8 +257,8 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
         <div className="flex-1" />
 
         <div className="flex items-center gap-0.5">
-          <span className="text-[9px] text-white/60 mr-1">FOV:</span>
-          <span className="text-[10px] text-white/80 w-8 text-center">{Math.round(fov)}°</span>
+          <span className="text-[9px] text-white/60 mr-1">Zoom:</span>
+          <span className="text-[10px] text-white/80 w-10 text-center">{Math.round(zoom * 100)}%</span>
         </div>
 
         <button
@@ -478,53 +308,44 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
         )}
       </div>
 
-      {/* WebGL Canvas */}
-      <canvas
-        ref={canvasRef}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          display: 'block',
-          cursor: stateRef.current.isDragging ? 'grabbing' : 'grab',
-          touchAction: 'none'
-        }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onWheel={handleWheel}
-      />
+      {/* Panorama Image - uses 3x width for seamless wrap */}
+      <div 
+        className="absolute inset-0 flex items-center justify-center overflow-hidden"
+        style={{ pointerEvents: 'none' }}
+      >
+        {/* Tripled image for seamless horizontal wrap */}
+        <img
+          ref={imageRef}
+          src={src}
+          alt={alt}
+          draggable={false}
+          onLoad={() => setImageLoaded(true)}
+          className="select-none"
+          style={{
+            height: '120%',
+            width: 'auto',
+            minWidth: '300%',
+            objectFit: 'cover',
+            transform: 'translate(-100%, 0)',
+            opacity: imageLoaded ? 1 : 0,
+            transition: 'opacity 0.3s ease'
+          }}
+        />
+      </div>
       
       {/* Loading overlay */}
-      {!imageLoaded && !error && (
-        <div className="absolute inset-0 flex items-center justify-center" style={{ background: WIN95.bg }}>
+      {!imageLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center z-5" style={{ background: WIN95.bg }}>
           <div className="text-center">
             <div className="w-10 h-10 border-3 border-t-transparent rounded-full animate-spin mx-auto mb-3" style={{ borderColor: '#000080', borderTopColor: 'transparent', borderWidth: '3px' }} />
             <span className="text-[11px] font-medium" style={{ color: WIN95.text }}>Loading 360° panorama...</span>
           </div>
         </div>
       )}
-      
-      {/* Error overlay */}
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center" style={{ background: WIN95.bg }}>
-          <div className="text-center p-4">
-            <div className="text-4xl mb-3">⚠️</div>
-            <span className="text-[12px] font-medium block mb-2" style={{ color: '#800000' }}>{error}</span>
-            <span className="text-[10px]" style={{ color: WIN95.textDisabled }}>Your browser may not support WebGL</span>
-          </div>
-        </div>
-      )}
 
       {/* Bottom hint */}
       <div 
-        className="absolute bottom-0 left-0 right-0 flex items-center justify-center p-2 pointer-events-none"
+        className="absolute bottom-0 left-0 right-0 flex items-center justify-center p-2 pointer-events-none z-10"
         style={{ background: 'linear-gradient(0deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 100%)' }}
       >
         <div className="flex items-center gap-2 text-[10px] text-white/70">
