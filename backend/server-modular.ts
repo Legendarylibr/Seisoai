@@ -643,6 +643,10 @@ async function gracefulShutdown(signal: string): Promise<void> {
     // Close Redis connection
     await closeRedis();
     
+    // Close MongoDB connection
+    const { closeDatabase } = await import('./config/database.js');
+    await closeDatabase();
+    
     logger.info('All connections closed successfully');
   } catch (error) {
     const err = error as Error;

@@ -3,7 +3,7 @@
  * Enterprise-grade health verification for all dependencies
  * 
  * Features:
- * - MongoDB connection health
+ * - MongoDB connection health with reconnection status
  * - Redis connection health
  * - External API health (FAL.ai)
  * - Disk space monitoring
@@ -11,7 +11,7 @@
  */
 import mongoose from 'mongoose';
 import { getRedis, isRedisConnected } from './redis.js';
-// Logger imported for potential future use in health check logging
+import { getConnectionStatus } from '../config/database.js';
 import config from '../config/env.js';
 
 // Health status types
@@ -51,12 +51,17 @@ async function checkMongoDB(): Promise<ComponentHealth> {
   const start = Date.now();
   
   try {
+    const connStatus = getConnectionStatus();
     const state = mongoose.connection.readyState;
     
     if (state !== 1) {
       return {
         status: HealthStatus.UNHEALTHY,
-        message: `Connection state: ${['disconnected', 'connected', 'connecting', 'disconnecting'][state] || 'unknown'}`,
+        message: `Connection state: ${connStatus.state}`,
+        details: {
+          state: connStatus.state,
+          reconnectAttempts: connStatus.reconnectAttempts,
+        },
       };
     }
     
@@ -71,18 +76,30 @@ async function checkMongoDB(): Promise<ComponentHealth> {
         status: HealthStatus.DEGRADED,
         responseTime,
         message: 'High latency detected',
+        details: {
+          state: connStatus.state,
+          reconnectAttempts: connStatus.reconnectAttempts,
+        },
       };
     }
     
     return {
       status: HealthStatus.HEALTHY,
       responseTime,
+      details: {
+        state: connStatus.state,
+      },
     };
   } catch (error) {
+    const connStatus = getConnectionStatus();
     return {
       status: HealthStatus.UNHEALTHY,
       responseTime: Date.now() - start,
       message: (error as Error).message,
+      details: {
+        state: connStatus.state,
+        reconnectAttempts: connStatus.reconnectAttempts,
+      },
     };
   }
 }
