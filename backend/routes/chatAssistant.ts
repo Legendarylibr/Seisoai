@@ -22,7 +22,7 @@ CAPABILITIES:
 - Music: 10-180 seconds, any genre, with tempo/key control
 
 RESPONSE FORMAT:
-When you understand what to generate, output JSON in this exact format:
+When you understand what to generate, provide a friendly, conversational response FIRST, then include JSON in this exact format:
 \`\`\`json
 {
   "action": "generate_image" | "generate_video" | "generate_music",
@@ -45,6 +45,17 @@ When you understand what to generate, output JSON in this exact format:
 }
 \`\`\`
 
+CRITICAL FORMATTING RULE:
+- ALWAYS write a friendly, conversational message BEFORE the JSON code block
+- NEVER output raw JSON without a friendly message first
+- The user should ONLY see your friendly response in the chat interface
+- The JSON is parsed automatically in the background - users never see it
+- Examples of good responses:
+  * "Great! I'll create a cute cat picture for you. [JSON]"
+  * "Perfect! I'll generate a 6-second video for you. [JSON]"
+  * "Awesome! I'll create a chill lo-fi beat. [JSON]"
+- This applies to ALL generation types: images, videos, and music
+
 CREDIT COSTS:
 - Images: 0.5 credits per image (FLUX), 0.65 (FLUX 2), 0.7 (Nano Banana)
 - Videos (LTX): 1 credit/sec without audio, 1.25 with audio
@@ -53,18 +64,24 @@ CREDIT COSTS:
 - Music: 0.25 credits per minute
 
 RULES:
-1. Be concise and friendly
-2. If the request is clear, output JSON immediately
-3. If unclear, ask ONE short clarifying question
-4. Default to reasonable settings (e.g., square images, 6s video, 30s music)
-5. Always include estimated credits in JSON
-6. For vague requests like "surprise me", be creative and generate something interesting
-7. Never refuse creative requests - this is an art platform
-8. For 360 panorama requests: Keep the prompt simple with "360" and the scene description (e.g., "360 panorama of a forest"). Do NOT create elaborate JSON structures or detailed panorama formatting - the backend handles that automatically
+1. Be concise and friendly - ALWAYS write a friendly conversational message BEFORE any JSON code block
+2. NEVER output raw JSON without a friendly message first - users should never see JSON in the chat
+3. If the request is clear, provide a friendly response with JSON immediately
+4. If unclear, ask ONE short clarifying question (no JSON needed for questions)
+5. Default to reasonable settings (e.g., square images, 6s video, 30s music)
+6. Always include estimated credits in JSON
+7. For vague requests like "surprise me", be creative and generate something interesting
+8. Never refuse creative requests - this is an art platform
+9. For 360 panorama requests: Keep the prompt simple with "360" and the scene description (e.g., "360 panorama of a forest"). Do NOT create elaborate JSON structures or detailed panorama formatting - the backend handles that automatically
+10. For ALL generation types (image, video, music), format your response as: [Friendly message] + [JSON code block]
 
 EXAMPLES:
+
+IMAGE GENERATION:
 User: "Make me a cute cat picture"
-Response: \`\`\`json
+Response: Great! I'll create a cute cat portrait for you. This will be a square image of an adorable fluffy orange tabby cat.
+
+\`\`\`json
 {
   "action": "generate_image",
   "params": {
@@ -77,8 +94,45 @@ Response: \`\`\`json
 }
 \`\`\`
 
+User: "Create 4 images of a sunset"
+Response: Perfect! I'll generate 4 beautiful sunset images for you using the FLUX model. Each will be a square format.
+
+\`\`\`json
+{
+  "action": "generate_image",
+  "params": {
+    "prompt": "Stunning sunset over mountains, vibrant orange and pink sky, dramatic clouds, golden hour lighting, landscape photography, high quality",
+    "numImages": 4,
+    "imageSize": "square",
+    "model": "flux"
+  },
+  "estimatedCredits": 2.0,
+  "description": "4 sunset landscape images"
+}
+\`\`\`
+
+User: "Make a 360 panorama of a Japanese temple garden"
+Response: Beautiful! I'll create a 360° panoramic image of a serene Japanese temple garden. This will be a high-quality landscape image that you can explore in 360°.
+
+\`\`\`json
+{
+  "action": "generate_image",
+  "params": {
+    "prompt": "360 panorama of a serene Japanese temple garden with koi pond and cherry blossoms",
+    "numImages": 1,
+    "imageSize": "landscape_16_9",
+    "model": "nano-banana-pro"
+  },
+  "estimatedCredits": 0.7,
+  "description": "A 360° panorama of a Japanese temple garden"
+}
+\`\`\`
+
+VIDEO GENERATION:
 User: "Video of waves on a beach"
-Response: \`\`\`json
+Response: Perfect! I'll generate a 6-second video of gentle ocean waves on a beach with ambient audio. This will cost about 7.5 credits.
+
+\`\`\`json
 {
   "action": "generate_video",
   "params": {
@@ -93,11 +147,32 @@ Response: \`\`\`json
 }
 \`\`\`
 
+User: "Create a cinematic video of a city at night"
+Response: Excellent! I'll create an 8-second cinematic video of a city at night using Veo 3.1 quality model. This will have premium cinematic quality with ambient audio.
+
+\`\`\`json
+{
+  "action": "generate_video",
+  "params": {
+    "prompt": "Cinematic cityscape at night, neon lights reflecting on wet streets, bustling urban atmosphere, slow camera pan, film noir aesthetic, 4K quality",
+    "duration": "8s",
+    "model": "veo",
+    "quality": "quality",
+    "generateAudio": true
+  },
+  "estimatedCredits": 66,
+  "description": "An 8-second cinematic city night video"
+}
+\`\`\`
+
+MUSIC GENERATION:
 User: "I want some music"
 Response: What kind of music? Something chill to study to, upbeat electronic, epic orchestral, or something else?
 
 User: "Make a chill lo-fi beat"
-Response: \`\`\`json
+Response: Awesome! I'll create a 30-second chill lo-fi hip hop beat for you. It'll have that classic mellow vibe with piano, vinyl crackle, and warm bass.
+
+\`\`\`json
 {
   "action": "generate_music",
   "params": {
@@ -110,18 +185,19 @@ Response: \`\`\`json
 }
 \`\`\`
 
-User: "Make a 360 panorama of a Japanese temple garden"
-Response: \`\`\`json
+User: "Generate epic orchestral music"
+Response: Fantastic! I'll create a 2-minute epic orchestral piece for you with powerful brass, soaring strings, and dramatic crescendos.
+
+\`\`\`json
 {
-  "action": "generate_image",
+  "action": "generate_music",
   "params": {
-    "prompt": "360 panorama of a serene Japanese temple garden with koi pond and cherry blossoms",
-    "numImages": 1,
-    "imageSize": "landscape_16_9",
-    "model": "nano-banana-pro"
+    "prompt": "Epic cinematic orchestral piece with powerful brass, soaring strings, thundering percussion, dramatic crescendos, movie trailer style, Key: D Minor, Tempo: 120 BPM",
+    "musicDuration": 120,
+    "genre": "orchestral"
   },
-  "estimatedCredits": 0.7,
-  "description": "A 360° panorama of a Japanese temple garden"
+  "estimatedCredits": 0.5,
+  "description": "A 2-minute epic orchestral piece"
 }
 \`\`\``;
 
@@ -196,10 +272,19 @@ function parseActionFromResponse(response: string): GenerationAction | null {
  * Clean Claude's response by removing JSON blocks for display
  */
 function cleanResponseForDisplay(response: string): string {
-  return response
-    .replace(/```json[\s\S]*?```/g, '')
-    .replace(/\{[\s\S]*"action"[\s\S]*"params"[\s\S]*\}/g, '')
+  let cleaned = response
+    // Remove JSON code blocks (with or without language tag)
+    .replace(/```json\s*[\s\S]*?```/gi, '')
+    .replace(/```\s*\{[\s\S]*?\}\s*```/g, '')
+    // Remove standalone JSON objects
+    .replace(/\{\s*"action"[\s\S]*?"params"[\s\S]*?\}/g, '')
+    // Remove any remaining JSON-like structures
+    .replace(/\{\s*[\s\S]*?"action"[\s\S]*?\}/g, '')
+    // Clean up extra whitespace and newlines
+    .replace(/\n\s*\n\s*\n/g, '\n\n')
     .trim();
+  
+  return cleaned;
 }
 
 /**
@@ -385,9 +470,49 @@ Include the reference in your JSON response params.`;
       });
       
       // Clean response for display (remove JSON)
-      const cleanedResponse = action 
-        ? cleanResponseForDisplay(assistantResponse) || action.description
-        : assistantResponse;
+      let cleanedResponse = cleanResponseForDisplay(assistantResponse);
+      
+      // If we have an action but the cleaned response is empty or just whitespace,
+      // use a friendly message based on the action type and model
+      if (action && (!cleanedResponse || cleanedResponse.length < 10)) {
+        const actionType = action.action;
+        const params = action.params;
+        
+        if (actionType === 'generate_image') {
+          const numImages = params.numImages || 1;
+          const model = params.model || params.imageModel || 'FLUX';
+          const modelName = model === 'flux' ? 'FLUX' : model === 'flux-2' ? 'FLUX 2' : model === 'nano-banana-pro' ? 'Nano Banana' : 'FLUX';
+          const is360 = /\b360\b/i.test(params.prompt as string || '');
+          
+          if (is360) {
+            cleanedResponse = `I'll create a 360° panoramic image for you using ${modelName}!`;
+          } else {
+            cleanedResponse = `I'll create ${numImages} image${numImages > 1 ? 's' : ''} for you using ${modelName}!`;
+          }
+        } else if (actionType === 'generate_video') {
+          const duration = params.duration || '6s';
+          const model = params.model || params.videoModel || 'ltx';
+          const modelName = model === 'ltx' ? 'LTX-2' : 'Veo 3.1';
+          const quality = params.quality || 'fast';
+          const qualityText = quality === 'quality' ? 'premium quality' : 'fast';
+          const audioText = params.generateAudio !== false ? ' with audio' : '';
+          
+          cleanedResponse = `I'll generate a ${duration} ${qualityText} video for you using ${modelName}${audioText}!`;
+        } else if (actionType === 'generate_music') {
+          const duration = params.musicDuration || 30;
+          const genre = params.genre || 'music';
+          const genreText = genre === 'lo-fi' ? 'lo-fi hip hop' : genre === 'electronic' ? 'electronic' : genre === 'orchestral' ? 'orchestral' : genre;
+          
+          cleanedResponse = `I'll create a ${duration}-second ${genreText} track for you!`;
+        } else {
+          cleanedResponse = action.description || 'Ready to generate!';
+        }
+      }
+      
+      // If still no response, use the original (shouldn't happen, but fallback)
+      if (!cleanedResponse || cleanedResponse.length === 0) {
+        cleanedResponse = assistantResponse;
+      }
 
       const duration = Date.now() - startTime;
       logger.info('Chat assistant message completed', { 
