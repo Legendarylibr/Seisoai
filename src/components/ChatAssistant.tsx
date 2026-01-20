@@ -1101,7 +1101,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
   }, [handleSend]);
 
   return (
-    <div className="h-full flex flex-col relative" style={{ background: 'linear-gradient(135deg, #1a3a4a 0%, #0f2027 100%)' }}>
+    <div className="h-full flex flex-col relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #1a3a4a 0%, #0f2027 100%)' }}>
       {/* Sign-in overlay when not connected */}
       {!isConnected && (
         <div 
@@ -1120,7 +1120,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
       
       {/* Main chat window - optimized margins on mobile */}
       <div 
-        className="flex-1 mx-1 sm:mx-2 lg:mx-4 mt-1 sm:mt-2 flex flex-col min-h-0 rounded-lg overflow-hidden"
+        className="flex-1 mx-1 lg:mx-4 mt-1 lg:mt-2 flex flex-col min-h-0 rounded-lg overflow-hidden"
         style={{
           ...PANEL.window,
           boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
@@ -1392,7 +1392,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
 
       {/* Status bar - compact on mobile */}
       <div 
-        className="flex items-center mx-2 lg:mx-4 my-1 sm:my-2 rounded-lg overflow-hidden flex-shrink-0"
+        className="flex items-center mx-1 lg:mx-4 my-1 lg:my-2 rounded-lg overflow-hidden flex-shrink-0"
         style={{ 
           ...PANEL.window,
           fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',

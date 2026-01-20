@@ -227,7 +227,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
   }, []);
 
   return (
-    <div className="min-h-screen lg:h-screen animated-bg flex flex-col" style={{ position: 'relative', zIndex: 0 }}>
+    <div className="h-dvh lg:h-screen animated-bg flex flex-col overflow-hidden" style={{ position: 'relative', zIndex: 0 }}>
       <Navigation 
         activeTab={activeTab} 
         setActiveTab={setActiveTab}
@@ -236,9 +236,9 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         onShowStripePayment={handleShowStripePayment}
       />
       
-      <div className="flex-1 overflow-auto p-2 lg:p-3">
+      <div className="flex-1 min-h-0 overflow-hidden lg:overflow-auto p-1 lg:p-3">
         {activeTab === 'chat' && (
-          <div className="h-full">
+          <div className="h-full min-h-0 flex flex-col">
             <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
               <ChatAssistant 
                 onShowTokenPayment={handleShowTokenPayment}
@@ -249,15 +249,15 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'generate' && (
-          <div className="container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-auto container mx-auto max-w-7xl">
             <AuthGuard>
-              <div className="space-y-3">
+              <div className="space-y-2 lg:space-y-3">
                 {!isAuthenticated && <SimpleWalletConnect />}
                 <EmailUserInfo />
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-3">
                   {/* Left Column - Controls */}
-                  <div className="space-y-3">
+                  <div className="space-y-2 lg:space-y-3">
                     <PromptOptimizer value={userPrompt} onPromptChange={setUserPrompt} />
                     <StyleSelector />
                     <AspectRatioSelector />
@@ -281,15 +281,15 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'batch' && (
-          <div className="container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-auto container mx-auto max-w-7xl">
             <AuthGuard>
-              <div className="space-y-3">
+              <div className="space-y-2 lg:space-y-3">
                 {!isAuthenticated && <SimpleWalletConnect />}
                 <EmailUserInfo />
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-3">
                   {/* Left Column - Batch Controls */}
-                  <div className="space-y-3">
+                  <div className="space-y-2 lg:space-y-3">
                     <StyleSelector />
                     <MultiImageModelSelector />
                     <GenerationQueue
@@ -309,23 +309,27 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'video' && (
-          <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
-            <VideoGenerator 
-              onShowTokenPayment={handleShowTokenPayment}
-              onShowStripePayment={handleShowStripePayment}
-              onModelChange={setVideoModel}
-              onGenerationModeChange={setVideoGenerationMode}
-            />
-          </Suspense>
+          <div className="h-full min-h-0 overflow-auto">
+            <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
+              <VideoGenerator 
+                onShowTokenPayment={handleShowTokenPayment}
+                onShowStripePayment={handleShowStripePayment}
+                onModelChange={setVideoModel}
+                onGenerationModeChange={setVideoGenerationMode}
+              />
+            </Suspense>
+          </div>
         )}
         
         {activeTab === 'music' && (
-          <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
-            <MusicGenerator 
-              onShowTokenPayment={handleShowTokenPayment}
-              onShowStripePayment={handleShowStripePayment}
-            />
-          </Suspense>
+          <div className="h-full min-h-0 overflow-auto">
+            <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
+              <MusicGenerator 
+                onShowTokenPayment={handleShowTokenPayment}
+                onShowStripePayment={handleShowStripePayment}
+              />
+            </Suspense>
+          </div>
         )}
         
         {/* TEMPORARILY DISABLED - 3D not working, re-enable when fixed
@@ -341,9 +345,11 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         
         
         {activeTab === 'gallery' && (
-          <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
-            <ImageGallery />
-          </Suspense>
+          <div className="h-full min-h-0 overflow-auto">
+            <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
+              <ImageGallery />
+            </Suspense>
+          </div>
         )}
       </div>
 

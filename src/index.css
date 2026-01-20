@@ -6,6 +6,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fallback for h-dvh utility on older browsers */
+.h-dvh {
+  height: 100vh;
+  height: 100dvh;
+}
+
 :root {
   /* Windows 95 Color Palette - Authentic System Colors (Light Mode) */
   --win95-bg: #c0c0c0;
@@ -902,17 +908,23 @@
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1023px) {
   body { 
-    overflow-x: hidden;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height - better for mobile */
+    max-height: 100vh;
+    max-height: 100dvh;
   }
   #root {
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
+    height: 100%;
+    max-height: 100%;
   }
   .animated-bg {
-    min-height: 100vh;
-    height: auto;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    overflow: hidden;
   }
 }
 

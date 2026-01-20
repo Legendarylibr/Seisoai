@@ -11,6 +11,18 @@ const config: Config = {
   },
   theme: {
     extend: {
+      height: {
+        'dvh': '100dvh',
+        'svh': '100svh',
+      },
+      minHeight: {
+        'dvh': '100dvh',
+        'svh': '100svh',
+      },
+      maxHeight: {
+        'dvh': '100dvh',
+        'svh': '100svh',
+      },
       colors: {
         primary: {
           50: '#f0f9ff',
