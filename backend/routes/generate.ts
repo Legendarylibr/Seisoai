@@ -153,10 +153,8 @@ async function optimizePromptForMusic(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const userPrompt = `User's music prompt: "${originalPrompt}"
-${genreContext}
-
-Enhance this prompt with specific musical details (instruments, mood, tempo, key) to help the AI create better music. Keep the same core concept, just add helpful specifics.`;
+    const userPrompt = `Enhance this music prompt with specific details (instruments, mood, tempo, key): "${originalPrompt}"
+${genreContext ? genreContext + '\n' : ''}Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
     const response = await fetch('https://fal.run/fal-ai/any-llm', {
       method: 'POST',
@@ -290,15 +288,10 @@ async function optimizePromptForFlux2Edit(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const userPrompt = `User's image edit request: "${originalPrompt}"
+    const userPrompt = `Transform this FLUX 2 edit request into an optimal prompt: "${originalPrompt}"
 
-Transform this into an optimal FLUX 2 edit prompt that is:
-1. Direct and action-oriented (starts with a verb)
-2. Specific about what to change
-3. Clear about the desired result
-4. Includes color codes if colors are mentioned
-
-Keep the user's intent, just make it clearer and more effective for the AI.`;
+Requirements: Direct action verb, specific changes, clear result, include hex colors if mentioned.
+Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
     const response = await fetch('https://fal.run/fal-ai/any-llm', {
       method: 'POST',
@@ -437,9 +430,10 @@ async function optimizePromptForFlux2T2I(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const userPrompt = `User's image prompt: "${originalPrompt}"
+    const userPrompt = `Enhance this FLUX.2 image prompt for photorealism and detail: "${originalPrompt}"
 
-Enhance this prompt to leverage FLUX.2's strengths in photorealism, lighting, and detail. Keep the same subject and core concept, just add helpful visual specifics that will produce a stunning image.`;
+Add: camera angle, lighting, style, mood, textures. Keep same subject.
+Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
     const response = await fetch('https://fal.run/fal-ai/any-llm', {
       method: 'POST',
@@ -527,82 +521,17 @@ function build360PanoramaPrompt(userPrompt: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 
-  // Build the comprehensive 360 panorama JSON structure dynamically
-  // NOTE: Clean panorama without any UI overlays, logos, or watermarks
+  // Optimized concise JSON structure - only essential fields for Nano Banana Pro
   const panoramaPrompt = {
-    image_meta: {
-      type: "360-degree Equirectangular Panorama",
-      style: "Clean immersive panoramic photograph",
-      projection: "Full spherical equirectangular",
-      aspect_ratio: "2:1 equirectangular (rendered as 16:9)",
-      resolution: "Ultra-high resolution panoramic"
-    },
-    scene_composition: {
-      location: sceneDescription,
-      camera_position: "Fixed at the exact center of the scene, eye level height",
-      field_of_view: "360° horizontal, 180° vertical full sphere",
-      projection_behavior: "Correct equirectangular distortion near poles",
-      depth_of_field: "Infinite focus (deep focus across entire panorama)"
-    },
-    visual_elements: {
-      description: sceneDescription,
-      foreground: {
-        surface: "Ground surface appropriate to the scene",
-        shadows: "Natural shadows wrapping around the full 360 panorama"
-      },
-      midground: {
-        subjects: `Main elements from: ${sceneDescription}`
-      },
-      environment: {
-        sky: "Sky visible in upper hemisphere of panorama",
-        ground: "Ground surface in lower hemisphere",
-        full_surround: "Scene elements visible in all directions around the viewer"
-      }
-    },
-    rendering_style: {
-      aesthetic: "Professional panoramic photography",
-      lighting: "Natural ambient lighting",
-      color_grading: "Vibrant, realistic colors",
-      texture_quality: {
-        stitching: "Seamless 360-degree panorama, no visible seams",
-        format: "Equirectangular projection"
-      }
-    },
+    type: "360 equirectangular panorama",
+    scene: sceneDescription,
+    style: "Professional panoramic photography, seamless 360° coverage",
     constraints: {
-      must_include: [
-        "Clean image without any UI overlays or watermarks",
-        "Spherical equirectangular perspective",
-        "Full 360-degree scene coverage",
-        "Seamless edges that wrap horizontally"
-      ],
-      avoid: [
-        "Any logos, watermarks, or text overlays",
-        "UI elements, buttons, or interface graphics",
-        "Map widgets or navigation controls",
-        "Single-point perspective",
-        "Cropped or partial views",
-        "Visible panorama seams"
-      ]
-    },
-    negative_prompt: [
-      "logos",
-      "watermarks", 
-      "text overlay",
-      "UI elements",
-      "interface",
-      "buttons",
-      "map",
-      "navigation arrows",
-      "google",
-      "copyright text",
-      "single perspective",
-      "cropped view",
-      "broken panorama seams",
-      "visible stitching"
-    ]
+      avoid: ["logos", "watermarks", "UI elements", "text overlays", "visible seams"]
+    }
   };
 
-  return JSON.stringify(panoramaPrompt, null, 2);
+  return JSON.stringify(panoramaPrompt);
 }
 
 /**

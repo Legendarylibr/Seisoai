@@ -250,7 +250,7 @@ export default function createPromptLabRoutes(_deps: Record<string, unknown>) {
       // Get the optimized system prompt for this mode/model
       const systemPrompt = getOptimizedSystemPrompt(context?.mode, context?.selectedModel);
 
-      // Format conversation history for Claude
+      // Format conversation history for Claude 3 Haiku - use native message format
       const conversationMessages: Array<{ role: string; content: string }> = [];
       
       // Add history (limit to last 10 messages for context window)
@@ -268,10 +268,10 @@ export default function createPromptLabRoutes(_deps: Record<string, unknown>) {
         content: message
       });
 
-      // Build the full prompt for the API
+      // Build prompt - Claude 3 Haiku works better with direct message format
       const fullPrompt = conversationMessages
-        .map(m => `${m.role === 'user' ? 'Human' : 'Assistant'}: ${m.content}`)
-        .join('\n\n') + '\n\nAssistant:';
+        .map(m => m.content)
+        .join('\n\n');
 
       // Use AbortController for timeout
       const controller = new AbortController();
@@ -286,7 +286,7 @@ export default function createPromptLabRoutes(_deps: Record<string, unknown>) {
         body: JSON.stringify({
           model: 'anthropic/claude-3-haiku',
           prompt: fullPrompt,
-          system_prompt: systemPrompt + contextInfo,
+          system_prompt: systemPrompt + (contextInfo ? '\n' + contextInfo : ''),
           temperature: 0.7,
           max_tokens: 350
         }),

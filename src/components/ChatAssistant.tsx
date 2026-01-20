@@ -248,14 +248,19 @@ const MessageBubble = memo(function MessageBubble({
   const handleConfirmWithModel = () => {
     if (!message.pendingAction || !onConfirmAction) return;
     
+    // Preserve referenceImage from original params if it exists
+    const originalParams = message.pendingAction.params || {};
+    const preservedReferenceImage = originalParams.referenceImage;
+    
     // For 360 requests, always use nano-banana-pro with 16:9 landscape
     if (is360Request) {
       const actionWith360Model: PendingAction = {
         ...message.pendingAction,
         params: {
-          ...message.pendingAction.params,
+          ...originalParams,
           model: 'nano-banana-pro',
-          imageSize: 'landscape_16_9'
+          imageSize: 'landscape_16_9',
+          ...(preservedReferenceImage && { referenceImage: preservedReferenceImage })
         }
       };
       onConfirmAction(actionWith360Model);
@@ -268,10 +273,12 @@ const MessageBubble = memo(function MessageBubble({
     const actionWithModel: PendingAction = {
       ...message.pendingAction,
       params: {
-        ...message.pendingAction.params,
+        ...originalParams,
         model: modelToUse,
         // Add aspect ratio for image generation
-        ...(message.pendingAction.type === 'generate_image' && { imageSize: selectedAspectRatio })
+        ...(message.pendingAction.type === 'generate_image' && { imageSize: selectedAspectRatio }),
+        // Preserve referenceImage if it exists
+        ...(preservedReferenceImage && { referenceImage: preservedReferenceImage })
       }
     };
     
@@ -1000,7 +1007,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     }
 
     setIsLoading(false);
-  }, [inputValue, isLoading, isConnected, messages, getContext]);
+  }, [inputValue, isLoading, isConnected, messages, getContext, attachedImage]);
 
   // Confirm generation action
   const handleConfirmAction = useCallback(async (action: PendingAction) => {
