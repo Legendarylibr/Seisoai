@@ -8,7 +8,9 @@ import logger from '../utils/logger';
 import { getFalApiKey } from '../services/fal';
 import { 
   optimizePromptForFlux2T2I, 
-  optimizePromptForFlux2Edit, 
+  optimizePromptForFlux2Edit,
+  optimizePromptForFluxEdit,
+  optimizePromptForNanoBananaEdit,
   optimizePromptForMusic 
 } from './generate';
 
@@ -29,7 +31,8 @@ When you understand what to generate, respond with a friendly message followed b
     "quality": "fast" | "quality",
     "generateAudio": true | false,
     "musicDuration": 30,
-    "genre": "lo-fi" | "electronic" | "orchestral"
+    "genre": "lo-fi" | "electronic" | "orchestral",
+    "isEdit": true | false
   },
   "estimatedCredits": number,
   "description": "brief description"
@@ -43,13 +46,46 @@ RULES:
 - For 360 panoramas: use simple prompt like "360 panorama of [scene]" - backend handles formatting
 - Credits: Images 0.5-0.7, Videos 1-8.25/sec, Music 0.25/min
 
+IMAGE EDITING (VERY IMPORTANT):
+When the user wants to EDIT a previously generated image, set "isEdit": true.
+Edit requests include phrases like:
+- "add a hat", "put glasses on it", "add sunglasses"
+- "change the background", "make the sky blue", "change color to red"
+- "remove the tree", "take away the person"
+- "make it darker", "brighten it", "make it warmer"
+- "add more detail", "make it more realistic"
+- "change the style", "make it cartoon", "make it anime"
+- "edit it", "modify it", "adjust the..."
+- References like "it", "this", "that", "the image", "the picture"
+
+For edits, write the prompt as a MODIFICATION instruction describing what to change.
+Example: User says "add a red hat" → prompt: "add a red hat to the person"
+Example: User says "make the background sunset" → prompt: "change the background to a beautiful sunset"
+Example: User says "make it blue" → prompt: "change the color scheme to blue tones"
+
 MODEL-SPECIFIC GUIDANCE:
-- FLUX 2: Write detailed prompts with camera angles, lighting, and style descriptors for photorealism
-- FLUX: Keep prompts concise but descriptive
+- FLUX 2: Best for edits! Write detailed prompts with camera angles, lighting, and style descriptors
+- FLUX: Keep prompts concise but descriptive, good for edits
 - Nano Banana: Best for 360 panoramas and high-quality images
 - LTX-2: Fast video generation, good for simple scenes
 - Veo 3.1: Cinematic quality, use detailed prompts for best results
 - Music: Include genre, instruments, mood, and tempo in prompts`;
+
+// Patterns that indicate an edit request (referencing previous output)
+const EDIT_PATTERNS = [
+  /\b(add|put|place|insert)\s+(a|an|the|some)?\s*\w+\s*(to|on|in)?\s*(it|this|that|the image|the picture)?/i,
+  /\b(change|make|turn|convert)\s+(it|this|that|the)?\s*(background|color|style|sky|hair|eyes|clothes)/i,
+  /\b(remove|delete|take away|get rid of)\s+(the|a|an)?\s*\w+/i,
+  /\b(make it|make this|make that)\s+(more|less|darker|brighter|warmer|cooler|bigger|smaller)/i,
+  /\b(edit|modify|adjust|tweak|fix)\s+(it|this|that|the image|the picture)?/i,
+  /\bcan you\s+(add|change|remove|make|edit|modify)/i,
+  /\b(now|also|and)\s+(add|change|remove|make)/i,
+  /\b(add|put|give)\s+(him|her|them|it)\s+(a|an|some)/i,
+  /\bchange\s+(the|its|his|her)\s+\w+\s+to/i,
+  /\bmake\s+(the|it|this)\s+\w+\s+(blue|red|green|yellow|purple|orange|pink|black|white|darker|lighter|brighter)/i,
+  /\b(instead|rather)\b/i,
+  /\bwith\s+(a|an)\s+\w+\s+(instead|now)/i,
+];
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -72,8 +108,37 @@ interface ChatRequestBody {
     walletAddress?: string;
     email?: string;
     credits?: number;
+    // Last generated image for edit context
+    lastGeneratedImageUrl?: string;
+    lastGeneratedPrompt?: string;
   };
   referenceImage?: string;
+}
+
+/**
+ * Check if a message appears to be an edit request
+ */
+function isEditRequest(message: string, hasLastGeneratedImage: boolean): boolean {
+  if (!hasLastGeneratedImage) return false;
+  
+  const lowerMessage = message.toLowerCase();
+  
+  // Check against edit patterns
+  for (const pattern of EDIT_PATTERNS) {
+    if (pattern.test(message)) {
+      return true;
+    }
+  }
+  
+  // Additional simple keyword checks
+  const editKeywords = ['add', 'change', 'remove', 'edit', 'modify', 'adjust', 'make it', 'make the', 'put', 'give it', 'give him', 'give her'];
+  for (const keyword of editKeywords) {
+    if (lowerMessage.includes(keyword)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 interface GenerateRequestBody {
@@ -177,12 +242,32 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         });
       }
       
+      // Check if this looks like an edit request and we have a previous image
+      const hasLastGeneratedImage = !!context?.lastGeneratedImageUrl;
+      const detectedAsEdit = isEditRequest(message, hasLastGeneratedImage);
+      
+      // Auto-attach the last generated image if this is an edit request and no explicit reference
+      let effectiveReferenceImage = referenceImage;
+      let isAutoEdit = false;
+      
+      if (detectedAsEdit && !referenceImage && context?.lastGeneratedImageUrl) {
+        effectiveReferenceImage = context.lastGeneratedImageUrl;
+        isAutoEdit = true;
+        logger.info('Auto-detected edit request, using last generated image', {
+          lastImageUrl: context.lastGeneratedImageUrl.substring(0, 50),
+          lastPrompt: context.lastGeneratedPrompt?.substring(0, 50)
+        });
+      }
+      
       logger.info('Chat assistant processing message', { 
         messageLength: message.length, 
         historyLength: history.length,
         hasContext: !!context,
         hasCredits: context?.credits !== undefined,
-        hasReferenceImage: !!referenceImage
+        hasReferenceImage: !!referenceImage,
+        hasLastGeneratedImage,
+        detectedAsEdit,
+        isAutoEdit
       });
 
       // Build context info
@@ -190,7 +275,16 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
       if (context?.credits !== undefined) {
         contextInfo += `\nUser has ${context.credits} credits available.`;
       }
-      if (referenceImage) {
+      
+      // Add edit context if auto-detected
+      if (isAutoEdit && context?.lastGeneratedImageUrl) {
+        contextInfo += `\n\nEDIT MODE DETECTED: The user is asking to modify a previously generated image.
+Previous image URL available: YES (will be auto-attached)
+${context.lastGeneratedPrompt ? `Original image prompt was: "${context.lastGeneratedPrompt}"` : ''}
+
+IMPORTANT: Set "isEdit": true in your JSON params. The referenceImage will be automatically attached.
+Write the prompt as an EDIT INSTRUCTION describing what to change or add.`;
+      } else if (referenceImage) {
         contextInfo += `\n\nIMPORTANT: User has attached a REFERENCE IMAGE to this message. When generating, you should:
 - For images: Use this as an image-to-image reference (set referenceImage in params)
 - For videos: Use this as the first frame (set firstFrameUrl in params, use image-to-video mode)
@@ -290,14 +384,17 @@ Include the reference in your JSON response params.`;
       // Parse for action JSON
       let action = parseActionFromResponse(assistantResponse);
       
-      // If there's a reference image and an action, inject it into the params
-      if (action && referenceImage) {
+      // If there's a reference image (explicit or auto-detected) and an action, inject it into the params
+      if (action && effectiveReferenceImage) {
         if (action.action === 'generate_image') {
           action = {
             ...action,
             params: {
               ...action.params,
-              referenceImage
+              referenceImage: effectiveReferenceImage,
+              isEdit: isAutoEdit || !!action.params.isEdit,
+              // Pass original prompt for context-aware optimization
+              originalImagePrompt: isAutoEdit ? context?.lastGeneratedPrompt : undefined
             }
           };
         } else if (action.action === 'generate_video') {
@@ -305,7 +402,7 @@ Include the reference in your JSON response params.`;
             ...action,
             params: {
               ...action.params,
-              firstFrameUrl: referenceImage,
+              firstFrameUrl: effectiveReferenceImage,
               generationMode: 'image-to-video'
             }
           };
@@ -315,7 +412,8 @@ Include the reference in your JSON response params.`;
       logger.info('Chat assistant response parsed', {
         hasAction: !!action,
         actionType: action?.action,
-        hasReferenceImage: !!referenceImage,
+        hasReferenceImage: !!effectiveReferenceImage,
+        isAutoEdit,
         responsePreview: assistantResponse.substring(0, 200)
       });
       
@@ -455,25 +553,49 @@ Include the reference in your JSON response params.`;
           
           // Optimize prompt per model before API call
           let optimizedPrompt = imagePrompt;
+          const isEdit = hasReferenceImage || params.isEdit;
+          const originalImagePrompt = params.originalImagePrompt as string | undefined;
           
-          if (isFlux2 && imagePrompt && imagePrompt.trim()) {
+          // Model-specific prompt optimization
+          if (imagePrompt && imagePrompt.trim()) {
             try {
-              if (hasReferenceImage) {
-                // Image-to-image editing with FLUX 2
-                const optimizationResult = await optimizePromptForFlux2Edit(imagePrompt);
-                if (!optimizationResult.skipped && optimizationResult.optimizedPrompt) {
-                  optimizedPrompt = optimizationResult.optimizedPrompt;
-                  logger.debug('FLUX 2 edit prompt optimized in chat', {
-                    original: imagePrompt.substring(0, 50),
-                    optimized: optimizedPrompt.substring(0, 50)
-                  });
+              if (isEdit) {
+                // Image editing - use model-specific optimizer
+                if (imageModel === 'flux-2') {
+                  const result = await optimizePromptForFlux2Edit(imagePrompt);
+                  if (!result.skipped && result.optimizedPrompt) {
+                    optimizedPrompt = result.optimizedPrompt;
+                    logger.debug('FLUX 2 edit prompt optimized', {
+                      original: imagePrompt.substring(0, 50),
+                      optimized: optimizedPrompt.substring(0, 50)
+                    });
+                  }
+                } else if (imageModel === 'nano-banana-pro') {
+                  const result = await optimizePromptForNanoBananaEdit(imagePrompt, originalImagePrompt);
+                  if (!result.skipped && result.optimizedPrompt) {
+                    optimizedPrompt = result.optimizedPrompt;
+                    logger.debug('Nano Banana edit prompt optimized', {
+                      original: imagePrompt.substring(0, 50),
+                      optimized: optimizedPrompt.substring(0, 50)
+                    });
+                  }
+                } else {
+                  // FLUX standard
+                  const result = await optimizePromptForFluxEdit(imagePrompt, originalImagePrompt);
+                  if (!result.skipped && result.optimizedPrompt) {
+                    optimizedPrompt = result.optimizedPrompt;
+                    logger.debug('FLUX edit prompt optimized', {
+                      original: imagePrompt.substring(0, 50),
+                      optimized: optimizedPrompt.substring(0, 50)
+                    });
+                  }
                 }
-              } else {
+              } else if (isFlux2) {
                 // Text-to-image with FLUX 2
-                const optimizationResult = await optimizePromptForFlux2T2I(imagePrompt);
-                if (!optimizationResult.skipped && optimizationResult.optimizedPrompt) {
-                  optimizedPrompt = optimizationResult.optimizedPrompt;
-                  logger.debug('FLUX 2 T2I prompt optimized in chat', {
+                const result = await optimizePromptForFlux2T2I(imagePrompt);
+                if (!result.skipped && result.optimizedPrompt) {
+                  optimizedPrompt = result.optimizedPrompt;
+                  logger.debug('FLUX 2 T2I prompt optimized', {
                     original: imagePrompt.substring(0, 50),
                     optimized: optimizedPrompt.substring(0, 50)
                   });
@@ -483,6 +605,14 @@ Include the reference in your JSON response params.`;
               logger.warn('Prompt optimization failed in chat, using original', { error: (err as Error).message });
             }
           }
+          
+          logger.info('Image prompt optimization complete', {
+            model: imageModel,
+            isEdit,
+            originalLength: imagePrompt.length,
+            optimizedLength: optimizedPrompt.length,
+            wasOptimized: optimizedPrompt !== imagePrompt
+          });
           
           // Only pass essential parameters to the API
           result = await callInternalEndpoint('/api/generate/image', {

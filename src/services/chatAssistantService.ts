@@ -104,6 +104,9 @@ export interface ChatContext {
   walletAddress?: string;
   email?: string;
   credits?: number;
+  // Last generated image for edit context
+  lastGeneratedImageUrl?: string;
+  lastGeneratedPrompt?: string;
 }
 
 /**
@@ -118,6 +121,20 @@ export async function sendChatMessage(
   try {
     const csrfToken = await ensureCSRFToken();
     
+    // Find the last generated image from history for edit context
+    // Look backwards through history for the most recent image generation
+    let lastGeneratedImageUrl: string | undefined;
+    let lastGeneratedPrompt: string | undefined;
+    
+    for (let i = history.length - 1; i >= 0; i--) {
+      const msg = history[i];
+      if (msg.generatedContent?.type === 'image' && msg.generatedContent.urls?.length > 0) {
+        lastGeneratedImageUrl = msg.generatedContent.urls[0];
+        lastGeneratedPrompt = msg.generatedContent.prompt;
+        break;
+      }
+    }
+    
     const response = await fetch(`${API_URL}/api/chat-assistant/message`, {
       method: 'POST',
       headers: {
@@ -130,9 +147,16 @@ export async function sendChatMessage(
         history: history.slice(-20).map(m => ({ 
           role: m.role, 
           content: m.content,
-          hasGeneration: !!m.generatedContent
+          hasGeneration: !!m.generatedContent,
+          // Include generated image info for context
+          generatedImageUrl: m.generatedContent?.type === 'image' ? m.generatedContent.urls?.[0] : undefined,
+          generatedPrompt: m.generatedContent?.prompt
         })),
-        context,
+        context: {
+          ...context,
+          lastGeneratedImageUrl,
+          lastGeneratedPrompt
+        },
         referenceImage
       })
     });

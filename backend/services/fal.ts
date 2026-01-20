@@ -51,6 +51,11 @@ export async function falRequest<T = unknown>(endpoint: string, options: Request
  * Submit a FAL queue request
  */
 export async function submitToQueue<T = unknown>(model: string, input: Record<string, unknown>): Promise<T> {
+  if (!FAL_API_KEY) {
+    logger.error('FAL queue submission failed: API key not configured', { model });
+    throw new Error('FAL API not configured');
+  }
+
   const endpoint = `https://queue.fal.run/${model}`;
   
   const response = await fetch(endpoint, {
@@ -77,6 +82,11 @@ export async function submitToQueue<T = unknown>(model: string, input: Record<st
  * @param model - Optional model path (e.g., 'CassetteAI/music-generator'). If not provided, uses generic endpoint.
  */
 export async function checkQueueStatus<T = unknown>(requestId: string, model?: string): Promise<T> {
+  if (!FAL_API_KEY) {
+    logger.error('FAL queue status check failed: API key not configured', { requestId, model });
+    throw new Error('FAL API not configured');
+  }
+
   // Use model-specific endpoint if model is provided
   const endpoint = model 
     ? `https://queue.fal.run/${model}/requests/${requestId}/status`

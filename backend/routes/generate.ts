@@ -368,6 +368,255 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 // ============================================================================
 
 // ============================================================================
+// FLUX (STANDARD) IMAGE EDITING PROMPT OPTIMIZATION SERVICE
+// ============================================================================
+
+/**
+ * FLUX standard image editing prompt optimization guidelines
+ * Optimized for img2img transformations with FLUX schnell/dev
+ */
+const FLUX_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompts for FLUX image-to-image editing.
+
+FLUX img2img works by blending the original image with the prompt. The key is to:
+1. Describe the FULL desired result, not just the change
+2. Mention key elements you want to KEEP from the original
+3. Clearly state what should be DIFFERENT
+4. Use style descriptors for consistent quality
+
+Optimal prompt structure for FLUX edits:
+- Start with the main subject as it should appear in the result
+- Include style/quality modifiers
+- Be specific about changes while referencing what stays the same
+
+Good FLUX edit prompts:
+- User wants to add sunglasses: "Portrait of person wearing stylish black sunglasses, same pose and lighting, high quality"
+- User wants blue background: "Same subject, professional headshot, solid blue background, studio lighting"
+- User wants it more colorful: "Same scene with vibrant saturated colors, enhanced contrast, vivid tones"
+- User wants anime style: "Same composition in anime art style, cel shading, detailed linework"
+
+Keep prompts concise (under 75 words) for FLUX.
+
+JSON response:
+{"optimizedPrompt": "complete scene description with changes applied", "reasoning": "brief explanation"}`;
+
+/**
+ * Optimize a prompt for FLUX (standard) image editing
+ */
+export async function optimizePromptForFluxEdit(
+  originalPrompt: string,
+  originalImagePrompt?: string
+): Promise<ImageEditOptimizationResult> {
+  if (!originalPrompt || originalPrompt.trim() === '') {
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
+  }
+
+  const FAL_API_KEY = getFalApiKey();
+  
+  if (!FAL_API_KEY) {
+    logger.warn('FLUX edit prompt optimization skipped: FAL_API_KEY not configured');
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'API key not configured' };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const contextInfo = originalImagePrompt 
+      ? `\nThe original image was: "${originalImagePrompt}"`
+      : '';
+
+    const userPrompt = `User wants to edit an image with this request: "${originalPrompt}"${contextInfo}
+
+Create a complete FLUX img2img prompt that describes the desired result (not just the change).
+Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
+
+    const response = await fetch('https://fal.run/fal-ai/any-llm', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3-haiku',
+        prompt: userPrompt,
+        system_prompt: FLUX_EDIT_PROMPT_GUIDELINES,
+        temperature: 0.5,
+        max_tokens: 200
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      logger.warn('FLUX edit prompt optimization failed', { status: response.status });
+      return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM request failed' };
+    }
+
+    const data = await response.json() as { output?: string; text?: string; response?: string };
+    const output = data.output || data.text || data.response || '';
+
+    try {
+      const jsonMatch = output.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
+        if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+          logger.debug('FLUX edit prompt optimized', { 
+            original: originalPrompt.substring(0, 50),
+            optimized: parsed.optimizedPrompt.substring(0, 50)
+          });
+          return {
+            optimizedPrompt: parsed.optimizedPrompt,
+            reasoning: parsed.reasoning || null,
+            skipped: false
+          };
+        }
+      }
+    } catch {
+      if (output && output.length > 10 && output.length < 500) {
+        return { optimizedPrompt: output.trim(), reasoning: 'Enhanced for FLUX editing', skipped: false };
+      }
+    }
+
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'Failed to parse response' };
+
+  } catch (error) {
+    const err = error as Error;
+    logger.error('FLUX edit prompt optimization error', { error: err.message });
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: err.message };
+  }
+}
+
+// ============================================================================
+// END FLUX (STANDARD) IMAGE EDITING PROMPT OPTIMIZATION SERVICE
+// ============================================================================
+
+// ============================================================================
+// NANO BANANA IMAGE EDITING PROMPT OPTIMIZATION SERVICE
+// ============================================================================
+
+/**
+ * Nano Banana Pro image editing prompt optimization guidelines
+ * Optimized for high-quality image transformations
+ */
+const NANO_BANANA_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompts for Nano Banana Pro image editing.
+
+Nano Banana Pro excels at:
+- High-quality photorealistic transformations
+- Artistic style transfers
+- Complex scene modifications
+- Detailed texture and lighting changes
+
+For Nano Banana edits, prompts should be:
+1. Richly descriptive of the desired end result
+2. Include quality modifiers (high detail, sharp, professional)
+3. Specify lighting and atmosphere if relevant
+4. Describe textures and materials clearly
+
+Good Nano Banana edit prompts:
+- For adding accessories: "Portrait with elegant pearl necklace, same lighting and expression, high detail photography"
+- For style change: "Same scene rendered as oil painting, impressionist brushstrokes, rich colors"
+- For environment: "Subject in magical forest setting, dappled sunlight, mystical atmosphere"
+- For color grading: "Same image with warm golden hour tones, soft shadows, cinematic color grading"
+
+Be descriptive but focused. Quality over brevity.
+
+JSON response:
+{"optimizedPrompt": "detailed result description with changes", "reasoning": "brief explanation"}`;
+
+/**
+ * Optimize a prompt for Nano Banana Pro image editing
+ */
+export async function optimizePromptForNanoBananaEdit(
+  originalPrompt: string,
+  originalImagePrompt?: string
+): Promise<ImageEditOptimizationResult> {
+  if (!originalPrompt || originalPrompt.trim() === '') {
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
+  }
+
+  const FAL_API_KEY = getFalApiKey();
+  
+  if (!FAL_API_KEY) {
+    logger.warn('Nano Banana edit prompt optimization skipped: FAL_API_KEY not configured');
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'API key not configured' };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const contextInfo = originalImagePrompt 
+      ? `\nThe original image was created with: "${originalImagePrompt}"`
+      : '';
+
+    const userPrompt = `User wants to modify an image: "${originalPrompt}"${contextInfo}
+
+Create a detailed Nano Banana Pro prompt describing the complete desired result.
+Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
+
+    const response = await fetch('https://fal.run/fal-ai/any-llm', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3-haiku',
+        prompt: userPrompt,
+        system_prompt: NANO_BANANA_EDIT_PROMPT_GUIDELINES,
+        temperature: 0.6,
+        max_tokens: 250
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      logger.warn('Nano Banana edit prompt optimization failed', { status: response.status });
+      return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM request failed' };
+    }
+
+    const data = await response.json() as { output?: string; text?: string; response?: string };
+    const output = data.output || data.text || data.response || '';
+
+    try {
+      const jsonMatch = output.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
+        if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+          logger.debug('Nano Banana edit prompt optimized', { 
+            original: originalPrompt.substring(0, 50),
+            optimized: parsed.optimizedPrompt.substring(0, 50)
+          });
+          return {
+            optimizedPrompt: parsed.optimizedPrompt,
+            reasoning: parsed.reasoning || null,
+            skipped: false
+          };
+        }
+      }
+    } catch {
+      if (output && output.length > 10 && output.length < 500) {
+        return { optimizedPrompt: output.trim(), reasoning: 'Enhanced for Nano Banana', skipped: false };
+      }
+    }
+
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'Failed to parse response' };
+
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Nano Banana edit prompt optimization error', { error: err.message });
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: err.message };
+  }
+}
+
+// ============================================================================
+// END NANO BANANA IMAGE EDITING PROMPT OPTIMIZATION SERVICE
+// ============================================================================
+
+// ============================================================================
 // FLUX 2 TEXT-TO-IMAGE PROMPT OPTIMIZATION SERVICE
 // ============================================================================
 
@@ -1947,6 +2196,14 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Submit to FAL - CassetteAI Music Generator
       // Documentation: https://fal.ai/models/cassetteai/music-generator/api
+
+      // Check FAL API key is configured
+      const FAL_API_KEY = getFalApiKey();
+      if (!FAL_API_KEY) {
+        logger.error('Music generation failed: FAL_API_KEY not configured');
+        res.status(500).json({ success: false, error: 'AI service not configured' });
+        return;
+      }
 
       // Validate prompt
       if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
