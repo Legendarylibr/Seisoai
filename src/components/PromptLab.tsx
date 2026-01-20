@@ -136,6 +136,7 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
   const handleApplyPrompt = useCallback((prompt: string) => {
     onApplyPrompt?.(prompt);
     setCopiedPrompt(prompt);
+    setIsMinimized(true);
     setTimeout(() => setCopiedPrompt(null), 2000);
   }, [onApplyPrompt]);
 

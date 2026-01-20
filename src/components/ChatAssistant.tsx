@@ -199,7 +199,8 @@ const MessageBubble = memo(function MessageBubble({
   onCancelAction,
   onRetry,
   isActionLoading,
-  isFirst
+  isFirst,
+  onSetReferenceImage
 }: { 
   message: ChatMessage;
   onConfirmAction?: (action: PendingAction) => void;
@@ -207,6 +208,7 @@ const MessageBubble = memo(function MessageBubble({
   onRetry?: () => void;
   isActionLoading?: boolean;
   isFirst?: boolean;
+  onSetReferenceImage?: (imageUrl: string) => void;
 }) {
   const isUser = message.role === 'user';
   const [isPlaying, setIsPlaying] = useState(false);
@@ -614,6 +616,19 @@ const MessageBubble = memo(function MessageBubble({
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                           <div className="absolute bottom-2 right-2 flex gap-1">
+                            {onSetReferenceImage && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSetReferenceImage(url);
+                                }}
+                                className="p-2 rounded-lg backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100 hover:scale-110"
+                                style={{ background: 'rgba(102,126,234,0.9)' }}
+                                title="Use as reference for image-to-image"
+                              >
+                                <Image className="w-4 h-4" style={{ color: '#ffffff' }} />
+                              </button>
+                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -926,12 +941,24 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     setAttachedImage(null);
   }, []);
 
+  // Set reference image from generated content
+  const handleSetReferenceImage = useCallback((imageUrl: string) => {
+    setReferenceImage(imageUrl);
+    setAttachedImage(null); // Clear attached image if any
+    inputRef.current?.focus();
+  }, []);
+
+  // Remove reference image
+  const handleRemoveReferenceImage = useCallback(() => {
+    setReferenceImage(null);
+  }, []);
+
   // Send message handler
   const handleSend = useCallback(async () => {
     if (!inputValue.trim() || isLoading || !isConnected) return;
 
     // Build message content - include image reference indicator if attached
-    const messageContent = attachedImage 
+    const messageContent = (attachedImage || referenceImage)
       ? `[Image attached] ${inputValue.trim()}`
       : inputValue.trim();
 
@@ -950,12 +977,13 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
       isLoading: true
     };
 
-    // Store the attached image before clearing
-    const imageToSend = attachedImage;
+    // Store the attached or reference image before clearing (prefer reference image)
+    const imageToSend = referenceImage || attachedImage;
 
     setMessages(prev => [...prev, userMessage, loadingMessage]);
     setInputValue('');
     setAttachedImage(null);
+    setReferenceImage(null);
     setIsLoading(true);
     setSuggestions([]);
 
@@ -1019,7 +1047,21 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     setMessages(prev => [...prev, generatingMessage]);
 
     try {
-      const response = await executeGeneration(action, getContext());
+      // Add reference image to action params if available
+      const actionWithReference = referenceImage 
+        ? {
+            ...action,
+            params: {
+              ...action.params,
+              referenceImage: referenceImage
+            }
+          }
+        : action;
+      
+      const response = await executeGeneration(actionWithReference, getContext());
+      
+      // Clear reference image after generation
+      setReferenceImage(null);
 
       setMessages(prev => prev.map(msg =>
         msg.id === generatingMessage.id
@@ -1048,7 +1090,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     }
 
     setIsGenerating(false);
-  }, [isGenerating, getContext, isEmailAuth, emailContext, walletContext]);
+  }, [isGenerating, getContext, isEmailAuth, emailContext, walletContext, referenceImage]);
 
   // Cancel pending action
   const handleCancelAction = useCallback(() => {
@@ -1188,6 +1230,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
               onCancelAction={handleCancelAction}
               isActionLoading={isGenerating}
               isFirst={i === 0}
+              onSetReferenceImage={handleSetReferenceImage}
             />
           ))}
           <div ref={messagesEndRef} />
@@ -1224,14 +1267,53 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
           className="p-2 sm:p-4 flex-shrink-0"
           style={{ 
             background: WIN95.bg,
-            borderTop: `1px solid ${WIN95.border.dark}`
+            borderTop: `1px solid #1a4a5e`
           }}
         >
           {isConnected && (
             <>
               <QuickActions onSelect={handleQuickAction} />
               
-              {/* Attached image preview - compact on mobile */}
+              {/* Reference image preview (from generated content) - compact on mobile */}
+              {referenceImage && (
+                <div 
+                  className="mb-2 p-1.5 sm:p-2 rounded-lg flex items-center gap-2 sm:gap-3"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(22,163,74,0.1) 100%)',
+                    border: '1px solid rgba(34,197,94,0.3)'
+                  }}
+                >
+                  <div className="relative flex-shrink-0">
+                    <img 
+                      src={referenceImage} 
+                      alt="Reference image"
+                      className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-lg"
+                      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
+                    />
+                    <button
+                      onClick={handleRemoveReferenceImage}
+                      className="absolute -top-1 -right-1 sm:-top-1.5 sm:-right-1.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center"
+                      style={{ 
+                        background: '#ef4444',
+                        color: '#fff',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                      }}
+                    >
+                      <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                    </button>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] sm:text-[11px] font-medium truncate" style={{ color: WIN95.text }}>
+                      🎨 Reference image selected
+                    </div>
+                    <div className="text-[8px] sm:text-[9px] hidden sm:block" style={{ color: WIN95.textDisabled }}>
+                      This will be used for image-to-image generation
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Attached image preview (uploaded) - compact on mobile */}
               {attachedImage && (
                 <div 
                   className="mb-2 p-1.5 sm:p-2 rounded-lg flex items-center gap-2 sm:gap-3"
@@ -1274,18 +1356,18 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                 {/* Image upload button - smaller on mobile */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={isLoading || isGenerating || isUploadingImage}
+                  disabled={isLoading || isGenerating || isUploadingImage || !!referenceImage}
                   className="w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center rounded-lg sm:rounded-xl transition-all flex-shrink-0"
                   style={{
-                    background: attachedImage 
+                    background: (attachedImage || referenceImage)
                       ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
                       : WIN95.bgLight,
-                    color: attachedImage ? '#fff' : WIN95.text,
-                    border: `1px solid ${WIN95.border.dark}`,
-                    cursor: (isLoading || isGenerating || isUploadingImage) ? 'default' : 'pointer',
-                    opacity: (isLoading || isGenerating) ? 0.5 : 1
+                    color: (attachedImage || referenceImage) ? '#fff' : WIN95.text,
+                    border: `1px solid #1a4a5e`,
+                    cursor: (isLoading || isGenerating || isUploadingImage || !!referenceImage) ? 'default' : 'pointer',
+                    opacity: (isLoading || isGenerating || !!referenceImage) ? 0.5 : 1
                   }}
-                  title="Attach reference image"
+                  title={referenceImage ? "Reference image selected" : "Attach reference image"}
                 >
                   {isUploadingImage ? (
                     <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -1308,7 +1390,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                   style={{
                     background: WIN95.inputBg,
                     boxShadow: `inset 0 2px 4px rgba(0,0,0,0.1)`,
-                    border: `1px solid ${WIN95.border.dark}`
+                    border: `1px solid #1a4a5e`
                   }}
                 >
                   <textarea
@@ -1316,7 +1398,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={attachedImage ? "Describe what to do..." : "What do you want to create?"}
+                    placeholder={(attachedImage || referenceImage) ? "Describe what to change..." : "What do you want to create?"}
                     disabled={isLoading || isGenerating}
                     rows={1}
                     className="w-full px-3 py-2.5 sm:px-4 sm:py-3 text-[12px] sm:text-[13px] resize-none focus:outline-none"
@@ -1371,7 +1453,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
               className="text-center py-4 rounded-lg"
               style={{ 
                 background: WIN95.inputBg,
-                border: `1px dashed ${WIN95.border.dark}`
+                border: `1px dashed #1a4a5e`
               }}
             >
               <Sparkles className="w-6 h-6 mx-auto mb-1" style={{ color: WIN95.textDisabled }} />

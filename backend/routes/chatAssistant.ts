@@ -27,7 +27,7 @@ When you understand what to generate, output JSON in this exact format:
 {
   "action": "generate_image" | "generate_video" | "generate_music",
   "params": {
-    "prompt": "detailed prompt for generation",
+    "prompt": "detailed prompt for generation (REQUIRED - must always be included)",
     // For images:
     "numImages": 1-4,
     "imageSize": "square" | "portrait_16_9" | "landscape_16_9",
@@ -95,6 +95,20 @@ Response: \`\`\`json
 
 User: "I want some music"
 Response: What kind of music? Something chill to study to, upbeat electronic, epic orchestral, or something else?
+
+User: "Make a chill lo-fi beat"
+Response: \`\`\`json
+{
+  "action": "generate_music",
+  "params": {
+    "prompt": "Relaxing lo-fi hip hop beat with mellow piano, vinyl crackle, soft drums, and warm bass. Perfect for studying or chilling. Key: C Major, Tempo: 85 BPM.",
+    "musicDuration": 30,
+    "genre": "lo-fi"
+  },
+  "estimatedCredits": 0.25,
+  "description": "A 30-second chill lo-fi hip hop beat"
+}
+\`\`\`
 
 User: "Make a 360 panorama of a Japanese temple garden"
 Response: \`\`\`json
@@ -506,14 +520,26 @@ Include the reference in your JSON response params.`;
 
         case 'generate_music':
           contentType = 'music';
+          
+          // Validate and ensure prompt is present
+          let musicPrompt = params.prompt as string;
+          if (!musicPrompt || typeof musicPrompt !== 'string' || musicPrompt.trim().length === 0) {
+            // Fallback to description if prompt is missing
+            musicPrompt = action.description || 'Lo-fi hip hop beat';
+            logger.warn('Music prompt missing, using fallback', { 
+              fallbackPrompt: musicPrompt.substring(0, 50),
+              hasDescription: !!action.description
+            });
+          }
+          
           logger.info('Generating music via chat', { 
-            prompt: (params.prompt as string)?.substring(0, 50),
+            prompt: musicPrompt.substring(0, 50),
             duration: params.musicDuration || 30,
             genre: params.genre
           });
           // Call the music generation endpoint
           result = await callInternalEndpoint('/api/generate/music', {
-            prompt: params.prompt,
+            prompt: musicPrompt.trim(),
             duration: params.musicDuration || 30,
             selectedGenre: params.genre,
             optimizePrompt: true,
