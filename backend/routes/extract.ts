@@ -13,6 +13,7 @@ import type { IUser } from '../models/User';
 // Types
 interface Dependencies {
   freeImageRateLimiter?: RequestHandler;
+  authenticateFlexible?: RequestHandler;
   requireCredits: (credits: number) => RequestHandler;
 }
 
@@ -71,13 +72,15 @@ async function refundCredits(
 
 export function createExtractRoutes(deps: Dependencies) {
   const router = Router();
-  const { freeImageRateLimiter, requireCredits } = deps;
+  const { freeImageRateLimiter, authenticateFlexible, requireCredits } = deps;
+  const flexibleAuth = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Extract layers from image
    * POST /api/extract-layers
    */
   router.post('/extract-layers', 
+    flexibleAuth,
     freeImageRateLimiter || ((_req: Request, _res: Response, next: () => void) => next()), 
     requireCredits(1), 
     async (req: AuthenticatedRequest, res: Response) => {

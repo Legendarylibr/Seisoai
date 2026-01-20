@@ -633,8 +633,11 @@ export function createGenerationRoutes(deps: Dependencies) {
   /**
    * Generate image
    * POST /api/generate/image
+   * NOTE: Authentication runs in requireCreditsForModel, but we need it before rate limiter
+   * to check credits. However, since requireCreditsForModel handles auth, we keep the order
+   * and the rate limiter will check req.user if it's set by previous middleware.
    */
-  router.post('/image', freeImageLimiter, requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/image', flexibleAuth, freeImageLimiter, requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -1024,7 +1027,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/image-stream
    * Uses Server-Sent Events for real-time progress updates
    */
-  router.post('/image-stream', freeImageLimiter, requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/image-stream', flexibleAuth, freeImageLimiter, requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     // Set up SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -1357,7 +1360,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/video
    * Modes: text-to-video, image-to-video, first-last-frame
    */
-  router.post('/video', freeImageLimiter, requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/video', flexibleAuth, freeImageLimiter, requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -1955,7 +1958,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * Generate music
    * POST /api/generate/music
    */
-  router.post('/music', freeImageLimiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/music', flexibleAuth, freeImageLimiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -2269,7 +2272,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/upscale
    * Uses fal.ai creative-upscaler for 2x/4x upscaling
    */
-  router.post('/upscale', freeImageLimiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/upscale', flexibleAuth, freeImageLimiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -2437,7 +2440,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/video-to-audio
    * Uses fal.ai MMAudio V2 for synchronized audio generation
    */
-  router.post('/video-to-audio', freeImageLimiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/video-to-audio', flexibleAuth, freeImageLimiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {

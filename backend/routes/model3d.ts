@@ -191,7 +191,7 @@ export function createModel3dRoutes(deps: Dependencies) {
    * POST /api/model3d/generate
    * Uses Hunyuan3D V3 Image-to-3D
    */
-  router.post('/generate', freeImageLimiter, flexibleAuth, requireCreditsFor3d, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/generate', flexibleAuth, freeImageLimiter, requireCreditsFor3d, async (req: AuthenticatedRequest, res: Response) => {
     // Set headers to prevent connection timeout during long-running 3D generation
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering if behind nginx

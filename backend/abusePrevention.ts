@@ -214,7 +214,15 @@ export function createFreeImageRateLimiter(rateLimit: (options: unknown) => Rate
     },
     // SECURITY FIX: Actually verify JWT tokens, not just check structure
     // Fake tokens matching xxx.yyy.zzz pattern will now fail verification
+    // Also skip rate limiting if user is already authenticated and has credits
     skip: (req: Request) => {
+      // First check if req.user is already set (from previous middleware) and has credits
+      const user = (req as Request & { user?: { credits?: number } }).user;
+      if (user && (user.credits || 0) > 0) {
+        // User is authenticated and has credits - skip rate limiting
+        return true;
+      }
+      
       const authHeader = req.headers['authorization'];
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return false;
@@ -237,6 +245,7 @@ export function createFreeImageRateLimiter(rateLimit: (options: unknown) => Rate
         
         const decoded = jwt.verify(token, secret);
         // Token is valid - skip rate limiting for authenticated users
+        // Note: We can't check credits here synchronously, but requireCredits middleware will handle that
         return !!decoded;
       } catch {
         // Invalid token - do NOT skip rate limiting
