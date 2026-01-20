@@ -331,9 +331,10 @@ const MessageBubble = memo(function MessageBubble({
           </div>
         )}
 
-        <div className={`max-w-[88%] sm:max-w-[80%] lg:max-w-[70%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+        <div className={`max-w-[75%] sm:max-w-[80%] lg:max-w-[70%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`} style={{ minWidth: 0 }}>
           {/* Message bubble */}
           <div
+            className="overflow-hidden"
             style={{
               background: isUser 
                 ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
@@ -343,7 +344,8 @@ const MessageBubble = memo(function MessageBubble({
                 ? '0 2px 8px rgba(102, 126, 234, 0.3)'
                 : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 2px 2px 0 rgba(0,0,0,0.1)`,
               fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-              borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px'
+              borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+              maxWidth: '100%'
             }}
           >
             {/* Message content - compact on mobile */}
@@ -379,7 +381,8 @@ const MessageBubble = memo(function MessageBubble({
                 </div>
               ) : (
                 <div 
-                  className="text-[13px] leading-relaxed"
+                  className="text-[12px] sm:text-[13px] leading-relaxed break-words"
+                  style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
                   dangerouslySetInnerHTML={{ 
                     __html: message.content
                       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
