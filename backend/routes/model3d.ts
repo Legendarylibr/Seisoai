@@ -15,7 +15,6 @@ import { encrypt, isEncryptionConfigured } from '../utils/encryption';
 
 // Types
 interface Dependencies {
-  freeImageRateLimiter?: RequestHandler;
   authenticateFlexible?: RequestHandler;
   requireCredits: (credits: number) => RequestHandler;
 }
@@ -134,12 +133,10 @@ async function refundCredits(
 export function createModel3dRoutes(deps: Dependencies) {
   const router = Router();
   const { 
-    freeImageRateLimiter,
     authenticateFlexible
     // requireCredits - not used, we use dynamic requireCreditsFor3d instead
   } = deps;
 
-  const freeImageLimiter = freeImageRateLimiter || ((_req: Request, _res: Response, next: () => void) => next());
   const flexibleAuth = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
@@ -191,7 +188,7 @@ export function createModel3dRoutes(deps: Dependencies) {
    * POST /api/model3d/generate
    * Uses Hunyuan3D V3 Image-to-3D
    */
-  router.post('/generate', freeImageLimiter, flexibleAuth, requireCreditsFor3d, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/generate', flexibleAuth, requireCreditsFor3d, async (req: AuthenticatedRequest, res: Response) => {
     // Set headers to prevent connection timeout during long-running 3D generation
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering if behind nginx

@@ -19,7 +19,6 @@ import { withRetry } from '../utils/mongoRetry';
 
 // Types
 interface Dependencies {
-  freeImageRateLimiter?: RequestHandler;
   authenticateFlexible?: RequestHandler;
   requireCreditsForModel: () => RequestHandler;
   requireCreditsForVideo: () => RequestHandler;
@@ -620,22 +619,19 @@ function is360PanoramaRequest(prompt: string): boolean {
 export function createGenerationRoutes(deps: Dependencies) {
   const router = Router();
   const { 
-    freeImageRateLimiter,
     authenticateFlexible,
     requireCreditsForModel,
     requireCreditsForVideo,
     requireCredits
   } = deps;
 
-  const freeImageLimiter = freeImageRateLimiter || ((_req: Request, _res: Response, next: () => void) => next());
   const flexibleAuth = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Generate image
    * POST /api/generate/image
-   * Rate limiter skips authenticated users (valid JWT), credits middleware handles auth & credit checks
    */
-  router.post('/image', freeImageLimiter, requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/image', requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -1025,7 +1021,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/image-stream
    * Uses Server-Sent Events for real-time progress updates
    */
-  router.post('/image-stream', freeImageLimiter, requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/image-stream', requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     // Set up SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -1358,7 +1354,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/video
    * Modes: text-to-video, image-to-video, first-last-frame
    */
-  router.post('/video', freeImageLimiter, requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/video', requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -1956,7 +1952,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * Generate music
    * POST /api/generate/music
    */
-  router.post('/music', freeImageLimiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/music', requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -2270,7 +2266,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/upscale
    * Uses fal.ai creative-upscaler for 2x/4x upscaling
    */
-  router.post('/upscale', freeImageLimiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/upscale', requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -2438,7 +2434,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/video-to-audio
    * Uses fal.ai MMAudio V2 for synchronized audio generation
    */
-  router.post('/video-to-audio', freeImageLimiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/video-to-audio', requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
