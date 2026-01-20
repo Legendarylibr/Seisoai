@@ -166,6 +166,18 @@ const ImageLightbox = memo(function ImageLightbox({
       >
         <X className="w-6 h-6" />
       </button>
+      {onDownload && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownload();
+          }}
+          className="absolute top-4 right-16 p-2 text-white/70 hover:text-white transition-colors"
+          title="Download image"
+        >
+          <Download className="w-6 h-6" />
+        </button>
+      )}
       <img 
         src={src} 
         alt="Fullscreen preview"
@@ -601,27 +613,43 @@ const MessageBubble = memo(function MessageBubble({
                             }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                          <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="absolute bottom-2 right-2 flex gap-1">
                             <button
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setLightboxImage(url);
                                 setLightboxIs360(is360Generated);
                               }}
-                              className="p-2 rounded-lg backdrop-blur-sm transition-colors"
+                              className="p-2 rounded-lg backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100 hover:scale-110"
                               style={{ background: 'rgba(255,255,255,0.9)' }}
                               title={is360Generated ? "View 360° panorama" : "View fullscreen"}
                             >
                               <Maximize2 className="w-4 h-4 text-gray-700" />
                             </button>
                             <button
-                              onClick={() => handleDownload(url, 'image')}
-                              className="p-2 rounded-lg backdrop-blur-sm transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownload(url, 'image');
+                              }}
+                              className="p-2 rounded-lg backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100 hover:scale-110"
                               style={{ background: 'rgba(255,255,255,0.9)' }}
-                              title="Download"
+                              title="Download image"
                             >
                               <Download className="w-4 h-4 text-gray-700" />
                             </button>
                           </div>
+                          {/* Always visible download button in corner */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(url, 'image');
+                            }}
+                            className="absolute top-2 right-2 p-1.5 rounded-lg backdrop-blur-sm transition-all hover:scale-110"
+                            style={{ background: 'rgba(0,0,0,0.6)' }}
+                            title="Download image"
+                          >
+                            <Download className="w-3.5 h-3.5 text-white" />
+                          </button>
                           {/* 360 interaction hint */}
                           {is360Generated && (
                             <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'rgba(0,0,0,0.7)' }}>
