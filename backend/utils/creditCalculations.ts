@@ -18,9 +18,15 @@ export function calculateVideoCredits(
   quality: string,
   model: string = 'veo'
 ): number {
-  const durationSeconds = typeof duration === 'number' 
-    ? duration 
-    : parseInt(duration.replace('s', '')) || 8;
+  let durationSeconds: number;
+  if (typeof duration === 'number') {
+    durationSeconds = Number.isFinite(duration) ? duration : 8;
+  } else if (typeof duration === 'string') {
+    const parsed = parseInt(duration.replace('s', ''), 10);
+    durationSeconds = (Number.isFinite(parsed) && parsed > 0) ? parsed : 8;
+  } else {
+    durationSeconds = 8;
+  }
   
   // LTX-2 model - budget pricing with good margin
   if (model === 'ltx') {
@@ -49,8 +55,12 @@ export function calculateVideoCredits(
  * @returns Number of credits required
  */
 export function calculateMusicCredits(durationSeconds: number): number {
+  // Validate input - default to 30 seconds if invalid
+  const validDuration = (Number.isFinite(durationSeconds) && durationSeconds > 0) 
+    ? durationSeconds 
+    : 30;
   // Clamp duration between 10 and 180 seconds
-  const clampedDuration = Math.max(10, Math.min(180, durationSeconds));
+  const clampedDuration = Math.max(10, Math.min(180, validDuration));
   const minutes = clampedDuration / 60;
   // CREDITS.MUSIC_GENERATION_PER_MINUTE = 0.25 credits per minute
   // Round up to nearest 0.25
@@ -81,7 +91,9 @@ export function calculateImageCredits(model: string | undefined): number {
  * @returns Number of credits required
  */
 export function calculateUpscaleCredits(scale: number): number {
-  return scale === 4 ? 1.0 : 0.5;
+  // Validate input - only 2 or 4 are valid
+  const validScale = (Number.isFinite(scale) && scale === 4) ? 4 : 2;
+  return validScale === 4 ? 1.0 : 0.5;
 }
 
 /**

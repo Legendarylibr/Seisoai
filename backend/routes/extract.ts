@@ -30,6 +30,12 @@ async function refundCredits(
   reason: string
 ): Promise<IUser | null> {
   try {
+    // Validate credits is a valid positive number
+    if (!Number.isFinite(credits) || credits <= 0) {
+      logger.error('Cannot refund invalid credits amount', { credits, reason, userId: user.userId });
+      return null;
+    }
+    
     const User = mongoose.model<IUser>('User');
     const updateQuery = buildUserUpdateQuery(user);
     

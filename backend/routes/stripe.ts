@@ -250,6 +250,15 @@ export function createStripeRoutes(deps: Dependencies = {}) {
               const User = mongoose.model<IUser>('User');
               const creditsNum = parseInt(credits, 10);
               
+              // Validate creditsNum is a valid number
+              if (isNaN(creditsNum) || !Number.isFinite(creditsNum) || creditsNum <= 0) {
+                logger.error('Invalid credits value in payment_intent.succeeded', { 
+                  credits, 
+                  parsed: creditsNum 
+                });
+                break;
+              }
+              
               const user = await findUserByIdentifier(walletAddress || null, null, userId || null);
               if (user) {
                 await User.findOneAndUpdate(
@@ -291,6 +300,15 @@ export function createStripeRoutes(deps: Dependencies = {}) {
               if (monthlyCredits && (userId || walletAddress)) {
                 const User = mongoose.model<IUser>('User');
                 const creditsNum = parseInt(monthlyCredits, 10);
+                
+                // Validate creditsNum is a valid number
+                if (isNaN(creditsNum) || !Number.isFinite(creditsNum) || creditsNum <= 0) {
+                  logger.error('Invalid credits value in invoice.payment_succeeded', { 
+                    monthlyCredits, 
+                    parsed: creditsNum 
+                  });
+                  break;
+                }
                 
                 const user = await findUserByIdentifier(walletAddress || null, null, userId || null);
                 if (user) {
