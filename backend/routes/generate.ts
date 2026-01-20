@@ -133,7 +133,7 @@ interface MusicOptimizationResult {
 /**
  * Optimize a prompt for music generation
  */
-async function optimizePromptForMusic(
+export async function optimizePromptForMusic(
   originalPrompt: string,
   selectedGenre: string | null = null
 ): Promise<MusicOptimizationResult> {
@@ -275,7 +275,7 @@ interface ImageEditOptimizationResult {
 /**
  * Optimize a prompt for FLUX 2 image editing
  */
-async function optimizePromptForFlux2Edit(
+export async function optimizePromptForFlux2Edit(
   originalPrompt: string
 ): Promise<ImageEditOptimizationResult> {
   // Skip optimization for empty prompts
@@ -417,7 +417,7 @@ interface Flux2T2IOptimizationResult {
 /**
  * Optimize a prompt for FLUX 2 text-to-image generation
  */
-async function optimizePromptForFlux2T2I(
+export async function optimizePromptForFlux2T2I(
   originalPrompt: string
 ): Promise<Flux2T2IOptimizationResult> {
   // Skip optimization for empty prompts
