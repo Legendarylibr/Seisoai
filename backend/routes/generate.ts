@@ -101,27 +101,21 @@ interface FalImageResponse {
  */
 const MUSIC_PROMPT_GUIDELINES = `You are an expert music producer helping optimize prompts for AI music generation.
 
-Your goal: Transform a user's simple music description into a detailed, well-structured prompt that will produce better music.
+CRITICAL: Keep prompts SHORT - under 200 characters. Long prompts slow down generation.
 
-Guidelines:
-1. Include specific musical elements:
-   - Genre/style (be specific: "lo-fi hip hop" not just "hip hop")
-   - Instruments (piano, drums, bass, synth pads, etc.)
-   - Mood/atmosphere (relaxing, energetic, melancholic, uplifting)
-   - Key signature if appropriate (C Major, A Minor, etc.)
-   - Tempo/BPM (slow: 60-90, medium: 100-120, fast: 130+)
+Include only essential elements:
+- Genre/style (specific: "lo-fi hip hop" not "hip hop")
+- 2-3 instruments max
+- Mood word
+- Optional: tempo or key (not both)
 
-2. Keep the user's core intent - just add helpful details
-3. Be concise but specific - avoid overly verbose descriptions
-4. Use music production terminology naturally
-
-Examples:
-- "chill music" → "Relaxing lo-fi hip hop with mellow piano chords, soft drums, vinyl crackle, and warm bass. Tempo: 85 BPM, Key: C Major."
-- "rock song" → "Energetic rock anthem with crunchy electric guitars, driving drums, punchy bass, and an anthemic feel. Key: E Major, Tempo: 140 BPM."
-- "sad piano" → "Melancholic piano piece with gentle, emotional melodies, soft dynamics, and subtle reverb. Key: D Minor, Tempo: 70 BPM."
+Examples (note brevity):
+- "chill music" → "Relaxing lo-fi hip hop, mellow piano, soft drums, warm bass, 85 BPM"
+- "rock song" → "Energetic rock, crunchy guitars, driving drums, punchy bass, 140 BPM"
+- "sad piano" → "Melancholic piano piece, gentle melodies, soft reverb, D Minor"
 
 JSON only:
-{"optimizedPrompt": "enhanced version of the prompt", "reasoning": "what you enhanced and why"}`;
+{"optimizedPrompt": "enhanced version under 200 chars", "reasoning": "brief explanation"}`;
 
 interface MusicOptimizationResult {
   optimizedPrompt: string;
@@ -159,8 +153,8 @@ export async function optimizePromptForMusic(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const userPrompt = `Enhance this music prompt with specific details (instruments, mood, tempo, key): "${originalPrompt}"
-${genreContext ? genreContext + '\n' : ''}Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
+    const userPrompt = `Enhance this music prompt. Keep it SHORT (under 200 chars): "${originalPrompt}"
+${genreContext ? genreContext + '\n' : ''}Add genre, 2-3 instruments, mood. Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
     const response = await fetch('https://fal.run/fal-ai/any-llm', {
       method: 'POST',
@@ -194,8 +188,9 @@ ${genreContext ? genreContext + '\n' : ''}Return JSON: {"optimizedPrompt": "..."
       const jsonMatch = output.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
+        const optimized = parsed.optimizedPrompt || originalPrompt;
         return {
-          optimizedPrompt: parsed.optimizedPrompt || originalPrompt,
+          optimizedPrompt: truncatePrompt(optimized.trim()),
           reasoning: parsed.reasoning || null,
           skipped: false
         };
@@ -203,7 +198,7 @@ ${genreContext ? genreContext + '\n' : ''}Return JSON: {"optimizedPrompt": "..."
     } catch {
       if (output && output.length > 10) {
         return {
-          optimizedPrompt: output.trim(),
+          optimizedPrompt: truncatePrompt(output.trim()),
           reasoning: 'Enhanced by AI',
           skipped: false
         };
@@ -233,37 +228,25 @@ ${genreContext ? genreContext + '\n' : ''}Return JSON: {"optimizedPrompt": "..."
  */
 const FLUX2_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompts for FLUX 2 image editing AI.
 
-FLUX 2 Edit specializes in:
-- Precise modifications using natural language descriptions
-- Color changes (supports hex color codes like #FF5733)
-- Object modifications, additions, and removals
-- Style transfers and artistic adjustments
-- Clothing, hair, and appearance changes
-- Background and environment modifications
+CRITICAL: Keep prompts SHORT - under 150 characters. Long prompts slow down generation significantly.
 
-Optimal prompt structure for FLUX 2:
-1. Be DIRECT and SPECIFIC about what to change
-2. Use action verbs: "Change", "Make", "Transform", "Replace", "Add", "Remove"
-3. Specify colors with hex codes when possible (e.g., "Change shirt to navy blue #1E3A5F")
-4. Describe the desired end state clearly
-5. Keep focused on ONE main edit per prompt for best results
-6. Avoid vague terms - be precise about locations and attributes
+Optimal prompt structure:
+1. Use action verbs: "Change", "Make", "Replace", "Add", "Remove"
+2. Be specific but brief - ONE main edit per prompt
+3. Include hex colors only if the user mentioned a specific color
 
-Good FLUX 2 prompts:
-- "Change the shirt to a red flannel pattern"
-- "Make the hair blonde with subtle highlights"
-- "Replace the background with a sunset beach scene"
-- "Add stylish sunglasses to the person"
-- "Transform the casual outfit into a formal black suit"
-- "Change eye color to emerald green #50C878"
+Good examples (note the brevity):
+- "Change the shirt to red flannel"
+- "Make hair blonde with highlights"
+- "Replace background with sunset beach"
+- "Add stylish sunglasses"
 
-Bad prompts to avoid:
-- "Make it look better" (too vague)
-- "Change everything" (unfocused)
-- "Something different" (no direction)
+Bad prompts:
+- "Make it look better" (vague)
+- Long descriptions with multiple changes
 
-JSON response format:
-{"optimizedPrompt": "clear, action-oriented edit instruction", "reasoning": "brief explanation of improvements"}`;
+JSON response:
+{"optimizedPrompt": "short action-oriented instruction under 150 chars", "reasoning": "brief explanation"}`;
 
 interface ImageEditOptimizationResult {
   optimizedPrompt: string;
@@ -294,9 +277,9 @@ export async function optimizePromptForFlux2Edit(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const userPrompt = `Transform this FLUX 2 edit request into an optimal prompt: "${originalPrompt}"
+    const userPrompt = `Make this edit instruction SHORT (under 150 chars): "${originalPrompt}"
 
-Requirements: Direct action verb, specific changes, clear result, include hex colors if mentioned.
+Use action verb, be specific. Brevity is critical.
 Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
     const response = await fetch('https://fal.run/fal-ai/any-llm', {
@@ -332,12 +315,14 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
         if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+          const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim(), 200);
           logger.debug('FLUX 2 prompt optimized', { 
             original: originalPrompt.substring(0, 50),
-            optimized: parsed.optimizedPrompt.substring(0, 50)
+            optimized: truncatedPrompt.substring(0, 50),
+            truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
           });
           return {
-            optimizedPrompt: parsed.optimizedPrompt,
+            optimizedPrompt: truncatedPrompt,
             reasoning: parsed.reasoning || null,
             skipped: false
           };
@@ -347,7 +332,7 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
       // If JSON parsing fails but we have reasonable output, use it
       if (output && output.length > 10 && output.length < 500) {
         return {
-          optimizedPrompt: output.trim(),
+          optimizedPrompt: truncatePrompt(output.trim(), 200),
           reasoning: 'Enhanced for FLUX 2 editing',
           skipped: false
         };
@@ -377,27 +362,21 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
  */
 const FLUX_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompts for FLUX image-to-image editing.
 
-FLUX img2img works by blending the original image with the prompt. The key is to:
-1. Describe the FULL desired result, not just the change
-2. Mention key elements you want to KEEP from the original
-3. Clearly state what should be DIFFERENT
-4. Use style descriptors for consistent quality
+CRITICAL: Keep prompts SHORT - under 200 characters. Long prompts slow down generation.
 
-Optimal prompt structure for FLUX edits:
-- Start with the main subject as it should appear in the result
-- Include style/quality modifiers
-- Be specific about changes while referencing what stays the same
+Key points:
+1. Describe the desired result briefly
+2. Include 1-2 style modifiers max
+3. Be specific but concise
 
-Good FLUX edit prompts:
-- User wants to add sunglasses: "Portrait of person wearing stylish black sunglasses, same pose and lighting, high quality"
-- User wants blue background: "Same subject, professional headshot, solid blue background, studio lighting"
-- User wants it more colorful: "Same scene with vibrant saturated colors, enhanced contrast, vivid tones"
-- User wants anime style: "Same composition in anime art style, cel shading, detailed linework"
-
-Keep prompts concise (under 75 words) for FLUX.
+Good examples (note brevity):
+- "Portrait with stylish black sunglasses, same pose, high quality"
+- "Same subject, blue background, studio lighting"
+- "Same scene with vibrant saturated colors"
+- "Same composition in anime style, cel shading"
 
 JSON response:
-{"optimizedPrompt": "complete scene description with changes applied", "reasoning": "brief explanation"}`;
+{"optimizedPrompt": "brief scene description under 200 chars", "reasoning": "brief explanation"}`;
 
 /**
  * Optimize a prompt for FLUX (standard) image editing
@@ -422,13 +401,12 @@ export async function optimizePromptForFluxEdit(
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     const contextInfo = originalImagePrompt 
-      ? `\nThe original image was: "${originalImagePrompt}"`
+      ? ` Original: "${originalImagePrompt.substring(0, 50)}"`
       : '';
 
-    const userPrompt = `User wants to edit an image with this request: "${originalPrompt}"${contextInfo}
+    const userPrompt = `Create SHORT FLUX edit prompt (under 200 chars): "${originalPrompt}"${contextInfo}
 
-Create a complete FLUX img2img prompt that describes the desired result (not just the change).
-Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
+Describe result briefly. Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
     const response = await fetch('https://fal.run/fal-ai/any-llm', {
       method: 'POST',
@@ -461,12 +439,14 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
         if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+          const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
           logger.debug('FLUX edit prompt optimized', { 
             original: originalPrompt.substring(0, 50),
-            optimized: parsed.optimizedPrompt.substring(0, 50)
+            optimized: truncatedPrompt.substring(0, 50),
+            truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
           });
           return {
-            optimizedPrompt: parsed.optimizedPrompt,
+            optimizedPrompt: truncatedPrompt,
             reasoning: parsed.reasoning || null,
             skipped: false
           };
@@ -474,7 +454,7 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
       }
     } catch {
       if (output && output.length > 10 && output.length < 500) {
-        return { optimizedPrompt: output.trim(), reasoning: 'Enhanced for FLUX editing', skipped: false };
+        return { optimizedPrompt: truncatePrompt(output.trim()), reasoning: 'Enhanced for FLUX editing', skipped: false };
       }
     }
 
@@ -501,28 +481,21 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
  */
 const NANO_BANANA_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompts for Nano Banana Pro image editing.
 
-Nano Banana Pro excels at:
-- High-quality photorealistic transformations
-- Artistic style transfers
-- Complex scene modifications
-- Detailed texture and lighting changes
+CRITICAL: Keep prompts SHORT - under 200 characters. Long prompts slow down generation.
 
-For Nano Banana edits, prompts should be:
-1. Richly descriptive of the desired end result
-2. Include quality modifiers (high detail, sharp, professional)
-3. Specify lighting and atmosphere if relevant
-4. Describe textures and materials clearly
+For edits, prompts should:
+1. Describe desired result briefly
+2. Include 1-2 quality modifiers max
+3. Be specific but concise
 
-Good Nano Banana edit prompts:
-- For adding accessories: "Portrait with elegant pearl necklace, same lighting and expression, high detail photography"
-- For style change: "Same scene rendered as oil painting, impressionist brushstrokes, rich colors"
-- For environment: "Subject in magical forest setting, dappled sunlight, mystical atmosphere"
-- For color grading: "Same image with warm golden hour tones, soft shadows, cinematic color grading"
-
-Be descriptive but focused. Quality over brevity.
+Good examples (note brevity):
+- "Portrait with pearl necklace, same lighting, high detail"
+- "Same scene as oil painting, impressionist style"
+- "Subject in magical forest, dappled sunlight"
+- "Same image with golden hour tones, cinematic"
 
 JSON response:
-{"optimizedPrompt": "detailed result description with changes", "reasoning": "brief explanation"}`;
+{"optimizedPrompt": "brief result description under 200 chars", "reasoning": "brief explanation"}`;
 
 /**
  * Optimize a prompt for Nano Banana Pro image editing
@@ -547,13 +520,12 @@ export async function optimizePromptForNanoBananaEdit(
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     const contextInfo = originalImagePrompt 
-      ? `\nThe original image was created with: "${originalImagePrompt}"`
+      ? ` Original: "${originalImagePrompt.substring(0, 50)}"`
       : '';
 
-    const userPrompt = `User wants to modify an image: "${originalPrompt}"${contextInfo}
+    const userPrompt = `Create SHORT Nano Banana edit prompt (under 200 chars): "${originalPrompt}"${contextInfo}
 
-Create a detailed Nano Banana Pro prompt describing the complete desired result.
-Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
+Describe result briefly. Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
     const response = await fetch('https://fal.run/fal-ai/any-llm', {
       method: 'POST',
@@ -586,12 +558,14 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
         if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+          const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
           logger.debug('Nano Banana edit prompt optimized', { 
             original: originalPrompt.substring(0, 50),
-            optimized: parsed.optimizedPrompt.substring(0, 50)
+            optimized: truncatedPrompt.substring(0, 50),
+            truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
           });
           return {
-            optimizedPrompt: parsed.optimizedPrompt,
+            optimizedPrompt: truncatedPrompt,
             reasoning: parsed.reasoning || null,
             skipped: false
           };
@@ -599,7 +573,7 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
       }
     } catch {
       if (output && output.length > 10 && output.length < 500) {
-        return { optimizedPrompt: output.trim(), reasoning: 'Enhanced for Nano Banana', skipped: false };
+        return { optimizedPrompt: truncatePrompt(output.trim()), reasoning: 'Enhanced for Nano Banana', skipped: false };
       }
     }
 
@@ -624,37 +598,55 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
  * Flux 2 text-to-image prompt optimization guidelines
  * Optimized for FLUX.2 [dev] from Black Forest Labs
  */
-const FLUX2_T2I_PROMPT_GUIDELINES = `You are an expert prompt engineer for FLUX.2, a state-of-the-art text-to-image AI model known for enhanced realism and crisp text generation.
+// Maximum character limit for optimized prompts to keep generation times fast
+const MAX_OPTIMIZED_PROMPT_LENGTH = 250;
 
-Your goal: Transform a user's simple image description into a detailed, well-structured prompt that leverages FLUX.2's strengths.
+/**
+ * Truncate a prompt to the maximum length, preserving meaning
+ * Tries to cut at a comma or space boundary
+ */
+function truncatePrompt(prompt: string, maxLength: number = MAX_OPTIMIZED_PROMPT_LENGTH): string {
+  if (prompt.length <= maxLength) return prompt;
+  
+  // Try to cut at a comma boundary
+  const truncated = prompt.substring(0, maxLength);
+  const lastComma = truncated.lastIndexOf(',');
+  if (lastComma > maxLength * 0.6) {
+    return truncated.substring(0, lastComma).trim();
+  }
+  
+  // Otherwise cut at last space
+  const lastSpace = truncated.lastIndexOf(' ');
+  if (lastSpace > maxLength * 0.6) {
+    return truncated.substring(0, lastSpace).trim();
+  }
+  
+  return truncated.trim();
+}
 
-FLUX.2 Strengths:
-- Exceptional photorealism and fine details
-- Accurate text rendering in images
-- Precise composition and subject placement
-- Realistic lighting and shadows
-- Natural skin textures and facial features
+const FLUX2_T2I_PROMPT_GUIDELINES = `You are an expert prompt engineer for FLUX.2, a state-of-the-art text-to-image AI model.
+
+CRITICAL: Keep prompts SHORT - under 200 characters. Long prompts slow down generation significantly.
+
+Your goal: Transform a user's image description into a concise, effective prompt.
 
 Guidelines:
-1. Include visual elements that FLUX.2 excels at:
-   - Camera angle/shot type (close-up, wide shot, Dutch angle, eye-level)
-   - Lighting description (dramatic lighting, soft diffused light, golden hour, studio lighting)
-   - Style descriptors (photorealistic, cinematic, professional photography)
-   - Atmosphere/mood (moody, vibrant, serene, dystopian)
-   - Specific details (textures, materials, expressions)
+1. Add 2-3 key visual elements max:
+   - Camera angle OR lighting (not both unless essential)
+   - One style descriptor (photorealistic, cinematic, etc.)
+   - One mood/atmosphere word
 
 2. Keep the user's core intent - enhance, don't change the subject
-3. Be descriptive but concise - avoid overly long prompts
-4. Use photography/cinematography terminology naturally
-5. For text in images, specify font style and placement
+3. BREVITY IS KEY - shorter prompts generate faster with similar quality
+4. Skip unnecessary adjectives and redundant details
 
-Examples:
-- "a cat" → "Close-up portrait of a fluffy tabby cat with striking green eyes, soft natural window light illuminating fur details, shallow depth of field, photorealistic, warm cozy atmosphere"
-- "futuristic city" → "Wide establishing shot of a neon-lit cyberpunk cityscape at night, towering skyscrapers with holographic advertisements, rain-slicked streets reflecting colorful lights, cinematic atmosphere, blade runner aesthetic"
-- "woman portrait" → "Professional headshot of a woman in her 30s, confident expression, studio lighting with soft fill, sharp focus on eyes, neutral background, commercial photography style"
+Examples (note the brevity):
+- "a cat" → "Fluffy tabby cat, striking green eyes, soft natural light, photorealistic"
+- "futuristic city" → "Cyberpunk cityscape at night, neon lights, rain-slicked streets, cinematic"
+- "woman portrait" → "Professional headshot, confident expression, studio lighting, sharp focus"
 
 JSON only:
-{"optimizedPrompt": "enhanced version of the prompt", "reasoning": "what you enhanced and why"}`;
+{"optimizedPrompt": "enhanced version under 200 chars", "reasoning": "brief explanation"}`;
 
 interface Flux2T2IOptimizationResult {
   optimizedPrompt: string;
@@ -685,9 +677,9 @@ export async function optimizePromptForFlux2T2I(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const userPrompt = `Enhance this FLUX.2 image prompt for photorealism and detail: "${originalPrompt}"
+    const userPrompt = `Enhance this FLUX.2 image prompt. Keep it SHORT (under 200 chars): "${originalPrompt}"
 
-Add: camera angle, lighting, style, mood, textures. Keep same subject.
+Add 2-3 key elements max. Brevity is critical for fast generation.
 Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
     const response = await fetch('https://fal.run/fal-ai/any-llm', {
@@ -723,12 +715,14 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
         if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+          const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
           logger.debug('FLUX 2 T2I prompt optimized', { 
             original: originalPrompt.substring(0, 50),
-            optimized: parsed.optimizedPrompt.substring(0, 50)
+            optimized: truncatedPrompt.substring(0, 50),
+            truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
           });
           return {
-            optimizedPrompt: parsed.optimizedPrompt,
+            optimizedPrompt: truncatedPrompt,
             reasoning: parsed.reasoning || null,
             skipped: false
           };
@@ -738,7 +732,7 @@ Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
       // If JSON parsing fails but we have reasonable output, use it
       if (output && output.length > 10 && output.length < 500) {
         return {
-          optimizedPrompt: output.trim(),
+          optimizedPrompt: truncatePrompt(output.trim()),
           reasoning: 'Enhanced for FLUX 2 text-to-image',
           skipped: false
         };
