@@ -1311,7 +1311,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
           className="flex items-center gap-2 px-2 sm:px-3 py-1.5 flex-shrink-0"
           style={{
             ...WINDOW_TITLE_STYLE,
-            background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)'
+            background: 'linear-gradient(90deg, #0d4a5e 0%, #1a7a8a 100%)'
           }}
         >
           <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 opacity-90" />
@@ -1569,7 +1569,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         <div 
           className="flex items-center gap-3 px-3 py-1 flex-1 text-[9px]"
           style={{ 
-            background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
+            background: 'linear-gradient(90deg, #0d4a5e 0%, #1a7a8a 100%)',
             color: '#ffffff'
           }}
         >

@@ -160,7 +160,7 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
         className="fixed bottom-20 right-4 z-50 flex items-center gap-2 px-3 py-2 text-[11px] font-bold transition-transform hover:scale-105"
         style={{
           ...BTN.base,
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          background: 'linear-gradient(135deg, #0d4a5e 0%, #1a7a8a 100%)',
           color: '#fff',
           boxShadow: '2px 2px 8px rgba(0,0,0,0.3), inset 1px 1px 0 rgba(255,255,255,0.3)'
         }}
@@ -179,7 +179,7 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
         className="fixed bottom-20 right-4 z-50 flex items-center gap-2 px-3 py-1.5 cursor-pointer"
         onClick={() => setIsMinimized(false)}
         style={{
-          background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
+          background: 'linear-gradient(90deg, #0d4a5e 0%, #1a7a8a 100%)',
           boxShadow: '2px 2px 8px rgba(0,0,0,0.3)'
         }}
       >
@@ -205,7 +205,7 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
       <div 
         className="flex items-center gap-2 px-2 py-1 cursor-move select-none"
         style={{ 
-          background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
+          background: 'linear-gradient(90deg, #0d4a5e 0%, #1a7a8a 100%)',
           color: '#ffffff'
         }}
       >
@@ -337,7 +337,7 @@ const PromptLab: React.FC<PromptLabProps> = memo(({
                             ...BTN.base,
                             background: copiedPrompt === msg.action.value 
                               ? '#4ade80' 
-                              : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                              : 'linear-gradient(135deg, #0d4a5e 0%, #1a7a8a 100%)',
                             color: '#fff',
                             boxShadow: '1px 1px 0 rgba(255,255,255,0.3) inset'
                           }}
