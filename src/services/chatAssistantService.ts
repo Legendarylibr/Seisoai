@@ -193,14 +193,6 @@ export async function sendChatMessage(
 
     const data = await response.json();
     
-    // Debug logging
-    console.log('[ChatAssistant] API Response:', {
-      success: data.success,
-      hasResponse: !!data.response,
-      hasAction: !!data.action,
-      actionType: data.action?.action,
-      error: data.error
-    });
     
     if (!response.ok || !data.success) {
       throw new Error(data.error || 'Failed to get response');
@@ -216,7 +208,6 @@ export async function sendChatMessage(
         estimatedCredits: data.action.estimatedCredits,
         description: data.action.description
       };
-      console.log('[ChatAssistant] Mapped action:', mappedAction);
     }
 
     return {

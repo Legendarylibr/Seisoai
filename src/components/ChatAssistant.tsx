@@ -1160,14 +1160,6 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         imageToSend || undefined
       );
 
-      // Debug logging
-      console.log('[ChatAssistant] Response received:', {
-        message: response.message?.substring(0, 100),
-        hasAction: !!response.action,
-        actionType: response.action?.type,
-        error: response.error
-      });
-
       setMessages(prev => prev.map(msg => 
         msg.id === loadingMessage.id
           ? {
