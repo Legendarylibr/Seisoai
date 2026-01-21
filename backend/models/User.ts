@@ -99,6 +99,8 @@ export interface IUser extends Document {
   // Password reset fields
   passwordResetToken?: string;
   passwordResetExpires?: Date;
+  // Stripe integration
+  stripeCustomerId?: string;
   // Virtual field to track if email was decrypted
   _emailDecrypted?: boolean;
 }
@@ -290,7 +292,13 @@ const userSchema = new mongoose.Schema<IUser>({
   lockoutUntil: { type: Date, required: false },
   // Password reset fields
   passwordResetToken: { type: String, sparse: true, select: false },
-  passwordResetExpires: { type: Date, select: false }
+  passwordResetExpires: { type: Date, select: false },
+  // Stripe integration - store customer ID for reliable subscription lookups
+  stripeCustomerId: {
+    type: String,
+    sparse: true,
+    index: true
+  }
 }, {
   timestamps: true
 });

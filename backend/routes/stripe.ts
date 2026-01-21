@@ -292,6 +292,9 @@ export function createStripeRoutes(deps: Dependencies = {}) {
           case 'invoice.payment_succeeded': {
             const invoice = event.data.object as Stripe.Invoice & { subscription?: string };
             const subscriptionId = invoice.subscription as string;
+            const invoiceCustomerId = typeof invoice.customer === 'string' 
+              ? invoice.customer 
+              : invoice.customer?.id;
             
             if (subscriptionId) {
               const sub = await stripe.subscriptions.retrieve(subscriptionId);
@@ -312,33 +315,41 @@ export function createStripeRoutes(deps: Dependencies = {}) {
                 
                 const user = await findUserByIdentifier(walletAddress || null, null, userId || null);
                 if (user) {
-                  // Store subscriptionId in paymentHistory for future lookups
-                  await User.findOneAndUpdate(
-                    { userId: user.userId },
-                    {
-                      $inc: {
-                        credits: creditsNum,
-                        totalCreditsEarned: creditsNum
-                      },
-                      $push: {
-                        paymentHistory: {
-                          $each: [{
-                            type: 'subscription',
-                            subscriptionId,
-                            credits: creditsNum,
-                            amount: (invoice.amount_paid || 0) / 100,
-                            timestamp: new Date()
-                          }],
-                          $slice: -30 // Keep last 30 entries
-                        }
+                  // Build update object
+                  const updateObj: Record<string, unknown> = {
+                    $inc: {
+                      credits: creditsNum,
+                      totalCreditsEarned: creditsNum
+                    },
+                    $push: {
+                      paymentHistory: {
+                        $each: [{
+                          type: 'subscription',
+                          subscriptionId,
+                          credits: creditsNum,
+                          amount: (invoice.amount_paid || 0) / 100,
+                          timestamp: new Date()
+                        }],
+                        $slice: -30 // Keep last 30 entries
                       }
                     }
+                  };
+                  
+                  // Store Stripe customer ID if not already stored
+                  if (invoiceCustomerId && !user.stripeCustomerId) {
+                    updateObj.stripeCustomerId = invoiceCustomerId;
+                  }
+                  
+                  await User.findOneAndUpdate(
+                    { userId: user.userId },
+                    updateObj
                   );
                   
                   logger.info('Subscription credits added', {
                     userId: user.userId,
                     credits: creditsNum,
-                    subscriptionId
+                    subscriptionId,
+                    stripeCustomerId: invoiceCustomerId
                   });
                 }
               }
@@ -350,6 +361,9 @@ export function createStripeRoutes(deps: Dependencies = {}) {
           case 'customer.subscription.updated': {
             const subscription = event.data.object as Stripe.Subscription;
             const { userId, walletAddress, email } = subscription.metadata;
+            const stripeCustomerId = typeof subscription.customer === 'string' 
+              ? subscription.customer 
+              : subscription.customer?.id;
             
             if (userId || walletAddress || email) {
               const User = mongoose.model<IUser>('User');
@@ -361,28 +375,40 @@ export function createStripeRoutes(deps: Dependencies = {}) {
                   (p: { subscriptionId?: string }) => p.subscriptionId === subscription.id
                 );
                 
-                // Only add if not already present (for 'created' event or first 'updated')
-                if (!hasSubscription && subscription.status === 'active') {
+                // Build update object - always store stripeCustomerId for reliable lookups
+                const updateObj: Record<string, unknown> = {};
+                
+                // Store Stripe customer ID if not already stored
+                if (stripeCustomerId && !user.stripeCustomerId) {
+                  updateObj.stripeCustomerId = stripeCustomerId;
+                }
+                
+                // Only add subscription to history if not already present
+                if (!hasSubscription && (subscription.status === 'active' || subscription.status === 'trialing')) {
+                  updateObj.$push = {
+                    paymentHistory: {
+                      $each: [{
+                        type: 'subscription',
+                        subscriptionId: subscription.id,
+                        credits: 0, // Credits added via invoice.payment_succeeded
+                        timestamp: new Date()
+                      }],
+                      $slice: -30
+                    }
+                  };
+                }
+                
+                // Only update if there's something to update
+                if (Object.keys(updateObj).length > 0) {
                   await User.findOneAndUpdate(
                     { userId: user.userId },
-                    {
-                      $push: {
-                        paymentHistory: {
-                          $each: [{
-                            type: 'subscription',
-                            subscriptionId: subscription.id,
-                            credits: 0, // Credits added via invoice.payment_succeeded
-                            timestamp: new Date()
-                          }],
-                          $slice: -30
-                        }
-                      }
-                    }
+                    updateObj
                   );
                   
                   logger.info('Subscription linked to user', {
                     userId: user.userId,
                     subscriptionId: subscription.id,
+                    stripeCustomerId,
                     status: subscription.status
                   });
                 }
@@ -455,6 +481,69 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         }
       }
 
+      // Helper function to find subscriptions for a given customer ID
+      const findSubscriptionForCustomer = async (customerId: string): Promise<string | null> => {
+        // First, try to find an active subscription
+        let subscriptions = await stripe.subscriptions.list({
+          customer: customerId,
+          status: 'active',
+          limit: 1
+        });
+
+        // If no active subscription, check for trialing
+        if (subscriptions.data.length === 0) {
+          subscriptions = await stripe.subscriptions.list({
+            customer: customerId,
+            status: 'trialing',
+            limit: 1
+          });
+        }
+
+        // If no trialing, check for past_due (user might need to update payment)
+        if (subscriptions.data.length === 0) {
+          subscriptions = await stripe.subscriptions.list({
+            customer: customerId,
+            status: 'past_due',
+            limit: 1
+          });
+        }
+
+        // If still none, check for any subscription that's not canceled/incomplete_expired
+        // This catches edge cases like 'incomplete' subscriptions awaiting payment
+        if (subscriptions.data.length === 0) {
+          const allSubs = await stripe.subscriptions.list({
+            customer: customerId,
+            limit: 10
+          });
+          // Filter to usable subscriptions (not canceled or incomplete_expired)
+          const usableSub = allSubs.data.find(sub => 
+            sub.status !== 'canceled' && sub.status !== 'incomplete_expired'
+          );
+          if (usableSub) {
+            return usableSub.id;
+          }
+        } else {
+          return subscriptions.data[0].id;
+        }
+        return null;
+      };
+
+      // First try using stored stripeCustomerId (most reliable)
+      if (!subscriptionId && user.stripeCustomerId) {
+        try {
+          subscriptionId = await findSubscriptionForCustomer(user.stripeCustomerId);
+          if (subscriptionId) {
+            logger.debug('Found subscription using stored stripeCustomerId', { 
+              userId: user.userId, 
+              stripeCustomerId: user.stripeCustomerId 
+            });
+          }
+        } catch (stripeError) {
+          logger.error('Error finding subscription by stored customer ID:', { error: (stripeError as Error).message });
+        }
+      }
+
+      // Fallback: look up customer by email in Stripe
       if (!subscriptionId && user.email) {
         try {
           const customers = await stripe.customers.list({
@@ -465,51 +554,22 @@ export function createStripeRoutes(deps: Dependencies = {}) {
           if (customers.data.length > 0) {
             const customerId = customers.data[0].id;
             
-            // First, try to find an active subscription
-            let subscriptions = await stripe.subscriptions.list({
-              customer: customerId,
-              status: 'active',
-              limit: 1
-            });
-
-            // If no active subscription, check for trialing
-            if (subscriptions.data.length === 0) {
-              subscriptions = await stripe.subscriptions.list({
-                customer: customerId,
-                status: 'trialing',
-                limit: 1
-              });
-            }
-
-            // If no trialing, check for past_due (user might need to update payment)
-            if (subscriptions.data.length === 0) {
-              subscriptions = await stripe.subscriptions.list({
-                customer: customerId,
-                status: 'past_due',
-                limit: 1
-              });
-            }
-
-            // If still none, check for any subscription that's not canceled/incomplete_expired
-            // This catches edge cases like 'incomplete' subscriptions awaiting payment
-            if (subscriptions.data.length === 0) {
-              const allSubs = await stripe.subscriptions.list({
-                customer: customerId,
-                limit: 10
-              });
-              // Filter to usable subscriptions (not canceled or incomplete_expired)
-              const usableSub = allSubs.data.find(sub => 
-                sub.status !== 'canceled' && sub.status !== 'incomplete_expired'
+            // Store the customer ID for future lookups if not already stored
+            if (!user.stripeCustomerId) {
+              await User.findOneAndUpdate(
+                { userId: user.userId },
+                { stripeCustomerId: customerId }
               );
-              if (usableSub) {
-                subscriptionId = usableSub.id;
-              }
-            } else {
-              subscriptionId = subscriptions.data[0].id;
+              logger.info('Stored Stripe customer ID for user', { 
+                userId: user.userId, 
+                stripeCustomerId: customerId 
+              });
             }
+            
+            subscriptionId = await findSubscriptionForCustomer(customerId);
           }
         } catch (stripeError) {
-          logger.error('Error finding subscription by customer:', { error: (stripeError as Error).message });
+          logger.error('Error finding subscription by customer email:', { error: (stripeError as Error).message });
         }
       }
 
@@ -523,12 +583,25 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       }
 
       const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
-        expand: ['items.data.price']
+        expand: ['items.data.price', 'items.data.price.product']
       });
       
       // Return the subscription data in a format the frontend expects
       // Cast subscription to access properties (Stripe types may vary)
       const subData = subscription as Stripe.Subscription;
+      
+      // Try to get a meaningful plan name from various sources
+      let planName: string | undefined = subData.metadata?.planType;
+      if (!planName && subData.items?.data?.[0]?.price) {
+        const price = subData.items.data[0].price as Stripe.Price & { product?: Stripe.Product };
+        // Try price nickname first
+        planName = price.nickname || undefined;
+        // Then try product name
+        if (!planName && price.product && typeof price.product === 'object') {
+          planName = price.product.name;
+        }
+      }
+      
       res.json({
         success: true,
         hasSubscription: true,
@@ -538,7 +611,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
           current_period_start: (subData as unknown as { current_period_start: number }).current_period_start,
           current_period_end: (subData as unknown as { current_period_end: number }).current_period_end,
           cancel_at_period_end: subData.cancel_at_period_end,
-          plan: subData.metadata?.planType || 'unknown',
+          plan: planName || 'Subscription',
           items: subData.items
         }
       });
@@ -914,6 +987,15 @@ export function createStripeRoutes(deps: Dependencies = {}) {
 
       const subscription = await stripe.subscriptions.retrieve(subscriptionId);
       const User = mongoose.model<IUser>('User');
+      
+      // Get Stripe customer ID from session or subscription
+      const sessionCustomerId = typeof session.customer === 'string' 
+        ? session.customer 
+        : session.customer?.id;
+      const subscriptionCustomerId = typeof subscription.customer === 'string'
+        ? subscription.customer
+        : subscription.customer?.id;
+      const stripeCustomerId = sessionCustomerId || subscriptionCustomerId;
 
       // SECURITY: Use authenticated user, not metadata
       const user = req.user;
@@ -929,14 +1011,22 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         timestamp: new Date()
       };
 
+      // Build update object
+      const updateObj: Record<string, unknown> = {
+        $inc: { credits: monthlyCredits, totalCreditsEarned: monthlyCredits },
+        $addToSet: {
+          paymentHistory: paymentRecord
+        }
+      };
+      
+      // Store Stripe customer ID if not already stored
+      if (stripeCustomerId && !user.stripeCustomerId) {
+        updateObj.stripeCustomerId = stripeCustomerId;
+      }
+
       const updatedUser = await User.findOneAndUpdate(
         { userId: user.userId },
-        {
-          $inc: { credits: monthlyCredits, totalCreditsEarned: monthlyCredits },
-          $addToSet: {
-            paymentHistory: paymentRecord
-          }
-        },
+        updateObj,
         { new: true }
       );
 
@@ -967,6 +1057,7 @@ export function createStripeRoutes(deps: Dependencies = {}) {
       logger.info('Subscription verified', {
         userId: user.userId,
         subscriptionId,
+        stripeCustomerId,
         credits: monthlyCredits
       });
 
@@ -1165,8 +1256,44 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         priceId = prices.data[0].id;
       }
 
-      // Create checkout session with validated URLs
-      const session = await stripe.checkout.sessions.create({
+      // Get or create Stripe customer for reliable subscription management
+      let stripeCustomerId = user.stripeCustomerId;
+      
+      if (!stripeCustomerId && user.email) {
+        // Look up existing customer by email
+        const existingCustomers = await stripe.customers.list({
+          email: user.email,
+          limit: 1
+        });
+        
+        if (existingCustomers.data.length > 0) {
+          stripeCustomerId = existingCustomers.data[0].id;
+        } else {
+          // Create new customer
+          const newCustomer = await stripe.customers.create({
+            email: user.email,
+            metadata: {
+              userId: user.userId || (user._id as mongoose.Types.ObjectId).toString(),
+              walletAddress: user.walletAddress ? user.walletAddress.toLowerCase() : ''
+            }
+          });
+          stripeCustomerId = newCustomer.id;
+        }
+        
+        // Store customer ID on user record for future lookups
+        await User.findOneAndUpdate(
+          { userId: user.userId },
+          { stripeCustomerId }
+        );
+        
+        logger.info('Stripe customer linked to user', {
+          userId: user.userId,
+          stripeCustomerId
+        });
+      }
+
+      // Build checkout session config
+      const checkoutConfig: Stripe.Checkout.SessionCreateParams = {
         mode: 'subscription',
         line_items: [
           {
@@ -1174,7 +1301,6 @@ export function createStripeRoutes(deps: Dependencies = {}) {
             quantity: 1,
           },
         ],
-        customer_email: user.email || undefined,
         metadata: {
           userId: user.userId || (user._id as mongoose.Types.ObjectId).toString(),
           walletAddress: user.walletAddress ? user.walletAddress.toLowerCase() : '',
@@ -1189,7 +1315,17 @@ export function createStripeRoutes(deps: Dependencies = {}) {
         },
         success_url: validatedSuccessUrl,
         cancel_url: validatedCancelUrl,
-      });
+      };
+      
+      // Use existing customer if available, otherwise use customer_email
+      if (stripeCustomerId) {
+        checkoutConfig.customer = stripeCustomerId;
+      } else if (user.email) {
+        checkoutConfig.customer_email = user.email;
+      }
+
+      // Create checkout session with validated URLs
+      const session = await stripe.checkout.sessions.create(checkoutConfig);
 
       logger.info('Stripe checkout session created', {
         userId: user.userId,
