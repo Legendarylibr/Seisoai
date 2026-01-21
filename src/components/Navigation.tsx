@@ -236,6 +236,15 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                     </Win95NavButton>
                   );
                 })}
+                {/* Quick Access Buttons */}
+                <div className="ml-2 pl-2" style={{ borderLeft: `1px solid ${WIN95.border.dark}` }}>
+                  <Win95NavButton onClick={() => setShowReferralDashboard(true)} title="Referral Program">
+                    <Gift className="w-4 h-4" />
+                  </Win95NavButton>
+                  <Win95NavButton onClick={() => setShowAchievements(true)} title="Achievements">
+                    <Trophy className="w-4 h-4" />
+                  </Win95NavButton>
+                </div>
               </nav>
             )}
 
@@ -555,17 +564,29 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                     </Win95NavButton>
                   );
                 })}
+                <div style={{ borderTop: `1px solid ${WIN95.bgDark}`, marginTop: '4px', paddingTop: '4px' }} />
+                <Win95NavButton 
+                  onClick={() => { setShowReferralDashboard(true); setShowMobileMenu(false); }}
+                  className="w-full justify-start"
+                >
+                  <Gift className="w-4 h-4" />
+                  <span>Referral Program</span>
+                </Win95NavButton>
+                <Win95NavButton 
+                  onClick={() => { setShowAchievements(true); setShowMobileMenu(false); }}
+                  className="w-full justify-start"
+                >
+                  <Trophy className="w-4 h-4" />
+                  <span>Achievements</span>
+                </Win95NavButton>
                 {isEmailAuth && (
-                  <>
-                    <div style={{ borderTop: `1px solid ${WIN95.bgDark}`, marginTop: '4px', paddingTop: '4px' }} />
-                    <Win95NavButton 
-                      onClick={() => { setShowSubscriptionManagement(true); setShowMobileMenu(false); }}
-                      className="w-full justify-start"
-                    >
-                      <Settings className="w-4 h-4" />
-                      <span>Manage Subscription</span>
-                    </Win95NavButton>
-                  </>
+                  <Win95NavButton 
+                    onClick={() => { setShowSubscriptionManagement(true); setShowMobileMenu(false); }}
+                    className="w-full justify-start"
+                  >
+                    <Settings className="w-4 h-4" />
+                    <span>Manage Subscription</span>
+                  </Win95NavButton>
                 )}
               </nav>
             </div>
