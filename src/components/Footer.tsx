@@ -17,7 +17,7 @@ const Footer = memo(function Footer({ onOpenTerms }: FooterProps) {
     >
       <button
         onClick={() => onOpenTerms('terms')}
-        className="hover:underline"
+        className="hover:underline min-h-0"
         style={{ color: WIN95.textDisabled }}
         onMouseEnter={(e) => e.currentTarget.style.color = WIN95.highlight}
         onMouseLeave={(e) => e.currentTarget.style.color = WIN95.textDisabled}
@@ -27,7 +27,7 @@ const Footer = memo(function Footer({ onOpenTerms }: FooterProps) {
       <span style={{ color: WIN95.bgDark }}>•</span>
       <button
         onClick={() => onOpenTerms('privacy')}
-        className="hover:underline"
+        className="hover:underline min-h-0"
         style={{ color: WIN95.textDisabled }}
         onMouseEnter={(e) => e.currentTarget.style.color = WIN95.highlight}
         onMouseLeave={(e) => e.currentTarget.style.color = WIN95.textDisabled}
@@ -37,7 +37,7 @@ const Footer = memo(function Footer({ onOpenTerms }: FooterProps) {
       <span style={{ color: WIN95.bgDark }}>•</span>
       <button
         onClick={() => onOpenTerms('content')}
-        className="hover:underline"
+        className="hover:underline min-h-0"
         style={{ color: WIN95.textDisabled }}
         onMouseEnter={(e) => e.currentTarget.style.color = WIN95.highlight}
         onMouseLeave={(e) => e.currentTarget.style.color = WIN95.textDisabled}
@@ -47,7 +47,7 @@ const Footer = memo(function Footer({ onOpenTerms }: FooterProps) {
       <span style={{ color: WIN95.bgDark }}>•</span>
       <button
         onClick={() => onOpenTerms('refunds')}
-        className="hover:underline"
+        className="hover:underline min-h-0"
         style={{ color: WIN95.textDisabled }}
         onMouseEnter={(e) => e.currentTarget.style.color = WIN95.highlight}
         onMouseLeave={(e) => e.currentTarget.style.color = WIN95.textDisabled}
