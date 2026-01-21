@@ -697,20 +697,35 @@ Include the reference in your JSON response params.`;
             logger.warn('Music prompt optimization failed in chat, using original', { error: (err as Error).message });
           }
           
+          const musicDuration = typeof params.musicDuration === 'number' ? params.musicDuration : 30;
+          
           logger.info('Generating music via chat', { 
             prompt: optimizedMusicPrompt.substring(0, 50),
-            duration: params.musicDuration || 30,
-            genre: params.genre
+            promptLength: optimizedMusicPrompt.length,
+            duration: musicDuration,
+            genre: params.genre,
+            rawMusicDuration: params.musicDuration,
+            paramsKeys: Object.keys(params)
           });
           
           // Only pass essential parameters to the API
-          result = await callInternalEndpoint('/api/generate/music', {
+          const musicRequestBody = {
             prompt: optimizedMusicPrompt,
-            duration: params.musicDuration || 30,
-            selectedGenre: params.genre,
+            duration: musicDuration,
+            selectedGenre: params.genre || null,
             optimizePrompt: false, // Already optimized above
-            ...fullParams
-          }, req);
+            userId: context.userId,
+            walletAddress: context.walletAddress,
+            email: context.email
+          };
+          
+          logger.info('Music request body', { 
+            hasPrompt: !!musicRequestBody.prompt,
+            promptLength: musicRequestBody.prompt?.length,
+            duration: musicRequestBody.duration
+          });
+          
+          result = await callInternalEndpoint('/api/generate/music', musicRequestBody, req);
           break;
 
         default:
@@ -733,13 +748,14 @@ Include the reference in your JSON response params.`;
       };
 
       // Log the result for debugging
-      logger.debug('Generation result received', {
+      logger.info('Generation result received', {
         contentType,
         hasImages: !!typedResult.images,
         hasVideo: !!typedResult.video,
         hasVideoUrl: !!typedResult.video_url,
         hasAudioFile: !!typedResult.audio_file,
         hasAudioUrl: !!typedResult.audio_url,
+        audioFileUrl: typedResult.audio_file?.url?.substring(0, 100),
         success: typedResult.success,
         resultKeys: Object.keys(typedResult)
       });
