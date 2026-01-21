@@ -18,6 +18,7 @@ import { createEmailHash } from '../utils/emailHash';
 import { generateResetToken, hashResetToken, sendPasswordResetEmail } from '../services/email';
 import { alertPasswordReset, alertAccountLockout } from '../services/securityAlerts';
 import { sendWelcomeEmail } from '../services/emailMarketing';
+import { applyReferralCode } from '../services/referralService';
 import type { IUser } from '../models/User';
 
 // Types
@@ -55,7 +56,7 @@ export function createAuthRoutes(deps: Dependencies = {}) {
    */
   router.post('/signup', limiter, async (req: Request, res: Response) => {
     try {
-      const { email, password } = req.body as { email?: string; password?: string };
+      const { email, password, referralCode } = req.body as { email?: string; password?: string; referralCode?: string };
 
       if (!email || !password) {
         res.status(400).json({
@@ -140,6 +141,28 @@ export function createAuthRoutes(deps: Dependencies = {}) {
       await user.save();
       logger.info('New user created with 10 credits', { email: user.email, userId: user.userId });
 
+      // Apply referral code if provided (awards credits to both referrer and referee)
+      let referralBonus = 0;
+      if (referralCode && user.userId) {
+        const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip;
+        const userAgent = req.headers['user-agent'];
+        const referralResult = await applyReferralCode(user.userId, referralCode, ipAddress, userAgent);
+        if (referralResult.success) {
+          referralBonus = referralResult.bonusCredits || 0;
+          logger.info('Referral code applied during signup', { 
+            userId: user.userId, 
+            referralCode, 
+            bonusCredits: referralBonus 
+          });
+        } else {
+          logger.warn('Failed to apply referral code during signup', { 
+            userId: user.userId, 
+            referralCode, 
+            error: referralResult.error 
+          });
+        }
+      }
+
       // Send welcome email (non-blocking)
       if (user.userId) {
         sendWelcomeEmail(user.userId).catch(err => {
@@ -160,6 +183,11 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         { expiresIn: '30d' }
       );
 
+      // Refetch user to get updated credits after referral bonus
+      const updatedUser = referralBonus > 0 
+        ? await User.findOne({ userId: user.userId })
+        : user;
+
       res.json({
         success: true,
         token,
@@ -167,8 +195,12 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         user: {
           userId: user.userId,
           email: user.email,
-          credits: user.credits
-        }
+          credits: updatedUser?.credits ?? user.credits,
+          totalCreditsEarned: updatedUser?.totalCreditsEarned ?? user.totalCreditsEarned,
+          totalCreditsSpent: updatedUser?.totalCreditsSpent ?? 0
+        },
+        referralApplied: referralBonus > 0,
+        referralBonus
       });
     } catch (error) {
       const err = error as Error;

@@ -178,9 +178,30 @@ const fetchWithRetry = async (
 };
 
 /**
+ * Get stored referral code from URL parameter
+ */
+export const getStoredReferralCode = (): string | null => {
+  return safeGetItem('pendingReferralCode');
+};
+
+/**
+ * Store referral code from URL parameter
+ */
+export const storeReferralCode = (code: string): void => {
+  safeSetItem('pendingReferralCode', code);
+};
+
+/**
+ * Clear stored referral code after successful signup
+ */
+export const clearStoredReferralCode = (): void => {
+  safeRemoveItem('pendingReferralCode');
+};
+
+/**
  * Sign up with email and password
  */
-export const signUp = async (email: string, password: string): Promise<AuthResponse> => {
+export const signUp = async (email: string, password: string, referralCode?: string): Promise<AuthResponse> => {
   // Validate inputs
   if (!email || typeof email !== 'string') {
     throw new Error('Email is required');
@@ -190,6 +211,9 @@ export const signUp = async (email: string, password: string): Promise<AuthRespo
   }
 
   const trimmedEmail = email.trim().toLowerCase();
+  
+  // Use provided referral code or get stored one
+  const effectiveReferralCode = referralCode || getStoredReferralCode();
   
   try {
     // Ensure CSRF token is available
@@ -202,7 +226,11 @@ export const signUp = async (email: string, password: string): Promise<AuthRespo
         ...(csrfToken && { [CSRF_TOKEN_HEADER]: csrfToken })
       },
       credentials: 'include',
-      body: JSON.stringify({ email: trimmedEmail, password })
+      body: JSON.stringify({ 
+        email: trimmedEmail, 
+        password,
+        ...(effectiveReferralCode && { referralCode: effectiveReferralCode })
+      })
     });
 
     let data: AuthResponse;
@@ -225,6 +253,9 @@ export const signUp = async (email: string, password: string): Promise<AuthRespo
     if (data.refreshToken) {
       safeSetItem('refreshToken', data.refreshToken);
     }
+    
+    // Clear stored referral code after successful signup
+    clearStoredReferralCode();
 
     return {
       success: true,

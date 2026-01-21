@@ -131,53 +131,31 @@ const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }
             </div>
           ) : stats ? (
             <>
-              {/* Referral Code Section */}
+              {/* Referral Link Section */}
               <div className="mb-4 p-3" style={PANEL.sunken}>
                 <h3 className="text-sm font-bold mb-2" style={{ color: WIN95.text }}>
-                  Your Referral Code
+                  Your Referral Link
                 </h3>
-                <div className="flex items-center gap-2 mb-2">
-                  <div 
-                    className="flex-1 px-3 py-2 text-center text-lg font-mono tracking-wider"
-                    style={{ 
-                      background: WIN95.inputBg,
-                      color: WIN95.highlight,
-                      border: `1px solid ${WIN95.border.dark}`
-                    }}
-                  >
-                    {stats.referral.code}
-                  </div>
-                  <button
-                    onClick={() => handleCopy(stats.referral.code, 'code')}
-                    className="px-3 py-2 flex items-center gap-1 text-xs"
-                    style={BTN.base}
-                    {...hoverHandlers}
-                  >
-                    {copied === 'code' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    {copied === 'code' ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
-                
-                {/* Share URL */}
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     readOnly
                     value={stats.referral.shareUrl}
-                    className="flex-1 px-2 py-1 text-xs"
+                    className="flex-1 px-3 py-2 text-sm font-mono"
                     style={{
                       background: WIN95.inputBg,
-                      color: WIN95.text,
+                      color: WIN95.highlight,
                       border: `1px solid ${WIN95.border.dark}`
                     }}
                   />
                   <button
                     onClick={() => handleCopy(stats.referral.shareUrl, 'url')}
-                    className="px-2 py-1 text-xs"
+                    className="px-3 py-2 flex items-center gap-1 text-xs"
                     style={BTN.base}
                     {...hoverHandlers}
                   >
-                    {copied === 'url' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    {copied === 'url' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copied === 'url' ? 'Copied!' : 'Copy'}
                   </button>
                 </div>
               </div>

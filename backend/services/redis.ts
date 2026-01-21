@@ -32,9 +32,9 @@ export async function initializeRedis(): Promise<Redis | null> {
   try {
     // Optimize Redis connection for scaling
     // ioredis uses connection pooling internally - each instance maintains a pool
-    const redisOptions: Redis.RedisOptions = {
+    const redisOptions = {
       maxRetriesPerRequest: 3,
-      retryStrategy(times) {
+      retryStrategy(times: number) {
         // Exponential backoff with max 30 second delay
         // Stops retrying after 10 attempts to avoid resource waste
         if (times > 10) {
