@@ -38,6 +38,27 @@ export function createReferralRoutes(deps: Dependencies = {}) {
   const limiter = rateLimiter || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
+   * Normalize frontend URL to always use seisoai.com (without www)
+   */
+  const getNormalizedFrontendUrl = (): string => {
+    const frontendUrl = process.env.FRONTEND_URL || 'https://seisoai.com';
+    // Remove www. prefix if present and ensure it's https://seisoai.com
+    try {
+      const url = new URL(frontendUrl);
+      if (url.hostname.startsWith('www.')) {
+        url.hostname = url.hostname.replace(/^www\./, '');
+      }
+      // Ensure it's seisoai.com (not a subdomain)
+      if (url.hostname === 'seisoai.com' || url.hostname.endsWith('.seisoai.com')) {
+        return `https://seisoai.com`;
+      }
+      return url.toString();
+    } catch {
+      return 'https://seisoai.com';
+    }
+  };
+
+  /**
    * Get or generate referral code for the current user
    * GET /api/referral/code
    */
@@ -52,11 +73,12 @@ export function createReferralRoutes(deps: Dependencies = {}) {
       }
 
       const referralCode = await getOrCreateReferralCode(userId);
+      const baseUrl = getNormalizedFrontendUrl();
       
       res.json({
         success: true,
         referralCode,
-        shareUrl: `${process.env.FRONTEND_URL || 'https://seisoai.com'}?ref=${referralCode}`
+        shareUrl: `${baseUrl}?ref=${referralCode}`
       });
     } catch (error) {
       const err = error as Error;
@@ -152,12 +174,13 @@ export function createReferralRoutes(deps: Dependencies = {}) {
 
       const stats = await getReferralStats(userId);
       const shareStats = await getShareStats(userId);
+      const baseUrl = getNormalizedFrontendUrl();
       
       res.json({
         success: true,
         referral: {
           code: stats.referralCode,
-          shareUrl: `${process.env.FRONTEND_URL || 'https://seisoai.com'}?ref=${stats.referralCode}`,
+          shareUrl: `${baseUrl}?ref=${stats.referralCode}`,
           count: stats.referralCount,
           creditsEarned: stats.referralCreditsEarned,
           recentReferrals: stats.recentReferrals
