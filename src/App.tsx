@@ -19,6 +19,7 @@ import PromptLab from './components/PromptLab';
 import { useImageGenerator } from './contexts/ImageGeneratorContext';
 import { Grid, Sparkles, Film, Music, Layers, MessageCircle, type LucideIcon } from 'lucide-react';
 import { API_URL, ensureCSRFToken } from './utils/apiConfig';
+import { storeReferralCode } from './services/emailAuthService';
 
 // Build version - check console to verify deployment
 logger.info('[SEISOAI BUILD] v2026.01.06.1');
@@ -130,6 +131,22 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
     });
   }, []);
 
+  // Capture referral code from URL on app mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const refCode = urlParams.get('ref');
+    if (refCode) {
+      storeReferralCode(refCode.toUpperCase());
+      logger.info('Referral code captured from URL', { code: refCode });
+      // Clean up URL to remove ref param (keep other params if any)
+      urlParams.delete('ref');
+      const newUrl = urlParams.toString() 
+        ? `${window.location.pathname}?${urlParams.toString()}`
+        : window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, []);
+
   // Handle subscription verification from Stripe checkout redirect
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -236,7 +253,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         onShowStripePayment={handleShowStripePayment}
       />
       
-      <div className="flex-1 min-h-0 overflow-hidden lg:overflow-auto p-1 lg:p-3">
+      <div className="flex-1 min-h-0 overflow-hidden p-1 lg:p-2">
         {activeTab === 'chat' && (
           <div className="h-full min-h-0 flex flex-col">
             <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
@@ -249,31 +266,28 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'generate' && (
-          <div className="h-full min-h-0 overflow-auto container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden container mx-auto max-w-7xl">
             <AuthGuard>
-              <div className="space-y-2 lg:space-y-3">
-                {!isAuthenticated && <SimpleWalletConnect />}
-                <EmailUserInfo />
+              <div className="h-full flex flex-col lg:flex-row gap-2 lg:gap-2">
+                {/* Left Column - Controls */}
+                <div className="lg:w-[42%] space-y-1 lg:space-y-1.5 overflow-auto lg:overflow-y-auto lg:max-h-full flex-shrink-0">
+                  {!isAuthenticated && <SimpleWalletConnect />}
+                  <EmailUserInfo />
+                  <PromptOptimizer value={userPrompt} onPromptChange={setUserPrompt} />
+                  <StyleSelector />
+                  <AspectRatioSelector />
+                  <ReferenceImageInput />
+                  <MultiImageModelSelector />
+                  <GenerateButton 
+                    customPrompt={userPrompt}
+                    onShowTokenPayment={handleShowTokenPayment}
+                    onShowStripePayment={handleShowStripePayment}
+                  />
+                </div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-3">
-                  {/* Left Column - Controls */}
-                  <div className="space-y-2 lg:space-y-3">
-                    <PromptOptimizer value={userPrompt} onPromptChange={setUserPrompt} />
-                    <StyleSelector />
-                    <AspectRatioSelector />
-                    <ReferenceImageInput />
-                    <MultiImageModelSelector />
-                    <GenerateButton 
-                      customPrompt={userPrompt}
-                      onShowTokenPayment={handleShowTokenPayment}
-                      onShowStripePayment={handleShowStripePayment}
-                    />
-                  </div>
-                  
-                  {/* Right Column - Output */}
-                  <div className="lg:h-full lg:min-h-[500px]">
-                    <ImageOutput />
-                  </div>
+                {/* Right Column - Output */}
+                <div className="flex-1 min-h-0 lg:min-h-0">
+                  <ImageOutput />
                 </div>
               </div>
             </AuthGuard>
@@ -281,27 +295,24 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'batch' && (
-          <div className="h-full min-h-0 overflow-auto container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden container mx-auto max-w-7xl">
             <AuthGuard>
-              <div className="space-y-2 lg:space-y-3">
-                {!isAuthenticated && <SimpleWalletConnect />}
-                <EmailUserInfo />
+              <div className="h-full flex flex-col lg:flex-row gap-2 lg:gap-2">
+                {/* Left Column - Batch Controls */}
+                <div className="lg:w-[42%] space-y-1 lg:space-y-1.5 overflow-auto lg:overflow-y-auto lg:max-h-full flex-shrink-0">
+                  {!isAuthenticated && <SimpleWalletConnect />}
+                  <EmailUserInfo />
+                  <StyleSelector />
+                  <MultiImageModelSelector />
+                  <GenerationQueue
+                    onShowTokenPayment={handleShowTokenPayment}
+                    onShowStripePayment={handleShowStripePayment}
+                  />
+                </div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-3">
-                  {/* Left Column - Batch Controls */}
-                  <div className="space-y-2 lg:space-y-3">
-                    <StyleSelector />
-                    <MultiImageModelSelector />
-                    <GenerationQueue
-                      onShowTokenPayment={handleShowTokenPayment}
-                      onShowStripePayment={handleShowStripePayment}
-                    />
-                  </div>
-                  
-                  {/* Right Column - Output */}
-                  <div className="lg:h-full lg:min-h-[500px]">
-                    <ImageOutput />
-                  </div>
+                {/* Right Column - Output */}
+                <div className="flex-1 min-h-0 lg:min-h-0">
+                  <ImageOutput />
                 </div>
               </div>
             </AuthGuard>
@@ -309,7 +320,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'video' && (
-          <div className="h-full min-h-0 overflow-auto">
+          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden">
             <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
               <VideoGenerator 
                 onShowTokenPayment={handleShowTokenPayment}
@@ -322,7 +333,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'music' && (
-          <div className="h-full min-h-0 overflow-auto">
+          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden">
             <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
               <MusicGenerator 
                 onShowTokenPayment={handleShowTokenPayment}
@@ -345,7 +356,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         
         
         {activeTab === 'gallery' && (
-          <div className="h-full min-h-0 overflow-auto">
+          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden">
             <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
               <ImageGallery />
             </Suspense>

@@ -670,9 +670,9 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
       <CollapsibleVideoHowToUse />
       
       {/* Main content */}
-      <div className="flex-1 min-h-0 p-2 lg:p-2 flex flex-col lg:flex-row gap-2 lg:gap-3 overflow-auto lg:overflow-hidden">
+      <div className="flex-1 min-h-0 p-1.5 lg:p-1.5 flex flex-col lg:flex-row gap-1.5 lg:gap-2 overflow-auto lg:overflow-hidden">
         {/* Left panel - Controls */}
-        <div className="lg:w-[45%] flex flex-col gap-2 min-h-0 overflow-auto lg:overflow-hidden">
+        <div className="lg:w-[45%] flex flex-col gap-1 min-h-0 overflow-auto lg:overflow-y-auto">
           {/* Model & Mode Selection */}
           <Win95GroupBox title="Model & Mode" className="flex-shrink-0" icon={<Layers className="w-3.5 h-3.5" />}>
             <div className="flex flex-col gap-1.5">

@@ -410,7 +410,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator() {
       {/* Main content */}
       <div className="flex-1 min-h-0 p-1 lg:p-1.5 flex flex-col lg:flex-row gap-1 lg:gap-1.5 overflow-auto lg:overflow-hidden">
         {/* Left panel - Controls */}
-        <div className="lg:w-[45%] flex flex-col gap-0.5 lg:gap-1 min-h-0 overflow-auto lg:overflow-hidden">
+        <div className="lg:w-[45%] flex flex-col gap-0.5 lg:gap-1 min-h-0 overflow-auto lg:overflow-y-auto">
           
           {/* Genre Selection */}
           <Win95GroupBox title="Genre" className="flex-shrink-0">
