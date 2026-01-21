@@ -52,7 +52,7 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
   }
   
   // Generate new unique code
-  let code: string;
+  let code: string = '';
   let attempts = 0;
   const maxAttempts = 10;
   
@@ -69,12 +69,20 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
     throw new Error('Failed to generate unique referral code');
   }
   
-  // Save the code to the user
-  user.referralCode = code!;
-  await user.save();
+  // Use findOneAndUpdate to avoid triggering full document validation
+  // This prevents issues with existing users who may exceed new array limits
+  const updatedUser = await User.findOneAndUpdate(
+    { userId },
+    { $set: { referralCode: code } },
+    { new: true }
+  );
   
-  logger.info('Generated referral code', { userId, code: code! });
-  return code!;
+  if (!updatedUser) {
+    throw new Error('Failed to save referral code');
+  }
+  
+  logger.info('Generated referral code', { userId, code });
+  return code;
 }
 
 /**
@@ -299,49 +307,71 @@ export async function trackSocialShare(
   const weeklyReset = user.weeklyShareReset || new Date(0);
   const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   
-  // Reset weekly counter if needed
-  if (weeklyReset < oneWeekAgo) {
-    user.weeklyShareCredits = 0;
-    user.weeklyShareReset = now;
+  // Calculate current weekly credits (reset if needed)
+  let currentWeeklyCredits = user.weeklyShareCredits || 0;
+  const needsReset = weeklyReset < oneWeekAgo;
+  if (needsReset) {
+    currentWeeklyCredits = 0;
   }
   
   // Check if user has reached weekly limit
-  if ((user.weeklyShareCredits || 0) >= MAX_WEEKLY_SHARE_CREDITS) {
-    // Still track the share, but don't award credits
-    if (!user.socialShares) user.socialShares = [];
-    user.socialShares.push({
-      platform,
-      contentId,
-      sharedAt: now,
-      creditsAwarded: false
-    });
-    await user.save();
-    return { success: true, creditsAwarded: 0, error: 'Weekly share credit limit reached' };
-  }
+  const atWeeklyLimit = currentWeeklyCredits >= MAX_WEEKLY_SHARE_CREDITS;
+  const creditsToAward = atWeeklyLimit ? 0 : 1;
   
-  // Award 1 credit
-  const creditsToAward = 1;
-  user.credits += creditsToAward;
-  user.totalCreditsEarned += creditsToAward;
-  user.weeklyShareCredits = (user.weeklyShareCredits || 0) + creditsToAward;
-  
-  if (!user.socialShares) user.socialShares = [];
-  user.socialShares.push({
+  // Build update operation using $push with $slice to avoid validation issues
+  // and $inc for atomic credit updates
+  const newShare = {
     platform,
     contentId,
     sharedAt: now,
-    creditsAwarded: true
-  });
+    creditsAwarded: !atWeeklyLimit
+  };
   
-  // Keep only last 50 shares
-  if (user.socialShares.length > 50) {
-    user.socialShares = user.socialShares.slice(-50);
+  const updateOps: Record<string, unknown> = {
+    $push: {
+      socialShares: {
+        $each: [newShare],
+        $slice: -50  // Keep only last 50 shares
+      }
+    }
+  };
+  
+  if (needsReset) {
+    updateOps.$set = {
+      weeklyShareCredits: creditsToAward,
+      weeklyShareReset: now
+    };
+  } else if (creditsToAward > 0) {
+    updateOps.$inc = {
+      weeklyShareCredits: creditsToAward
+    };
   }
   
-  await user.save();
+  if (creditsToAward > 0) {
+    updateOps.$inc = {
+      ...(updateOps.$inc as Record<string, number> || {}),
+      credits: creditsToAward,
+      totalCreditsEarned: creditsToAward
+    };
+  }
   
-  logger.info('Social share tracked', { userId, platform, contentId, creditsAwarded: creditsToAward });
-  return { success: true, creditsAwarded: creditsToAward };
+  try {
+    await User.findOneAndUpdate({ userId }, updateOps);
+    
+    if (creditsToAward > 0) {
+      logger.info('Social share tracked', { userId, platform, contentId, creditsAwarded: creditsToAward });
+    }
+    
+    return { 
+      success: true, 
+      creditsAwarded: creditsToAward,
+      error: atWeeklyLimit ? 'Weekly share credit limit reached' : undefined
+    };
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to track social share', { userId, error: err.message });
+    return { success: false, creditsAwarded: 0, error: 'Failed to save share' };
+  }
 }
 
 /**
