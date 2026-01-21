@@ -21,9 +21,11 @@ import {
   generateMessageId,
   IMAGE_MODELS,
   VIDEO_MODELS,
+  VIDEO_DURATIONS,
   ASPECT_RATIOS,
   MUSIC_DURATIONS,
   calculateMusicCredits,
+  calculateVideoCredits,
   type ChatMessage, 
   type PendingAction,
   type ChatContext,
@@ -218,6 +220,7 @@ const MessageBubble = memo(function MessageBubble({
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<string>('square');
   const [selectedMusicDuration, setSelectedMusicDuration] = useState<number>(30);
+  const [selectedVideoDuration, setSelectedVideoDuration] = useState<string>('6s');
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Check if this is a 360 panorama request (for pending action)
@@ -282,6 +285,22 @@ const MessageBubble = memo(function MessageBubble({
         estimatedCredits: calculateMusicCredits(selectedMusicDuration)
       };
       onConfirmAction(actionWithDuration);
+      return;
+    }
+    
+    // For video, include duration and calculate credits based on model
+    if (message.pendingAction.type === 'generate_video') {
+      const videoModel = selectedModel || VIDEO_MODELS[0].id;
+      const actionWithVideo: PendingAction = {
+        ...message.pendingAction,
+        params: {
+          ...originalParams,
+          model: videoModel,
+          duration: selectedVideoDuration
+        },
+        estimatedCredits: calculateVideoCredits(selectedVideoDuration, videoModel)
+      };
+      onConfirmAction(actionWithVideo);
       return;
     }
     
@@ -447,6 +466,8 @@ const MessageBubble = memo(function MessageBubble({
                           <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                           {message.pendingAction.type === 'generate_music' 
                             ? calculateMusicCredits(selectedMusicDuration) 
+                            : message.pendingAction.type === 'generate_video'
+                            ? calculateVideoCredits(selectedVideoDuration, selectedModel || VIDEO_MODELS[0].id)
                             : message.pendingAction.estimatedCredits} cr
                         </span>
                         <span className="hidden sm:inline">•</span>
@@ -526,6 +547,45 @@ const MessageBubble = memo(function MessageBubble({
                             </div>
                           </button>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Duration Selector - for video */}
+                  {message.pendingAction?.type === 'generate_video' && (
+                    <div className="mb-2">
+                      <div className="text-[10px] sm:text-[11px] font-bold mb-1.5" style={{ color: WIN95.text }}>
+                        Duration:
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {VIDEO_DURATIONS.map((dur) => {
+                          const videoModel = selectedModel || VIDEO_MODELS[0].id;
+                          const credits = calculateVideoCredits(dur.value, videoModel);
+                          return (
+                            <button
+                              key={dur.value}
+                              onClick={() => setSelectedVideoDuration(dur.value)}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded transition-all"
+                              style={{
+                                background: selectedVideoDuration === dur.value 
+                                  ? 'linear-gradient(135deg, rgba(59,130,246,0.2) 0%, rgba(37,99,235,0.2) 100%)'
+                                  : WIN95.bgLight,
+                                border: selectedVideoDuration === dur.value 
+                                  ? '1.5px solid #3b82f6'
+                                  : `1px solid ${WIN95.border.dark}`,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <span className="text-[10px]">{dur.icon}</span>
+                              <span className="text-[10px] sm:text-[11px] font-bold" style={{ color: WIN95.text }}>
+                                {dur.label}
+                              </span>
+                              <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                                {credits} cr
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

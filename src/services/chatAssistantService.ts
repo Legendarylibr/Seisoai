@@ -73,6 +73,20 @@ export const VIDEO_MODELS = [
   { id: 'veo', name: 'Veo 3.1', description: 'Cinematic quality', creditsPerSec: 2.2 }
 ];
 
+// Video duration options (same as VideoGenerator)
+export const VIDEO_DURATIONS = [
+  { value: '4s', label: '4s', seconds: 4, icon: '⚡' },
+  { value: '6s', label: '6s', seconds: 6, icon: '🎬' },
+  { value: '8s', label: '8s', seconds: 8, icon: '🎥' }
+];
+
+// Calculate video credits based on duration and model
+export function calculateVideoCredits(duration: string, modelId: string): number {
+  const seconds = parseInt(duration) || 6;
+  const model = VIDEO_MODELS.find(m => m.id === modelId) || VIDEO_MODELS[0];
+  return Math.round(seconds * model.creditsPerSec * 100) / 100;
+}
+
 export const MUSIC_GENRES = [
   { id: 'lo-fi', name: 'Lo-Fi', description: 'Chill beats' },
   { id: 'electronic', name: 'Electronic', description: 'EDM & synths' },
