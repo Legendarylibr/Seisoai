@@ -312,41 +312,38 @@ const MessageBubble = memo(function MessageBubble({
   return (
     <>
       <div 
-        className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3 animate-fadeIn`}
+        className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-2`}
         style={{ 
-          animationDelay: isFirst ? '0s' : '0.15s',
-          opacity: 0,
-          animation: 'fadeSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+          animation: 'fadeSlideIn 0.3s ease-out forwards'
         }}
       >
-        {/* Avatar for assistant */}
+        {/* Avatar for assistant - hidden on mobile for more space */}
         {!isUser && (
           <div 
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center mr-3 flex-shrink-0 transition-transform hover:scale-110"
+            className="hidden sm:flex w-8 h-8 rounded-full items-center justify-center mr-2 flex-shrink-0"
             style={{ 
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4), 0 2px 4px rgba(0,0,0,0.2)',
-              border: '2px solid rgba(255,255,255,0.2)'
+              boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
             }}
           >
-            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+            <Sparkles className="w-4 h-4 text-white" />
           </div>
         )}
 
-        <div className={`max-w-[80%] sm:max-w-[75%] lg:max-w-[68%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`} style={{ minWidth: 0 }}>
+        <div className={`max-w-[90%] sm:max-w-[85%] lg:max-w-[80%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`} style={{ minWidth: 0 }}>
           {/* Message bubble */}
           <div
-            className="overflow-hidden transition-all duration-200 hover:shadow-lg"
+            className="overflow-hidden"
             style={{
               background: isUser 
                 ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
                 : WIN95.bg,
               color: isUser ? '#fff' : WIN95.text,
               boxShadow: isUser 
-                ? '0 4px 16px rgba(102, 126, 234, 0.35), 0 2px 4px rgba(0,0,0,0.1)'
-                : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 0 4px 12px rgba(0,0,0,0.08), 2px 2px 0 rgba(0,0,0,0.1)`,
+                ? '0 2px 8px rgba(102, 126, 234, 0.25)'
+                : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
               fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-              borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+              borderRadius: isUser ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
               maxWidth: '100%',
               border: isUser ? 'none' : `1px solid ${WIN95.border.dark}`
             }}
@@ -772,23 +769,22 @@ const MessageBubble = memo(function MessageBubble({
             </div>
           </div>
 
-          {/* Timestamp */}
-          <div className="mt-1.5 px-2 text-[10px] sm:text-[11px] opacity-70" style={{ color: WIN95.textDisabled }}>
+          {/* Timestamp - only show on hover/desktop */}
+          <div className="hidden sm:block mt-1 px-1 text-[9px] opacity-50" style={{ color: WIN95.textDisabled }}>
             {formatTime(message.timestamp)}
           </div>
         </div>
 
-        {/* Avatar for user */}
+        {/* Avatar for user - hidden on mobile for more space */}
         {isUser && (
           <div 
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ml-3 flex-shrink-0 transition-transform hover:scale-110"
+            className="hidden sm:flex w-8 h-8 rounded-full items-center justify-center ml-2 flex-shrink-0"
             style={{ 
               background: 'linear-gradient(135deg, #4a90e2 0%, #357abd 100%)',
-              boxShadow: '0 4px 12px rgba(74, 144, 226, 0.4), 0 2px 4px rgba(0,0,0,0.2)',
-              border: '2px solid rgba(255,255,255,0.2)'
+              boxShadow: '0 2px 8px rgba(74, 144, 226, 0.3)'
             }}
           >
-            <User className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+            <User className="w-4 h-4 text-white" />
           </div>
         )}
       </div>
@@ -1143,33 +1139,29 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         </div>
       )}
       
-      {/* Main chat window - optimized margins on mobile */}
+      {/* Main chat window - minimal margins for max content */}
       <div 
-        className="flex-1 mx-1.5 lg:mx-4 mt-1.5 lg:mt-2.5 flex flex-col min-h-0 rounded-xl sm:rounded-2xl overflow-hidden"
+        className="flex-1 mx-1 sm:mx-2 lg:mx-3 mt-1 flex flex-col min-h-0 rounded-lg sm:rounded-xl overflow-hidden"
         style={{
           ...PANEL.window,
-          boxShadow: '0 12px 40px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.15)',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
           filter: !isConnected ? 'blur(2px)' : 'none',
           opacity: !isConnected ? 0.75 : 1,
-          transition: 'filter 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease',
+          transition: 'filter 0.3s ease, opacity 0.3s ease',
           border: `1px solid ${WIN95.border.dark}`
         }}
       >
-        {/* Title bar - compact on mobile */}
+        {/* Title bar - compact */}
         <div 
-          className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2 sm:py-2.5 flex-shrink-0"
+          className="flex items-center gap-2 px-2 sm:px-3 py-1.5 flex-shrink-0"
           style={{
             ...WINDOW_TITLE_STYLE,
-            background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 1px 2px rgba(0,0,0,0.1)'
+            background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)'
           }}
         >
-          <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-          </div>
+          <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 opacity-90" />
           <div className="flex-1 min-w-0">
-            <span className="text-[11px] sm:text-[13px] font-bold">AI Assistant</span>
-            <span className="text-[9px] sm:text-[10px] ml-1 sm:ml-2 opacity-70 hidden sm:inline">Images • Videos • Music</span>
+            <span className="text-[11px] sm:text-[12px] font-bold">AI Assistant</span>
           </div>
           <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
             {isConnected && (
@@ -1227,26 +1219,24 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
           ))}
           <div ref={messagesEndRef} />
 
-          {/* Suggestions - optimized for mobile */}
+          {/* Suggestions - compact */}
           {suggestions.length > 0 && messages.length <= 1 && (
-            <div className="mt-6 sm:mt-8 mb-3 sm:mb-5">
-              <div className="text-center mb-3 sm:mb-4 text-[11px] sm:text-[12px] font-medium" style={{ color: WIN95.textDisabled }}>
-                💡 Try one of these:
+            <div className="mt-3 sm:mt-4 mb-2">
+              <div className="text-center mb-2 text-[10px] sm:text-[11px]" style={{ color: WIN95.textDisabled }}>
+                Try one of these:
               </div>
-              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-2.5 sm:justify-center">
+              <div className="flex flex-wrap gap-1.5 justify-center">
                 {suggestions.map((suggestion, i) => (
                   <button
                     key={i}
                     onClick={() => handleSuggestionClick(suggestion)}
-                    className="px-4 py-2.5 sm:px-5 sm:py-3 text-[11px] sm:text-[12px] sm:max-w-[240px] text-left rounded-xl transition-all hover:scale-[1.03] hover:shadow-xl active:scale-[0.98]"
+                    className="px-3 py-1.5 text-[10px] sm:text-[11px] max-w-[200px] text-left rounded-lg truncate"
                     style={{
                       background: WIN95.bg,
-                      border: `1.5px solid ${WIN95.border.dark}`,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.12), inset 1px 1px 0 rgba(255,255,255,0.1)',
+                      border: `1px solid ${WIN95.border.dark}`,
                       fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                     }}
                   >
-                    <span className="mr-1.5">✨</span>
                     {suggestion}
                   </button>
                 ))}
@@ -1257,16 +1247,18 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
 
         {/* Input area - compact on mobile */}
         <div 
-          className="p-3 sm:p-5 flex-shrink-0"
+          className="p-2 sm:p-3 flex-shrink-0"
           style={{ 
             background: WIN95.bg,
-            borderTop: `2px solid ${WIN95.border.dark}`,
-            boxShadow: '0 -2px 8px rgba(0,0,0,0.05)'
+            borderTop: `1px solid ${WIN95.border.dark}`
           }}
         >
           {isConnected && (
             <>
-              <QuickActions onSelect={handleQuickAction} />
+              {/* Quick actions - hidden on mobile */}
+              <div className="hidden sm:block">
+                <QuickActions onSelect={handleQuickAction} />
+              </div>
               
               {/* Attached image preview - compact on mobile */}
               {attachedImage && (
@@ -1307,32 +1299,29 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                 </div>
               )}
               
-              <div className="flex gap-1.5 sm:gap-2 items-end">
-                {/* Image upload button - smaller on mobile */}
+              <div className="flex gap-1.5 items-end">
+                {/* Image upload button */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isLoading || isGenerating || isUploadingImage}
-                  className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-xl sm:rounded-2xl transition-all flex-shrink-0 hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100"
+                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg transition-all flex-shrink-0"
                   style={{
                     background: attachedImage 
                       ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
                       : WIN95.bgLight,
                     color: attachedImage ? '#fff' : WIN95.text,
-                    border: `1.5px solid ${WIN95.border.dark}`,
+                    border: `1px solid ${WIN95.border.dark}`,
                     cursor: (isLoading || isGenerating || isUploadingImage) ? 'default' : 'pointer',
-                    opacity: (isLoading || isGenerating) ? 0.5 : 1,
-                    boxShadow: attachedImage 
-                      ? '0 4px 12px rgba(34, 197, 94, 0.35)'
-                      : '0 2px 4px rgba(0,0,0,0.08)'
+                    opacity: (isLoading || isGenerating) ? 0.5 : 1
                   }}
                   title="Attach reference image"
                 >
                   {isUploadingImage ? (
-                    <div className="w-4 h-4 sm:w-4.5 sm:h-4.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                   ) : attachedImage ? (
-                    <Check className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                    <Check className="w-4 h-4" />
                   ) : (
-                    <ImagePlus className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                    <ImagePlus className="w-4 h-4" />
                   )}
                 </button>
                 <input
@@ -1344,11 +1333,11 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                 />
                 
                 <div 
-                  className="flex-1 rounded-xl sm:rounded-2xl overflow-hidden min-w-0 transition-all duration-200"
+                  className="flex-1 rounded-lg overflow-hidden min-w-0"
                   style={{
                     background: WIN95.inputBg,
-                    boxShadow: `inset 0 2px 6px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.05)`,
-                    border: `1.5px solid ${WIN95.border.dark}`
+                    boxShadow: `inset 0 1px 3px rgba(0,0,0,0.1)`,
+                    border: `1px solid ${WIN95.border.dark}`
                   }}
                 >
                   <textarea
@@ -1356,32 +1345,24 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    onFocus={(e) => {
-                      e.currentTarget.parentElement!.style.borderColor = '#667eea';
-                      e.currentTarget.parentElement!.style.boxShadow = `inset 0 2px 6px rgba(0,0,0,0.12), 0 0 0 2px rgba(102, 126, 234, 0.2)`;
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.parentElement!.style.borderColor = WIN95.border.dark;
-                      e.currentTarget.parentElement!.style.boxShadow = `inset 0 2px 6px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.05)`;
-                    }}
                     placeholder={attachedImage ? "Describe what to do..." : "What do you want to create?"}
                     disabled={isLoading || isGenerating}
                     rows={1}
-                    className="w-full px-4 py-3 sm:px-5 sm:py-3.5 text-[13px] sm:text-[14px] resize-none focus:outline-none transition-colors"
+                    className="w-full px-3 py-2 text-[13px] sm:text-[14px] resize-none focus:outline-none"
                     style={{
                       background: 'transparent',
                       color: WIN95.text,
                       fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                      minHeight: '40px',
-                      maxHeight: '120px',
-                      lineHeight: '1.5'
+                      minHeight: '36px',
+                      maxHeight: '80px',
+                      lineHeight: '1.4'
                     }}
                   />
                 </div>
                 <button
                   onClick={handleSend}
                   disabled={!inputValue.trim() || isLoading || isGenerating}
-                  className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-xl sm:rounded-2xl transition-all flex-shrink-0 hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100"
+                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg transition-all flex-shrink-0"
                   style={{
                     background: (!inputValue.trim() || isLoading || isGenerating) 
                       ? WIN95.buttonFace 
@@ -1391,27 +1372,13 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                       : '#fff',
                     boxShadow: (!inputValue.trim() || isLoading || isGenerating)
                       ? 'none'
-                      : '0 6px 20px rgba(102, 126, 234, 0.45), 0 2px 4px rgba(0,0,0,0.1)',
+                      : '0 2px 8px rgba(102, 126, 234, 0.3)',
                     cursor: (!inputValue.trim() || isLoading || isGenerating) ? 'default' : 'pointer',
                     border: (!inputValue.trim() || isLoading || isGenerating) ? `1px solid ${WIN95.border.dark}` : 'none'
                   }}
                 >
-                  <Send className="w-4.5 h-4.5 sm:w-5.5 sm:h-5.5" />
+                  <Send className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
-              </div>
-              
-              {/* Keyboard hints - hidden on mobile */}
-              <div className="hidden sm:flex items-center justify-between mt-3 px-1 text-[10px]" style={{ color: WIN95.textDisabled }}>
-                <span className="flex items-center gap-2">
-                  <kbd className="px-2 py-1 rounded-md font-medium" style={{ background: WIN95.bgLight, border: `1px solid ${WIN95.border.dark}` }}>Enter</kbd>
-                  <span>to send</span>
-                  <span className="mx-1">•</span>
-                  <kbd className="px-2 py-1 rounded-md font-medium" style={{ background: WIN95.bgLight, border: `1px solid ${WIN95.border.dark}` }}>Shift+Enter</kbd>
-                  <span>new line</span>
-                </span>
-                <span className="flex items-center gap-1.5 opacity-80">
-                  <Sparkles className="w-3.5 h-3.5" /> Powered by Claude
-                </span>
               </div>
             </>
           )}
@@ -1434,37 +1401,34 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         </div>
       </div>
 
-      {/* Status bar - compact on mobile */}
+      {/* Status bar - hidden on mobile, minimal on desktop */}
       <div 
-        className="flex items-center mx-1 lg:mx-4 my-1.5 lg:my-2.5 rounded-xl overflow-hidden flex-shrink-0"
+        className="hidden sm:flex items-center mx-2 lg:mx-4 my-1 rounded-lg overflow-hidden flex-shrink-0"
         style={{ 
           ...PANEL.window,
           fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
           filter: !isConnected ? 'blur(2px)' : 'none',
-          opacity: !isConnected ? 0.75 : 1,
-          transition: 'filter 0.3s ease, opacity 0.3s ease',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          opacity: !isConnected ? 0.75 : 1
         }}
       >
         <div 
-          className="flex items-center gap-3 sm:gap-5 px-3 sm:px-4 py-1.5 sm:py-2 flex-1 text-[10px] sm:text-[11px]"
+          className="flex items-center gap-3 px-3 py-1 flex-1 text-[9px]"
           style={{ 
             background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
-            color: '#ffffff',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)'
+            color: '#ffffff'
           }}
         >
-          <span className="flex items-center gap-1.5 opacity-95 hover:opacity-100 transition-opacity">
-            <Image className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline font-medium">Images</span>
+          <span className="flex items-center gap-1 opacity-90">
+            <Image className="w-3 h-3" /> Images
           </span>
-          <span className="flex items-center gap-1.5 opacity-95 hover:opacity-100 transition-opacity">
-            <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline font-medium">Videos</span>
+          <span className="flex items-center gap-1 opacity-90">
+            <Film className="w-3 h-3" /> Videos
           </span>
-          <span className="flex items-center gap-1.5 opacity-95 hover:opacity-100 transition-opacity">
-            <Music className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline font-medium">Music</span>
+          <span className="flex items-center gap-1 opacity-90">
+            <Music className="w-3 h-3" /> Music
           </span>
           <span className="flex-1" />
-          <span className="opacity-90 font-medium">
+          <span className="opacity-80">
             {isGenerating ? '⏳ Creating...' : isLoading ? '💭 Thinking...' : '✨ Ready'}
           </span>
         </div>
