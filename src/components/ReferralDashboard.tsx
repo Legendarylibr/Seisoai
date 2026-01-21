@@ -323,17 +323,17 @@ const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }
                             key={entry.rank}
                             className="flex items-center gap-2 py-1 px-2 text-xs"
                             style={{ 
-                              background: entry.userId === userId ? WIN95.highlight : 
+                              background: entry.isCurrentUser ? WIN95.highlight : 
                                          entry.rank % 2 === 0 ? WIN95.inputBg : 'transparent',
-                              color: entry.userId === userId ? WIN95.highlightText : WIN95.text
+                              color: entry.isCurrentUser ? WIN95.highlightText : WIN95.text
                             }}
                           >
                             <span className="w-6 font-bold">#{entry.rank}</span>
                             <span className="flex-1 truncate">
-                              {entry.userId === userId ? 'You' : `${entry.userId.substring(0, 10)}...`}
+                              {entry.isCurrentUser ? 'You' : `Player #${entry.rank}`}
                             </span>
                             <span className="font-mono">{entry.referralCount} refs</span>
-                            <span className="font-mono" style={{ color: entry.userId === userId ? 'inherit' : WIN95.successText }}>
+                            <span className="font-mono" style={{ color: entry.isCurrentUser ? 'inherit' : WIN95.successText }}>
                               {entry.creditsEarned}c
                             </span>
                           </div>

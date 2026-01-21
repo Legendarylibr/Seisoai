@@ -28,7 +28,7 @@ export interface ReferralStats {
 
 export interface LeaderboardEntry {
   rank: number;
-  userId: string;
+  isCurrentUser: boolean;
   referralCount: number;
   creditsEarned: number;
 }

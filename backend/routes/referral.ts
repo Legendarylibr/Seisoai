@@ -197,12 +197,14 @@ export function createReferralRoutes(deps: Dependencies = {}) {
   /**
    * Get referral leaderboard
    * GET /api/referral/leaderboard
+   * Returns anonymized leaderboard - no email or wallet addresses exposed
    */
-  router.get('/leaderboard', authMiddleware, async (req: Request, res: Response) => {
+  router.get('/leaderboard', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+      const currentUserId = req.user?.userId; // Optional - for showing "You" to current user
       
-      const leaderboard = await getReferralLeaderboard(limit);
+      const leaderboard = await getReferralLeaderboard(limit, currentUserId);
       
       res.json({
         success: true,

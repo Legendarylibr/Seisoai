@@ -244,10 +244,14 @@ export async function getReferralStats(userId: string): Promise<{
 
 /**
  * Get referral leaderboard
+ * Returns anonymized leaderboard data - no email or wallet addresses exposed
  */
-export async function getReferralLeaderboard(limit: number = 10): Promise<{
+export async function getReferralLeaderboard(
+  limit: number = 10,
+  currentUserId?: string
+): Promise<{
   rank: number;
-  userId: string;
+  isCurrentUser: boolean;
   referralCount: number;
   creditsEarned: number;
 }[]> {
@@ -260,7 +264,7 @@ export async function getReferralLeaderboard(limit: number = 10): Promise<{
   
   return topReferrers.map((user, index) => ({
     rank: index + 1,
-    userId: user.userId || 'unknown',
+    isCurrentUser: currentUserId ? user.userId === currentUserId : false,
     referralCount: user.referralCount || 0,
     creditsEarned: user.referralCreditsEarned || 0
   }));
