@@ -836,7 +836,21 @@ const MessageBubble = memo(function MessageBubble({
                   )}
 
                   {/* Music */}
-                  {message.generatedContent.type === 'music' && message.generatedContent.urls[0] && (
+                  {message.generatedContent.type === 'music' && !message.generatedContent.urls?.[0] && (
+                    <div 
+                      className="p-3 rounded-lg"
+                      style={{ 
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)'
+                      }}
+                    >
+                      <div className="flex items-center gap-2 text-[12px]" style={{ color: '#ef4444' }}>
+                        <AlertCircle className="w-4 h-4" />
+                        <span>Music generated but no audio URL returned. Please try again.</span>
+                      </div>
+                    </div>
+                  )}
+                  {message.generatedContent.type === 'music' && message.generatedContent.urls?.[0] && (
                     <div 
                       className="p-4 rounded-lg"
                       style={{ 
@@ -881,7 +895,7 @@ const MessageBubble = memo(function MessageBubble({
                       </div>
                       
                       <audio
-                        src={message.generatedContent.urls[0]}
+                        src={message.generatedContent.urls?.[0] || ''}
                         controls
                         className="w-full h-10 rounded"
                         style={{ 
@@ -891,7 +905,7 @@ const MessageBubble = memo(function MessageBubble({
                       />
                       <div className="flex gap-2 mt-3">
                         <button
-                          onClick={() => handleDownload(message.generatedContent!.urls[0], 'music')}
+                          onClick={() => handleDownload(message.generatedContent?.urls?.[0] || '', 'music')}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] rounded-lg"
                           style={BTN.base}
                         >
