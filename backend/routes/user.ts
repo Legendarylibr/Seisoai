@@ -566,6 +566,72 @@ export function createUserRoutes(deps: Dependencies = {}) {
     }
   });
 
+  /**
+   * Complete onboarding and award bonus credits
+   * POST /api/user/complete-onboarding
+   */
+  router.post('/complete-onboarding', strictAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!requireAuth(req, res)) return;
+      
+      const { userId } = req.body as { userId?: string };
+      const authenticatedUserId = req.user?.userId;
+      
+      // Verify user is completing their own onboarding
+      if (userId !== authenticatedUserId) {
+        sendError(res, 'Unauthorized', 403, req.requestId);
+        return;
+      }
+      
+      const User = mongoose.model<IUser>('User');
+      const user = await User.findOne({ userId });
+      
+      if (!user) {
+        sendError(res, 'User not found', 404, req.requestId);
+        return;
+      }
+      
+      // Check if onboarding already completed
+      if (user.onboardingCompleted) {
+        res.json({
+          success: true,
+          alreadyCompleted: true,
+          creditsAwarded: 0
+        });
+        return;
+      }
+      
+      // Award 5 bonus credits for completing onboarding
+      const bonusCredits = 5;
+      
+      user.credits += bonusCredits;
+      user.totalCreditsEarned += bonusCredits;
+      user.onboardingCompleted = true;
+      user.onboardingStep = 99; // Mark as fully complete
+      
+      // Add to payment history
+      user.paymentHistory.push({
+        amount: 0,
+        credits: bonusCredits,
+        timestamp: new Date(),
+        type: 'admin' // Using 'admin' type for onboarding bonus
+      });
+      
+      await user.save();
+      
+      logger.info('Onboarding completed', { userId, creditsAwarded: bonusCredits });
+      
+      res.json({
+        success: true,
+        creditsAwarded: bonusCredits,
+        newBalance: user.credits
+      });
+    } catch (error) {
+      logger.error('Error completing onboarding:', { error: (error as Error).message });
+      sendServerError(res, error as Error, req.requestId);
+    }
+  });
+
   return router;
 }
 

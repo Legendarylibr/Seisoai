@@ -5,7 +5,8 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
 import { extractLayers } from '../services/layerExtractionService';
 import { addGeneration } from '../services/galleryService';
-import { X, Sparkles, Layers, Image as ImageIcon, AlertTriangle, Brain, ZoomIn } from 'lucide-react';
+import { X, Sparkles, Layers, Image as ImageIcon, AlertTriangle, Brain, ZoomIn, Share2 } from 'lucide-react';
+import SocialShareButtons from './SocialShareButtons';
 import { BTN, WIN95, hoverHandlers } from '../utils/buttonStyles';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
@@ -649,6 +650,26 @@ const ImageOutput: React.FC = () => {
           <Sparkles className="w-3 h-3" />
           <span>New Prompt</span>
         </button>
+
+        {/* Share Button */}
+        {hasImages && (
+          <SocialShareButtons
+            content={{
+              imageUrl: imagesToDisplay[0],
+              prompt: currentGeneration?.prompt,
+              id: currentGeneration?.image?.split('/').pop()?.split('?')[0]
+            }}
+            onCreditsEarned={(credits) => {
+              // Refresh credits after earning
+              if (isEmailAuth && emailContext.refreshCredits) {
+                emailContext.refreshCredits();
+              } else if (refreshCredits && address) {
+                refreshCredits();
+              }
+            }}
+            compact={true}
+          />
+        )}
 
         <div className="flex-1" />
         

@@ -57,6 +57,12 @@ export interface IDiscordUser extends Document {
     autoThread: boolean;
   };
   
+  // Referral system
+  referralCode?: string;
+  referredBy?: string;
+  referralCount: number;
+  referralCreditsEarned: number;
+  
   createdAt: Date;
   updatedAt: Date;
 }
@@ -142,6 +148,28 @@ const discordUserSchema = new Schema<IDiscordUser>({
     defaultAspectRatio: { type: String, default: '16:9' },
     notifyOnComplete: { type: Boolean, default: true },
     autoThread: { type: Boolean, default: true }
+  },
+  
+  // Referral system
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true
+  },
+  referredBy: {
+    type: String,  // discordId of the referrer
+    sparse: true
+  },
+  referralCount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  referralCreditsEarned: {
+    type: Number,
+    default: 0,
+    min: 0
   }
 }, {
   timestamps: true

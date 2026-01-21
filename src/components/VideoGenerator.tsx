@@ -14,9 +14,10 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateVideo } from '../services/videoService';
 import { addGeneration } from '../services/galleryService';
-import { Film, Upload, Play, X, Clock, Monitor, Volume2, VolumeX, Sparkles, AlertCircle, ChevronDown, Zap, Image, Layers } from 'lucide-react';
+import { Film, Upload, Play, X, Clock, Monitor, Volume2, VolumeX, Sparkles, AlertCircle, ChevronDown, Zap, Image, Layers, Share2 } from 'lucide-react';
 import logger from '../utils/logger';
 import { Win95Button, Win95Panel, Win95GroupBox, WIN95_COLORS as WIN95 } from './ui/Win95';
+import SocialShareButtons from './SocialShareButtons';
 
 // Generation mode options - Veo 3.1 variants + Lip Sync
 // Note: Actual endpoint construction is handled by the backend
@@ -1039,6 +1040,24 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
                 <span>🗑️</span>
                 <span className="hidden sm:inline">Clear</span>
               </Win95Button>
+
+              {/* Share Button */}
+              <SocialShareButtons
+                content={{
+                  videoUrl: generatedVideoUrl,
+                  prompt: prompt.trim(),
+                  id: generatedVideoUrl?.split('/').pop()?.split('?')[0]
+                }}
+                onCreditsEarned={() => {
+                  // Refresh credits after earning
+                  if (isEmailAuth && emailContext.refreshCredits) {
+                    emailContext.refreshCredits();
+                  } else if (walletContext.fetchCredits && walletContext.address) {
+                    walletContext.fetchCredits(walletContext.address, 3, true);
+                  }
+                }}
+                compact={true}
+              />
 
               <div className="flex-1" />
               

@@ -65,6 +65,19 @@ interface UserSettings {
   preferredStyle?: string;
   defaultImageSize?: string;
   enableNotifications?: boolean;
+  emailMarketing?: boolean;
+}
+
+interface SocialShare {
+  platform: 'twitter' | 'discord' | 'reddit' | 'facebook' | 'linkedin';
+  contentId: string;
+  sharedAt: Date;
+  creditsAwarded: boolean;
+}
+
+interface Achievement {
+  id: string;
+  unlockedAt: Date;
 }
 
 export interface IUser extends Document {
@@ -103,6 +116,23 @@ export interface IUser extends Document {
   stripeCustomerId?: string;
   // Virtual field to track if email was decrypted
   _emailDecrypted?: boolean;
+  // Referral system fields
+  referralCode?: string;
+  referredBy?: string;  // userId of the referrer
+  referralCount: number;
+  referralCreditsEarned: number;
+  // Social sharing tracking
+  socialShares: SocialShare[];
+  weeklyShareCredits: number;
+  weeklyShareReset?: Date;
+  // Achievement/gamification fields
+  achievements: Achievement[];
+  totalGenerations: number;
+  loginStreak: number;
+  lastLoginDate?: Date;
+  // Onboarding tracking
+  onboardingCompleted: boolean;
+  onboardingStep: number;
 }
 
 interface UserModel extends Model<IUser> {
@@ -298,6 +328,79 @@ const userSchema = new mongoose.Schema<IUser>({
     type: String,
     sparse: true,
     index: true
+  },
+  // Referral system fields
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true
+  },
+  referredBy: {
+    type: String,  // userId of the referrer
+    sparse: true,
+    index: true
+  },
+  referralCount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  referralCreditsEarned: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  // Social sharing tracking (limited to prevent abuse)
+  socialShares: {
+    type: [{
+      platform: { type: String, enum: ['twitter', 'discord', 'reddit', 'facebook', 'linkedin'] },
+      contentId: String,
+      sharedAt: { type: Date, default: Date.now },
+      creditsAwarded: { type: Boolean, default: false }
+    }],
+    validate: [arrayLimit50, 'Social shares exceed limit of 50']
+  },
+  weeklyShareCredits: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 5  // Cap at 5 credits per week
+  },
+  weeklyShareReset: {
+    type: Date,
+    default: Date.now
+  },
+  // Achievement/gamification fields
+  achievements: {
+    type: [{
+      id: String,
+      unlockedAt: { type: Date, default: Date.now }
+    }],
+    validate: [arrayLimit50, 'Achievements exceed limit of 50']
+  },
+  totalGenerations: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  loginStreak: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  lastLoginDate: {
+    type: Date
+  },
+  // Onboarding tracking
+  onboardingCompleted: {
+    type: Boolean,
+    default: false
+  },
+  onboardingStep: {
+    type: Number,
+    default: 0,
+    min: 0
   }
 }, {
   timestamps: true
@@ -311,6 +414,10 @@ userSchema.index({ lastActive: 1 }); // For querying inactive users
 userSchema.index({ 'gallery.timestamp': 1 });
 userSchema.index({ 'gallery.expiresAt': 1 }); // For cleaning up expired 3D models
 userSchema.index({ 'generationHistory.requestId': 1 }); // For deduplication checks
+// Referral system indexes
+userSchema.index({ referralCount: -1 }); // For leaderboard queries
+userSchema.index({ referralCreditsEarned: -1 }); // For leaderboard queries
+userSchema.index({ totalGenerations: -1 }); // For achievement leaderboards
 
 // DATA MINIMIZATION: Auto-delete inactive accounts with 0 credits
 // TTL index on expiresAt - MongoDB will auto-delete when expiresAt < now

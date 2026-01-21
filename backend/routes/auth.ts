@@ -17,6 +17,7 @@ import { blacklistToken } from '../middleware/auth';
 import { createEmailHash } from '../utils/emailHash';
 import { generateResetToken, hashResetToken, sendPasswordResetEmail } from '../services/email';
 import { alertPasswordReset, alertAccountLockout } from '../services/securityAlerts';
+import { sendWelcomeEmail } from '../services/emailMarketing';
 import type { IUser } from '../models/User';
 
 // Types
@@ -138,6 +139,13 @@ export function createAuthRoutes(deps: Dependencies = {}) {
 
       await user.save();
       logger.info('New user created with 10 credits', { email: user.email, userId: user.userId });
+
+      // Send welcome email (non-blocking)
+      if (user.userId) {
+        sendWelcomeEmail(user.userId).catch(err => {
+          logger.warn('Failed to send welcome email', { userId: user.userId, error: err.message });
+        });
+      }
 
       // Generate tokens
       const token = jwt.sign(

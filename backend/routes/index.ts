@@ -29,6 +29,9 @@ import createSessionRoutes from './sessions';
 import createAuditRoutes from './audit';
 import createPromptLabRoutes from './promptLab';
 import createChatAssistantRoutes from './chatAssistant';
+import createReferralRoutes from './referral';
+import createPublicGalleryRoutes from './gallery-public';
+import createAchievementRoutes from './achievements';
 import { adminIPAllowlist } from '../middleware/ipAllowlist';
 import { getCSRFToken } from '../middleware/csrf';
 
@@ -74,6 +77,18 @@ export function createApiRoutes(deps: Dependencies) {
   router.use('/users', userRoutes);
 
   // ============================================
+  // Referral System
+  // Referral codes, stats, leaderboard, social sharing
+  // ============================================
+  router.use('/referral', createReferralRoutes(deps as never));
+
+  // ============================================
+  // Achievements & Gamification
+  // Badges, milestones, leaderboards
+  // ============================================
+  router.use('/achievements', createAchievementRoutes(deps as never));
+
+  // ============================================
   // Content Generation
   // Primary: /generate, Alias: /generations
   // ============================================
@@ -85,6 +100,7 @@ export function createApiRoutes(deps: Dependencies) {
   // Media & Content Routes
   // ============================================
   router.use('/gallery', createGalleryRoutes(deps as never));
+  router.use('/gallery', createPublicGalleryRoutes(deps as never));
   router.use('/audio', createAudioRoutes(deps as never));
   router.use('/image-tools', createImageToolsRoutes(deps as never));
   router.use('/workflows', createWorkflowRoutes(deps as never));

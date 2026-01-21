@@ -18,6 +18,7 @@ import * as credits from './credits.js';
 import * as link from './link.js';
 import * as help from './help.js';
 import * as admin from './admin.js';
+import * as referral from './referral.js';
 
 export interface Command {
   data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder | SlashCommandSubcommandsOnlyBuilder;
@@ -36,7 +37,8 @@ const commandModules: Command[] = [
   credits,
   link,
   help,
-  admin
+  admin,
+  referral
 ];
 
 for (const command of commandModules) {
