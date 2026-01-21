@@ -8,7 +8,7 @@ interface FooterProps {
 const Footer = memo(function Footer({ onOpenTerms }: FooterProps) {
   return (
     <div 
-      className="flex items-center justify-center gap-1.5 sm:gap-4 px-2 py-0.5 sm:py-1 text-[8px] sm:text-[10px]"
+      className="flex-shrink-0 flex items-center justify-center gap-2 sm:gap-3 md:gap-4 px-2 py-1 sm:py-1.5 text-[9px] sm:text-[10px] md:text-[11px]"
       style={{
         background: WIN95.bg,
         borderTop: `1px solid ${WIN95.border.light}`,

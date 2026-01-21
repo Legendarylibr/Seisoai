@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Wallet, ArrowRight, Sparkles, Link2, Calendar } from 'lucide-react';
+import { Mail, Wallet, ArrowRight, Sparkles, MessageCircle, Image, Film, Music, Gift, Users } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import EmailSignIn from './EmailSignIn';
 import logger from '../utils/logger';
@@ -148,30 +148,61 @@ const AuthPrompt: React.FC = () => {
             </div>
 
             {/* Main Content Grid - Win95 Group Boxes */}
-            <div className="grid md:grid-cols-3 gap-3">
-              {/* Features */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-3">
+              {/* AI Tools - 4 compact cards */}
               <div 
-                className="p-3 text-left"
+                className="p-2 md:p-3 text-center"
                 style={{ 
                   background: WIN95.bg,
                   boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
-                <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: WIN95.highlight }}>
-                  <Link2 className="w-3.5 h-3.5" />
-                  Features
-                </h2>
-                <div className="space-y-1 text-[10px]" style={{ color: WIN95.text }}>
-                  <div>• <strong>Generate</strong> from text</div>
-                  <div>• <strong>Edit</strong> existing images</div>
-                  <div>• <strong>Blend</strong> 2+ images</div>
-                  <div>• <strong>Extract layers</strong> from images</div>
-                  <div>• <strong>Multiple</strong> art styles</div>
-                </div>
+                <MessageCircle className="w-5 h-5 md:w-6 md:h-6 mx-auto mb-1" style={{ color: WIN95.highlight }} />
+                <div className="text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Chat AI</div>
+                <div className="text-[8px] md:text-[10px]" style={{ color: WIN95.textDisabled }}>Plan & describe</div>
               </div>
+              <div 
+                className="p-2 md:p-3 text-center"
+                style={{ 
+                  background: WIN95.bg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+              >
+                <Image className="w-5 h-5 md:w-6 md:h-6 mx-auto mb-1" style={{ color: '#008000' }} />
+                <div className="text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Images</div>
+                <div className="text-[8px] md:text-[10px]" style={{ color: WIN95.textDisabled }}>20+ styles</div>
+              </div>
+              <div 
+                className="p-2 md:p-3 text-center"
+                style={{ 
+                  background: WIN95.bg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+              >
+                <Film className="w-5 h-5 md:w-6 md:h-6 mx-auto mb-1" style={{ color: '#800080' }} />
+                <div className="text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Videos</div>
+                <div className="text-[8px] md:text-[10px]" style={{ color: WIN95.textDisabled }}>AI animation</div>
+              </div>
+              <div 
+                className="p-2 md:p-3 text-center"
+                style={{ 
+                  background: WIN95.bg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+              >
+                <Music className="w-5 h-5 md:w-6 md:h-6 mx-auto mb-1" style={{ color: '#b8860b' }} />
+                <div className="text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Music</div>
+                <div className="text-[8px] md:text-[10px]" style={{ color: WIN95.textDisabled }}>50+ genres</div>
+              </div>
+            </div>
 
-              {/* Free Benefits */}
+            {/* Bottom Row - Benefits & How to Use */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
+              {/* Free Benefits & Referrals */}
               <div 
                 className="p-3 text-left"
                 style={{ 
@@ -181,17 +212,25 @@ const AuthPrompt: React.FC = () => {
                 }}
               >
                 <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#006400' }}>
-                  <Calendar className="w-3.5 h-3.5" />
-                  Free Benefits
+                  <Gift className="w-3.5 h-3.5" />
+                  Free Credits
                 </h2>
-                <div className="space-y-1.5 text-[10px]" style={{ color: WIN95.text }}>
-                  <div className="flex items-center gap-1.5">
-                    <span>🎁</span>
-                    <strong>2 Credits</strong> for all new users
+                <div className="grid grid-cols-2 gap-2 text-[10px]" style={{ color: WIN95.text }}>
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm">🎁</span>
+                    <div><strong>2</strong> on signup</div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span>✨</span>
-                    No credit card required
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm">💌</span>
+                    <div><strong>+5</strong> per referral</div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5" style={{ color: '#006400' }} />
+                    <div><strong>+10</strong> for friend</div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm">✨</span>
+                    <div>No card needed</div>
                   </div>
                 </div>
               </div>
@@ -207,13 +246,12 @@ const AuthPrompt: React.FC = () => {
               >
                 <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#b8860b' }}>
                   <Sparkles className="w-3.5 h-3.5" />
-                  How to Use
+                  How It Works
                 </h2>
-                <div className="space-y-1 text-[10px] leading-relaxed" style={{ color: WIN95.text }}>
-                  <div><strong>1.</strong> Type a description and Generate</div>
-                  <div><strong>2.</strong> Upload images to edit</div>
-                  <div><strong>3.</strong> Blend multiple images</div>
-                  <div><strong>4.</strong> Extract layers from images</div>
+                <div className="space-y-1 text-[10px]" style={{ color: WIN95.text }}>
+                  <div><strong>1.</strong> Sign in with Email or Wallet</div>
+                  <div><strong>2.</strong> Chat with AI or use tools directly</div>
+                  <div><strong>3.</strong> Download & share creations</div>
                 </div>
               </div>
             </div>
