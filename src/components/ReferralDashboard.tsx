@@ -68,7 +68,7 @@ const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }
     if (!stats) return;
     
     const shareUrl = stats.referral.shareUrl;
-    const text = encodeURIComponent('Join me on SeisoAI and get 15 bonus credits! Create amazing AI images, videos, and music.');
+    const text = encodeURIComponent('Join me on SeisoAI! Create amazing AI images, videos, and music.');
     const encodedUrl = encodeURIComponent(shareUrl);
     
     let url = '';
@@ -189,7 +189,7 @@ const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }
                   <div className="text-xs" style={{ color: WIN95.text }}>Credits for you</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold" style={{ color: WIN95.successText }}>+15</div>
+                  <div className="text-2xl font-bold" style={{ color: WIN95.successText }}>10</div>
                   <div className="text-xs" style={{ color: WIN95.text }}>Credits for friend</div>
                 </div>
               </div>

@@ -138,7 +138,7 @@ ${contentWrapper(`
   
   <h3 style="color: #333; margin: 0 0 15px 0;">Share & Earn More Credits</h3>
   
-  <p>Invite friends and earn <strong>5 credits</strong> for each signup. They'll get <strong>15 bonus credits</strong> too!</p>
+  <p>Invite friends and earn <strong>5 credits</strong> for each signup. They'll get the standard <strong>10 credits</strong> on signup!</p>
   
   <div style="background: #faf5ff; border: 1px solid #c084fc; border-radius: 8px; padding: 15px; text-align: center; margin: 20px 0;">
     <p style="margin: 0 0 5px 0; font-size: 12px; color: #7c3aed;">Your Referral Code</p>
@@ -189,7 +189,7 @@ Get started: ${FRONTEND_URL}
 
 Share & Earn More Credits
 
-Invite friends and earn 5 credits for each signup. They'll get 15 bonus credits too!
+Invite friends and earn 5 credits for each signup. They'll get the standard 10 credits on signup!
 
 Your Referral Code: ${referralCode}
 Share this link: ${FRONTEND_URL}?ref=${referralCode}

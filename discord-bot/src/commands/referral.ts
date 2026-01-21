@@ -17,7 +17,7 @@ import crypto from 'crypto';
 // Referral configuration
 const REFERRAL_CODE_LENGTH = 8;
 const REFERRER_CREDITS = 5;
-const REFEREE_BONUS_CREDITS = 5;
+const REFEREE_BONUS_CREDITS = 0;
 
 /**
  * Generate a unique referral code
@@ -129,7 +129,7 @@ async function handleCodeCommand(
       {
         name: 'How It Works',
         value: `You get **${REFERRER_CREDITS} credits** for each friend who signs up\n` +
-               `Your friend gets **${REFEREE_BONUS_CREDITS} bonus credits** (total 15 credits!)\n` +
+               `Your friend gets the standard **10 credits** on signup\n` +
                `No limit on referrals - invite as many as you want!`,
         inline: false
       }
@@ -142,7 +142,7 @@ async function handleCodeCommand(
       new ButtonBuilder()
         .setLabel('Share on Twitter')
         .setStyle(ButtonStyle.Link)
-        .setURL(`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Join me on SeisoAI and get 15 bonus credits! Create amazing AI images, videos, and music. Use my code: ${referralCode}`)}&url=${encodeURIComponent(shareUrl)}`)
+        .setURL(`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Join me on SeisoAI! Create amazing AI images, videos, and music. Use my code: ${referralCode}`)}&url=${encodeURIComponent(shareUrl)}`)
         .setEmoji('🐦'),
       new ButtonBuilder()
         .setLabel('Visit Website')

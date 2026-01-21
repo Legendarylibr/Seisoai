@@ -60,7 +60,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'share',
     title: 'Share & Earn',
-    description: 'Share your creations on social media and earn 1 credit per share (up to 5 per week). Invite friends for 5 bonus credits each!',
+    description: 'Share your creations on social media and earn 1 credit per share (up to 5 per week). Invite friends and earn 5 credits for each signup!',
     icon: <Share2 className="w-8 h-8" />,
     credits: 0
   },
