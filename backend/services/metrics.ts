@@ -133,10 +133,40 @@ export const dbConnectionPool = new client.Gauge({
   registers: [register]
 });
 
+export const dbQueryDuration = new client.Histogram({
+  name: 'seisoai_mongodb_query_duration_seconds',
+  help: 'MongoDB query duration in seconds',
+  labelNames: ['operation', 'collection'],
+  buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5],
+  registers: [register]
+});
+
+export const dbQueryErrors = new client.Counter({
+  name: 'seisoai_mongodb_query_errors_total',
+  help: 'Total MongoDB query errors',
+  labelNames: ['operation', 'error_type'],
+  registers: [register]
+});
+
 // Redis metrics
 export const redisConnected = new client.Gauge({
   name: 'seisoai_redis_connected',
   help: 'Redis connection status (1=connected, 0=disconnected)',
+  registers: [register]
+});
+
+export const redisCommandDuration = new client.Histogram({
+  name: 'seisoai_redis_command_duration_seconds',
+  help: 'Redis command duration in seconds',
+  labelNames: ['command'],
+  buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1],
+  registers: [register]
+});
+
+export const redisCommandErrors = new client.Counter({
+  name: 'seisoai_redis_command_errors_total',
+  help: 'Total Redis command errors',
+  labelNames: ['command', 'error_type'],
   registers: [register]
 });
 
@@ -305,6 +335,53 @@ export function updateJobQueueMetrics(queue: string, waiting: number, active: nu
   jobQueueSize.set({ queue, state: 'active' }, active);
   jobQueueSize.set({ queue, state: 'completed' }, completed);
   jobQueueSize.set({ queue, state: 'failed' }, failed);
+}
+
+/**
+ * Update MongoDB connection pool metrics
+ * Call this periodically to track pool usage
+ */
+export function updateDbConnectionPoolMetrics(): void {
+  try {
+    const connection = require('mongoose').connection;
+    if (connection && connection.readyState === 1) {
+      const pool = connection.db?.serverConfig?.pool;
+      if (pool) {
+        // Track active, idle, and waiting connections
+        dbConnectionPool.set({ state: 'active' }, pool.currentCheckedOut || 0);
+        dbConnectionPool.set({ state: 'idle' }, pool.currentAvailable || 0);
+        dbConnectionPool.set({ state: 'waiting' }, pool.waitQueueLength || 0);
+        dbConnectionPool.set({ state: 'total' }, (pool.currentCheckedOut || 0) + (pool.currentAvailable || 0));
+      } else {
+        // Fallback: use connection state
+        dbConnectionPool.set({ state: 'connected' }, connection.readyState === 1 ? 1 : 0);
+      }
+    } else {
+      dbConnectionPool.set({ state: 'disconnected' }, 1);
+    }
+  } catch (error) {
+    // Silently fail - metrics shouldn't break the app
+  }
+}
+
+/**
+ * Record a MongoDB query
+ */
+export function recordDbQuery(operation: string, collection: string, durationSeconds: number, error?: Error): void {
+  dbQueryDuration.observe({ operation, collection }, durationSeconds);
+  if (error) {
+    dbQueryErrors.inc({ operation, error_type: error.constructor.name });
+  }
+}
+
+/**
+ * Record a Redis command
+ */
+export function recordRedisCommand(command: string, durationSeconds: number, error?: Error): void {
+  redisCommandDuration.observe({ command }, durationSeconds);
+  if (error) {
+    redisCommandErrors.inc({ command, error_type: error.constructor.name });
+  }
 }
 
 export default {

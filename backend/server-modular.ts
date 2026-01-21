@@ -155,8 +155,19 @@ app.options('*', cors({
   optionsSuccessStatus: 200
 }));
 
-// Compression
-app.use(compression());
+// Compression - optimized for production
+app.use(compression({
+  level: config.isProduction ? 6 : 1,  // Higher compression in production
+  threshold: 1024,  // Only compress responses > 1KB
+  filter: (req: Request, res: Response) => {
+    // Don't compress if client doesn't support it
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Use compression for all other responses
+    return compression.filter(req, res);
+  }
+}));
 
 // Cookie parser (required for CSRF protection)
 app.use(cookieParser());
@@ -251,15 +262,28 @@ app.use('/api', (_req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Body parsing
+// Body parsing with optimized limits
 // Stripe webhook needs raw body
-app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json', limit: '1mb' }));
 // SECURITY FIX: Reduced from 150mb to 50mb to prevent DoS attacks
 // Audio routes need larger body limit for video uploads, but 50MB is sufficient
 app.use('/api/audio', express.json({ limit: '50mb' }));
-// Default limit for other routes
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Image upload routes may need larger limits
+app.use('/api/generate', express.json({ limit: '20mb' }));
+// Default limit for other routes - optimized for API performance
+app.use(express.json({ 
+  limit: '10mb',
+  // Performance: Use strict JSON parsing
+  strict: true,
+  // Performance: Don't parse arrays as objects
+  type: 'application/json'
+}));
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '10mb',
+  // Performance: Only parse when Content-Type matches
+  type: 'application/x-www-form-urlencoded'
+}));
 
 // Static files with in-app browser compatible headers
 const distPath = path.join(__dirname, '..', 'dist');
@@ -621,6 +645,17 @@ async function startServer(): Promise<void> {
           allowedIPs: ipConfig.allowlist.length 
         });
       }
+    });
+
+    // Performance optimizations for HTTP server
+    // Keep-alive settings for better connection reuse
+    server.keepAliveTimeout = 65000;  // 65 seconds (slightly above nginx default of 60s)
+    server.headersTimeout = 66000;    // Must be > keepAliveTimeout
+    // Enable TCP_NODELAY for lower latency
+    server.on('connection', (socket) => {
+      socket.setNoDelay(true);
+      // Set socket timeout to prevent hanging connections
+      socket.setTimeout(300000);  // 5 minutes
     });
 
     // ENTERPRISE: Setup graceful shutdown with HTTP server

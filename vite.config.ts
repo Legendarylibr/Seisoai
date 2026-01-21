@@ -77,26 +77,42 @@ export default defineConfig(({ mode }) => {
       },
       rollupOptions: {
         output: {
-          // Disable manual chunking for Solana - let Rollup handle it to avoid circular dep issues
+          // Optimized chunking strategy for better caching and parallel loading
           manualChunks: (id: string) => {
+            // Core React - changes rarely, cache aggressively
             if (id.includes('react-dom') || id.includes('react/')) return 'vendor-react';
+            // UI components - separate chunk for better caching
             if (id.includes('lucide-react')) return 'vendor-ui';
+            // Wallet connections - separate for lazy loading
             if (id.includes('@walletconnect') || id.includes('@web3modal')) return 'vendor-walletconnect';
+            // Blockchain libraries - large, separate chunk
             if (id.includes('ethers')) return 'vendor-ethers';
+            // Payment processing - separate for security/isolation
             if (id.includes('@stripe')) return 'vendor-stripe';
             
-            // Let Solana deps be bundled naturally - don't force them into a single chunk
-            // The circular dependency issue was caused by forcing them together incorrectly
+            // Solana deps - separate chunk for better code splitting
             if (id.includes('@solana')) {
               return 'vendor-solana';
             }
             
+            // Large media processing libraries - lazy load
+            if (id.includes('@ffmpeg')) return 'vendor-media';
+            
             // Don't chunk other node_modules - let Rollup handle dependency order
             return undefined;
           },
-          chunkFileNames: 'assets/[name]-[hash:8].js',
-          entryFileNames: 'assets/[name]-[hash:8].js',
-          assetFileNames: 'assets/[name]-[hash:8].[ext]',
+          // Optimized file naming for better CDN caching
+          chunkFileNames: mode === 'production' 
+            ? 'assets/[name]-[hash:12].js'  // Longer hash for better cache busting
+            : 'assets/[name]-[hash:8].js',
+          entryFileNames: mode === 'production'
+            ? 'assets/[name]-[hash:12].js'
+            : 'assets/[name]-[hash:8].js',
+          assetFileNames: mode === 'production'
+            ? 'assets/[name]-[hash:12].[ext]'
+            : 'assets/[name]-[hash:8].[ext]',
+          // Optimize chunk size for better parallel loading
+          experimentalMinChunkSize: 20000,  // 20KB minimum chunk size
         },
         // Tree-shake aggressively
         treeshake: {

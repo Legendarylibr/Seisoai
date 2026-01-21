@@ -13,9 +13,6 @@ import Referral from './Referral';
 export { User, IPFreeImage, GlobalFreeImage, Generation, GalleryItem, Payment, Referral };
 // buildUserUpdateQuery is now in services/user.ts to avoid circular dependencies
 export { buildUserUpdateQuery } from '../services/user';
-export default { User, IPFreeImage, GlobalFreeImage, Generation, GalleryItem, Payment, Referral };
-
-
-
+// Removed default export to avoid issues with private names.
 
 

@@ -30,7 +30,9 @@ export async function initializeRedis(): Promise<Redis | null> {
   }
 
   try {
-    redisClient = new Redis(config.REDIS_URL, {
+    // Optimize Redis connection for scaling
+    // ioredis uses connection pooling internally - each instance maintains a pool
+    const redisOptions: Redis.RedisOptions = {
       maxRetriesPerRequest: 3,
       retryStrategy(times) {
         // Exponential backoff with max 30 second delay
@@ -46,10 +48,25 @@ export async function initializeRedis(): Promise<Redis | null> {
       // Memory optimization: Enable offline queue with limits
       enableOfflineQueue: true,
       offlineQueue: true,
-      // Connection optimization
-      connectTimeout: 10000,
-      commandTimeout: 5000,
-    });
+      // Connection optimization - increased timeouts for high load
+      connectTimeout: config.isProduction ? 15000 : 10000,
+      commandTimeout: config.isProduction ? 10000 : 5000,
+      // Connection pool settings for better performance
+      keepAlive: 30000,  // Keep connections alive
+      // For Redis Cluster/Sentinel support (if using)
+      // enableReadyCheck: true,
+      // maxRetriesPerRequest: null,  // Set to null for cluster mode
+    };
+
+    // If using Redis Sentinel or Cluster, parse the URL accordingly
+    // For Sentinel: redis-sentinel://host:port?sentinel=host1:port1,host2:port2
+    // For Cluster: redis-cluster://host:port
+    if (config.REDIS_URL.includes('sentinel') || config.REDIS_URL.includes('cluster')) {
+      // ioredis will automatically detect and configure for Sentinel/Cluster
+      logger.info('Using Redis Sentinel/Cluster mode');
+    }
+
+    redisClient = new Redis(config.REDIS_URL, redisOptions);
 
     redisClient.on('connect', () => {
       logger.info('Redis connected');

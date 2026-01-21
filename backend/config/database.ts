@@ -15,11 +15,31 @@ const MAX_RECONNECT_DELAY_MS = 60000;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let healthCheckInterval: NodeJS.Timeout | null = null;
 
-// MongoDB connection options - optimized for stability
+// MongoDB connection options - optimized for stability and scaling
+// Calculate optimal pool size based on environment
+// Formula: (maxPoolSize per instance) * (number of instances) should not exceed MongoDB connection limit
+const getOptimalPoolSize = (): number => {
+  // Allow override via environment variable
+  const envPoolSize = process.env.MONGODB_MAX_POOL_SIZE;
+  if (envPoolSize) {
+    return parseInt(envPoolSize, 10);
+  }
+  
+  // Production: Higher pool size for better throughput
+  // Each connection uses ~1-2MB RAM, so 50 connections = ~100MB per instance
+  // With 3 instances, that's 150 connections total (well below typical MongoDB Atlas M10 limit of 350)
+  if (config.isProduction) {
+    return 50;  // Increased from 20 for better scaling
+  }
+  
+  // Development: Lower pool size
+  return 10;
+};
+
 const mongoOptions: ConnectOptions = {
-  // Connection pool settings
-  maxPoolSize: 20,         // Reasonable pool size - saves ~80MB RAM
-  minPoolSize: 2,          // Reduced for faster cold starts
+  // Connection pool settings - optimized for scaling
+  maxPoolSize: getOptimalPoolSize(),
+  minPoolSize: config.isProduction ? 5 : 2,  // Higher min pool for production to reduce connection churn
   
   // Timeout settings - increased for unstable networks
   serverSelectionTimeoutMS: 45000,   // Increased from 30s - more time for DNS resolution
@@ -230,6 +250,13 @@ function startHealthCheck(): void {
       if (mongoose.connection.readyState !== 1) {
         logger.warn('Health check: MongoDB not connected, triggering reconnection');
         scheduleReconnect();
+        // Update metrics
+        try {
+          const { updateDbConnectionPoolMetrics } = await import('../services/metrics.js');
+          updateDbConnectionPoolMetrics();
+        } catch {
+          // Ignore metrics errors
+        }
         return;
       }
 
@@ -242,6 +269,14 @@ function startHealthCheck(): void {
         logger.warn('Health check: High MongoDB latency detected', { latencyMs: latency });
       } else {
         logger.debug('Health check: MongoDB connection healthy', { latencyMs: latency });
+      }
+
+      // Update connection pool metrics
+      try {
+        const { updateDbConnectionPoolMetrics } = await import('../services/metrics.js');
+        updateDbConnectionPoolMetrics();
+      } catch {
+        // Ignore metrics errors - don't break health checks
       }
     } catch (error) {
       const err = error as Error;

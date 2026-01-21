@@ -54,14 +54,16 @@ interface Win95NavButtonProps {
   disabled?: boolean;
   active?: boolean;
   className?: string;
+  title?: string;
 }
 
 // Windows 95 style button component
-const Win95NavButton = memo(function Win95NavButton({ children, onClick, disabled, active, className = '' }: Win95NavButtonProps) {
+const Win95NavButton = memo(function Win95NavButton({ children, onClick, disabled, active, className = '', title }: Win95NavButtonProps) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`flex items-center gap-2 px-3 py-1.5 transition-none select-none ${className}`}
       style={{
         background: active ? WIN95.bgDark : WIN95.buttonFace,
