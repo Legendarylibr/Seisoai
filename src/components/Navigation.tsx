@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, memo, useCallback, ReactNode } from 'react';
-import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard, Mail, Settings, Clock, type LucideIcon } from 'lucide-react';
+import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard, Mail, Settings, Clock, Gift, Trophy, Users, type LucideIcon } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import SubscriptionManagement from './SubscriptionManagement';
+import ReferralDashboard from './ReferralDashboard';
+import AchievementBadge from './AchievementBadge';
 import { WIN95, BTN, PANEL, TITLEBAR } from '../utils/buttonStyles';
 import logger from '../utils/logger';
 
@@ -116,6 +118,8 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
   const [showUserDropdown, setShowUserDropdown] = useState<boolean>(false);
   const [showCreditsDropdown, setShowCreditsDropdown] = useState<boolean>(false);
   const [showSubscriptionManagement, setShowSubscriptionManagement] = useState<boolean>(false);
+  const [showReferralDashboard, setShowReferralDashboard] = useState<boolean>(false);
+  const [showAchievements, setShowAchievements] = useState<boolean>(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const creditsDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -271,6 +275,45 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                         }}
                       >
                         <button 
+                          onClick={() => { setShowReferralDashboard(true); setShowUserDropdown(false); }} 
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
+                          style={{ 
+                            color: WIN95.text, 
+                            fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' 
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = WIN95.highlight;
+                            e.currentTarget.style.color = WIN95.highlightText;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                            e.currentTarget.style.color = WIN95.text;
+                          }}
+                        >
+                          <Gift className="w-4 h-4" />
+                          <span>Referral Program</span>
+                        </button>
+                        <button 
+                          onClick={() => { setShowAchievements(true); setShowUserDropdown(false); }} 
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
+                          style={{ 
+                            color: WIN95.text, 
+                            fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' 
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = WIN95.highlight;
+                            e.currentTarget.style.color = WIN95.highlightText;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                            e.currentTarget.style.color = WIN95.text;
+                          }}
+                        >
+                          <Trophy className="w-4 h-4" />
+                          <span>Achievements</span>
+                        </button>
+                        <div style={{ borderTop: `1px solid ${WIN95.border.dark}`, margin: '4px 0' }} />
+                        <button 
                           onClick={() => { emailContext.signOut(); setShowUserDropdown(false); }} 
                           className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
                           style={{ 
@@ -341,6 +384,45 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                           <span>Manage Subscription</span>
                         </button>
                       )}
+                      <div style={{ borderTop: `1px solid ${WIN95.border.dark}`, margin: '4px 0' }} />
+                      <button 
+                        onClick={() => { setShowReferralDashboard(true); setShowCreditsDropdown(false); }} 
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
+                        style={{ 
+                          color: WIN95.text, 
+                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' 
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = WIN95.highlight;
+                          e.currentTarget.style.color = WIN95.highlightText;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                          e.currentTarget.style.color = WIN95.text;
+                        }}
+                      >
+                        <Gift className="w-4 h-4" />
+                        <span>Referral Program</span>
+                      </button>
+                      <button 
+                        onClick={() => { setShowAchievements(true); setShowCreditsDropdown(false); }} 
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
+                        style={{ 
+                          color: WIN95.text, 
+                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' 
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = WIN95.highlight;
+                          e.currentTarget.style.color = WIN95.highlightText;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                          e.currentTarget.style.color = WIN95.text;
+                        }}
+                      >
+                        <Trophy className="w-4 h-4" />
+                        <span>Achievements</span>
+                      </button>
                       <button 
                         onClick={handleRefreshCredits} 
                         className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
@@ -492,6 +574,8 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
       </div>
 
       {isEmailAuth && <SubscriptionManagement isOpen={showSubscriptionManagement} onClose={() => setShowSubscriptionManagement(false)} />}
+      {isConnected && <ReferralDashboard isOpen={showReferralDashboard} onClose={() => setShowReferralDashboard(false)} />}
+      {isConnected && <AchievementBadge isOpen={showAchievements} onClose={() => setShowAchievements(false)} />}
     </header>
   );
 });
