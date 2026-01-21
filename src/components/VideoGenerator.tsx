@@ -672,7 +672,9 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
       {/* Main content */}
       <div className="flex-1 min-h-0 p-1.5 lg:p-1.5 flex flex-col lg:flex-row gap-1.5 lg:gap-2 overflow-auto lg:overflow-hidden">
         {/* Left panel - Controls */}
-        <div className="lg:w-[45%] flex flex-col gap-1 min-h-0 overflow-auto lg:overflow-y-auto">
+        <div className="lg:w-[45%] flex flex-col min-h-0">
+          {/* Scrollable controls area */}
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1">
           {/* Model & Mode Selection */}
           <Win95GroupBox title="Model & Mode" className="flex-shrink-0" icon={<Layers className="w-3.5 h-3.5" />}>
             <div className="flex flex-col gap-1.5">
@@ -951,9 +953,10 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
             </div>
           </Win95GroupBox>
           )}
+          </div>
 
-          {/* Generate Section */}
-          <Win95GroupBox title="Generate" className="flex-shrink-0" icon={<Play className="w-3.5 h-3.5" />}>
+          {/* Generate Section - Fixed at bottom */}
+          <Win95GroupBox title="Generate" className="flex-shrink-0 mt-1" icon={<Play className="w-3.5 h-3.5" />}>
             <div className="flex flex-col gap-1">
               <button
                 onClick={handleGenerate}

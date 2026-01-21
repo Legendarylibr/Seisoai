@@ -266,23 +266,29 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'generate' && (
-          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl">
             <AuthGuard>
               <div className="h-full flex flex-col lg:flex-row gap-2 lg:gap-2">
                 {/* Left Column - Controls */}
-                <div className="lg:w-[42%] space-y-1 lg:space-y-1.5 overflow-auto lg:overflow-y-auto lg:max-h-full flex-shrink-0">
-                  {!isAuthenticated && <SimpleWalletConnect />}
-                  <EmailUserInfo />
-                  <PromptOptimizer value={userPrompt} onPromptChange={setUserPrompt} />
-                  <StyleSelector />
-                  <AspectRatioSelector />
-                  <ReferenceImageInput />
-                  <MultiImageModelSelector />
-                  <GenerateButton 
-                    customPrompt={userPrompt}
-                    onShowTokenPayment={handleShowTokenPayment}
-                    onShowStripePayment={handleShowStripePayment}
-                  />
+                <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
+                  {/* Scrollable controls */}
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1 lg:space-y-1.5 pb-1">
+                    {!isAuthenticated && <SimpleWalletConnect />}
+                    <EmailUserInfo />
+                    <PromptOptimizer value={userPrompt} onPromptChange={setUserPrompt} />
+                    <StyleSelector />
+                    <AspectRatioSelector />
+                    <ReferenceImageInput />
+                    <MultiImageModelSelector />
+                  </div>
+                  {/* Fixed generate button at bottom */}
+                  <div className="flex-shrink-0 pt-1">
+                    <GenerateButton 
+                      customPrompt={userPrompt}
+                      onShowTokenPayment={handleShowTokenPayment}
+                      onShowStripePayment={handleShowStripePayment}
+                    />
+                  </div>
                 </div>
                 
                 {/* Right Column - Output */}
@@ -295,19 +301,22 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'batch' && (
-          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl">
             <AuthGuard>
               <div className="h-full flex flex-col lg:flex-row gap-2 lg:gap-2">
                 {/* Left Column - Batch Controls */}
-                <div className="lg:w-[42%] space-y-1 lg:space-y-1.5 overflow-auto lg:overflow-y-auto lg:max-h-full flex-shrink-0">
-                  {!isAuthenticated && <SimpleWalletConnect />}
-                  <EmailUserInfo />
-                  <StyleSelector />
-                  <MultiImageModelSelector />
-                  <GenerationQueue
-                    onShowTokenPayment={handleShowTokenPayment}
-                    onShowStripePayment={handleShowStripePayment}
-                  />
+                <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
+                  {/* Scrollable controls */}
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1 lg:space-y-1.5">
+                    {!isAuthenticated && <SimpleWalletConnect />}
+                    <EmailUserInfo />
+                    <StyleSelector />
+                    <MultiImageModelSelector />
+                    <GenerationQueue
+                      onShowTokenPayment={handleShowTokenPayment}
+                      onShowStripePayment={handleShowStripePayment}
+                    />
+                  </div>
                 </div>
                 
                 {/* Right Column - Output */}

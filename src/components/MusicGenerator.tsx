@@ -410,8 +410,9 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator() {
       {/* Main content */}
       <div className="flex-1 min-h-0 p-1 lg:p-1.5 flex flex-col lg:flex-row gap-1 lg:gap-1.5 overflow-auto lg:overflow-hidden">
         {/* Left panel - Controls */}
-        <div className="lg:w-[45%] flex flex-col gap-0.5 lg:gap-1 min-h-0 overflow-auto lg:overflow-y-auto">
-          
+        <div className="lg:w-[45%] flex flex-col min-h-0">
+          {/* Scrollable controls area */}
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-0.5 lg:gap-1">
           {/* Genre Selection */}
           <Win95GroupBox title="Genre" className="flex-shrink-0">
             <Win95GenreDropdown
@@ -486,9 +487,10 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator() {
               <span className="text-[10px] font-mono" style={{ color: WIN95.text }}>{duration}s</span>
             </div>
           </Win95GroupBox>
+          </div>
           
-          {/* Generate Section */}
-          <Win95GroupBox title="Generate" className="flex-shrink-0">
+          {/* Generate Section - Fixed at bottom */}
+          <Win95GroupBox title="Generate" className="flex-shrink-0 mt-1">
             <div className="flex flex-col gap-1">
               <button
                 onClick={handleGenerate}
