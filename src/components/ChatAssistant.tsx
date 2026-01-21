@@ -1503,14 +1503,15 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                     placeholder={attachedImage ? "Describe what to do..." : "What do you want to create?"}
                     disabled={isLoading || isGenerating}
                     rows={1}
-                    className="w-full px-3 py-2 text-[13px] sm:text-[14px] resize-none focus:outline-none"
+                    className="w-full px-3 py-2 text-base sm:text-[14px] resize-none focus:outline-none"
                     style={{
                       background: 'transparent',
                       color: WIN95.text,
                       fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
                       minHeight: '36px',
                       maxHeight: '80px',
-                      lineHeight: '1.4'
+                      lineHeight: '1.4',
+                      fontSize: 'max(16px, 1rem)' // Prevent iOS zoom on focus
                     }}
                   />
                 </div>
