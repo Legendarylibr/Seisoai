@@ -268,16 +268,6 @@ export async function executeGeneration(
 
     const data = await response.json();
     
-    // Debug logging for generation result
-    console.log('[ChatAssistant] Generation result:', {
-      success: data.success,
-      hasGeneratedContent: !!data.generatedContent,
-      contentType: data.generatedContent?.type,
-      urlCount: data.generatedContent?.urls?.length,
-      urls: data.generatedContent?.urls,
-      error: data.error
-    });
-    
     if (!response.ok || !data.success) {
       throw new Error(data.error || 'Generation failed');
     }
