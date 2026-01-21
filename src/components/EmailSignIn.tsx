@@ -186,24 +186,24 @@ const EmailSignIn: React.FC = () => {
   const displayError = error || authError || '';
 
   return (
-    <div className="w-full max-w-md md:max-w-xl mx-auto">
-      <div className="glass-card rounded-xl p-6 md:p-8 space-y-6 md:space-y-8 relative overflow-hidden">
+    <div className="w-full max-w-md md:max-w-xl mx-auto max-h-full overflow-hidden">
+      <div className="glass-card rounded-xl p-3 sm:p-6 md:p-8 space-y-3 sm:space-y-6 md:space-y-8 relative overflow-hidden">
         {/* Shimmer overlay */}
         <div className="absolute inset-0 -translate-x-full hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/5 to-transparent pointer-events-none"></div>
         
         {/* Header */}
         <div className="text-center relative z-10">
           <div 
-            className="w-16 h-16 md:w-20 md:h-20 rounded-xl flex items-center justify-center mx-auto mb-4 md:mb-6 transition-transform duration-300 hover:scale-105"
+            className="w-10 h-10 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-xl flex items-center justify-center mx-auto mb-2 sm:mb-4 md:mb-6 transition-transform duration-300 hover:scale-105"
             style={{
               background: 'linear-gradient(135deg, #f0f0f8, #e0e0e8, #d0d0d8)',
               border: '2px outset #f0f0f0',
               boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15)'
             }}
           >
-            <Mail className="w-8 h-8 md:w-10 md:h-10" style={{ color: '#000000', filter: 'drop-shadow(0 0 4px rgba(0, 212, 255, 0.3))' }} />
+            <Mail className="w-5 h-5 sm:w-8 sm:h-8 md:w-10 md:h-10" style={{ color: '#000000', filter: 'drop-shadow(0 0 4px rgba(0, 212, 255, 0.3))' }} />
           </div>
-          <h2 className="text-2xl md:text-3xl font-bold mb-2 md:mb-3 tracking-wide" style={{ 
+          <h2 className="text-lg sm:text-2xl md:text-3xl font-bold mb-1 sm:mb-2 md:mb-3 tracking-wide" style={{ 
             color: '#000000', 
             textShadow: '1px 1px 0 rgba(255, 255, 255, 0.9)',
             fontFamily: "'VT323', monospace",
@@ -211,7 +211,7 @@ const EmailSignIn: React.FC = () => {
           }}>
             {isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN'}
           </h2>
-          <p className="text-sm md:text-base" style={{ 
+          <p className="text-xs sm:text-sm md:text-base" style={{ 
             color: '#1a1a2e', 
             textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
             fontFamily: "'IBM Plex Mono', monospace"
@@ -221,14 +221,14 @@ const EmailSignIn: React.FC = () => {
         </div>
 
         {/* Form - noValidate to use custom JS validation instead of browser native */}
-        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6" noValidate>
+        <form onSubmit={handleSubmit} className="space-y-2 sm:space-y-4 md:space-y-6" noValidate>
           {/* Email Input */}
           <div>
-            <label className="block text-sm md:text-base font-medium mb-2 md:mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+            <label className="block text-xs sm:text-sm md:text-base font-medium mb-1 sm:mb-2 md:mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
               Email
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
+              <Mail className="absolute left-2 sm:left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
               <input
                 type="email"
                 name="email"
@@ -236,7 +236,7 @@ const EmailSignIn: React.FC = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 onInput={(e) => setEmail(e.currentTarget.value)}
                 placeholder="your@email.com"
-                className="w-full pl-10 md:pl-12 pr-4 md:pr-5 py-3 md:py-4 rounded text-sm md:text-base"
+                className="w-full pl-8 sm:pl-10 md:pl-12 pr-3 sm:pr-4 md:pr-5 py-2 sm:py-3 md:py-4 rounded text-xs sm:text-sm md:text-base"
                 style={{
                   background: 'linear-gradient(to bottom, #ffffff, #f8f8f8)',
                   border: '2px inset #c0c0c0',
@@ -254,11 +254,11 @@ const EmailSignIn: React.FC = () => {
 
           {/* Password Input */}
           <div>
-            <label className="block text-sm md:text-base font-medium mb-2 md:mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+            <label className="block text-xs sm:text-sm md:text-base font-medium mb-1 sm:mb-2 md:mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
+              <Lock className="absolute left-2 sm:left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
               <input
                 type={showPassword ? 'text' : 'password'}
                 name="password"
@@ -266,7 +266,7 @@ const EmailSignIn: React.FC = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 onInput={(e) => setPassword(e.currentTarget.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 md:pl-12 pr-12 md:pr-14 py-3 md:py-4 rounded text-sm md:text-base"
+                className="w-full pl-8 sm:pl-10 md:pl-12 pr-10 sm:pr-12 md:pr-14 py-2 sm:py-3 md:py-4 rounded text-xs sm:text-sm md:text-base"
                 style={{
                   background: 'linear-gradient(to bottom, #ffffff, #f8f8f8)',
                   border: '2px inset #c0c0c0',
@@ -279,34 +279,34 @@ const EmailSignIn: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 md:right-4 top-1/2 transform -translate-y-1/2 transition-colors"
+                className="absolute right-2 sm:right-3 md:right-4 top-1/2 transform -translate-y-1/2 transition-colors"
                 style={{ color: '#000000' }}
               >
                 {showPassword ? (
-                  <EyeOff className="w-5 h-5 md:w-6 md:h-6" />
+                  <EyeOff className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
                 ) : (
-                  <Eye className="w-5 h-5 md:w-6 md:h-6" />
+                  <Eye className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
                 )}
               </button>
             </div>
             {/* Password Requirements (only shown on signup) */}
             {isSignUp && (
-              <div className="mt-2 md:mt-3 p-3 md:p-4 rounded text-xs md:text-sm" style={{
+              <div className="mt-1.5 sm:mt-2 md:mt-3 p-2 sm:p-3 md:p-4 rounded text-[10px] sm:text-xs md:text-sm" style={{
                 background: 'linear-gradient(to bottom, #ffffdd, #ffffbb, #ffffaa)',
                 border: '2px outset #ffffbb',
                 boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 0.8), inset -2px -2px 0 rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15)',
                 color: '#000000',
                 textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
               }}>
-                <div className="font-semibold mb-1 md:mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                <div className="font-semibold mb-0.5 sm:mb-1 md:mb-2" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                   Password Requirements:
                 </div>
-                <ul className="list-disc list-inside space-y-0.5 md:space-y-1 text-[10px] md:text-xs">
-                  <li className={password.length >= 12 ? 'line-through opacity-60' : ''}>At least 12 characters</li>
-                  <li className={/[a-z]/.test(password) ? 'line-through opacity-60' : ''}>One lowercase letter</li>
-                  <li className={/[A-Z]/.test(password) ? 'line-through opacity-60' : ''}>One uppercase letter</li>
-                  <li className={/\d/.test(password) ? 'line-through opacity-60' : ''}>One number</li>
-                  <li className={/[@$!%*?&]/.test(password) ? 'line-through opacity-60' : ''}>One special character (@$!%*?&)</li>
+                <ul className="list-disc list-inside space-y-0 sm:space-y-0.5 md:space-y-1 text-[8px] sm:text-[10px] md:text-xs">
+                  <li className={password.length >= 12 ? 'line-through opacity-60' : ''}>12+ chars</li>
+                  <li className={/[a-z]/.test(password) ? 'line-through opacity-60' : ''}>Lowercase</li>
+                  <li className={/[A-Z]/.test(password) ? 'line-through opacity-60' : ''}>Uppercase</li>
+                  <li className={/\d/.test(password) ? 'line-through opacity-60' : ''}>Number</li>
+                  <li className={/[@$!%*?&]/.test(password) ? 'line-through opacity-60' : ''}>Special (@$!%*?&)</li>
                 </ul>
               </div>
             )}
@@ -315,11 +315,11 @@ const EmailSignIn: React.FC = () => {
           {/* Confirm Password Input (only on signup) */}
           {isSignUp && (
             <div>
-              <label className="block text-sm md:text-base font-medium mb-2 md:mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+              <label className="block text-xs sm:text-sm md:text-base font-medium mb-1 sm:mb-2 md:mb-3" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                 Confirm Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
+                <Lock className="absolute left-2 sm:left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" style={{ color: '#000000' }} />
                 <input
                   type={showConfirmPassword ? 'text' : 'password'}
                   name="confirmPassword"
@@ -327,7 +327,7 @@ const EmailSignIn: React.FC = () => {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   onInput={(e) => setConfirmPassword(e.currentTarget.value)}
                   placeholder="••••••••"
-                  className="w-full pl-10 md:pl-12 pr-12 md:pr-14 py-3 md:py-4 rounded text-sm md:text-base"
+                  className="w-full pl-8 sm:pl-10 md:pl-12 pr-10 sm:pr-12 md:pr-14 py-2 sm:py-3 md:py-4 rounded text-xs sm:text-sm md:text-base"
                   style={{
                     background: 'linear-gradient(to bottom, #ffffff, #f8f8f8)',
                     border: confirmPassword && password !== confirmPassword 
@@ -344,19 +344,19 @@ const EmailSignIn: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 md:right-4 top-1/2 transform -translate-y-1/2 transition-colors"
+                  className="absolute right-2 sm:right-3 md:right-4 top-1/2 transform -translate-y-1/2 transition-colors"
                   style={{ color: '#000000' }}
                 >
                   {showConfirmPassword ? (
-                    <EyeOff className="w-5 h-5 md:w-6 md:h-6" />
+                    <EyeOff className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
                   ) : (
-                    <Eye className="w-5 h-5 md:w-6 md:h-6" />
+                    <Eye className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
                   )}
                 </button>
               </div>
               {/* Password match indicator */}
               {confirmPassword && (
-                <div className="mt-1 text-xs md:text-sm" style={{ 
+                <div className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs md:text-sm" style={{ 
                   color: password === confirmPassword ? '#2f9e44' : '#e03131',
                   textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
                 }}>
@@ -369,7 +369,7 @@ const EmailSignIn: React.FC = () => {
           {/* Error Message */}
           {displayError && (
             <div 
-              className="p-3 md:p-4 rounded text-sm md:text-base flex items-start gap-3"
+              className="p-2 sm:p-3 md:p-4 rounded text-xs sm:text-sm md:text-base flex items-start gap-2 sm:gap-3"
               style={{
                 background: errorType === 'network' 
                   ? 'linear-gradient(to bottom, #fff3e0, #ffe0c0)'
@@ -404,20 +404,20 @@ const EmailSignIn: React.FC = () => {
           <button
             type="submit"
             disabled={isLoading || isSubmitting}
-            className="w-full btn-primary py-3 md:py-4 flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-70 disabled:cursor-not-allowed"
+            className="w-full btn-primary py-2 sm:py-3 md:py-4 flex items-center justify-center gap-2 text-xs sm:text-sm md:text-base disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {(isLoading || isSubmitting) ? (
               <>
                 <div 
-                  className="w-5 h-5 md:w-6 md:h-6 border-2 border-t-transparent rounded-full animate-spin"
+                  className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 border-2 border-t-transparent rounded-full animate-spin"
                   style={{ borderColor: '#000000', borderTopColor: 'transparent' }}
                 ></div>
-                <span>{isSignUp ? 'Creating Account...' : 'Signing In...'}</span>
+                <span>{isSignUp ? 'Creating...' : 'Signing In...'}</span>
               </>
             ) : (
               <>
                 <span>{isSignUp ? 'Create Account' : 'Sign In'}</span>
-                <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
+                <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
               </>
             )}
           </button>
@@ -435,7 +435,7 @@ const EmailSignIn: React.FC = () => {
               setShowPassword(false);
               setShowConfirmPassword(false);
             }}
-            className="text-sm md:text-base transition-colors"
+            className="text-xs sm:text-sm md:text-base transition-colors"
             style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}
             onMouseEnter={(e) => {
               e.currentTarget.style.textDecoration = 'underline';

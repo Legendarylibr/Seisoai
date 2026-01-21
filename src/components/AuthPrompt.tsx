@@ -25,10 +25,10 @@ const AuthPrompt: React.FC = () => {
   // Show auth mode selection if not selected
   if (!authMode) {
     return (
-      <div className="flex items-center justify-center h-full lg:max-h-[calc(100vh-80px)] px-4 py-4 lg:py-2 overflow-auto lg:overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
+      <div className="flex items-center justify-center h-full px-2 sm:px-4 py-2 lg:py-2 overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
         {/* Win95 Window Container */}
         <div 
-          className="text-center max-w-5xl mx-auto slide-up"
+          className="text-center max-w-5xl mx-auto slide-up max-h-full"
           style={{
             background: WIN95.bg,
             boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}, 4px 4px 8px rgba(0,0,0,0.3)`
@@ -53,16 +53,16 @@ const AuthPrompt: React.FC = () => {
           </div>
 
           {/* Window Content */}
-          <div className="p-4 lg:p-6">
+          <div className="p-2 sm:p-4 lg:p-6">
             {/* Hero Section */}
-            <div className="mb-4 text-center">
-              <h1 className="text-2xl md:text-3xl font-bold mb-2" style={{ 
+            <div className="mb-2 sm:mb-4 text-center">
+              <h1 className="text-lg sm:text-2xl md:text-3xl font-bold mb-1 sm:mb-2" style={{ 
                 color: WIN95.highlight,
                 fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
               }}>
                 🎨 AI Creative Studio
               </h1>
-              <p className="text-sm" style={{ 
+              <p className="text-xs sm:text-sm" style={{ 
                 color: WIN95.text,
                 fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
               }}>
@@ -72,186 +72,178 @@ const AuthPrompt: React.FC = () => {
 
             {/* Sign In Section Header */}
             <div 
-              className="mb-3 py-1.5 px-3 inline-block"
+              className="mb-2 sm:mb-3 py-1 sm:py-1.5 px-2 sm:px-3 inline-block"
               style={{
                 background: WIN95.highlight,
                 color: '#ffffff',
                 fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
               }}
             >
-              <span className="text-sm font-bold">▸ Sign In to Get Started</span>
+              <span className="text-xs sm:text-sm font-bold">▸ Sign In to Get Started</span>
             </div>
 
             {/* Auth Mode Selection - Win95 Buttons */}
-            <div className="grid md:grid-cols-2 gap-3 max-w-3xl mx-auto mb-4">
+            <div className="grid md:grid-cols-2 gap-2 sm:gap-3 max-w-3xl mx-auto mb-2 sm:mb-4">
               <button
                 onClick={() => setAuthMode('email')}
-                className="w-full p-4 text-left transition-all active:translate-y-px"
+                className="w-full p-2 sm:p-4 text-left transition-all active:translate-y-px"
                 style={{
                   background: WIN95.bg,
                   boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   <div 
-                    className="p-2 flex-shrink-0"
+                    className="p-1.5 sm:p-2 flex-shrink-0"
                     style={{
                       background: WIN95.bgLight,
                       boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
                     }}
                   >
-                    <Mail className="w-5 h-5" style={{ color: WIN95.highlight }} />
+                    <Mail className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: WIN95.highlight }} />
                   </div>
                   <div className="flex-1">
-                    <div className="font-bold text-sm" style={{ color: WIN95.text }}>
+                    <div className="font-bold text-xs sm:text-sm" style={{ color: WIN95.text }}>
                       📧 Sign in with Email
                     </div>
-                    <div className="text-xs" style={{ color: WIN95.textDisabled }}>
+                    <div className="text-[10px] sm:text-xs" style={{ color: WIN95.textDisabled }}>
                       Monthly subscriptions • Credit card
                     </div>
                   </div>
-                  <ArrowRight className="w-4 h-4 flex-shrink-0" style={{ color: WIN95.text }} />
+                  <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" style={{ color: WIN95.text }} />
                 </div>
               </button>
 
               <button
                 onClick={() => setAuthMode('wallet')}
-                className="w-full p-4 text-left transition-all active:translate-y-px"
+                className="w-full p-2 sm:p-4 text-left transition-all active:translate-y-px"
                 style={{
                   background: WIN95.bg,
                   boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   <div 
-                    className="p-2 flex-shrink-0"
+                    className="p-1.5 sm:p-2 flex-shrink-0"
                     style={{
                       background: WIN95.bgLight,
                       boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
                     }}
                   >
-                    <Wallet className="w-5 h-5" style={{ color: '#008000' }} />
+                    <Wallet className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#008000' }} />
                   </div>
                   <div className="flex-1">
-                    <div className="font-bold text-sm" style={{ color: WIN95.text }}>
+                    <div className="font-bold text-xs sm:text-sm" style={{ color: WIN95.text }}>
                       💳 Connect Crypto Wallet
                     </div>
-                    <div className="text-xs" style={{ color: WIN95.textDisabled }}>
+                    <div className="text-[10px] sm:text-xs" style={{ color: WIN95.textDisabled }}>
                       Pay-per-credit • Crypto payments
                     </div>
                   </div>
-                  <ArrowRight className="w-4 h-4 flex-shrink-0" style={{ color: WIN95.text }} />
+                  <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" style={{ color: WIN95.text }} />
                 </div>
               </button>
             </div>
 
             {/* Main Content Grid - Win95 Group Boxes */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-3">
+            <div className="grid grid-cols-4 gap-1.5 sm:gap-2 md:gap-3 mb-2 sm:mb-3">
               {/* AI Tools - 4 compact cards */}
               <div 
-                className="p-2 md:p-3 text-center"
+                className="p-1.5 sm:p-2 md:p-3 text-center"
                 style={{ 
                   background: WIN95.bg,
                   boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
-                <MessageCircle className="w-5 h-5 md:w-6 md:h-6 mx-auto mb-1" style={{ color: WIN95.highlight }} />
-                <div className="text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Chat AI</div>
-                <div className="text-[8px] md:text-[10px]" style={{ color: WIN95.textDisabled }}>Plan & describe</div>
+                <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mx-auto mb-0.5 sm:mb-1" style={{ color: WIN95.highlight }} />
+                <div className="text-[8px] sm:text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Chat</div>
+                <div className="text-[7px] sm:text-[8px] md:text-[10px] hidden sm:block" style={{ color: WIN95.textDisabled }}>Plan & describe</div>
               </div>
               <div 
-                className="p-2 md:p-3 text-center"
+                className="p-1.5 sm:p-2 md:p-3 text-center"
                 style={{ 
                   background: WIN95.bg,
                   boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
-                <Image className="w-5 h-5 md:w-6 md:h-6 mx-auto mb-1" style={{ color: '#008000' }} />
-                <div className="text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Images</div>
-                <div className="text-[8px] md:text-[10px]" style={{ color: WIN95.textDisabled }}>20+ styles</div>
+                <Image className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mx-auto mb-0.5 sm:mb-1" style={{ color: '#008000' }} />
+                <div className="text-[8px] sm:text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Images</div>
+                <div className="text-[7px] sm:text-[8px] md:text-[10px] hidden sm:block" style={{ color: WIN95.textDisabled }}>20+ styles</div>
               </div>
               <div 
-                className="p-2 md:p-3 text-center"
+                className="p-1.5 sm:p-2 md:p-3 text-center"
                 style={{ 
                   background: WIN95.bg,
                   boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
-                <Film className="w-5 h-5 md:w-6 md:h-6 mx-auto mb-1" style={{ color: '#800080' }} />
-                <div className="text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Videos</div>
-                <div className="text-[8px] md:text-[10px]" style={{ color: WIN95.textDisabled }}>AI animation</div>
+                <Film className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mx-auto mb-0.5 sm:mb-1" style={{ color: '#800080' }} />
+                <div className="text-[8px] sm:text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Videos</div>
+                <div className="text-[7px] sm:text-[8px] md:text-[10px] hidden sm:block" style={{ color: WIN95.textDisabled }}>AI animation</div>
               </div>
               <div 
-                className="p-2 md:p-3 text-center"
+                className="p-1.5 sm:p-2 md:p-3 text-center"
                 style={{ 
                   background: WIN95.bg,
                   boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
-                <Music className="w-5 h-5 md:w-6 md:h-6 mx-auto mb-1" style={{ color: '#b8860b' }} />
-                <div className="text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Music</div>
-                <div className="text-[8px] md:text-[10px]" style={{ color: WIN95.textDisabled }}>50+ genres</div>
+                <Music className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mx-auto mb-0.5 sm:mb-1" style={{ color: '#b8860b' }} />
+                <div className="text-[8px] sm:text-[10px] md:text-xs font-bold" style={{ color: WIN95.text }}>Music</div>
+                <div className="text-[7px] sm:text-[8px] md:text-[10px] hidden sm:block" style={{ color: WIN95.textDisabled }}>50+ genres</div>
               </div>
             </div>
 
             {/* Bottom Row - Benefits & How to Use */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
+            <div className="grid grid-cols-2 gap-1.5 sm:gap-2 md:gap-3">
               {/* Free Benefits & Referrals */}
               <div 
-                className="p-3 text-left"
+                className="p-1.5 sm:p-3 text-left"
                 style={{ 
                   background: '#c8ffc8',
                   boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
-                <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#006400' }}>
-                  <Gift className="w-3.5 h-3.5" />
+                <h2 className="text-[10px] sm:text-xs font-bold mb-1 sm:mb-2 flex items-center gap-1" style={{ color: '#006400' }}>
+                  <Gift className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   Free Credits
                 </h2>
-                <div className="grid grid-cols-2 gap-2 text-[10px]" style={{ color: WIN95.text }}>
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm">🎁</span>
-                    <div><strong>2</strong> on signup</div>
+                <div className="grid grid-cols-2 gap-1 sm:gap-2 text-[8px] sm:text-[10px]" style={{ color: WIN95.text }}>
+                  <div className="flex items-center gap-0.5 sm:gap-1">
+                    <span className="text-[10px] sm:text-sm">🎁</span>
+                    <div><strong>2</strong> signup</div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm">💌</span>
-                    <div><strong>+5</strong> per referral</div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5" style={{ color: '#006400' }} />
-                    <div><strong>+10</strong> for friend</div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm">✨</span>
-                    <div>No card needed</div>
+                  <div className="flex items-center gap-0.5 sm:gap-1">
+                    <span className="text-[10px] sm:text-sm">💌</span>
+                    <div><strong>+5</strong> referral</div>
                   </div>
                 </div>
               </div>
 
               {/* Quick Instructions */}
               <div 
-                className="p-3 text-left"
+                className="p-1.5 sm:p-3 text-left"
                 style={{ 
                   background: WIN95.bg,
                   boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
                 }}
               >
-                <h2 className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: '#b8860b' }}>
-                  <Sparkles className="w-3.5 h-3.5" />
+                <h2 className="text-[10px] sm:text-xs font-bold mb-1 sm:mb-2 flex items-center gap-1" style={{ color: '#b8860b' }}>
+                  <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   How It Works
                 </h2>
-                <div className="space-y-1 text-[10px]" style={{ color: WIN95.text }}>
-                  <div><strong>1.</strong> Sign in with Email or Wallet</div>
-                  <div><strong>2.</strong> Chat with AI or use tools directly</div>
-                  <div><strong>3.</strong> Download & share creations</div>
+                <div className="space-y-0.5 sm:space-y-1 text-[8px] sm:text-[10px]" style={{ color: WIN95.text }}>
+                  <div><strong>1.</strong> Sign in</div>
+                  <div><strong>2.</strong> Create with AI</div>
+                  <div><strong>3.</strong> Download</div>
                 </div>
               </div>
             </div>
@@ -264,11 +256,11 @@ const AuthPrompt: React.FC = () => {
   // Show email sign-in
   if (authMode === 'email') {
     return (
-      <div className="flex items-center justify-center h-full lg:max-h-[calc(100vh-80px)] px-4 overflow-auto lg:overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
-        <div className="w-full max-w-md md:max-w-xl mx-auto">
+      <div className="flex items-center justify-center h-full px-2 sm:px-4 py-2 overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
+        <div className="w-full max-w-md md:max-w-xl mx-auto max-h-full flex flex-col">
           <button
             onClick={() => setAuthMode(null)}
-            className="mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary"
+            className="mb-2 sm:mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary flex-shrink-0"
             style={{
               color: '#000000',
               textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
@@ -336,12 +328,12 @@ function WalletPrompt({ onBack }: WalletPromptProps) {
   };
 
   return (
-    <div className="flex items-center justify-center h-full lg:max-h-[calc(100vh-80px)] px-4 overflow-auto lg:overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
-      <div className="w-full max-w-md md:max-w-xl mx-auto">
+    <div className="flex items-center justify-center h-full px-2 sm:px-4 py-2 overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
+      <div className="w-full max-w-md md:max-w-xl mx-auto max-h-full flex flex-col">
         {onBack && (
           <button
             onClick={onBack}
-            className="mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary text-sm md:text-base"
+            className="mb-2 sm:mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary text-sm md:text-base flex-shrink-0"
             style={{
               color: '#000000',
               textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
