@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo, useCallback, ReactNode } from 'react';
-import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard, Mail, Settings, Clock, Gift, Trophy, Users, type LucideIcon } from 'lucide-react';
+import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard, Mail, Settings, Clock, Gift, Trophy, type LucideIcon } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import SubscriptionManagement from './SubscriptionManagement';
