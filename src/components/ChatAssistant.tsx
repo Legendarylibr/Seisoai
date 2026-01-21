@@ -22,6 +22,8 @@ import {
   IMAGE_MODELS,
   VIDEO_MODELS,
   ASPECT_RATIOS,
+  MUSIC_DURATIONS,
+  calculateMusicCredits,
   type ChatMessage, 
   type PendingAction,
   type ChatContext,
@@ -215,6 +217,7 @@ const MessageBubble = memo(function MessageBubble({
   const [lightboxIs360, setLightboxIs360] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<string>('square');
+  const [selectedMusicDuration, setSelectedMusicDuration] = useState<number>(30);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Check if this is a 360 panorama request (for pending action)
@@ -245,7 +248,7 @@ const MessageBubble = memo(function MessageBubble({
     return [];
   };
 
-  // Handle confirm with selected model and aspect ratio
+  // Handle confirm with selected model, aspect ratio, or music duration
   const handleConfirmWithModel = () => {
     if (!message.pendingAction || !onConfirmAction) return;
     
@@ -265,6 +268,20 @@ const MessageBubble = memo(function MessageBubble({
         }
       };
       onConfirmAction(actionWith360Model);
+      return;
+    }
+    
+    // For music, include the selected duration
+    if (message.pendingAction.type === 'generate_music') {
+      const actionWithDuration: PendingAction = {
+        ...message.pendingAction,
+        params: {
+          ...originalParams,
+          musicDuration: selectedMusicDuration
+        },
+        estimatedCredits: calculateMusicCredits(selectedMusicDuration)
+      };
+      onConfirmAction(actionWithDuration);
       return;
     }
     
@@ -293,7 +310,7 @@ const MessageBubble = memo(function MessageBubble({
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = downloadUrl;
-      a.download = `seiso-${type}-${Date.now()}.${type === 'music' ? 'mp3' : type === 'video' ? 'mp4' : 'png'}`;
+      a.download = `seiso-${type}-${Date.now()}.${type === 'music' ? 'wav' : type === 'video' ? 'mp4' : 'png'}`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(downloadUrl);
@@ -428,13 +445,15 @@ const MessageBubble = memo(function MessageBubble({
                       <div className="flex items-center gap-1 text-[9px] sm:text-[10px] flex-wrap" style={{ color: WIN95.textDisabled }}>
                         <span className="flex items-center gap-0.5">
                           <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                          {message.pendingAction.estimatedCredits} cr
+                          {message.pendingAction.type === 'generate_music' 
+                            ? calculateMusicCredits(selectedMusicDuration) 
+                            : message.pendingAction.estimatedCredits} cr
                         </span>
                         <span className="hidden sm:inline">•</span>
                         <span className="flex items-center gap-0.5">
                           <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                           {message.pendingAction.type === 'generate_video' ? '1-3m' :
-                           message.pendingAction.type === 'generate_music' ? '~30s' : '~10s'}
+                           message.pendingAction.type === 'generate_music' ? '~2-10s' : '~10s'}
                         </span>
                       </div>
                     </div>
@@ -539,6 +558,43 @@ const MessageBubble = memo(function MessageBubble({
                             </span>
                           </button>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Duration Selector - for music only */}
+                  {message.pendingAction?.type === 'generate_music' && (
+                    <div className="mb-2">
+                      <div className="text-[10px] sm:text-[11px] font-bold mb-1.5" style={{ color: WIN95.text }}>
+                        Duration:
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {MUSIC_DURATIONS.map((dur) => (
+                          <button
+                            key={dur.value}
+                            onClick={() => setSelectedMusicDuration(dur.value)}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded transition-all"
+                            style={{
+                              background: selectedMusicDuration === dur.value 
+                                ? 'linear-gradient(135deg, rgba(236,72,153,0.2) 0%, rgba(168,85,247,0.2) 100%)'
+                                : WIN95.bgLight,
+                              border: selectedMusicDuration === dur.value 
+                                ? '1.5px solid #ec4899'
+                                : `1px solid ${WIN95.border.dark}`,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <span className="text-[10px] sm:text-[11px] font-bold" style={{ color: WIN95.text }}>
+                              {dur.label}
+                            </span>
+                            <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                              {dur.credits} cr
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-1.5 text-[9px]" style={{ color: WIN95.textDisabled }}>
+                        Selected: {selectedMusicDuration}s • {calculateMusicCredits(selectedMusicDuration)} credits
                       </div>
                     </div>
                   )}
@@ -732,23 +788,56 @@ const MessageBubble = memo(function MessageBubble({
                         <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-500 to-purple-500 flex items-center justify-center">
                           <Volume2 className="w-5 h-5 text-white" />
                         </div>
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <div className="text-[12px] font-bold">Your Track</div>
-                          <div className="text-[10px]" style={{ color: WIN95.textDisabled }}>AI Generated Music</div>
+                          <div className="text-[10px]" style={{ color: WIN95.textDisabled }}>
+                            AI Generated Music
+                            {message.generatedContent.metadata?.file_name && (
+                              <span> • WAV</span>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      
+                      {/* Waveform visualization */}
+                      <div 
+                        className="w-full h-12 mb-3 flex items-center justify-center gap-0.5 overflow-hidden rounded"
+                        style={{ background: '#000080' }}
+                      >
+                        {Array.from({ length: 40 }).map((_, i) => {
+                          const height = Math.sin(i * 0.4) * 25 + 35;
+                          return (
+                            <div
+                              key={i}
+                              className="w-1"
+                              style={{
+                                height: `${height}%`,
+                                background: '#00ff00',
+                                transition: 'height 0.3s'
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                      
                       <audio
                         src={message.generatedContent.urls[0]}
                         controls
                         className="w-full h-10 rounded"
+                        style={{ 
+                          borderRadius: '6px',
+                          background: WIN95.bgDark
+                        }}
                       />
-                      <button
-                        onClick={() => handleDownload(message.generatedContent!.urls[0], 'music')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] mt-3 rounded-lg"
-                        style={BTN.base}
-                      >
-                        <Download className="w-3.5 h-3.5" /> Download MP3
-                      </button>
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={() => handleDownload(message.generatedContent!.urls[0], 'music')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] rounded-lg"
+                          style={BTN.base}
+                        >
+                          <Download className="w-3.5 h-3.5" /> Download WAV
+                        </button>
+                      </div>
                     </div>
                   )}
 

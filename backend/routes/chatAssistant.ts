@@ -47,7 +47,8 @@ RULES:
 - If unclear, ask ONE short question (no JSON)
 - Defaults: square images, 6s video, 30s music
 - For 360 panoramas: use simple prompt like "360 panorama of [scene]" - backend handles formatting
-- Credits: Images 0.5-0.7, Videos 1-8.25/sec, Music 0.25/min
+- Credits: Images 0.5-0.7, Videos 1-8.25/sec, Music 0.25-0.75 total (NOT per minute!)
+- MUSIC CREDITS: 15-60s = 0.25 credits, 120s = 0.5 credits, 180s = 0.75 credits
 - For any request, attempt to generate it - let the system handle what's possible
 
 IMAGE EDITING (VERY IMPORTANT):

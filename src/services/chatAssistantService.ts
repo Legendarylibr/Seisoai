@@ -81,6 +81,22 @@ export const MUSIC_GENRES = [
   { id: 'jazz', name: 'Jazz', description: 'Smooth & improvisational' }
 ];
 
+// Music duration options (same as MusicGenerator)
+export const MUSIC_DURATIONS = [
+  { value: 15, label: '15s', credits: 0.25 },
+  { value: 30, label: '30s', credits: 0.25 },
+  { value: 60, label: '1m', credits: 0.25 },
+  { value: 120, label: '2m', credits: 0.5 },
+  { value: 180, label: '3m', credits: 0.75 }
+];
+
+// Calculate music credits based on duration (same logic as musicService)
+export function calculateMusicCredits(duration: number): number {
+  const seconds = Math.max(10, Math.min(180, duration || 30));
+  const minutes = seconds / 60;
+  return Math.max(0.25, Math.ceil(minutes * 4) / 4); // Round up to nearest 0.25
+}
+
 // Aspect ratio options for image generation
 export const ASPECT_RATIOS = [
   { id: 'square', name: '1:1', icon: '⬜', description: 'Square' },
