@@ -266,13 +266,13 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'generate' && (
-          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden container mx-auto max-w-7xl">
             <AuthGuard>
-              <div className="h-full flex flex-col lg:flex-row gap-2 lg:gap-2">
+              <div className="min-h-full lg:h-full flex flex-col lg:flex-row gap-2 lg:gap-2">
                 {/* Left Column - Controls */}
                 <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
-                  {/* Scrollable controls */}
-                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1 lg:space-y-1.5 pb-1">
+                  {/* Scrollable controls on desktop, flows naturally on mobile */}
+                  <div className="flex-1 min-h-0 lg:overflow-y-auto space-y-1 lg:space-y-1.5 pb-1">
                     {!isAuthenticated && <SimpleWalletConnect />}
                     <EmailUserInfo />
                     <PromptOptimizer value={userPrompt} onPromptChange={setUserPrompt} />
@@ -281,8 +281,8 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                     <ReferenceImageInput />
                     <MultiImageModelSelector />
                   </div>
-                  {/* Fixed generate button at bottom */}
-                  <div className="flex-shrink-0 pt-1">
+                  {/* Generate button */}
+                  <div className="flex-shrink-0 pt-1 pb-2 lg:pb-0">
                     <GenerateButton 
                       customPrompt={userPrompt}
                       onShowTokenPayment={handleShowTokenPayment}
@@ -292,7 +292,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                 </div>
                 
                 {/* Right Column - Output */}
-                <div className="flex-1 min-h-0 lg:min-h-0">
+                <div className="flex-1 min-h-[300px] lg:min-h-0">
                   <ImageOutput />
                 </div>
               </div>
@@ -301,13 +301,13 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'batch' && (
-          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden container mx-auto max-w-7xl">
             <AuthGuard>
-              <div className="h-full flex flex-col lg:flex-row gap-2 lg:gap-2">
+              <div className="min-h-full lg:h-full flex flex-col lg:flex-row gap-2 lg:gap-2">
                 {/* Left Column - Batch Controls */}
                 <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
-                  {/* Scrollable controls */}
-                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1 lg:space-y-1.5">
+                  {/* Scrollable controls on desktop, flows naturally on mobile */}
+                  <div className="flex-1 min-h-0 lg:overflow-y-auto space-y-1 lg:space-y-1.5 pb-2 lg:pb-0">
                     {!isAuthenticated && <SimpleWalletConnect />}
                     <EmailUserInfo />
                     <StyleSelector />
@@ -320,7 +320,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                 </div>
                 
                 {/* Right Column - Output */}
-                <div className="flex-1 min-h-0 lg:min-h-0">
+                <div className="flex-1 min-h-[300px] lg:min-h-0">
                   <ImageOutput />
                 </div>
               </div>
