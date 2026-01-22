@@ -1326,8 +1326,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                   style={{ background: 'rgba(255,255,255,0.15)' }}
                 >
                   <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                  <span className="hidden xs:inline">{emailContext.credits ?? walletContext.credits ?? 0}</span>
-                  <span className="xs:hidden">{emailContext.credits ?? walletContext.credits ?? 0}</span>
+                  <span>{emailContext.credits ?? walletContext.credits ?? 0}</span>
                 </div>
                 <button
                   onClick={handleClearChat}

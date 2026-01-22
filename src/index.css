@@ -930,7 +930,9 @@
 
 @media (max-width: 768px) {
   .container { @apply px-2; }
-  button, .btn { @apply min-h-[40px]; }
+  /* Touch-friendly tap targets for primary action buttons only */
+  /* Use .touch-target class explicitly instead of all buttons to avoid conflicts */
+  .touch-target { @apply min-h-[40px]; }
 }
 
 @media (min-width: 768px) {
