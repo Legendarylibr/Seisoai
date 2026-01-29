@@ -125,6 +125,11 @@ export interface Config {
   EMAIL_FROM?: string;
   // Security alerts
   SECURITY_DISCORD_WEBHOOK?: string;
+  // ERC-8004 Agent Registry
+  ERC8004_IDENTITY_REGISTRY?: string;
+  ERC8004_REPUTATION_REGISTRY?: string;
+  ERC8004_VALIDATION_REGISTRY?: string;
+  ERC8004_CHAIN_ID?: number;
   isProduction: boolean;
   isDevelopment: boolean;
 }
@@ -183,6 +188,12 @@ export const config: Config = {
   // Frontend URL
   FRONTEND_URL: process.env.FRONTEND_URL || 
     (process.env.NODE_ENV === 'production' ? PRODUCTION_URL : 'http://localhost:5173'),
+  
+  // ERC-8004 Agent Registry
+  ERC8004_IDENTITY_REGISTRY: process.env.ERC8004_IDENTITY_REGISTRY,
+  ERC8004_REPUTATION_REGISTRY: process.env.ERC8004_REPUTATION_REGISTRY,
+  ERC8004_VALIDATION_REGISTRY: process.env.ERC8004_VALIDATION_REGISTRY,
+  ERC8004_CHAIN_ID: process.env.ERC8004_CHAIN_ID ? parseInt(process.env.ERC8004_CHAIN_ID, 10) : undefined,
   
   // Flags
   isProduction: process.env.NODE_ENV === 'production',

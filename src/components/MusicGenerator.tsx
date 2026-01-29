@@ -97,7 +97,7 @@ interface WaveformDisplayProps {
 const WaveformDisplay = memo<WaveformDisplayProps>(function WaveformDisplay({ isPlaying, isGenerating }) {
   return (
     <div 
-      className="w-full h-16 lg:h-20 flex items-center justify-center gap-0.5 overflow-hidden"
+      className="w-full h-12 sm:h-16 lg:h-20 flex items-center justify-center gap-0.5 overflow-hidden"
       style={{ background: '#000080' }}
     >
       {Array.from({ length: 48 }).map((_, i) => {
@@ -408,11 +408,11 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator() {
       <CollapsibleMusicHowToUse />
       
       {/* Main content */}
-      <div className="flex-1 min-h-0 p-1 lg:p-1.5 flex flex-col lg:flex-row gap-1 lg:gap-1.5 overflow-auto lg:overflow-hidden">
+      <div className="flex-1 min-h-0 p-1 sm:p-1.5 flex flex-col lg:flex-row gap-1 sm:gap-1.5 overflow-hidden">
         {/* Left panel - Controls */}
         <div className="lg:w-[45%] flex flex-col min-h-0">
           {/* Scrollable controls area */}
-          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-0.5 lg:gap-1">
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-0.5 sm:gap-1">
           {/* Genre Selection */}
           <Win95GroupBox title="Genre" className="flex-shrink-0">
             <Win95GenreDropdown
@@ -524,7 +524,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator() {
         <div className="flex-1 flex flex-col gap-0.5 lg:gap-1 min-h-0">
           {/* Waveform Display */}
           <Win95GroupBox title="Waveform" className="flex-1 flex flex-col min-h-0">
-            <Win95Panel sunken className="overflow-hidden flex-1 min-h-[60px]">
+            <Win95Panel sunken className="overflow-hidden flex-1 min-h-[50px] sm:min-h-[60px]">
               <AnimatedWaveform isPlaying={isPlaying} isGenerating={isGenerating} />
             </Win95Panel>
           </Win95GroupBox>
@@ -589,7 +589,7 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator() {
       
       {/* Status bar */}
       <div 
-        className="flex items-center px-1 lg:px-2 py-0.5 text-[9px] flex-shrink-0"
+        className="flex items-center px-1 sm:px-2 py-0.5 text-[8px] sm:text-[9px] flex-shrink-0"
         style={{ 
           background: WIN95.bg,
           borderTop: `1px solid ${WIN95.border.light}`,

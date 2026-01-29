@@ -549,31 +549,31 @@ const ImageOutput: React.FC = () => {
       )}
 
       {/* Win95 Toolbar */}
-      <div className="flex items-center gap-0.5 p-1 flex-shrink-0 flex-wrap" style={{ 
+      <div className="flex items-center gap-0.5 p-0.5 sm:p-1 flex-shrink-0 flex-wrap" style={{ 
         background: WIN95.bg,
         borderBottom: `1px solid ${WIN95.bgDark}`
       }}>
         <button onClick={() => handleDownload(imagesToDisplay[0])} disabled={isDownloading}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold"
+          className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold"
           style={isDownloading ? BTN.disabled : BTN.base}
           {...(isDownloading ? {} : hoverHandlers)}
           title="Save image to disk"
         >
           <span>💾</span>
-          <span>{isDownloading ? 'Saving...' : 'Save'}</span>
+          <span className="hidden xs:inline">{isDownloading ? 'Saving...' : 'Save'}</span>
         </button>
         
         <button onClick={handleRegenerate} disabled={isRegenerating || isGenerating || !isConnected || !currentGeneration}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold"
+          className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold"
           style={(isRegenerating || isGenerating || !isConnected || !currentGeneration) ? BTN.disabled : BTN.base}
           {...((isRegenerating || isGenerating || !isConnected || !currentGeneration) ? {} : hoverHandlers)}
           title="Regenerate with same settings"
         >
           <span>🔄</span>
-          <span>{isRegenerating ? 'Wait...' : 'Redo'}</span>
+          <span className="hidden xs:inline">{isRegenerating ? 'Wait...' : 'Redo'}</span>
         </button>
         
-        <button onClick={clearGeneration} className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold" style={BTN.base} {...hoverHandlers} title="Clear image">
+        <button onClick={clearGeneration} className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold" style={BTN.base} {...hoverHandlers} title="Clear image">
           <span>🗑️</span>
           <span className="hidden sm:inline">Clear</span>
         </button>
@@ -583,7 +583,7 @@ const ImageOutput: React.FC = () => {
           <button
             onClick={() => setShowUpscaleMenu(!showUpscaleMenu)}
             disabled={isUpscaling || !hasImages || availableCredits < 0.5}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold"
+            className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold"
             style={(isUpscaling || !hasImages || availableCredits < 0.5) ? BTN.disabled : BTN.base}
             {...((isUpscaling || !hasImages || availableCredits < 0.5) ? {} : hoverHandlers)}
             title="Upscale image"
@@ -591,7 +591,7 @@ const ImageOutput: React.FC = () => {
             {isUpscaling ? (
               <>
                 <span className="animate-spin">⏳</span>
-                <span>Upscaling...</span>
+                <span className="hidden xs:inline">Upscaling...</span>
               </>
             ) : (
               <>
@@ -635,7 +635,7 @@ const ImageOutput: React.FC = () => {
         <button
           onClick={() => { setSelectedModel(multiImageModel || currentGeneration?.multiImageModel || 'flux'); setShowPromptModal(true); }}
           disabled={isNewPromptDisabled}
-          className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold"
+          className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold"
           style={isNewPromptDisabled ? BTN.disabled : {
             background: 'linear-gradient(180deg, #1084d0 0%, #000080 100%)',
             color: '#ffffff',
@@ -648,7 +648,8 @@ const ImageOutput: React.FC = () => {
           title="Generate with new prompt"
         >
           <Sparkles className="w-3 h-3" />
-          <span>New Prompt</span>
+          <span className="hidden xs:inline">New Prompt</span>
+          <span className="xs:hidden">New</span>
         </button>
 
         {/* Share Button */}
@@ -689,7 +690,7 @@ const ImageOutput: React.FC = () => {
       </div>
       
       {/* Image Display - fills all remaining space with fixed container */}
-      <div className="flex-1 min-h-0 p-1 overflow-hidden" style={{ background: WIN95.bg, maxHeight: 'calc(100% - 40px)' }}>
+      <div className="flex-1 min-h-0 p-0.5 sm:p-1 overflow-hidden" style={{ background: WIN95.bg }}>
         <div 
           className="w-full h-full overflow-hidden flex items-center justify-center relative"
           style={{ 
@@ -840,7 +841,7 @@ const ImageOutput: React.FC = () => {
           onClick={(e) => e.target === e.currentTarget && closeModal()}
         >
           <div 
-            className="w-full max-w-md mx-2 sm:mx-4 max-h-[95vh] sm:max-h-[90vh] flex flex-col"
+            className="w-full max-w-md mx-2 sm:mx-4 max-h-[90vh] sm:max-h-[85vh] flex flex-col"
             style={{
               background: WIN95.bg,
               boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}, 4px 4px 0 rgba(0,0,0,0.3)`

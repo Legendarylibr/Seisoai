@@ -670,11 +670,11 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
       <CollapsibleVideoHowToUse />
       
       {/* Main content */}
-      <div className="flex-1 min-h-0 p-1.5 lg:p-1.5 flex flex-col lg:flex-row gap-1.5 lg:gap-2 overflow-auto lg:overflow-hidden">
+      <div className="flex-1 min-h-0 p-1 sm:p-1.5 flex flex-col lg:flex-row gap-1 sm:gap-1.5 lg:gap-2 overflow-hidden">
         {/* Left panel - Controls */}
         <div className="lg:w-[45%] flex flex-col min-h-0">
           {/* Scrollable controls area */}
-          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1">
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-0.5 sm:gap-1">
           {/* Model & Mode Selection */}
           <Win95GroupBox title="Model & Mode" className="flex-shrink-0" icon={<Layers className="w-3.5 h-3.5" />}>
             <div className="flex flex-col gap-1.5">
@@ -1030,16 +1030,16 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
 
           {/* Toolbar - matches ImageOutput */}
           {generatedVideoUrl && (
-            <div className="flex items-center gap-0.5 p-1 flex-shrink-0 flex-wrap" style={{ 
+            <div className="flex items-center gap-0.5 p-0.5 sm:p-1 flex-shrink-0 flex-wrap" style={{ 
               background: WIN95.bg,
               borderBottom: `1px solid ${WIN95.bgDark}`
             }}>
-              <Win95Button onClick={handleDownload} className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold">
+              <Win95Button onClick={handleDownload} className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold">
                 <span>💾</span>
-                <span>Save</span>
+                <span className="hidden xs:inline">Save</span>
               </Win95Button>
               
-              <Win95Button onClick={() => { setGeneratedVideoUrl(null); setVideoReady(false); setError(null); }} className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold">
+              <Win95Button onClick={() => { setGeneratedVideoUrl(null); setVideoReady(false); setError(null); }} className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold">
                 <span>🗑️</span>
                 <span className="hidden sm:inline">Clear</span>
               </Win95Button>
@@ -1081,7 +1081,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
           )}
 
           {/* Video Display - matches ImageOutput styling */}
-          <div className="flex-1 min-h-0 p-1 overflow-hidden" style={{ background: '#c0c0c0', maxHeight: 'calc(100% - 40px)' }}>
+          <div className="flex-1 min-h-0 p-0.5 sm:p-1 overflow-hidden" style={{ background: '#c0c0c0' }}>
             <div 
               className="w-full h-full overflow-hidden flex items-center justify-center relative"
               style={{ 
@@ -1240,7 +1240,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
       
       {/* Status bar */}
       <div 
-        className="flex items-center mx-2 mb-2 flex-shrink-0"
+        className="flex items-center mx-1 sm:mx-2 mb-1 sm:mb-2 flex-shrink-0"
         style={{ 
           background: WIN95.bg,
           boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,

@@ -1,6 +1,5 @@
 import React, { ReactNode } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { AlertCircle } from 'lucide-react';
 import AuthPrompt from './AuthPrompt';
 
@@ -11,14 +10,12 @@ interface AuthGuardProps {
 
 const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null }) => {
   const walletContext = useSimpleWallet();
-  const emailContext = useEmailAuth();
   
-  // Check if authenticated via either method
-  const isConnected = walletContext.isConnected || emailContext.isAuthenticated;
+  // Wallet-only authentication
+  const isConnected = walletContext.isConnected;
   const address = walletContext.address;
-  const isEmailAuth = emailContext.isAuthenticated;
-  const isLoading = walletContext.isLoading || emailContext.isLoading;
-  const error = walletContext.error || emailContext.error;
+  const isLoading = walletContext.isLoading;
+  const error = walletContext.error;
 
   // PERFORMANCE: Only show loading spinner if it's been loading for a while
   // This prevents flash of loading state for fast connections
@@ -53,9 +50,9 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null }) => {
     );
   }
 
-  // Check if authenticated - support both email and wallet
-  if (!isConnected || (!address && !isEmailAuth)) {
-    // Show AuthPrompt with both email and wallet options when not authenticated
+  // Check if wallet is connected
+  if (!isConnected || !address) {
+    // Show wallet connection prompt when not authenticated
     return fallback || <AuthPrompt />;
   }
 

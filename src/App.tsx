@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import logger from './utils/logger';
 import { ImageGeneratorProvider } from './contexts/ImageGeneratorContext';
-import { SimpleWalletProvider } from './contexts/SimpleWalletContext';
-import { EmailAuthProvider, useEmailAuth } from './contexts/EmailAuthContext';
+import { SimpleWalletProvider, useSimpleWallet } from './contexts/SimpleWalletContext';
 import SimpleWalletConnect from './components/SimpleWalletConnect';
 import StyleSelector from './components/StyleSelector';
 import ImageOutput from './components/ImageOutput';
@@ -11,7 +10,6 @@ import ReferenceImageInput from './components/ReferenceImageInput';
 import MultiImageModelSelector from './components/MultiImageModelSelector';
 import AspectRatioSelector from './components/AspectRatioSelector';
 import PromptOptimizer from './components/PromptOptimizer';
-import EmailUserInfo from './components/EmailUserInfo';
 import AuthGuard from './components/AuthGuard';
 import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
@@ -19,14 +17,13 @@ import PromptLab from './components/PromptLab';
 import { useImageGenerator } from './contexts/ImageGeneratorContext';
 import { Grid, Sparkles, Film, Music, Layers, MessageCircle, type LucideIcon } from 'lucide-react';
 import { API_URL, ensureCSRFToken } from './utils/apiConfig';
-import { storeReferralCode } from './services/emailAuthService';
 
 // Build version - check console to verify deployment
 logger.info('[SEISOAI BUILD] v2026.01.06.1');
 
 // PERFORMANCE: Lazy load heavy modals and gallery - not needed on initial render
-// StripePaymentModal handles both card and stablecoin payments (USDC on Ethereum, Solana, Polygon, Base)
-const StripePaymentModal = lazy(() => import('./components/StripePaymentModal'));
+// TokenPaymentModal handles on-chain stablecoin payments (USDC on Ethereum, Solana, Polygon, Base, etc.)
+const TokenPaymentModal = lazy(() => import('./components/TokenPaymentModal'));
 const PaymentSuccessModal = lazy(() => import('./components/PaymentSuccessModal'));
 const ImageGallery = lazy(() => import('./components/ImageGallery'));
 const VideoGenerator = lazy(() => import('./components/VideoGenerator'));
@@ -92,15 +89,13 @@ function App(): JSX.Element {
 
   return (
     <SimpleWalletProvider>
-      <EmailAuthProvider>
-        <ImageGeneratorProvider>
-          <AppWithCreditsCheck 
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            tabs={tabs}
-          />
-        </ImageGeneratorProvider>
-      </EmailAuthProvider>
+      <ImageGeneratorProvider>
+        <AppWithCreditsCheck 
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          tabs={tabs}
+        />
+      </ImageGeneratorProvider>
     </SimpleWalletProvider>
   );
 }
@@ -112,7 +107,7 @@ interface AppWithCreditsCheckProps {
 }
 
 function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCheckProps): JSX.Element {
-  const { isAuthenticated, userId, refreshCredits } = useEmailAuth();
+  const { isConnected, address, refreshCredits, hasFreeAccess, isNFTHolder, isTokenHolder } = useSimpleWallet();
   const { multiImageModel } = useImageGenerator();
   // Unified payment modal - Stripe handles both cards and stablecoins (USDC)
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -131,21 +126,17 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
     });
   }, []);
 
-  // Capture referral code from URL on app mount
+  // Log holder status for debugging
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const refCode = urlParams.get('ref');
-    if (refCode) {
-      storeReferralCode(refCode.toUpperCase());
-      logger.info('Referral code captured from URL', { code: refCode });
-      // Clean up URL to remove ref param (keep other params if any)
-      urlParams.delete('ref');
-      const newUrl = urlParams.toString() 
-        ? `${window.location.pathname}?${urlParams.toString()}`
-        : window.location.pathname;
-      window.history.replaceState({}, document.title, newUrl);
+    if (isConnected && address) {
+      logger.info('Wallet connected', { 
+        address, 
+        hasFreeAccess, 
+        isNFTHolder, 
+        isTokenHolder 
+      });
     }
-  }, []);
+  }, [isConnected, address, hasFreeAccess, isNFTHolder, isTokenHolder]);
 
   // Handle subscription verification from Stripe checkout redirect
   useEffect(() => {
@@ -161,8 +152,8 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
       const verifySubscription = async (): Promise<void> => {
         try {
           const body: Record<string, string> = { sessionId };
-          if (userId) {
-            body.userId = userId;
+          if (address) {
+            body.walletAddress = address;
           }
 
           // Ensure CSRF token is available before making POST request
@@ -172,10 +163,6 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
             'Content-Type': 'application/json',
             ...(csrfToken && { 'X-CSRF-Token': csrfToken })
           };
-          const token = localStorage.getItem('authToken');
-          if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-          }
 
           const response = await fetch(`${API_URL}/api/subscription/verify`, {
             method: 'POST',
@@ -227,7 +214,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
       logger.info('Subscription checkout was canceled');
       cleanupUrl();
     }
-  }, [userId, refreshCredits]);
+  }, [address, refreshCredits]);
 
   // Unified payment handler - Stripe handles both cards and stablecoins (USDC on Ethereum, Solana, Polygon, Base)
   const handleShowPayment = useCallback((): void => {
@@ -244,7 +231,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
   }, []);
 
   return (
-    <div className="h-dvh lg:h-screen animated-bg flex flex-col overflow-hidden" style={{ position: 'relative', zIndex: 0 }}>
+    <div className="h-dvh animated-bg flex flex-col overflow-hidden" style={{ position: 'relative', zIndex: 0 }}>
       <Navigation 
         activeTab={activeTab} 
         setActiveTab={setActiveTab}
@@ -253,7 +240,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         onShowStripePayment={handleShowStripePayment}
       />
       
-      <div className="flex-1 min-h-0 overflow-hidden p-1 lg:p-2">
+      <div className="flex-1 min-h-0 overflow-hidden p-0.5 sm:p-1 lg:p-2">
         {activeTab === 'chat' && (
           <div className="h-full min-h-0 flex flex-col">
             <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
@@ -266,15 +253,14 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'generate' && (
-          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl">
             <AuthGuard>
-              <div className="min-h-full lg:h-full flex flex-col lg:flex-row gap-2 lg:gap-2">
+              <div className="h-full flex flex-col lg:flex-row gap-1 sm:gap-1.5 lg:gap-2">
                 {/* Left Column - Controls */}
                 <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
                   {/* Scrollable controls on desktop, flows naturally on mobile */}
-                  <div className="flex-1 min-h-0 lg:overflow-y-auto space-y-1 lg:space-y-1.5 pb-1">
-                    {!isAuthenticated && <SimpleWalletConnect />}
-                    <EmailUserInfo />
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1 sm:space-y-1.5 pb-1">
+                    <SimpleWalletConnect />
                     <PromptOptimizer value={userPrompt} onPromptChange={setUserPrompt} />
                     <StyleSelector />
                     <AspectRatioSelector />
@@ -282,7 +268,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                     <MultiImageModelSelector />
                   </div>
                   {/* Generate button */}
-                  <div className="flex-shrink-0 pt-1 pb-2 lg:pb-0">
+                  <div className="flex-shrink-0 pt-1 pb-1 sm:pb-2 lg:pb-0">
                     <GenerateButton 
                       customPrompt={userPrompt}
                       onShowTokenPayment={handleShowTokenPayment}
@@ -292,7 +278,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                 </div>
                 
                 {/* Right Column - Output */}
-                <div className="flex-1 min-h-[300px] lg:min-h-0">
+                <div className="flex-1 min-h-[250px] sm:min-h-[300px] lg:min-h-0">
                   <ImageOutput />
                 </div>
               </div>
@@ -301,15 +287,14 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'batch' && (
-          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl">
             <AuthGuard>
-              <div className="min-h-full lg:h-full flex flex-col lg:flex-row gap-2 lg:gap-2">
+              <div className="h-full flex flex-col lg:flex-row gap-1 sm:gap-1.5 lg:gap-2">
                 {/* Left Column - Batch Controls */}
                 <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
                   {/* Scrollable controls on desktop, flows naturally on mobile */}
-                  <div className="flex-1 min-h-0 lg:overflow-y-auto space-y-1 lg:space-y-1.5 pb-2 lg:pb-0">
-                    {!isAuthenticated && <SimpleWalletConnect />}
-                    <EmailUserInfo />
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1 sm:space-y-1.5 pb-1 sm:pb-2 lg:pb-0">
+                    <SimpleWalletConnect />
                     <StyleSelector />
                     <MultiImageModelSelector />
                     <GenerationQueue
@@ -320,7 +305,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                 </div>
                 
                 {/* Right Column - Output */}
-                <div className="flex-1 min-h-[300px] lg:min-h-0">
+                <div className="flex-1 min-h-[250px] sm:min-h-[300px] lg:min-h-0">
                   <ImageOutput />
                 </div>
               </div>
@@ -329,7 +314,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'video' && (
-          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden">
+          <div className="h-full min-h-0 overflow-hidden">
             <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
               <VideoGenerator 
                 onShowTokenPayment={handleShowTokenPayment}
@@ -342,7 +327,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'music' && (
-          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden">
+          <div className="h-full min-h-0 overflow-hidden">
             <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
               <MusicGenerator 
                 onShowTokenPayment={handleShowTokenPayment}
@@ -365,7 +350,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         
         
         {activeTab === 'gallery' && (
-          <div className="h-full min-h-0 overflow-auto lg:overflow-hidden">
+          <div className="h-full min-h-0 overflow-hidden">
             <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
               <ImageGallery />
             </Suspense>
@@ -373,12 +358,16 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
       </div>
 
-      {/* Unified Payment Modal - Stripe handles cards + stablecoins (USDC) */}
+      {/* Token Payment Modal - On-chain stablecoin payments (USDC) */}
       {showPaymentModal && (
         <Suspense fallback={null}>
-          <StripePaymentModal 
+          <TokenPaymentModal 
             isOpen={showPaymentModal}
             onClose={() => setShowPaymentModal(false)}
+            onSuccess={() => {
+              setShowPaymentModal(false);
+              if (refreshCredits) refreshCredits();
+            }}
           />
         </Suspense>
       )}
@@ -405,8 +394,8 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         </Suspense>
       )}
 
-      {/* Prompt Lab - AI prompt planning assistant (only for authenticated users on generation screens, not chat since chat IS the assistant) */}
-      {isAuthenticated && activeTab !== 'chat' && (activeTab === 'generate' || activeTab === 'batch' || activeTab === 'video' || activeTab === 'music') && (
+      {/* Prompt Lab - AI prompt planning assistant (only for connected users on generation screens, not chat since chat IS the assistant) */}
+      {isConnected && activeTab !== 'chat' && (activeTab === 'generate' || activeTab === 'batch' || activeTab === 'video' || activeTab === 'music') && (
         <PromptLab
           mode={activeTab === 'generate' || activeTab === 'batch' ? 'image' : activeTab as 'video' | 'music'}
           currentPrompt={userPrompt}

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Mail, Wallet, ArrowRight, Sparkles, MessageCircle, Image, Film, Music, Gift, Users } from 'lucide-react';
+import { Wallet, ArrowRight, Sparkles, MessageCircle, Image, Film, Music, Coins } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import EmailSignIn from './EmailSignIn';
 import logger from '../utils/logger';
 
 const AuthPrompt: React.FC = () => {
-  const [authMode, setAuthMode] = useState<'email' | 'wallet' | null>(null);
+  const { connectWallet } = useSimpleWallet();
+  const [selectedChain, setSelectedChain] = useState<'evm' | 'solana' | null>(null);
 
   // Win95 style constants
   const WIN95 = {
@@ -22,8 +22,48 @@ const AuthPrompt: React.FC = () => {
     highlight: '#000080'
   };
 
-  // Show auth mode selection if not selected
-  if (!authMode) {
+  const chainOptions = [
+    { id: 'evm' as const, name: 'Ethereum', icon: '⟠', description: 'EVM Compatible (ETH, Polygon, Base, Arbitrum)' },
+    { id: 'solana' as const, name: 'Solana', icon: '◎', description: 'Solana Blockchain' }
+  ];
+
+  const evmWallets = [
+    { id: 'metamask', name: 'MetaMask', icon: '🦊' },
+    { id: 'walletconnect', name: 'WalletConnect', icon: '🔗' },
+    { id: 'coinbase', name: 'Coinbase Wallet', icon: '🔵' },
+    { id: 'rabby', name: 'Rabby Wallet', icon: '🐰' },
+    { id: 'phantom-evm', name: 'Phantom', icon: '👻' },
+    { id: 'rainbow', name: 'Rainbow Wallet', icon: '🌈' },
+    { id: 'trust', name: 'Trust Wallet', icon: '🛡️' },
+    { id: 'okx', name: 'OKX Wallet', icon: '⭕' },
+    { id: 'bitget', name: 'Bitget Wallet', icon: '💼' },
+    { id: 'brave', name: 'Brave Wallet', icon: '🦁' },
+    { id: 'frame', name: 'Frame', icon: '🖼️' }
+  ];
+
+  const solanaWallets = [
+    { id: 'phantom', name: 'Phantom', icon: '👻' },
+    { id: 'solflare', name: 'Solflare', icon: '☀️' }
+  ];
+
+  const handleChainSelect = (chainId: 'evm' | 'solana') => {
+    setSelectedChain(chainId);
+  };
+
+  const handleWalletSelect = async (walletId: string) => {
+    try {
+      await connectWallet(walletId);
+    } catch (error) {
+      logger.error('Wallet connection failed:', { walletId, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  };
+
+  const handleBack = () => {
+    setSelectedChain(null);
+  };
+
+  // Show chain selection if not selected
+  if (!selectedChain) {
     return (
       <div className="flex items-center justify-center h-full px-2 sm:px-4 py-2 lg:py-2 overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
         {/* Win95 Window Container */}
@@ -70,7 +110,7 @@ const AuthPrompt: React.FC = () => {
               </p>
             </div>
 
-            {/* Sign In Section Header */}
+            {/* Connect Wallet Section Header */}
             <div 
               className="mb-2 sm:mb-3 py-1 sm:py-1.5 px-2 sm:px-3 inline-block"
               style={{
@@ -79,72 +119,44 @@ const AuthPrompt: React.FC = () => {
                 fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
               }}
             >
-              <span className="text-xs sm:text-sm font-bold">▸ Sign In to Get Started</span>
+              <span className="text-xs sm:text-sm font-bold">▸ Connect Wallet to Get Started</span>
             </div>
 
-            {/* Auth Mode Selection - Win95 Buttons */}
+            {/* Chain Selection - Win95 Buttons */}
             <div className="grid md:grid-cols-2 gap-2 sm:gap-3 max-w-3xl mx-auto mb-2 sm:mb-4">
-              <button
-                onClick={() => setAuthMode('email')}
-                className="w-full p-2 sm:p-4 text-left transition-all active:translate-y-px"
-                style={{
-                  background: WIN95.bg,
-                  boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                }}
-              >
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div 
-                    className="p-1.5 sm:p-2 flex-shrink-0"
-                    style={{
-                      background: WIN95.bgLight,
-                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
-                    }}
-                  >
-                    <Mail className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: WIN95.highlight }} />
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-bold text-xs sm:text-sm" style={{ color: WIN95.text }}>
-                      📧 Sign in with Email
+              {chainOptions.map((chain) => (
+                <button
+                  key={chain.id}
+                  onClick={() => handleChainSelect(chain.id)}
+                  className="w-full p-2 sm:p-4 text-left transition-all active:translate-y-px"
+                  style={{
+                    background: WIN95.bg,
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
+                    fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                  }}
+                >
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div 
+                      className="p-1.5 sm:p-2 flex-shrink-0"
+                      style={{
+                        background: WIN95.bgLight,
+                        boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
+                      }}
+                    >
+                      <span className="text-lg sm:text-xl">{chain.icon}</span>
                     </div>
-                    <div className="text-[10px] sm:text-xs" style={{ color: WIN95.textDisabled }}>
-                      Monthly subscriptions • Credit card
+                    <div className="flex-1">
+                      <div className="font-bold text-xs sm:text-sm" style={{ color: WIN95.text }}>
+                        {chain.name}
+                      </div>
+                      <div className="text-[10px] sm:text-xs" style={{ color: WIN95.textDisabled }}>
+                        {chain.description}
+                      </div>
                     </div>
+                    <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" style={{ color: WIN95.text }} />
                   </div>
-                  <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" style={{ color: WIN95.text }} />
-                </div>
-              </button>
-
-              <button
-                onClick={() => setAuthMode('wallet')}
-                className="w-full p-2 sm:p-4 text-left transition-all active:translate-y-px"
-                style={{
-                  background: WIN95.bg,
-                  boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                }}
-              >
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div 
-                    className="p-1.5 sm:p-2 flex-shrink-0"
-                    style={{
-                      background: WIN95.bgLight,
-                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`
-                    }}
-                  >
-                    <Wallet className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#008000' }} />
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-bold text-xs sm:text-sm" style={{ color: WIN95.text }}>
-                      💳 Connect Crypto Wallet
-                    </div>
-                    <div className="text-[10px] sm:text-xs" style={{ color: WIN95.textDisabled }}>
-                      Pay-per-credit • Crypto payments
-                    </div>
-                  </div>
-                  <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" style={{ color: WIN95.text }} />
-                </div>
-              </button>
+                </button>
+              ))}
             </div>
 
             {/* Main Content Grid - Win95 Group Boxes */}
@@ -200,9 +212,29 @@ const AuthPrompt: React.FC = () => {
               </div>
             </div>
 
-            {/* Bottom Row - Benefits & How to Use */}
+            {/* Bottom Row - Free Access Info */}
             <div className="grid grid-cols-2 gap-1.5 sm:gap-2 md:gap-3">
-              {/* Free Benefits & Referrals */}
+              {/* NFT Holder Benefits */}
+              <div 
+                className="p-1.5 sm:p-3 text-left"
+                style={{ 
+                  background: '#ffffc8',
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+              >
+                <h2 className="text-[10px] sm:text-xs font-bold mb-1 sm:mb-2 flex items-center gap-1" style={{ color: '#b8860b' }}>
+                  <Wallet className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  NFT Holders
+                </h2>
+                <div className="space-y-0.5 sm:space-y-1 text-[8px] sm:text-[10px]" style={{ color: WIN95.text }}>
+                  <div>🎨 <strong>FREE</strong> generation</div>
+                  <div>⚡ Priority queue</div>
+                  <div>🌟 Exclusive models</div>
+                </div>
+              </div>
+
+              {/* Token Holder Benefits (Coming Soon) */}
               <div 
                 className="p-1.5 sm:p-3 text-left"
                 style={{ 
@@ -212,38 +244,13 @@ const AuthPrompt: React.FC = () => {
                 }}
               >
                 <h2 className="text-[10px] sm:text-xs font-bold mb-1 sm:mb-2 flex items-center gap-1" style={{ color: '#006400' }}>
-                  <Gift className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  Free Credits
-                </h2>
-                <div className="grid grid-cols-2 gap-1 sm:gap-2 text-[8px] sm:text-[10px]" style={{ color: WIN95.text }}>
-                  <div className="flex items-center gap-0.5 sm:gap-1">
-                    <span className="text-[10px] sm:text-sm">🎁</span>
-                    <div><strong>2</strong> signup</div>
-                  </div>
-                  <div className="flex items-center gap-0.5 sm:gap-1">
-                    <span className="text-[10px] sm:text-sm">💌</span>
-                    <div><strong>+5</strong> referral</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick Instructions */}
-              <div 
-                className="p-1.5 sm:p-3 text-left"
-                style={{ 
-                  background: WIN95.bg,
-                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
-                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                }}
-              >
-                <h2 className="text-[10px] sm:text-xs font-bold mb-1 sm:mb-2 flex items-center gap-1" style={{ color: '#b8860b' }}>
-                  <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  How It Works
+                  <Coins className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  Token Holders
                 </h2>
                 <div className="space-y-0.5 sm:space-y-1 text-[8px] sm:text-[10px]" style={{ color: WIN95.text }}>
-                  <div><strong>1.</strong> Sign in</div>
-                  <div><strong>2.</strong> Create with AI</div>
-                  <div><strong>3.</strong> Download</div>
+                  <div>🪙 <strong>FREE</strong> access</div>
+                  <div>🚀 Coming soon</div>
+                  <div>💎 Hold to earn</div>
                 </div>
               </div>
             </div>
@@ -253,249 +260,89 @@ const AuthPrompt: React.FC = () => {
     );
   }
 
-  // Show email sign-in
-  if (authMode === 'email') {
-    return (
-      <div className="flex items-center justify-center h-full px-2 sm:px-4 py-2 overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
-        <div className="w-full max-w-md md:max-w-xl mx-auto max-h-full flex flex-col">
-          <button
-            onClick={() => setAuthMode(null)}
-            className="mb-2 sm:mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary flex-shrink-0"
-            style={{
-              color: '#000000',
-              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-            }}
-          >
-            <ArrowRight className="w-4 h-4 rotate-180" />
-            <span>Back</span>
-          </button>
-          <EmailSignIn />
-        </div>
-      </div>
-    );
-  }
-
-  // Show wallet connection
-  return <WalletPrompt onBack={() => setAuthMode(null)} />;
-};
-
-interface WalletPromptProps {
-  onBack: () => void;
-}
-
-function WalletPrompt({ onBack }: WalletPromptProps) {
-  const { connectWallet } = useSimpleWallet();
-  const [selectedChain, setSelectedChain] = useState<'evm' | 'solana' | null>(null);
-
-  const chainOptions = [
-    { id: 'evm' as const, name: 'Ethereum', icon: '⟠', description: 'EVM Compatible Chains (Ethereum, Polygon, Base, Arbitrum, Optimism)' },
-    { id: 'solana' as const, name: 'Solana', icon: '◎', description: 'Solana Blockchain' }
-  ];
-
-  const evmWallets = [
-    { id: 'metamask', name: 'MetaMask', icon: '🦊' },
-    { id: 'walletconnect', name: 'WalletConnect', icon: '🔗' },
-    { id: 'coinbase', name: 'Coinbase Wallet', icon: '🔵' },
-    { id: 'rabby', name: 'Rabby Wallet', icon: '🐰' },
-    { id: 'phantom-evm', name: 'Phantom', icon: '👻' },
-    { id: 'rainbow', name: 'Rainbow Wallet', icon: '🌈' },
-    { id: 'trust', name: 'Trust Wallet', icon: '🛡️' },
-    { id: 'okx', name: 'OKX Wallet', icon: '⭕' },
-    { id: 'bitget', name: 'Bitget Wallet', icon: '💼' },
-    { id: 'brave', name: 'Brave Wallet', icon: '🦁' },
-    { id: 'frame', name: 'Frame', icon: '🖼️' }
-  ];
-
-  const solanaWallets = [
-    { id: 'phantom', name: 'Phantom', icon: '👻' },
-    { id: 'solflare', name: 'Solflare', icon: '☀️' }
-  ];
-
-  const handleChainSelect = (chainId: 'evm' | 'solana') => {
-    setSelectedChain(chainId);
-  };
-
-  const handleWalletSelect = async (walletId: string) => {
-    try {
-      await connectWallet(walletId);
-    } catch (error) {
-      logger.error('Wallet connection failed:', { walletId, error: error instanceof Error ? error.message : 'Unknown error' });
-    }
-  };
-
-  const handleBack = () => {
-    setSelectedChain(null);
-  };
-
+  // Show wallet selection for selected chain
   return (
     <div className="flex items-center justify-center h-full px-2 sm:px-4 py-2 overflow-hidden" style={{ position: 'relative', zIndex: 10 }}>
       <div className="w-full max-w-md md:max-w-xl mx-auto max-h-full flex flex-col">
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="mb-2 sm:mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary text-sm md:text-base flex-shrink-0"
-            style={{
-              color: '#000000',
-              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-            }}
-          >
-            <ArrowRight className="w-4 h-4 md:w-5 md:h-5 rotate-180" />
-            <span>Back to Sign In Options</span>
-          </button>
-        )}
+        <button
+          onClick={handleBack}
+          className="mb-2 sm:mb-4 flex items-center gap-2 transition-all duration-300 btn-secondary text-sm md:text-base flex-shrink-0"
+          style={{
+            color: '#000000',
+            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+          }}
+        >
+          <ArrowRight className="w-4 h-4 md:w-5 md:h-5 rotate-180" />
+          <span>Back</span>
+        </button>
 
-        {!selectedChain ? (
-          <div className="glass-card rounded-xl p-6 md:p-8 space-y-4 md:space-y-6" style={{ 
-            background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
-            border: '2px outset #e8e8e8',
-            boxShadow: 'inset 3px 3px 0 rgba(255, 255, 255, 1), inset -3px -3px 0 rgba(0, 0, 0, 0.25), 0 6px 12px rgba(0, 0, 0, 0.2)'
-          }}>
-            <div className="text-center mb-6 md:mb-8">
-              <div className="p-4 md:p-5 rounded inline-block mb-4 md:mb-5" style={{
-                background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
-                border: '2px outset #e0e0e0',
-                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
-              }}>
-                <Wallet className="w-12 h-12 md:w-16 md:h-16" style={{ color: '#000000' }} />
-              </div>
-              <h2 className="text-2xl md:text-3xl font-bold mb-2 md:mb-3" style={{ 
-                color: '#000000', 
-                textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
-              }}>
-                Connect Wallet
-              </h2>
-              <p className="text-sm md:text-base" style={{ color: '#1a1a1a', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)' }}>Choose your blockchain</p>
+        <div className="glass-card rounded-xl p-6 md:p-8 space-y-4 md:space-y-6" style={{ 
+          background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
+          border: '2px outset #e8e8e8',
+          boxShadow: 'inset 3px 3px 0 rgba(255, 255, 255, 1), inset -3px -3px 0 rgba(0, 0, 0, 0.25), 0 6px 12px rgba(0, 0, 0, 0.2)'
+        }}>
+          <div className="text-center mb-6 md:mb-8">
+            <div className="p-3 md:p-4 rounded inline-block mb-3 md:mb-4" style={{
+              background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
+              border: '2px outset #e0e0e0',
+              boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
+            }}>
+              <Wallet className="w-10 h-10 md:w-14 md:h-14" style={{ color: '#000000' }} />
             </div>
-
-            <div className="space-y-3 md:space-y-4">
-              {chainOptions.map((chain) => (
-                <button
-                  key={chain.id}
-                  onClick={() => handleChainSelect(chain.id)}
-                  className="w-full flex items-center gap-4 md:gap-5 p-4 md:p-5 rounded-xl transition-all duration-300"
-                  style={{
-                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                    border: '2px outset #f0f0f0',
-                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-                    textAlign: 'left'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                    e.currentTarget.style.border = '2px outset #f8f8f8';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                    e.currentTarget.style.border = '2px outset #f0f0f0';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}
-                >
-                  <span className="text-2xl md:text-3xl">{chain.icon}</span>
-                  <div className="flex-1 text-left">
-                    <div className="font-semibold text-base md:text-lg" style={{ 
-                      color: '#000000', 
-                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                    }}>
-                      {chain.name}
-                    </div>
-                    <div className="text-sm md:text-base" style={{ 
-                      color: '#1a1a1a', 
-                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
-                    }}>
-                      {chain.description}
-                    </div>
-                  </div>
-                  <ArrowRight className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0" style={{ color: '#000000' }} />
-                </button>
-              ))}
-            </div>
+            <h2 className="text-xl md:text-2xl font-bold mb-2 md:mb-3" style={{ 
+              color: '#000000', 
+              textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
+            }}>
+              {selectedChain === 'evm' ? 'EVM Wallets' : 'Solana Wallets'}
+            </h2>
+            <p className="text-sm md:text-base" style={{ 
+              color: '#1a1a1a', 
+              textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
+            }}>
+              Select your wallet
+            </p>
           </div>
-        ) : (
-          <div className="glass-card rounded-xl p-6 md:p-8 space-y-4 md:space-y-6" style={{ 
-            background: 'linear-gradient(to bottom, #ffffff, #f5f5f5)',
-            border: '2px outset #e8e8e8',
-            boxShadow: 'inset 3px 3px 0 rgba(255, 255, 255, 1), inset -3px -3px 0 rgba(0, 0, 0, 0.25), 0 6px 12px rgba(0, 0, 0, 0.2)'
-          }}>
-            <button
-              onClick={handleBack}
-              className="mb-2 flex items-center gap-2 transition-all duration-300 btn-secondary text-sm md:text-base"
-              style={{
-                color: '#000000',
-                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-              }}
-            >
-              <ArrowRight className="w-4 h-4 md:w-5 md:h-5 rotate-180" />
-              <span>Back</span>
-            </button>
 
-            <div className="text-center mb-6 md:mb-8">
-              <div className="p-3 md:p-4 rounded inline-block mb-3 md:mb-4" style={{
-                background: 'linear-gradient(to bottom, #e0e0e0, #d0d0d0)',
-                border: '2px outset #e0e0e0',
-                boxShadow: 'inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.3)'
-              }}>
-                <Wallet className="w-10 h-10 md:w-14 md:h-14" style={{ color: '#000000' }} />
-              </div>
-              <h2 className="text-xl md:text-2xl font-bold mb-2 md:mb-3" style={{ 
-                color: '#000000', 
-                textShadow: '2px 2px 0 rgba(255, 255, 255, 1), 1px 1px 0 rgba(255, 255, 255, 0.8)'
-              }}>
-                {selectedChain === 'evm' ? 'EVM Wallets' : 'Solana Wallets'}
-              </h2>
-              <p className="text-sm md:text-base" style={{ 
-                color: '#1a1a1a', 
-                textShadow: '1px 1px 0 rgba(255, 255, 255, 0.6)'
-              }}>
-                Select your wallet
-              </p>
-            </div>
-
-            <div className="space-y-3 md:space-y-4">
-              {(selectedChain === 'evm' ? evmWallets : solanaWallets).map((wallet) => (
-                <button
-                  key={wallet.id}
-                  onClick={() => handleWalletSelect(wallet.id)}
-                  className="w-full flex items-center gap-4 md:gap-5 p-4 md:p-5 rounded-xl transition-all duration-300"
-                  style={{
-                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                    border: '2px outset #f0f0f0',
-                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-                    textAlign: 'left'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                    e.currentTarget.style.border = '2px outset #f8f8f8';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                    e.currentTarget.style.border = '2px outset #f0f0f0';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}
-                >
-                  <span className="text-2xl md:text-3xl">{wallet.icon}</span>
-                  <div className="flex-1 text-left">
-                    <div className="font-semibold text-base md:text-lg" style={{ 
-                      color: '#000000', 
-                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                    }}>
-                      {wallet.name}
-                    </div>
+          <div className="space-y-3 md:space-y-4 max-h-[50vh] overflow-y-auto">
+            {(selectedChain === 'evm' ? evmWallets : solanaWallets).map((wallet) => (
+              <button
+                key={wallet.id}
+                onClick={() => handleWalletSelect(wallet.id)}
+                className="w-full flex items-center gap-4 md:gap-5 p-4 md:p-5 rounded-xl transition-all duration-300"
+                style={{
+                  background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                  border: '2px outset #f0f0f0',
+                  boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                  textAlign: 'left'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                  e.currentTarget.style.border = '2px outset #f8f8f8';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                  e.currentTarget.style.border = '2px outset #f0f0f0';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                <span className="text-2xl md:text-3xl">{wallet.icon}</span>
+                <div className="flex-1 text-left">
+                  <div className="font-semibold text-base md:text-lg" style={{ 
+                    color: '#000000', 
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  }}>
+                    {wallet.name}
                   </div>
-                  <ArrowRight className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0" style={{ color: '#000000' }} />
-                </button>
-              ))}
-            </div>
+                </div>
+                <ArrowRight className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0" style={{ color: '#000000' }} />
+              </button>
+            ))}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
-}
+};
 
 export default AuthPrompt;
-
-
-
-
-

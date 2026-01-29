@@ -1,0 +1,20 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "Seisoai Video Generator",
+  "description": "AI video creation and editing service. Generate videos from text prompts or animate existing images using advanced video diffusion models.",
+  "image": "https://seisoai.com/seiso-logo.png",
+  "services": [
+    {
+      "name": "web",
+      "endpoint": "https://seisoai.com/"
+    },
+    {
+      "name": "api",
+      "endpoint": "https://seisoai.com/api/wan-animate"
+    }
+  ],
+  "x402Support": false,
+  "active": true,
+  "registrations": [],
+  "supportedTrust": ["reputation"]
+}

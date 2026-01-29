@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "standard": "ERC-8004",
+  "organization": "Seisoai",
+  "agents": [
+    {
+      "id": "chat-assistant",
+      "file": "chat-assistant.json",
+      "name": "Seisoai ChatAssistant"
+    },
+    {
+      "id": "image-generator",
+      "file": "image-generator.json",
+      "name": "Seisoai Image Generator"
+    },
+    {
+      "id": "video-generator",
+      "file": "video-generator.json",
+      "name": "Seisoai Video Generator"
+    },
+    {
+      "id": "music-generator",
+      "file": "music-generator.json",
+      "name": "Seisoai Music Generator"
+    }
+  ]
+}

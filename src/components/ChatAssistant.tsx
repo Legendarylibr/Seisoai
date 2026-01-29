@@ -11,7 +11,6 @@ import {
   Upload, ImagePlus, LogOut
 } from 'lucide-react';
 import { WIN95, BTN, PANEL, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import AuthPrompt from './AuthPrompt';
 import { 
@@ -1020,11 +1019,9 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
   onShowTokenPayment: _onShowTokenPayment,
   onShowStripePayment: _onShowStripePayment
 }) {
-  const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   
-  const isEmailAuth = emailContext.isAuthenticated;
-  const isConnected = isEmailAuth || walletContext.isConnected;
+  const isConnected = walletContext.isConnected;
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -1068,11 +1065,9 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
 
   // Build context for API calls
   const getContext = useCallback((): ChatContext => ({
-    userId: emailContext.userId || undefined,
     walletAddress: walletContext.address || undefined,
-    email: emailContext.email || undefined,
-    credits: emailContext.credits ?? walletContext.credits
-  }), [emailContext, walletContext]);
+    credits: walletContext.credits
+  }), [walletContext]);
 
   // Handle image upload for reference
   const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1214,9 +1209,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
       ));
 
       // Refresh credits
-      if (isEmailAuth && emailContext.refreshCredits) {
-        emailContext.refreshCredits();
-      } else if (walletContext.fetchCredits && walletContext.address) {
+      if (walletContext.fetchCredits && walletContext.address) {
         walletContext.fetchCredits(walletContext.address, 3, true);
       }
     } catch (err) {
@@ -1228,7 +1221,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     }
 
     setIsGenerating(false);
-  }, [isGenerating, getContext, isEmailAuth, emailContext, walletContext]);
+  }, [isGenerating, getContext, walletContext]);
 
   // Cancel pending action
   const handleCancelAction = useCallback(() => {
@@ -1326,7 +1319,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                   style={{ background: 'rgba(255,255,255,0.15)' }}
                 >
                   <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                  <span>{emailContext.credits ?? walletContext.credits ?? 0}</span>
+                  <span>{walletContext.credits ?? 0}</span>
                 </div>
                 <button
                   onClick={handleClearChat}
@@ -1336,10 +1329,8 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                   <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
                 <button
-                  onClick={async () => {
-                    if (isEmailAuth) {
-                      await emailContext.signOut();
-                    } else if (walletContext.disconnect) {
+                  onClick={() => {
+                    if (walletContext.disconnect) {
                       walletContext.disconnect();
                     }
                   }}

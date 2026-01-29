@@ -316,9 +316,28 @@ export const EmailAuthProvider: React.FC<EmailAuthProviderProps> = ({ children }
   return <EmailAuthContext.Provider value={value}>{children}</EmailAuthContext.Provider>;
 };
 
+// Default value when no EmailAuthProvider is present (wallet-only mode)
+const defaultEmailAuthValue: EmailAuthContextValue = {
+  isAuthenticated: false,
+  email: null,
+  userId: null,
+  credits: 0,
+  totalCreditsEarned: 0,
+  totalCreditsSpent: 0,
+  isLoading: false,
+  error: null,
+  signUp: async () => ({ success: false, error: 'Email auth disabled' }),
+  signIn: async () => ({ success: false, error: 'Email auth disabled' }),
+  signOut: async () => {},
+  refreshCredits: async () => {},
+  fetchUserData: async () => {},
+  setCreditsManually: () => {}
+};
+
 export const useEmailAuth = (): EmailAuthContextValue => {
   const context = useContext(EmailAuthContext);
-  if (!context) throw new Error('useEmailAuth must be used within an EmailAuthProvider');
+  // Return default value instead of throwing when no provider (wallet-only mode)
+  if (!context) return defaultEmailAuthValue;
   return context;
 };
 

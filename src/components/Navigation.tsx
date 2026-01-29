@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef, memo, useCallback, ReactNode } from 'react';
-import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, CreditCard, Mail, Settings, Clock, Gift, Trophy, type LucideIcon } from 'lucide-react';
+import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, Clock, Gift, Trophy, type LucideIcon } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
-import SubscriptionManagement from './SubscriptionManagement';
 import ReferralDashboard from './ReferralDashboard';
 import AchievementBadge from './AchievementBadge';
 import { WIN95, BTN, PANEL, TITLEBAR } from '../utils/buttonStyles';
@@ -95,44 +93,35 @@ interface NavigationProps {
 
 const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, onShowStripePayment }: NavigationProps) => {
   const walletContext = useSimpleWallet();
-  const emailContext = useEmailAuth();
   
-  const isEmailAuth = emailContext.isAuthenticated;
-  const isWalletAuth = walletContext.isConnected;
-  const isConnected = isEmailAuth || isWalletAuth;
+  const isConnected = walletContext.isConnected;
   const address = walletContext.address;
   
   const getCredits = (value: number | undefined | null): number => Math.max(0, Math.floor(Number(value ?? 0) || 0));
-  const credits = getCredits(isEmailAuth ? emailContext?.credits : walletContext?.credits);
+  const credits = getCredits(walletContext?.credits);
   
   // DEBUG: Log credits source
   logger.debug('[Navigation] Auth state:', { 
-    isEmailAuth, 
-    isWalletAuth, 
-    emailCredits: emailContext?.credits, 
+    isConnected, 
     walletCredits: walletContext?.credits,
     displayedCredits: credits 
   });
-  const totalCreditsEarned = getCredits(isEmailAuth ? emailContext?.totalCreditsEarned : walletContext?.totalCreditsEarned);
-  const isLoading = isEmailAuth ? emailContext.isLoading : walletContext.isLoading;
+  const totalCreditsEarned = getCredits(walletContext?.totalCreditsEarned);
+  const isLoading = walletContext.isLoading;
   
   const [showMobileMenu, setShowMobileMenu] = useState<boolean>(false);
-  const [showUserDropdown, setShowUserDropdown] = useState<boolean>(false);
   const [showCreditsDropdown, setShowCreditsDropdown] = useState<boolean>(false);
-  const [showSubscriptionManagement, setShowSubscriptionManagement] = useState<boolean>(false);
   const [showReferralDashboard, setShowReferralDashboard] = useState<boolean>(false);
   const [showAchievements, setShowAchievements] = useState<boolean>(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const creditsDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setShowUserDropdown(false);
       if (creditsDropdownRef.current && !creditsDropdownRef.current.contains(e.target as Node)) setShowCreditsDropdown(false);
     };
-    if (showUserDropdown || showCreditsDropdown) document.addEventListener('mousedown', handleClickOutside);
+    if (showCreditsDropdown) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showUserDropdown, showCreditsDropdown]);
+  }, [showCreditsDropdown]);
 
   if (!tabs || !Array.isArray(tabs)) {
     return (
@@ -156,17 +145,13 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
 
   // PERFORMANCE: useCallback for handlers to prevent child re-renders
   const handleRefreshCredits = useCallback(() => {
-    isEmailAuth ? emailContext.refreshCredits() : walletContext.fetchCredits(address || '', 3, true);
+    walletContext.fetchCredits(address || '', 3, true);
     setShowCreditsDropdown(false);
-  }, [isEmailAuth, emailContext, walletContext, address]);
+  }, [walletContext, address]);
 
-  const handleSignOut = useCallback(async () => {
-    if (isEmailAuth) {
-      await emailContext.signOut();
-    } else {
-      walletContext.disconnectWallet();
-    }
-  }, [isEmailAuth, emailContext, walletContext]);
+  const handleSignOut = useCallback(() => {
+    walletContext.disconnectWallet();
+  }, [walletContext]);
 
   // Unified payment - Stripe handles both cards and stablecoins
   const handleBuyCredits = useCallback(() => {
@@ -268,85 +253,6 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                   </div>
                 )}
                 
-                {/* Email User Dropdown */}
-                {isEmailAuth && (
-                  <div className="relative" ref={dropdownRef}>
-                    <Win95NavButton onClick={() => setShowUserDropdown(!showUserDropdown)}>
-                      <Mail className="w-3 h-3" />
-                      <span className="text-[10px]">{emailContext.email}</span>
-                      <ChevronDown className={`w-3 h-3 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`} />
-                    </Win95NavButton>
-                    {showUserDropdown && (
-                      <div 
-                        className="absolute right-0 mt-1 w-48 z-50"
-                        style={{
-                          background: WIN95.bg,
-                          border: `1px solid ${WIN95.border.darker}`,
-                          boxShadow: `2px 2px 0 ${WIN95.border.darker}`
-                        }}
-                      >
-                        <button 
-                          onClick={() => { setShowReferralDashboard(true); setShowUserDropdown(false); }} 
-                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
-                          style={{ 
-                            color: WIN95.text, 
-                            fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' 
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = WIN95.highlight;
-                            e.currentTarget.style.color = WIN95.highlightText;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                            e.currentTarget.style.color = WIN95.text;
-                          }}
-                        >
-                          <Gift className="w-4 h-4" />
-                          <span>Referral Program</span>
-                        </button>
-                        <button 
-                          onClick={() => { setShowAchievements(true); setShowUserDropdown(false); }} 
-                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
-                          style={{ 
-                            color: WIN95.text, 
-                            fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' 
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = WIN95.highlight;
-                            e.currentTarget.style.color = WIN95.highlightText;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                            e.currentTarget.style.color = WIN95.text;
-                          }}
-                        >
-                          <Trophy className="w-4 h-4" />
-                          <span>Achievements</span>
-                        </button>
-                        <div style={{ borderTop: `1px solid ${WIN95.border.dark}`, margin: '4px 0' }} />
-                        <button 
-                          onClick={() => { emailContext.signOut(); setShowUserDropdown(false); }} 
-                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
-                          style={{ 
-                            color: WIN95.text, 
-                            fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' 
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = WIN95.highlight;
-                            e.currentTarget.style.color = WIN95.highlightText;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                            e.currentTarget.style.color = WIN95.text;
-                          }}
-                        >
-                          <LogOut className="w-4 h-4" />
-                          <span>Sign Out</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Credits Dropdown */}
                 <div className="relative" ref={creditsDropdownRef}>
@@ -374,27 +280,6 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                           <span className="font-bold" style={{ color: WIN95.text }}>{totalCreditsEarned}</span>
                         </div>
                       </div>
-                      {isEmailAuth && (
-                        <button 
-                          onClick={() => { setShowSubscriptionManagement(true); setShowCreditsDropdown(false); }} 
-                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
-                          style={{ 
-                            color: WIN95.text, 
-                            fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' 
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = WIN95.highlight;
-                            e.currentTarget.style.color = WIN95.highlightText;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                            e.currentTarget.style.color = WIN95.text;
-                          }}
-                        >
-                          <Settings className="w-4 h-4" />
-                          <span>Manage Subscription</span>
-                        </button>
-                      )}
                       <div style={{ borderTop: `1px solid ${WIN95.border.dark}`, margin: '4px 0' }} />
                       <button 
                         onClick={() => { setShowReferralDashboard(true); setShowCreditsDropdown(false); }} 
@@ -473,17 +358,15 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                     textShadow: '1px 1px 0 rgba(0, 0, 0, 0.4)'
                   }}
                 >
-                  {isEmailAuth ? <CreditCard className="w-4 h-4" /> : <Coins className="w-4 h-4" />}
+                  <Coins className="w-4 h-4" />
                   <span>Buy Credits</span>
                 </button>
 
-                {/* Sign Out (wallet users only) */}
-                {!isEmailAuth && (
-                  <Win95NavButton onClick={walletContext.disconnectWallet}>
-                    <LogOut className="w-3 h-3" />
-                    <span className="hidden lg:inline">Disconnect</span>
-                  </Win95NavButton>
-                )}
+                {/* Disconnect Wallet */}
+                <Win95NavButton onClick={walletContext.disconnectWallet}>
+                  <LogOut className="w-3 h-3" />
+                  <span className="hidden lg:inline">Disconnect</span>
+                </Win95NavButton>
                 
                 {/* System Tray Clock */}
                 <SystemClock />
@@ -527,21 +410,19 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                         fontWeight: 'bold'
                       }}
                     >
-                      {isEmailAuth ? <CreditCard className="w-3 h-3" /> : <Coins className="w-3 h-3" />}
-                      <span>Buy</span>
+                    <Coins className="w-3 h-3" />
+                    <span>Buy</span>
                     </button>
                   </div>
-                  {/* Sign out button only for wallet users - email users use the dropdown */}
-                  {!isEmailAuth && (
-                    <button 
-                      onClick={handleSignOut} 
-                      className="p-1.5"
-                      style={BTN.base}
-                      title="Disconnect"
-                    >
-                      <LogOut className="w-3 h-3" style={{ color: WIN95.text }} />
-                    </button>
-                  )}
+                  {/* Disconnect wallet button */}
+                  <button 
+                    onClick={handleSignOut} 
+                    className="p-1.5"
+                    style={BTN.base}
+                    title="Disconnect"
+                  >
+                    <LogOut className="w-3 h-3" style={{ color: WIN95.text }} />
+                  </button>
                 </>
               )}
             </div>
@@ -581,22 +462,12 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                   <Trophy className="w-4 h-4" />
                   <span>Achievements</span>
                 </Win95NavButton>
-                {isEmailAuth && (
-                  <Win95NavButton 
-                    onClick={() => { setShowSubscriptionManagement(true); setShowMobileMenu(false); }}
-                    className="w-full justify-start"
-                  >
-                    <Settings className="w-4 h-4" />
-                    <span>Manage Subscription</span>
-                  </Win95NavButton>
-                )}
               </nav>
             </div>
           )}
         </div>
       </div>
 
-      {isEmailAuth && <SubscriptionManagement isOpen={showSubscriptionManagement} onClose={() => setShowSubscriptionManagement(false)} />}
       {isConnected && <ReferralDashboard isOpen={showReferralDashboard} onClose={() => setShowReferralDashboard(false)} />}
       {isConnected && <AchievementBadge isOpen={showAchievements} onClose={() => setShowAchievements(false)} />}
     </header>

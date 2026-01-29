@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, memo } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
 import { WIN95 } from '../utils/buttonStyles';
@@ -26,9 +25,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
   } = useImageGenerator();
   
   const { isConnected, address, credits, isLoading: walletLoading, isNFTHolder, refreshCredits, setCreditsManually } = useSimpleWallet();
-  const emailContext = useEmailAuth();
-  const isEmailAuth = emailContext.isAuthenticated;
-  const _availableCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
+  const _availableCredits = credits ?? 0;
 
   const [progress, setProgress] = useState<number>(0);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
@@ -59,11 +56,8 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
   const handleGenerate = async () => {
     if (isGenerating || isLoading) return;
     
-    const isAuthenticated = isConnected || isEmailAuth;
-    const hasIdentifier = isEmailAuth ? emailContext.userId : address;
-    
-    if (!isAuthenticated || !hasIdentifier) {
-      setError('Please connect your wallet or sign in with email to generate images. New users get 2 credits!');
+    if (!isConnected || !address) {
+      setError('Please connect your wallet to generate images. New users get 2 credits!');
       return;
     }
 
@@ -74,12 +68,11 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
       return 0.6; // flux, flux-multi
     };
     const creditsToDeduct = getCreditsForModel(multiImageModel ?? undefined);
-    const currentCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
+    const currentCredits = credits ?? 0;
     const newCredits = Math.max(0, currentCredits - creditsToDeduct);
     
     // Optimistic update
-    if (isEmailAuth && emailContext.setCreditsManually) emailContext.setCreditsManually(newCredits);
-    else if (setCreditsManually) setCreditsManually(newCredits);
+    if (setCreditsManually) setCreditsManually(newCredits);
 
     try {
       setIsLoading(true);
@@ -90,9 +83,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
       const advancedSettings = {
         guidanceScale, imageSize, numImages, enableSafetyChecker, generationMode, 
         multiImageModel: multiImageModel,
-        walletAddress: isEmailAuth ? undefined : address,
-        userId: isEmailAuth ? emailContext.userId : null,
-        email: isEmailAuth ? emailContext.email : null,
+        walletAddress: address,
         isNFTHolder: isNFTHolder || false,
         referenceImageDimensions: controlNetImageDimensions,
         optimizePrompt
@@ -123,14 +114,12 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
       // Update credits from response
       if (imageResult.remainingCredits !== undefined) {
         const validatedCredits = Math.max(0, Math.floor(Number(imageResult.remainingCredits) || 0));
-        if (isEmailAuth && emailContext.setCreditsManually) emailContext.setCreditsManually(validatedCredits);
-        else if (setCreditsManually) setCreditsManually(validatedCredits);
+        if (setCreditsManually) setCreditsManually(validatedCredits);
       }
       
       // Refresh credits from backend
       try {
-        if (isEmailAuth && emailContext.refreshCredits) await emailContext.refreshCredits();
-        else if (refreshCredits && address) await refreshCredits();
+        if (refreshCredits && address) await refreshCredits();
       } catch (e) { 
         logger.warn('Failed to refresh credits', { error: e instanceof Error ? e.message : 'Unknown error' }); 
       }
@@ -141,18 +130,16 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
       
       // Save all images to gallery (non-blocking)
       const promptForDisplay = trimmedPrompt || (selectedStyle?.prompt || 'No prompt');
-      const userIdentifier = isEmailAuth ? emailContext.userId : (address ?? '');
+      const userIdentifier = address ?? '';
       const creditsPerImage = getCreditsForModel(multiImageModel ?? undefined);
       
       // Save each image to gallery
       imageUrls.forEach((imgUrl) => {
-        addGeneration(userIdentifier || '', {
+        addGeneration(userIdentifier, {
           prompt: promptForDisplay,
           style: selectedStyle?.name || 'No Style',
           imageUrl: imgUrl,
-          creditsUsed: creditsPerImage,
-          userId: isEmailAuth ? emailContext.userId : undefined,
-          email: isEmailAuth ? emailContext.email : undefined
+          creditsUsed: creditsPerImage
         }).catch(e => logger.debug('Gallery save failed', { error: e instanceof Error ? e.message : 'Unknown error' }));
       });
       
@@ -168,8 +155,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
     } catch (error) {
       // Refresh credits on error
       try {
-        if (isEmailAuth && emailContext.refreshCredits) await emailContext.refreshCredits();
-        else if (refreshCredits && address) await refreshCredits();
+        if (refreshCredits && address) await refreshCredits();
       } catch (e) { 
         logger.warn('Credit refresh failed', { error: e instanceof Error ? e.message : 'Unknown error' }); 
       }
@@ -194,7 +180,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
   }, []);
 
-  const isDisabled = isGenerating || walletLoading || (!isConnected && !isEmailAuth);
+  const isDisabled = isGenerating || walletLoading || !isConnected;
   // 20% above cost pricing
   const getCreditsNeeded = (model: string | undefined): number => {
     if (model === 'flux-2' || model === 'qwen-image-layered') return 0.3;
@@ -208,7 +194,7 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
   const getButtonText = (): string => {
     if (isGenerating) return isLayerExtract ? '⏳ Extracting...' : '⏳ Generating...';
     if (walletLoading) return '⏳ Loading...';
-    if (!isConnected && !isEmailAuth) return '🔗 Sign In';
+    if (!isConnected) return '🔗 Connect Wallet';
     if (isLayerExtract) return '▶ Generate';
     return '▶ Generate';
   };

@@ -32,6 +32,8 @@ import createChatAssistantRoutes from './chatAssistant';
 import createReferralRoutes from './referral';
 import createPublicGalleryRoutes from './gallery-public';
 import createAchievementRoutes from './achievements';
+// DISABLED: ERC-8004 Agent Registry - not used initially
+// import agentRoutes from './agents';
 import { adminIPAllowlist } from '../middleware/ipAllowlist';
 import { getCSRFToken } from '../middleware/csrf';
 
@@ -108,6 +110,13 @@ export function createApiRoutes(deps: Dependencies) {
   router.use('/wan-animate', createWanAnimateRoutes(deps as never));
   router.use('/prompt-lab', createPromptLabRoutes(deps as never));
   router.use('/chat-assistant', createChatAssistantRoutes(deps as never));
+
+  // ============================================
+  // ERC-8004 Agents (DISABLED - not used initially)
+  // Agent registry, reputation, and management
+  // Uncomment when ready to enable agent functionality
+  // ============================================
+  // router.use('/agents', agentRoutes);
 
   // ============================================
   // Payments

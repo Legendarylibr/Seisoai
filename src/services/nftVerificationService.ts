@@ -1,5 +1,5 @@
-// NFT Verification Service
-// Checks if a wallet holds qualifying NFTs for discounts/free access
+// NFT & Token Verification Service
+// Checks if a wallet holds qualifying NFTs or tokens for free access
 import logger from '../utils/logger';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 
@@ -11,10 +11,33 @@ export interface NFTCollection {
   balance?: number;
 }
 
+export interface TokenHolding {
+  chainId: string;
+  address: string;
+  symbol: string;
+  name: string;
+  balance: number;
+  decimals: number;
+}
+
 export interface NFTHoldingsResult {
   isHolder: boolean;
   collections: NFTCollection[];
   creditsGranted?: number;
+}
+
+export interface TokenHoldingsResult {
+  isHolder: boolean;
+  tokens: TokenHolding[];
+  hasFreeAccess: boolean;
+}
+
+export interface HolderStatus {
+  isNFTHolder: boolean;
+  isTokenHolder: boolean;
+  hasFreeAccess: boolean;
+  nftCollections: NFTCollection[];
+  tokens: TokenHolding[];
 }
 
 export interface NFTBenefits {
@@ -24,6 +47,22 @@ export interface NFTBenefits {
   exclusiveModels: boolean;
   features: string[];
 }
+
+// ERC-20 Token Configuration
+// TODO: Update with actual token contract address when deployed
+export const SEISO_TOKEN_CONFIG = {
+  // Placeholder - will be updated when token is created
+  contractAddress: '', // e.g., '0x...' for EVM or 'TokenMint...' for Solana
+  symbol: 'SEISO',
+  name: 'Seiso Token',
+  minimumBalance: 1, // Minimum tokens required for free access
+  chains: {
+    ethereum: { chainId: '1', address: '' },
+    polygon: { chainId: '137', address: '' },
+    base: { chainId: '8453', address: '' },
+    solana: { address: '' }
+  }
+};
 
 /**
  * Check if wallet holds any qualifying NFTs
@@ -119,7 +158,80 @@ export const checkNFTHoldings = async (walletAddress: string): Promise<NFTHoldin
 };
 
 /**
- * Get NFT holder benefits
+ * Check if wallet holds SEISO tokens (ERC-20)
+ * TODO: Implement when token is deployed
+ */
+export const checkTokenHoldings = async (walletAddress: string): Promise<TokenHoldingsResult> => {
+  try {
+    if (!walletAddress) {
+      logger.warn('No wallet address provided to checkTokenHoldings');
+      return { isHolder: false, tokens: [], hasFreeAccess: false };
+    }
+
+    // Token contract not yet deployed
+    if (!SEISO_TOKEN_CONFIG.contractAddress) {
+      logger.debug('Token contract not yet configured');
+      return { isHolder: false, tokens: [], hasFreeAccess: false };
+    }
+
+    // Normalize wallet address
+    const isSolanaAddress = !walletAddress.startsWith('0x');
+    const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
+    
+    // TODO: Call backend API to check token balance
+    // const apiEndpoint = `${API_URL}/api/token/check-holdings`;
+    // const response = await fetch(apiEndpoint, {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   credentials: 'include',
+    //   body: JSON.stringify({ walletAddress: normalizedAddress })
+    // });
+    
+    logger.debug('Token check not yet implemented', { walletAddress: normalizedAddress });
+    return { isHolder: false, tokens: [], hasFreeAccess: false };
+    
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Error checking token holdings:', { error: err.message, walletAddress });
+    return { isHolder: false, tokens: [], hasFreeAccess: false };
+  }
+};
+
+/**
+ * Get combined holder status (NFT + Token)
+ */
+export const getHolderStatus = async (walletAddress: string): Promise<HolderStatus> => {
+  try {
+    // Check both NFT and token holdings in parallel
+    const [nftResult, tokenResult] = await Promise.all([
+      checkNFTHoldings(walletAddress),
+      checkTokenHoldings(walletAddress)
+    ]);
+    
+    const hasFreeAccess = nftResult.isHolder || tokenResult.hasFreeAccess;
+    
+    return {
+      isNFTHolder: nftResult.isHolder,
+      isTokenHolder: tokenResult.isHolder,
+      hasFreeAccess,
+      nftCollections: nftResult.collections,
+      tokens: tokenResult.tokens
+    };
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Error getting holder status:', { error: err.message, walletAddress });
+    return {
+      isNFTHolder: false,
+      isTokenHolder: false,
+      hasFreeAccess: false,
+      nftCollections: [],
+      tokens: []
+    };
+  }
+};
+
+/**
+ * Get NFT/Token holder benefits
  */
 export const getNFTBenefits = (): NFTBenefits => {
   return {
@@ -128,24 +240,27 @@ export const getNFTBenefits = (): NFTBenefits => {
     priorityQueue: true,
     exclusiveModels: true,
     features: [
-      'Free image generation via local ComfyUI',
-      '20% bonus credits on purchases',
+      'FREE image, video, and music generation',
       'Priority generation queue',
-      'Access to exclusive AI models'
+      'Access to exclusive AI models',
+      '20% bonus credits on purchases'
     ]
   };
 };
 
 /**
  * Check if user qualifies for free generation
+ * NFT holders and token holders get FREE generation
  */
-export const canGenerateForFree = (isNFTHolder: boolean, credits: number): boolean => {
-  // NFT holders get discounts but still need credits
-  // Non-holders need credits
-  return isNFTHolder || credits > 0;
+export const canGenerateForFree = (isNFTHolder: boolean, isTokenHolder: boolean = false): boolean => {
+  // NFT holders and token holders get FREE generation
+  return isNFTHolder || isTokenHolder;
 };
 
-
-
-
-
+/**
+ * Check if user can generate (free access or has credits)
+ */
+export const canGenerate = (isNFTHolder: boolean, isTokenHolder: boolean, credits: number): boolean => {
+  // Free access for holders, or need credits
+  return canGenerateForFree(isNFTHolder, isTokenHolder) || credits > 0;
+};

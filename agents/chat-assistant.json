@@ -1,0 +1,20 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "Seisoai ChatAssistant",
+  "description": "AI assistant for creative content generation including images, videos, and music. Provides conversational AI capabilities with multi-modal output support.",
+  "image": "https://seisoai.com/seiso-logo.png",
+  "services": [
+    {
+      "name": "web",
+      "endpoint": "https://seisoai.com/"
+    },
+    {
+      "name": "api",
+      "endpoint": "https://seisoai.com/api/chat-assistant"
+    }
+  ],
+  "x402Support": false,
+  "active": true,
+  "registrations": [],
+  "supportedTrust": ["reputation"]
+}

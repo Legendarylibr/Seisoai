@@ -1,6 +1,10 @@
 /**
  * Credits middleware
  * Handles credit checks and deductions for paid operations
+ * 
+ * NFT and Token holders get FREE generation:
+ * - Users with NFT collections get free access
+ * - Users with SEISO tokens get free access (when token is deployed)
  */
 import type { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
@@ -12,6 +16,7 @@ import { CREDITS } from '../config/constants';
 interface CreditsRequest extends Request {
   user?: IUser;
   creditsRequired?: number;
+  hasFreeAccess?: boolean;
   body: {
     model?: string;
     image_urls?: string[];
@@ -26,6 +31,42 @@ interface CreditsRequest extends Request {
 
 // Batch processing premium (15% convenience fee for batch mode)
 const BATCH_PREMIUM = 0.15;
+
+// Token configuration - placeholder for future ERC-20 token
+// TODO: Update with actual token contract address when deployed
+const SEISO_TOKEN_CONFIG = {
+  contractAddress: '', // Empty until token is deployed
+  minimumBalance: 1    // Minimum tokens required for free access
+};
+
+/**
+ * Check if user has NFT holdings that grant free access
+ */
+function isNFTHolder(user: IUser): boolean {
+  return !!(user.nftCollections && user.nftCollections.length > 0);
+}
+
+/**
+ * Check if user has token holdings that grant free access
+ * TODO: Implement actual token balance check when token is deployed
+ */
+function isTokenHolder(_user: IUser): boolean {
+  // Token not yet deployed - always return false
+  if (!SEISO_TOKEN_CONFIG.contractAddress) {
+    return false;
+  }
+  
+  // TODO: Check user's token holdings from database or on-chain
+  // For now, return false until token integration is complete
+  return false;
+}
+
+/**
+ * Check if user qualifies for free generation access
+ */
+export function hasFreeGenerationAccess(user: IUser): boolean {
+  return isNFTHolder(user) || isTokenHolder(user);
+}
 
 /**
  * Create middleware that checks if user has enough credits
@@ -64,6 +105,20 @@ export const createRequireCredits = (
         }
 
         req.user = user;
+
+        // Check for free access (NFT/Token holders)
+        if (hasFreeGenerationAccess(user)) {
+          logger.info('Free generation access granted', {
+            userId: user.userId || user.walletAddress,
+            isNFT: isNFTHolder(user),
+            isToken: isTokenHolder(user),
+            path: req.path
+          });
+          req.hasFreeAccess = true;
+          req.creditsRequired = 0;
+          next();
+          return;
+        }
 
         // SECURITY: Validate requiredCredits is a positive number (allows decimals like 0.5)
         if (typeof requiredCredits !== 'number' || requiredCredits <= 0 || !Number.isFinite(requiredCredits)) {
@@ -138,6 +193,20 @@ export const createRequireCreditsForModel = (
         }
 
         req.user = user;
+
+        // Check for free access (NFT/Token holders)
+        if (hasFreeGenerationAccess(user)) {
+          logger.info('Free generation access granted for model', {
+            userId: user.userId || user.walletAddress,
+            isNFT: isNFTHolder(user),
+            isToken: isTokenHolder(user),
+            path: req.path
+          });
+          req.hasFreeAccess = true;
+          req.creditsRequired = 0;
+          next();
+          return;
+        }
 
         // Determine credit cost based on model
         // Uses centralized constants from config/constants.ts
@@ -219,6 +288,20 @@ export const createRequireCreditsForVideo = (
 
         req.user = user;
 
+        // Check for free access (NFT/Token holders)
+        if (hasFreeGenerationAccess(user)) {
+          logger.info('Free video generation access granted', {
+            userId: user.userId || user.walletAddress,
+            isNFT: isNFTHolder(user),
+            isToken: isTokenHolder(user),
+            path: req.path
+          });
+          req.hasFreeAccess = true;
+          req.creditsRequired = 0;
+          next();
+          return;
+        }
+
         // Minimum credits for video generation
         const minimumCredits = CREDITS.VIDEO_GENERATION_MINIMUM;
 
@@ -288,6 +371,9 @@ export default {
   requireCredits,
   requireCreditsForModel,
   requireCreditsForVideo,
-  calculateCredits
+  calculateCredits,
+  hasFreeGenerationAccess,
+  isNFTHolder,
+  isTokenHolder
 };
 

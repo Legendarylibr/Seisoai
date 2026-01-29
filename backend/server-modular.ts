@@ -26,6 +26,8 @@ import { getAllCircuitStats } from './services/circuitBreaker.js';
 import { metricsMiddleware, metricsHandler } from './services/metrics.js';
 import { initializeAuditLog } from './services/auditLog.js';
 import { getKeyRotationStatus } from './services/keyRotation.js';
+// DISABLED: ERC-8004 Agent Registry - not used initially
+// import { initializeContracts as initializeAgentRegistry } from './services/agentRegistry.js';
 import { createOpenApiRoutes } from './services/openapi.js';
 import { deepHealthCheck, livenessCheck, readinessCheck } from './services/healthCheck.js';
 import { setupGracefulShutdown, requestTrackingMiddleware, getInFlightCount } from './services/gracefulShutdown.js';
@@ -591,6 +593,18 @@ async function startServer(): Promise<void> {
 
     // Initialize Stripe
     await initializeStripe();
+
+    // DISABLED: ERC-8004 Agent Registry - not used initially
+    // Uncomment when ready to enable agent functionality
+    // if (config.ERC8004_IDENTITY_REGISTRY && config.ERC8004_CHAIN_ID) {
+    //   initializeAgentRegistry({
+    //     identityRegistry: config.ERC8004_IDENTITY_REGISTRY,
+    //     reputationRegistry: config.ERC8004_REPUTATION_REGISTRY || '',
+    //     validationRegistry: config.ERC8004_VALIDATION_REGISTRY,
+    //     chainId: config.ERC8004_CHAIN_ID,
+    //   });
+    //   logger.info('ERC-8004 Agent Registry initialized');
+    // }
 
     // ENTERPRISE: Initialize audit logging
     await initializeAuditLog();

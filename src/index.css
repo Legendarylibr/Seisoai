@@ -906,6 +906,18 @@
 }
 
 /* ===== RESPONSIVE ===== */
+/* Extra small devices (phones, 320px and up) */
+@media (min-width: 320px) {
+  .xs\:inline { display: inline; }
+  .xs\:hidden { display: none; }
+}
+
+/* Small devices (landscape phones, 640px and up) */
+@media (min-width: 640px) {
+  .sm\:inline { display: inline; }
+  .sm\:hidden { display: none; }
+}
+
 @media (max-width: 1023px) {
   body { 
     overflow: hidden;

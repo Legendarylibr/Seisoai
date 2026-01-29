@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, ReactNode } from 'react';
-import { checkNFTHoldings, NFTCollection } from '../services/nftVerificationService';
+import { checkNFTHoldings, checkTokenHoldings, NFTCollection, TokenHolding } from '../services/nftVerificationService';
 import logger from '../utils/logger';
 import { API_URL } from '../utils/apiConfig';
 
@@ -21,14 +21,17 @@ interface SimpleWalletContextValue {
   isLoading: boolean;
   error: string | null;
   isNFTHolder: boolean;
+  isTokenHolder: boolean;
+  hasFreeAccess: boolean;
   nftCollections: NFTCollection[];
+  tokenHoldings: TokenHolding[];
   walletType: WalletType;
   connectedWalletId: string | null;
   connectWallet: (selectedWallet?: string) => Promise<void>;
   disconnectWallet: () => Promise<void>;
   fetchCredits: (walletAddress: string, retries?: number, force?: boolean) => Promise<number>;
   refreshCredits: () => Promise<void>;
-  checkNFTStatus: (walletAddress: string) => Promise<void>;
+  checkHolderStatus: (walletAddress: string) => Promise<void>;
   setCreditsManually: (credits: number) => void;
 }
 
@@ -150,11 +153,17 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isNFTHolder, setIsNFTHolder] = useState(false);
+  const [isTokenHolder, setIsTokenHolder] = useState(false);
   const [nftCollections, setNftCollections] = useState<NFTCollection[]>([]);
+  const [tokenHoldings, setTokenHoldings] = useState<TokenHolding[]>([]);
   const [walletType, setWalletType] = useState<WalletType>(null);
   const [connectedWalletId, setConnectedWalletId] = useState<string | null>(null);
   const walletConnectProviderRef = useRef<Awaited<ReturnType<typeof getWalletConnectProvider>> | null>(null);
   const lastFetchRef = useRef(0);
+  
+  // Computed: has free access if NFT or token holder on EVM chains only
+  // Solana users do NOT get free generations
+  const hasFreeAccess = (isNFTHolder || isTokenHolder) && walletType === 'evm';
 
   const fetchCredits = useCallback(async (walletAddress: string, _retries?: number, force: boolean = false): Promise<number> => {
     if (!walletAddress) { setCredits(0); setTotalCreditsEarned(0); setTotalCreditsSpent(0); return 0; }
@@ -194,16 +203,42 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     }
   }, [credits]);
 
-  const checkNFTStatus = useCallback(async (walletAddress: string): Promise<void> => {
-    if (!walletAddress) { setIsNFTHolder(false); setNftCollections([]); return; }
+  // Check both NFT and token holder status
+  const checkHolderStatus = useCallback(async (walletAddress: string): Promise<void> => {
+    if (!walletAddress) { 
+      setIsNFTHolder(false); 
+      setIsTokenHolder(false);
+      setNftCollections([]); 
+      setTokenHoldings([]);
+      return; 
+    }
     try {
-      const result = await checkNFTHoldings(walletAddress.toLowerCase());
-      setIsNFTHolder(result.isHolder === true);
-      setNftCollections(Array.isArray(result.collections) ? result.collections : []);
-      if (result.creditsGranted && result.creditsGranted > 0) await fetchCredits(walletAddress, 0, true);
+      // Check NFT and token holdings in parallel
+      const [nftResult, tokenResult] = await Promise.all([
+        checkNFTHoldings(walletAddress.toLowerCase()),
+        checkTokenHoldings(walletAddress.toLowerCase())
+      ]);
+      
+      setIsNFTHolder(nftResult.isHolder === true);
+      setNftCollections(Array.isArray(nftResult.collections) ? nftResult.collections : []);
+      
+      setIsTokenHolder(tokenResult.isHolder === true);
+      setTokenHoldings(Array.isArray(tokenResult.tokens) ? tokenResult.tokens : []);
+      
+      if (nftResult.creditsGranted && nftResult.creditsGranted > 0) {
+        await fetchCredits(walletAddress, 0, true);
+      }
+      
+      logger.info('Holder status checked', {
+        isNFTHolder: nftResult.isHolder,
+        isTokenHolder: tokenResult.isHolder,
+        hasFreeAccess: nftResult.isHolder || tokenResult.hasFreeAccess
+      });
     } catch {
       setIsNFTHolder(false);
+      setIsTokenHolder(false);
       setNftCollections([]);
+      setTokenHoldings([]);
     }
   }, [fetchCredits]);
 
@@ -219,7 +254,9 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     setTotalCreditsSpent(0);
     setError(null);
     setIsNFTHolder(false);
+    setIsTokenHolder(false);
     setNftCollections([]);
+    setTokenHoldings([]);
     setWalletType(null);
     setConnectedWalletId(null);
   }, []);
@@ -356,7 +393,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
       setIsConnected(true);
       setConnectedWalletId(selectedWallet);
       await fetchCredits(walletAddress, 0, true);
-      checkNFTStatus(walletAddress).catch(() => { /* ignore */ });
+      checkHolderStatus(walletAddress).catch(() => { /* ignore */ });
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error';
       setError(errorMessage);
@@ -364,7 +401,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     } finally {
       setIsLoading(false);
     }
-  }, [fetchCredits, checkNFTStatus, disconnectWallet]);
+  }, [fetchCredits, checkHolderStatus, disconnectWallet]);
 
   // PERFORMANCE: Smarter polling
   useEffect(() => {
@@ -396,7 +433,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
         logger.debug('Account changed', { from: address, to: newAddress });
         setAddress(newAddress);
         fetchCredits(newAddress, 0, true);
-        checkNFTStatus(newAddress).catch(() => { /* ignore */ });
+        checkHolderStatus(newAddress).catch(() => { /* ignore */ });
       }
     };
 
@@ -411,7 +448,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
       eth.removeListener('accountsChanged', handleAccountsChanged);
       eth.removeListener('chainChanged', handleChainChanged);
     };
-  }, [isConnected, address, walletType, disconnectWallet, fetchCredits, checkNFTStatus]);
+  }, [isConnected, address, walletType, disconnectWallet, fetchCredits, checkHolderStatus]);
 
   const refreshCredits = useCallback(async (): Promise<void> => { 
     if (address) await fetchCredits(address, 0, true); 
@@ -424,11 +461,13 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
   // PERFORMANCE: Memoize context value
   const value = useMemo<SimpleWalletContextValue>(() => ({
     isConnected, address, credits, totalCreditsEarned, totalCreditsSpent, isLoading, error,
-    isNFTHolder, nftCollections, connectWallet, disconnectWallet, fetchCredits, refreshCredits,
-    checkNFTStatus, walletType, connectedWalletId, setCreditsManually
+    isNFTHolder, isTokenHolder, hasFreeAccess, nftCollections, tokenHoldings,
+    connectWallet, disconnectWallet, fetchCredits, refreshCredits,
+    checkHolderStatus, walletType, connectedWalletId, setCreditsManually
   }), [isConnected, address, credits, totalCreditsEarned, totalCreditsSpent, isLoading, error,
-      isNFTHolder, nftCollections, connectWallet, disconnectWallet, fetchCredits, refreshCredits,
-      checkNFTStatus, walletType, connectedWalletId, setCreditsManually]);
+      isNFTHolder, isTokenHolder, hasFreeAccess, nftCollections, tokenHoldings,
+      connectWallet, disconnectWallet, fetchCredits, refreshCredits,
+      checkHolderStatus, walletType, connectedWalletId, setCreditsManually]);
 
   return <SimpleWalletContext.Provider value={value}>{children}</SimpleWalletContext.Provider>;
 };

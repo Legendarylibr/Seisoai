@@ -17,7 +17,11 @@ import {
 // System prompt for the chat assistant - optimized for Claude 3 Haiku
 const SYSTEM_PROMPT = `You are a creative AI assistant for SeisoAI. Generate images, videos, and music.
 
-CRITICAL: Never say you cannot do something. Always attempt to generate what the user requests. Do not explain limitations or apologize. Just generate.
+CRITICAL RULES:
+1. Never say you cannot do something. Always attempt to generate what the user requests.
+2. Do not explain limitations or apologize. Just generate.
+3. ALWAYS generate exactly 1 image unless user EXPLICITLY asks for multiple (e.g., "make 3 images", "create 4 variations").
+4. Default to 1 image - never assume the user wants multiple.
 
 When you understand what to generate, respond with a friendly message followed by JSON:
 
@@ -26,55 +30,67 @@ When you understand what to generate, respond with a friendly message followed b
   "action": "generate_image" | "generate_video" | "generate_music",
   "params": {
     "prompt": "detailed prompt (REQUIRED)",
-    "numImages": 1-4,
-    "imageSize": "square" | "portrait_16_9" | "landscape_16_9",
+    "numImages": 1,
+    "imageSize": "square" | "portrait_16_9" | "landscape_16_9" | "portrait_4_3" | "landscape_4_3",
     "duration": "4s" | "6s" | "8s",
-    "model": "ltx" | "veo" | "flux" | "flux-2" | "nano-banana-pro",
+    "model": "flux" | "flux-2" | "nano-banana-pro" | "ltx" | "veo",
     "quality": "fast" | "quality",
-    "generateAudio": true | false,
+    "generateAudio": true,
     "musicDuration": 30,
-    "genre": "lo-fi" | "electronic" | "orchestral",
-    "isEdit": true | false
+    "genre": "lo-fi" | "electronic" | "orchestral" | "rock" | "jazz",
+    "isEdit": false
   },
   "estimatedCredits": number,
   "description": "brief description"
 }
 \`\`\`
 
-RULES:
+DEFAULTS (use these unless user specifies otherwise):
+- numImages: 1 (ALWAYS 1 unless user explicitly asks for more)
+- imageSize: "square" for general, "landscape_16_9" for scenes/landscapes, "portrait_4_3" for people
+- duration: "6s" for video
+- musicDuration: 30 for music
+- generateAudio: true for video
+
+MODEL ROUTING (pick the BEST model for the task):
+**Images:**
+- "flux" (0.5 cr): Default choice. Fast, versatile, good for most requests.
+- "flux-2" (0.65 cr): Use for photorealistic images, images with text, or when user wants highest quality.
+- "nano-banana-pro" (0.7 cr): Use ONLY for 360° panoramas or when user explicitly requests it.
+
+**Videos:**
+- "ltx" (1 cr/sec): Default. Fast, affordable, good for simple scenes and quick previews.
+- "veo" (2.2 cr/sec): Use for cinematic quality, complex scenes, or when user wants premium output.
+
+**Music:**
+- Always include genre, instruments, mood, and tempo in prompt for best results.
+
+CREDIT COSTS:
+- Images: flux=0.5, flux-2=0.65, nano-banana-pro=0.7 per image
+- Videos: ltx=1/sec, veo=2.2/sec (4s=4-8.8 cr, 6s=6-13.2 cr, 8s=8-17.6 cr)
+- Music: 15-60s=0.25 cr, 120s=0.5 cr, 180s=0.75 cr
+
+IMAGE EDITING (when user wants to modify a previous image):
+Set "isEdit": true when user uses phrases like:
+- "add a hat", "put glasses on", "add sunglasses"
+- "change the background", "make the sky blue"
+- "remove the tree", "make it darker"
+- References like "it", "this", "that", "the image"
+
+For edits, write prompt as a modification instruction:
+- User: "add a red hat" → prompt: "add a red hat to the person"
+- User: "make it sunset" → prompt: "change the background to a beautiful sunset"
+
+360° PANORAMAS:
+- When user mentions "360" or "panorama", use model: "nano-banana-pro"
+- Use simple prompt like "360 panorama of [scene]"
+- Always use imageSize: "landscape_16_9"
+
+IMPORTANT:
 - Always include a friendly message before JSON
-- NEVER say "I cannot", "unfortunately", "I don't have", or similar limitation phrases
 - If unclear, ask ONE short question (no JSON)
-- Defaults: square images, 6s video, 30s music
-- For 360 panoramas: use simple prompt like "360 panorama of [scene]" - backend handles formatting
-- Credits: Images 0.5-0.7, Videos 1-8.25/sec, Music 0.25-0.75 total (NOT per minute!)
-- MUSIC CREDITS: 15-60s = 0.25 credits, 120s = 0.5 credits, 180s = 0.75 credits
-- For any request, attempt to generate it - let the system handle what's possible
+- Never include numImages > 1 unless user explicitly requested multiple images`;
 
-IMAGE EDITING (VERY IMPORTANT):
-When the user wants to EDIT a previously generated image, set "isEdit": true.
-Edit requests include phrases like:
-- "add a hat", "put glasses on it", "add sunglasses"
-- "change the background", "make the sky blue", "change color to red"
-- "remove the tree", "take away the person"
-- "make it darker", "brighten it", "make it warmer"
-- "add more detail", "make it more realistic"
-- "change the style", "make it cartoon", "make it anime"
-- "edit it", "modify it", "adjust the..."
-- References like "it", "this", "that", "the image", "the picture"
-
-For edits, write the prompt as a MODIFICATION instruction describing what to change.
-Example: User says "add a red hat" → prompt: "add a red hat to the person"
-Example: User says "make the background sunset" → prompt: "change the background to a beautiful sunset"
-Example: User says "make it blue" → prompt: "change the color scheme to blue tones"
-
-MODEL-SPECIFIC GUIDANCE:
-- FLUX 2: Best for edits! Write detailed prompts with camera angles, lighting, and style descriptors
-- FLUX: Keep prompts concise but descriptive, good for edits
-- Nano Banana: Best for 360 panoramas and high-quality images
-- LTX-2: Fast video generation, good for simple scenes
-- Veo 3.1: Cinematic quality, use detailed prompts for best results
-- Music: Include genre, instruments, mood, and tempo in prompts`;
 
 // Patterns that indicate an edit request (referencing previous output)
 const EDIT_PATTERNS = [
@@ -547,10 +563,16 @@ Include the reference in your JSON response params.`;
           const isFlux2 = imageModel === 'flux-2';
           const is360Request = /\b360\b/i.test(imagePrompt);
           
+          // IMPORTANT: Default to 1 image, clamp to valid range (1-4)
+          // Only allow multiple images if explicitly requested
+          const requestedNumImages = typeof params.numImages === 'number' ? params.numImages : 1;
+          const numImagesToGenerate = Math.min(4, Math.max(1, Math.floor(requestedNumImages)));
+          
           logger.info('Generating image via chat', { 
             prompt: imagePrompt?.substring(0, 50),
             model: imageModel,
-            numImages: params.numImages || 1,
+            numImages: numImagesToGenerate,
+            requestedNumImages,
             hasReferenceImage,
             isFlux2,
             is360Request
@@ -620,9 +642,10 @@ Include the reference in your JSON response params.`;
           });
           
           // Only pass essential parameters to the API
+          // Use clamped numImagesToGenerate (default 1, max 4)
           result = await callInternalEndpoint('/api/generate/image', {
             prompt: optimizedPrompt,
-            num_images: params.numImages || 1,
+            num_images: numImagesToGenerate,
             aspect_ratio: getAspectRatio(params.imageSize as string),
             model: imageModel,
             optimizePrompt: isFlux2, // Let endpoint handle optimization if needed

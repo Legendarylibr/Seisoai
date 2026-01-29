@@ -1,0 +1,20 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "Seisoai Image Generator",
+  "description": "AI-powered image generation using state-of-the-art diffusion models. Supports multiple models, styles, aspect ratios, and reference image input.",
+  "image": "https://seisoai.com/seiso-logo.png",
+  "services": [
+    {
+      "name": "web",
+      "endpoint": "https://seisoai.com/"
+    },
+    {
+      "name": "api",
+      "endpoint": "https://seisoai.com/api/generate"
+    }
+  ],
+  "x402Support": false,
+  "active": true,
+  "registrations": [],
+  "supportedTrust": ["reputation"]
+}

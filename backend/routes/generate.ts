@@ -85,6 +85,7 @@ async function refundCredits(
 interface AuthenticatedRequest extends Request {
   user?: IUser;
   creditsRequired?: number;
+  hasFreeAccess?: boolean;
 }
 
 interface FalImageResponse {
@@ -830,8 +831,9 @@ export function createGenerationRoutes(deps: Dependencies) {
       }
 
       const creditsRequired = req.creditsRequired || 1;
+      const hasFreeAccess = req.hasFreeAccess || false;
       
-      // Deduct credits atomically
+      // Deduct credits atomically (skip for free access users)
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
       
@@ -843,23 +845,36 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      const updateResult = await User.findOneAndUpdate(
-        {
-          ...updateQuery,
-          credits: { $gte: creditsRequired }
-        },
-        {
-          $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
-        },
-        { new: true }
-      );
+      // Skip credit deduction for NFT/Token holders with free access
+      let remainingCredits = user.credits || 0;
+      let actualCreditsDeducted = 0;
+      
+      if (!hasFreeAccess) {
+        const updateResult = await User.findOneAndUpdate(
+          {
+            ...updateQuery,
+            credits: { $gte: creditsRequired }
+          },
+          {
+            $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
+          },
+          { new: true }
+        );
 
-      if (!updateResult) {
-        res.status(402).json({
-          success: false,
-          error: 'Insufficient credits'
+        if (!updateResult) {
+          res.status(402).json({
+            success: false,
+            error: 'Insufficient credits'
+          });
+          return;
+        }
+        remainingCredits = updateResult.credits;
+        actualCreditsDeducted = creditsRequired;
+      } else {
+        logger.info('Free generation - no credits deducted', {
+          userId: user.userId || user.walletAddress,
+          creditsWouldHaveCost: creditsRequired
         });
-        return;
       }
 
       // Extract request parameters
@@ -1163,8 +1178,9 @@ export function createGenerationRoutes(deps: Dependencies) {
       const responseData: Record<string, unknown> = {
         success: true,
         images,
-        remainingCredits: updateResult.credits,
-        creditsDeducted: creditsRequired
+        remainingCredits,
+        creditsDeducted: actualCreditsDeducted,
+        freeAccess: hasFreeAccess
       };
       
       // Include prompt optimization details if optimization was performed for FLUX 2
@@ -1226,8 +1242,9 @@ export function createGenerationRoutes(deps: Dependencies) {
       }
 
       const creditsRequired = req.creditsRequired || 1;
+      const hasFreeAccess = req.hasFreeAccess || false;
       
-      // Deduct credits atomically
+      // Deduct credits atomically (skip for free access users)
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
       
@@ -1237,27 +1254,44 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      const updateResult = await User.findOneAndUpdate(
-        {
-          ...updateQuery,
-          credits: { $gte: creditsRequired }
-        },
-        {
-          $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
-        },
-        { new: true }
-      );
+      // Skip credit deduction for NFT/Token holders with free access
+      let remainingCredits = user.credits || 0;
+      let actualCreditsDeducted = 0;
+      
+      if (!hasFreeAccess) {
+        const updateResult = await User.findOneAndUpdate(
+          {
+            ...updateQuery,
+            credits: { $gte: creditsRequired }
+          },
+          {
+            $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
+          },
+          { new: true }
+        );
 
-      if (!updateResult) {
-        sendEvent('error', { error: 'Insufficient credits' });
-        res.end();
-        return;
+        if (!updateResult) {
+          sendEvent('error', { error: 'Insufficient credits' });
+          res.end();
+          return;
+        }
+        remainingCredits = updateResult.credits;
+        actualCreditsDeducted = creditsRequired;
+        sendEvent('credits', { 
+          creditsDeducted: creditsRequired, 
+          remainingCredits 
+        });
+      } else {
+        logger.info('Free generation (streaming) - no credits deducted', {
+          userId: user.userId || user.walletAddress,
+          creditsWouldHaveCost: creditsRequired
+        });
+        sendEvent('credits', { 
+          creditsDeducted: 0, 
+          remainingCredits,
+          freeAccess: true 
+        });
       }
-
-      sendEvent('credits', { 
-        creditsDeducted: creditsRequired, 
-        remainingCredits: updateResult.credits 
-      });
 
       // Extract request parameters
       const {
@@ -1398,9 +1432,11 @@ export function createGenerationRoutes(deps: Dependencies) {
       if (!submitResponse.ok) {
         const errorText = await submitResponse.text();
         logger.error('FLUX 2 queue submit error', { status: submitResponse.status, error: errorText });
-        // Refund credits on queue submit failure
-        await refundCredits(user, creditsRequired, `FLUX 2 queue submit error: ${submitResponse.status}`);
-        sendEvent('error', { error: `Failed to start generation: ${submitResponse.status}`, creditsRefunded: creditsRequired });
+        // Refund credits on queue submit failure (only if credits were actually deducted)
+        if (actualCreditsDeducted > 0) {
+          await refundCredits(user, actualCreditsDeducted, `FLUX 2 queue submit error: ${submitResponse.status}`);
+        }
+        sendEvent('error', { error: `Failed to start generation: ${submitResponse.status}`, creditsRefunded: actualCreditsDeducted });
         res.end();
         return;
       }
@@ -1459,18 +1495,22 @@ export function createGenerationRoutes(deps: Dependencies) {
           completed = true;
           sendEvent('status', { message: 'Finalizing...', progress: 95 });
         } else if (isStatusFailed(streamStatus)) {
-          // Refund credits on generation failure
-          await refundCredits(user, creditsRequired, 'FLUX 2 streaming generation failed');
-          sendEvent('error', { error: 'Generation failed', creditsRefunded: creditsRequired });
+          // Refund credits on generation failure (only if credits were actually deducted)
+          if (actualCreditsDeducted > 0) {
+            await refundCredits(user, actualCreditsDeducted, 'FLUX 2 streaming generation failed');
+          }
+          sendEvent('error', { error: 'Generation failed', creditsRefunded: actualCreditsDeducted });
           res.end();
           return;
         }
       }
 
       if (!completed) {
-        // Refund credits on timeout
-        await refundCredits(user, creditsRequired, 'FLUX 2 streaming generation timed out');
-        sendEvent('error', { error: 'Generation timed out', creditsRefunded: creditsRequired });
+        // Refund credits on timeout (only if credits were actually deducted)
+        if (actualCreditsDeducted > 0) {
+          await refundCredits(user, actualCreditsDeducted, 'FLUX 2 streaming generation timed out');
+        }
+        sendEvent('error', { error: 'Generation timed out', creditsRefunded: actualCreditsDeducted });
         res.end();
         return;
       }
@@ -1484,9 +1524,11 @@ export function createGenerationRoutes(deps: Dependencies) {
       );
 
       if (!resultResponse.ok) {
-        // Refund credits if result fetch fails
-        await refundCredits(user, creditsRequired, 'Failed to fetch FLUX 2 streaming result');
-        sendEvent('error', { error: 'Failed to fetch result', creditsRefunded: creditsRequired });
+        // Refund credits if result fetch fails (only if credits were actually deducted)
+        if (actualCreditsDeducted > 0) {
+          await refundCredits(user, actualCreditsDeducted, 'Failed to fetch FLUX 2 streaming result');
+        }
+        sendEvent('error', { error: 'Failed to fetch result', creditsRefunded: actualCreditsDeducted });
         res.end();
         return;
       }
@@ -1508,21 +1550,25 @@ export function createGenerationRoutes(deps: Dependencies) {
       sendEvent('complete', {
         success: true,
         images,
-        remainingCredits: updateResult.credits,
-        creditsDeducted: creditsRequired
+        remainingCredits,
+        creditsDeducted: hasFreeAccess ? 0 : creditsRequired,
+        freeAccess: hasFreeAccess
       });
       
       res.end();
     } catch (error) {
       const err = error as Error;
       logger.error('FLUX 2 streaming error:', { error: err.message });
-      // Refund credits on unexpected error
+      // Refund credits on unexpected error (only if not a free access user)
       const user = req.user;
       const creditsRequired = req.creditsRequired || 1;
-      if (user) {
+      const hasFreeAccess = req.hasFreeAccess || false;
+      // Only refund if credits were actually deducted (non-free users)
+      if (user && !hasFreeAccess) {
         await refundCredits(user, creditsRequired, `FLUX 2 streaming error: ${err.message}`);
       }
-      sendEvent('error', { error: err.message, creditsRefunded: user ? creditsRequired : 0 });
+      const creditsRefunded = (user && !hasFreeAccess) ? creditsRequired : 0;
+      sendEvent('error', { error: err.message, creditsRefunded });
       res.end();
     }
   });
@@ -2154,8 +2200,9 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Calculate credits based on duration using shared utility
       const creditsRequired = calculateMusicCredits(clampedDuration);
+      const hasFreeAccess = req.hasFreeAccess || false;
       
-      // Deduct credits
+      // Deduct credits (skip for free access users)
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
       
@@ -2167,25 +2214,38 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      const updateResult = await User.findOneAndUpdate(
-        {
-          ...updateQuery,
-          credits: { $gte: creditsRequired }
-        },
-        {
-          $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
-        },
-        { new: true }
-      );
+      // Skip credit deduction for NFT/Token holders with free access
+      let remainingCredits = user.credits || 0;
+      let actualCreditsDeducted = 0;
+      
+      if (!hasFreeAccess) {
+        const updateResult = await User.findOneAndUpdate(
+          {
+            ...updateQuery,
+            credits: { $gte: creditsRequired }
+          },
+          {
+            $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
+          },
+          { new: true }
+        );
 
-      if (!updateResult) {
-        const currentUser = await User.findOne(updateQuery);
-        const currentCredits = currentUser?.credits || 0;
-        res.status(402).json({
-          success: false,
-          error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsRequired}.`
+        if (!updateResult) {
+          const currentUser = await User.findOne(updateQuery);
+          const currentCredits = currentUser?.credits || 0;
+          res.status(402).json({
+            success: false,
+            error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsRequired}.`
+          });
+          return;
+        }
+        remainingCredits = updateResult.credits;
+        actualCreditsDeducted = creditsRequired;
+      } else {
+        logger.info('Free music generation - no credits deducted', {
+          userId: user.userId || user.walletAddress,
+          creditsWouldHaveCost: creditsRequired
         });
-        return;
       }
 
       // Submit to FAL - CassetteAI Music Generator
@@ -2291,8 +2351,9 @@ export function createGenerationRoutes(deps: Dependencies) {
               const responseData: Record<string, unknown> = {
                 success: true,
                 audio_file: resultData.audio_file,
-                remainingCredits: updateResult.credits,
-                creditsDeducted: creditsRequired
+                remainingCredits,
+                creditsDeducted: actualCreditsDeducted,
+                freeAccess: hasFreeAccess
               };
 
               // Add prompt optimization details if optimization was performed
@@ -2308,16 +2369,20 @@ export function createGenerationRoutes(deps: Dependencies) {
               return;
             } else {
               logger.error('Music completed but no audio in response', { requestId, resultData: JSON.stringify(resultData).substring(0, 500) });
-              // Refund credits when no audio in response
-              await refundCredits(user, creditsRequired, 'Music completed but no audio in response');
-              res.status(500).json({ success: false, error: 'No audio in response', creditsRefunded: creditsRequired });
+              // Refund credits when no audio in response (only if credits were actually deducted)
+              if (actualCreditsDeducted > 0) {
+                await refundCredits(user, actualCreditsDeducted, 'Music completed but no audio in response');
+              }
+              res.status(500).json({ success: false, error: 'No audio in response', creditsRefunded: actualCreditsDeducted });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
             logger.error('Music generation failed', { requestId, statusData });
-            // Refund credits on music generation failure
-            await refundCredits(user, creditsRequired, `Music generation failed: ${normalizedStatus}`);
-            res.status(500).json({ success: false, error: 'Music generation failed', creditsRefunded: creditsRequired });
+            // Refund credits on music generation failure (only if credits were actually deducted)
+            if (actualCreditsDeducted > 0) {
+              await refundCredits(user, actualCreditsDeducted, `Music generation failed: ${normalizedStatus}`);
+            }
+            res.status(500).json({ success: false, error: 'Music generation failed', creditsRefunded: actualCreditsDeducted });
             return;
           }
 
@@ -2339,9 +2404,11 @@ export function createGenerationRoutes(deps: Dependencies) {
               consecutiveErrors,
               lastError: pollErr.message 
             });
-            // Refund credits on repeated polling errors
-            await refundCredits(user, creditsRequired, 'Music generation polling errors');
-            res.status(500).json({ success: false, error: 'Music generation failed - polling errors', creditsRefunded: creditsRequired });
+            // Refund credits on repeated polling errors (only if credits were actually deducted)
+            if (actualCreditsDeducted > 0) {
+              await refundCredits(user, actualCreditsDeducted, 'Music generation polling errors');
+            }
+            res.status(500).json({ success: false, error: 'Music generation failed - polling errors', creditsRefunded: actualCreditsDeducted });
             return;
           }
         }
@@ -2349,25 +2416,28 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Timeout reached
       logger.warn('Music generation timed out', { requestId, pollCount, elapsedMs: Date.now() - startTime });
-      // Refund credits on timeout
-      await refundCredits(user, creditsRequired, 'Music generation timed out');
-      res.status(504).json({ success: false, error: 'Music generation timed out. Please try again.', creditsRefunded: creditsRequired });
+      // Refund credits on timeout (only if credits were actually deducted)
+      if (actualCreditsDeducted > 0) {
+        await refundCredits(user, actualCreditsDeducted, 'Music generation timed out');
+      }
+      res.status(504).json({ success: false, error: 'Music generation timed out. Please try again.', creditsRefunded: actualCreditsDeducted });
     } catch (error) {
       const err = error as Error;
       logger.error('Music generation error:', { error: err.message });
-      // Refund credits on unexpected error
+      // Refund credits on unexpected error (only if not a free access user)
       const user = req.user;
+      const hasFreeAccess = req.hasFreeAccess || false;
       // Calculate credits for refund using shared utility
       const { duration = 30 } = req.body as { duration?: number };
       const clampedDuration = Math.max(10, Math.min(180, duration));
-      const creditsToRefund = calculateMusicCredits(clampedDuration);
-      if (user) {
+      const creditsToRefund = hasFreeAccess ? 0 : calculateMusicCredits(clampedDuration);
+      if (user && creditsToRefund > 0) {
         await refundCredits(user, creditsToRefund, `Music generation error: ${err.message}`);
       }
       res.status(500).json({
         success: false,
         error: err.message,
-        creditsRefunded: user ? creditsToRefund : 0
+        creditsRefunded: creditsToRefund
       });
     }
   });
@@ -2490,8 +2560,9 @@ export function createGenerationRoutes(deps: Dependencies) {
       
       // Credits based on scale using shared utility
       const creditsRequired = calculateUpscaleCredits(validScale);
+      const hasFreeAccess = req.hasFreeAccess || false;
 
-      // Deduct credits atomically
+      // Deduct credits atomically (skip for free access users)
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
       
@@ -2503,29 +2574,43 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      const updateResult = await User.findOneAndUpdate(
-        {
-          ...updateQuery,
-          credits: { $gte: creditsRequired }
-        },
-        {
-          $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
-        },
-        { new: true }
-      );
+      // Skip credit deduction for NFT/Token holders with free access
+      let remainingCredits = user.credits || 0;
+      let actualCreditsDeducted = 0;
+      
+      if (!hasFreeAccess) {
+        const updateResult = await User.findOneAndUpdate(
+          {
+            ...updateQuery,
+            credits: { $gte: creditsRequired }
+          },
+          {
+            $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
+          },
+          { new: true }
+        );
 
-      if (!updateResult) {
-        res.status(402).json({
-          success: false,
-          error: 'Insufficient credits'
+        if (!updateResult) {
+          res.status(402).json({
+            success: false,
+            error: 'Insufficient credits'
+          });
+          return;
+        }
+        remainingCredits = updateResult.credits;
+        actualCreditsDeducted = creditsRequired;
+      } else {
+        logger.info('Free upscale - no credits deducted', {
+          userId: user.userId || user.walletAddress,
+          creditsWouldHaveCost: creditsRequired
         });
-        return;
       }
 
       logger.info('Upscale request', { 
         scale: validScale, 
         userId: user.userId,
-        creditsRequired
+        creditsRequired,
+        freeAccess: hasFreeAccess
       });
 
       // Use fal.ai creative-upscaler
@@ -2553,12 +2638,14 @@ export function createGenerationRoutes(deps: Dependencies) {
       if (!response.ok) {
         const errorText = await response.text();
         logger.error('Upscale API error', { status: response.status, error: errorText });
-        // Refund credits on API failure
-        await refundCredits(user, creditsRequired, `Upscale API error: ${response.status}`);
+        // Refund credits on API failure (only if credits were actually deducted)
+        if (actualCreditsDeducted > 0) {
+          await refundCredits(user, actualCreditsDeducted, `Upscale API error: ${response.status}`);
+        }
         res.status(500).json({
           success: false,
           error: `Upscale failed: ${response.status}`,
-          creditsRefunded: creditsRequired
+          creditsRefunded: actualCreditsDeducted
         });
         return;
       }
@@ -2574,12 +2661,14 @@ export function createGenerationRoutes(deps: Dependencies) {
       }
 
       if (!upscaledUrl) {
-        // Refund credits if no image returned
-        await refundCredits(user, creditsRequired, 'No upscaled image returned');
+        // Refund credits if no image returned (only if credits were actually deducted)
+        if (actualCreditsDeducted > 0) {
+          await refundCredits(user, actualCreditsDeducted, 'No upscaled image returned');
+        }
         res.status(500).json({
           success: false,
           error: 'No upscaled image returned',
-          creditsRefunded: creditsRequired
+          creditsRefunded: actualCreditsDeducted
         });
         return;
       }
@@ -2593,24 +2682,26 @@ export function createGenerationRoutes(deps: Dependencies) {
         success: true,
         image_url: upscaledUrl,
         scale: validScale,
-        remainingCredits: updateResult.credits,
-        creditsDeducted: creditsRequired
+        remainingCredits,
+        creditsDeducted: actualCreditsDeducted,
+        freeAccess: hasFreeAccess
       });
 
     } catch (error) {
       const err = error as Error;
       logger.error('Upscale error:', { error: err.message });
-      // Refund credits on unexpected error using shared utility
+      // Refund credits on unexpected error (only if not a free access user)
       const user = req.user;
+      const hasFreeAccess = req.hasFreeAccess || false;
       const { scale = 2 } = req.body as { scale?: number };
-      const creditsToRefund = calculateUpscaleCredits(scale === 4 ? 4 : 2);
-      if (user) {
+      const creditsToRefund = hasFreeAccess ? 0 : calculateUpscaleCredits(scale === 4 ? 4 : 2);
+      if (user && creditsToRefund > 0) {
         await refundCredits(user, creditsToRefund, `Upscale error: ${err.message}`);
       }
       res.status(500).json({
         success: false,
         error: err.message,
-        creditsRefunded: user ? creditsToRefund : 0
+        creditsRefunded: creditsToRefund
       });
     }
   });
@@ -2666,8 +2757,9 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Credits for video-to-audio generation using shared utility
       const creditsRequired = calculateVideoToAudioCredits();
+      const hasFreeAccess = req.hasFreeAccess || false;
 
-      // Deduct credits atomically
+      // Deduct credits atomically (skip for free access users)
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
       
@@ -2679,30 +2771,44 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      const updateResult = await User.findOneAndUpdate(
-        {
-          ...updateQuery,
-          credits: { $gte: creditsRequired }
-        },
-        {
-          $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
-        },
-        { new: true }
-      );
+      // Skip credit deduction for NFT/Token holders with free access
+      let remainingCredits = user.credits || 0;
+      let actualCreditsDeducted = 0;
+      
+      if (!hasFreeAccess) {
+        const updateResult = await User.findOneAndUpdate(
+          {
+            ...updateQuery,
+            credits: { $gte: creditsRequired }
+          },
+          {
+            $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
+          },
+          { new: true }
+        );
 
-      if (!updateResult) {
-        res.status(402).json({
-          success: false,
-          error: 'Insufficient credits'
+        if (!updateResult) {
+          res.status(402).json({
+            success: false,
+            error: 'Insufficient credits'
+          });
+          return;
+        }
+        remainingCredits = updateResult.credits;
+        actualCreditsDeducted = creditsRequired;
+      } else {
+        logger.info('Free video-to-audio - no credits deducted', {
+          userId: user.userId || user.walletAddress,
+          creditsWouldHaveCost: creditsRequired
         });
-        return;
       }
 
       logger.info('Video-to-audio request', { 
         userId: user.userId,
         hasPrompt: !!prompt,
         duration,
-        creditsRequired
+        creditsRequired,
+        freeAccess: hasFreeAccess
       });
 
       // Submit to MMAudio V2 queue
@@ -2736,12 +2842,14 @@ export function createGenerationRoutes(deps: Dependencies) {
       if (!submitResponse.ok) {
         const errorText = await submitResponse.text();
         logger.error('MMAudio V2 submit error', { status: submitResponse.status, error: errorText });
-        // Refund credits on submit failure
-        await refundCredits(user, creditsRequired, `MMAudio submit error: ${submitResponse.status}`);
+        // Refund credits on submit failure (only if credits were actually deducted)
+        if (actualCreditsDeducted > 0) {
+          await refundCredits(user, actualCreditsDeducted, `MMAudio submit error: ${submitResponse.status}`);
+        }
         res.status(500).json({
           success: false,
           error: `Failed to start audio generation: ${submitResponse.status}`,
-          creditsRefunded: creditsRequired
+          creditsRefunded: actualCreditsDeducted
         });
         return;
       }
@@ -2751,11 +2859,13 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       if (!requestId) {
         logger.error('No request_id from MMAudio', { submitData });
-        await refundCredits(user, creditsRequired, 'No request_id from MMAudio');
+        if (actualCreditsDeducted > 0) {
+          await refundCredits(user, actualCreditsDeducted, 'No request_id from MMAudio');
+        }
         res.status(500).json({
           success: false,
           error: 'Failed to submit audio generation request',
-          creditsRefunded: creditsRequired
+          creditsRefunded: actualCreditsDeducted
         });
         return;
       }
@@ -2801,8 +2911,9 @@ export function createGenerationRoutes(deps: Dependencies) {
           res.json({
             success: true,
             audio: statusData.audio,
-            remainingCredits: updateResult.credits,
-            creditsDeducted: creditsRequired
+            remainingCredits,
+            creditsDeducted: actualCreditsDeducted,
+            freeAccess: hasFreeAccess
           });
           return;
         }
@@ -2817,11 +2928,13 @@ export function createGenerationRoutes(deps: Dependencies) {
           );
 
           if (!resultResponse.ok) {
-            await refundCredits(user, creditsRequired, 'Failed to fetch MMAudio result');
+            if (actualCreditsDeducted > 0) {
+              await refundCredits(user, actualCreditsDeducted, 'Failed to fetch MMAudio result');
+            }
             res.status(500).json({
               success: false,
               error: 'Failed to fetch audio result',
-              creditsRefunded: creditsRequired
+              creditsRefunded: actualCreditsDeducted
             });
             return;
           }
@@ -2855,29 +2968,34 @@ export function createGenerationRoutes(deps: Dependencies) {
                 file_name: audioMeta?.file_name || `audio-${requestId}.wav`,
                 file_size: audioMeta?.file_size
               },
-              remainingCredits: updateResult.credits,
-              creditsDeducted: creditsRequired
+              remainingCredits,
+              creditsDeducted: actualCreditsDeducted,
+              freeAccess: hasFreeAccess
             });
             return;
           }
 
           logger.error('No audio URL in MMAudio result', { resultData: JSON.stringify(resultData).substring(0, 500) });
-          await refundCredits(user, creditsRequired, 'No audio in MMAudio result');
+          if (actualCreditsDeducted > 0) {
+            await refundCredits(user, actualCreditsDeducted, 'No audio in MMAudio result');
+          }
           res.status(500).json({
             success: false,
             error: 'Audio generation completed but no audio URL found',
-            creditsRefunded: creditsRequired
+            creditsRefunded: actualCreditsDeducted
           });
           return;
         }
 
         if (isStatusFailed(normalizedStatus)) {
           logger.error('MMAudio generation failed', { requestId, status: normalizedStatus });
-          await refundCredits(user, creditsRequired, `MMAudio failed: ${normalizedStatus}`);
+          if (actualCreditsDeducted > 0) {
+            await refundCredits(user, actualCreditsDeducted, `MMAudio failed: ${normalizedStatus}`);
+          }
           res.status(500).json({
             success: false,
             error: 'Audio generation failed',
-            creditsRefunded: creditsRequired
+            creditsRefunded: actualCreditsDeducted
           });
           return;
         }
@@ -2885,25 +3003,28 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Timeout
       logger.error('MMAudio generation timeout', { requestId });
-      await refundCredits(user, creditsRequired, 'MMAudio timeout');
+      if (actualCreditsDeducted > 0) {
+        await refundCredits(user, actualCreditsDeducted, 'MMAudio timeout');
+      }
       res.status(504).json({
         success: false,
         error: 'Audio generation timed out. Please try again.',
-        creditsRefunded: creditsRequired
+        creditsRefunded: actualCreditsDeducted
       });
 
     } catch (error) {
       const err = error as Error;
       logger.error('Video-to-audio error:', { error: err.message });
       const user = req.user;
-      const creditsToRefund = calculateVideoToAudioCredits();
-      if (user) {
+      const hasFreeAccess = req.hasFreeAccess || false;
+      const creditsToRefund = hasFreeAccess ? 0 : calculateVideoToAudioCredits();
+      if (user && creditsToRefund > 0) {
         await refundCredits(user, creditsToRefund, `Video-to-audio error: ${err.message}`);
       }
       res.status(500).json({
         success: false,
         error: err.message,
-        creditsRefunded: user ? creditsToRefund : 0
+        creditsRefunded: creditsToRefund
       });
     }
   });

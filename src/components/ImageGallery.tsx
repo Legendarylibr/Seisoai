@@ -362,8 +362,8 @@ const ImageGallery: React.FC = () => {
       </div>
 
       {/* Gallery Grid */}
-      <div className="flex-1 overflow-auto p-1.5 lg:p-2 min-h-0">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-1.5 lg:gap-2">
+      <div className="flex-1 overflow-auto p-1 sm:p-1.5 lg:p-2 min-h-0">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-1 sm:gap-1.5 lg:gap-2">
           {filteredHistory.filter(item => {
             // Only show items with valid URLs
             const displayUrl = item.videoUrl || item.imageUrl || item.image;
@@ -491,11 +491,11 @@ const ImageGallery: React.FC = () => {
       {/* Item Modal */}
       {selectedItem && (
         <div 
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4"
           style={{ background: 'rgba(0,0,0,0.5)' }}
         >
           <div 
-            className="max-w-4xl max-h-[90vh] overflow-hidden"
+            className="w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden"
             style={{
               background: WIN95.bg,
               boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, 4px 4px 0 ${WIN95.border.darker}`
@@ -535,13 +535,13 @@ const ImageGallery: React.FC = () => {
                     loop
                     playsInline
                     preload="auto"
-                    className="max-w-full max-h-[60vh] mx-auto block"
+                    className="max-w-full max-h-[70vh] sm:max-h-[60vh] mx-auto block"
                   />
                 ) : (
                   <img
                     src={selectedItem.imageUrl || selectedItem.image}
                     alt="Generated content"
-                    className="max-w-full max-h-[60vh] mx-auto block"
+                    className="max-w-full max-h-[70vh] sm:max-h-[60vh] mx-auto block"
                     decoding="async"
                     fetchPriority="high"
                   />
