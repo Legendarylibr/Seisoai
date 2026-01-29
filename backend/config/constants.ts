@@ -184,6 +184,21 @@ export const SEISO_TOKEN: TokenConfig = {
   DECIMALS: 18           // Standard ERC-20 decimals
 };
 
+// NFT contracts that qualify for daily credits
+// Add NFT contract addresses here to enable NFT holder benefits
+export interface QualifyingNFT {
+  contractAddress: string;
+  chainId: string;
+  name: string;
+}
+
+export const QUALIFYING_NFT_CONTRACTS: QualifyingNFT[] = [
+  // Add your NFT contract addresses here
+  // Example:
+  // { contractAddress: '0x...', chainId: '1', name: 'Seiso Genesis' },
+  // { contractAddress: '0x...', chainId: '137', name: 'Seiso Polygon' },
+];
+
 // JWT settings
 export const JWT: JWTConfig = {
   ACCESS_TOKEN_EXPIRY: '24h',

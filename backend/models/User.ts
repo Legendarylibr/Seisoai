@@ -12,6 +12,8 @@ import { encrypt, decrypt, createBlindIndex, isEncryptionConfigured } from '../u
 interface NFTCollection {
   contractAddress?: string;
   chainId?: string;
+  name?: string;
+  balance?: number;
   tokenIds?: string[];
   lastChecked?: Date;
 }
@@ -242,6 +244,8 @@ const userSchema = new mongoose.Schema<IUser>({
     type: [{
       contractAddress: String,
       chainId: String,
+      name: String,           // Collection name
+      balance: Number,        // Number of NFTs held
       tokenIds: { type: [String], validate: [arrayLimit100, 'Token IDs exceed limit of 100'] },
       lastChecked: { type: Date, default: Date.now }
     }],

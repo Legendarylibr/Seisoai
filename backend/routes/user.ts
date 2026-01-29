@@ -8,11 +8,13 @@ import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { findUserByIdentifier, getOrCreateUser } from '../services/user';
 import { checkNFTBalance } from '../services/blockchain';
+import { getQualifyingNFTs, isAlchemyConfigured } from '../services/alchemy';
 import { isValidWalletAddress } from '../utils/validation';
 import { requireAuth, sendError, sendServerError } from '../utils/responses';
 import { PRODUCTION_DOMAIN } from '../config/env';
 import type { IUser } from '../models/User';
 import { qualifiesForDailyCredits, grantDailyCredits, isNFTHolder, isTokenHolder } from '../middleware/credits';
+import { QUALIFYING_NFT_CONTRACTS } from '../config/constants';
 
 // Constants
 const PRICING = {
@@ -416,6 +418,8 @@ export function createUserRoutes(deps: Dependencies = {}) {
    * 
    * NFT holders get 20 credits per day, Token holders get 20 credits per day
    * Credits are added to main balance (same as paid credits)
+   * 
+   * This endpoint verifies on-chain NFT ownership and updates user records.
    */
   router.post('/check-holdings', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -435,7 +439,123 @@ export function createUserRoutes(deps: Dependencies = {}) {
         userId: req.user.userId
       });
 
+      const User = mongoose.model<IUser>('User');
       let user = req.user;
+      
+      // Verify on-chain NFT ownership using Alchemy API
+      let verifiedCollections: Array<{ contractAddress: string; chainId: string; name: string; balance: number }> = [];
+      
+      if (QUALIFYING_NFT_CONTRACTS.length > 0) {
+        if (isAlchemyConfigured()) {
+          // Use Alchemy API for efficient NFT verification
+          logger.debug('Checking NFT holdings via Alchemy API', { 
+            contractCount: QUALIFYING_NFT_CONTRACTS.length 
+          });
+          
+          try {
+            verifiedCollections = await getQualifyingNFTs(normalizedAddress);
+            logger.info('Alchemy NFT check complete', {
+              wallet: normalizedAddress.substring(0, 10) + '...',
+              foundCount: verifiedCollections.length
+            });
+          } catch (error) {
+            logger.error('Alchemy NFT check failed, falling back to RPC', {
+              error: (error as Error).message
+            });
+            // Fall back to direct RPC calls
+            for (const nft of QUALIFYING_NFT_CONTRACTS) {
+              try {
+                const balance = await checkNFTBalance(normalizedAddress, nft.contractAddress, nft.chainId);
+                if (balance > 0) {
+                  verifiedCollections.push({
+                    contractAddress: nft.contractAddress,
+                    chainId: nft.chainId,
+                    name: nft.name,
+                    balance
+                  });
+                }
+              } catch (rpcError) {
+                logger.warn('RPC NFT check failed', {
+                  contract: nft.contractAddress,
+                  error: (rpcError as Error).message
+                });
+              }
+            }
+          }
+        } else {
+          // No Alchemy API key - use direct RPC calls
+          logger.debug('Checking NFT holdings via direct RPC (Alchemy not configured)', { 
+            contractCount: QUALIFYING_NFT_CONTRACTS.length 
+          });
+          
+          for (const nft of QUALIFYING_NFT_CONTRACTS) {
+            try {
+              const balance = await checkNFTBalance(normalizedAddress, nft.contractAddress, nft.chainId);
+              if (balance > 0) {
+                verifiedCollections.push({
+                  contractAddress: nft.contractAddress,
+                  chainId: nft.chainId,
+                  name: nft.name,
+                  balance
+                });
+                logger.info('NFT ownership verified via RPC', {
+                  wallet: normalizedAddress.substring(0, 10) + '...',
+                  contract: nft.name,
+                  balance
+                });
+              }
+            } catch (error) {
+              logger.warn('Failed to check NFT balance', {
+                contract: nft.contractAddress,
+                error: (error as Error).message
+              });
+            }
+          }
+        }
+        
+        // Update user's nftCollections if we found any verified NFTs
+        if (verifiedCollections.length > 0) {
+          const updatedUser = await User.findOneAndUpdate(
+            { userId: user.userId },
+            {
+              $set: {
+                nftCollections: verifiedCollections.map(c => ({
+                  contractAddress: c.contractAddress,
+                  chainId: c.chainId,
+                  name: c.name,
+                  balance: c.balance,
+                  lastChecked: new Date()
+                }))
+              }
+            },
+            { new: true }
+          );
+          
+          if (updatedUser) {
+            user = updatedUser;
+            logger.info('User NFT collections updated', {
+              userId: user.userId,
+              collectionCount: verifiedCollections.length
+            });
+          }
+        } else if ((user.nftCollections?.length || 0) > 0) {
+          // User previously had NFTs but now has none - clear them
+          const updatedUser = await User.findOneAndUpdate(
+            { userId: user.userId },
+            { $set: { nftCollections: [] } },
+            { new: true }
+          );
+          if (updatedUser) {
+            user = updatedUser;
+            logger.info('User NFT collections cleared - no longer holds NFTs', {
+              userId: user.userId
+            });
+          }
+        }
+      } else {
+        logger.debug('No qualifying NFT contracts configured');
+      }
+      
       const ownedCollections = user.nftCollections || [];
       const tokenHoldings = user.tokenHoldings || [];
       const nftHolder = isNFTHolder(user);

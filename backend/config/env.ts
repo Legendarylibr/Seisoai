@@ -109,6 +109,7 @@ export interface Config {
   OPTIMISM_RPC_URL?: string;
   BASE_RPC_URL?: string;
   SOLANA_RPC_URL?: string;
+  ALCHEMY_API_KEY?: string;
   EVM_PAYMENT_WALLET?: string;
   SOLANA_PAYMENT_WALLET?: string;
   // Discord OAuth
@@ -163,6 +164,9 @@ export const config: Config = {
   OPTIMISM_RPC_URL: process.env.OPTIMISM_RPC_URL,
   BASE_RPC_URL: process.env.BASE_RPC_URL,
   SOLANA_RPC_URL: process.env.SOLANA_RPC_URL,
+  
+  // Alchemy API (for NFT verification)
+  ALCHEMY_API_KEY: process.env.ALCHEMY_API_KEY,
   
   // Payment wallets
   EVM_PAYMENT_WALLET: process.env.EVM_PAYMENT_WALLET_ADDRESS || 
