@@ -323,11 +323,9 @@ export function createUserRoutes(deps: Dependencies = {}) {
    * Get user by wallet address
    * GET /api/users/:walletAddress
    * 
-   * SECURITY FIX: Now requires authentication OR returns only public data
-   * - Authenticated users can only access their own wallet data
-   * - Unauthenticated users get minimal public data only (no credits, no auto-creation)
+   * Wallet address serves as the identity - returns user data and grants daily credits for NFT holders.
    */
-  router.get('/:walletAddress', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  router.get('/:walletAddress', async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { walletAddress } = req.params;
 
@@ -340,80 +338,45 @@ export function createUserRoutes(deps: Dependencies = {}) {
       const isSolanaAddress = !walletAddress.startsWith('0x');
       const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
 
-      // SECURITY FIX: If authenticated, MUST be accessing own wallet
-      if (req.user) {
-        const normalizedUserWallet = req.user.walletAddress?.startsWith('0x') 
-          ? req.user.walletAddress.toLowerCase() 
-          : req.user.walletAddress;
+      // Get or create user for this wallet
+      let user = await getOrCreateUser(normalizedAddress);
 
-        if (!normalizedUserWallet || normalizedUserWallet !== normalizedAddress) {
-          logger.warn('SECURITY: Blocked user data access attempt for different wallet', {
-            requestedWallet: normalizedAddress.substring(0, 10) + '...',
-            authenticatedUserId: req.user.userId,
-            path: req.path,
-            ip: req.ip
-          });
-          sendError(res, 'You can only access your own account data', 403, req.requestId);
-          return;
-        }
-
-        // Authenticated user accessing their own wallet - return full data
-        const user = await getOrCreateUser(normalizedAddress);
-
-        // Update lastActive
-        const User = mongoose.model<IUser>('User');
-        await User.findOneAndUpdate(
-          { walletAddress: user.walletAddress },
-          { lastActive: new Date() }
-        );
-
-        const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-        
-        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-        res.setHeader('Pragma', 'no-cache');
-
-        res.json({
-          success: true,
-          credits: user.credits || 0,
-          totalCreditsEarned: user.totalCreditsEarned || 0,
-          totalCreditsSpent: user.totalCreditsSpent || 0,
-          walletAddress: user.walletAddress,
-          isNFTHolder,
-          pricing: getPricing(isNFTHolder)
-        });
-        return;
-      }
-
-      // SECURITY FIX: Unauthenticated - return minimal public data only
-      // Do NOT auto-create users or return credit balances
+      // Update lastActive
       const User = mongoose.model<IUser>('User');
-      const existingUser = await User.findOne({ walletAddress: normalizedAddress })
-        .select('walletAddress nftCollections')
-        .lean();
+      await User.findOneAndUpdate(
+        { walletAddress: user.walletAddress },
+        { lastActive: new Date() }
+      );
 
-      if (!existingUser) {
-        // User doesn't exist - return minimal response (don't create them)
-        res.json({
-          success: true,
-          exists: false,
-          walletAddress: normalizedAddress,
-          pricing: getPricing(false)
-        });
-        return;
+      // Grant daily credits if user is NFT/Token holder
+      let dailyCreditsGranted = 0;
+      if (qualifiesForDailyCredits(user)) {
+        const getUserModel = () => mongoose.model<IUser>('User');
+        const result = await grantDailyCredits(user, getUserModel);
+        if (result.granted) {
+          user = result.user;
+          dailyCreditsGranted = result.amount;
+          logger.info('Daily credits granted on wallet fetch', { 
+            userId: user.userId, 
+            credits: dailyCreditsGranted 
+          });
+        }
       }
 
-      // Return only public data for unauthenticated requests
-      const isNFTHolder = existingUser.nftCollections && existingUser.nftCollections.length > 0;
+      const nftHolder = isNFTHolder(user);
       
-      res.setHeader('Cache-Control', 'public, max-age=60'); // Cache public data for 1 min
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
 
       res.json({
         success: true,
-        exists: true,
-        walletAddress: existingUser.walletAddress,
-        isNFTHolder,
-        pricing: getPricing(isNFTHolder)
-        // SECURITY: Do NOT return credits, totalCreditsEarned, totalCreditsSpent for unauthed
+        credits: user.credits || 0,
+        totalCreditsEarned: user.totalCreditsEarned || 0,
+        totalCreditsSpent: user.totalCreditsSpent || 0,
+        walletAddress: user.walletAddress,
+        isNFTHolder: nftHolder,
+        pricing: getPricing(nftHolder),
+        dailyCreditsGranted
       });
     } catch (error) {
       logger.error('Get user by wallet error:', { error: (error as Error).message });
@@ -505,6 +468,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
         tokenHoldings: tokenHoldings,
         pricing: getPricing(nftHolder),
         credits: user.credits,
+        creditsGranted: dailyCreditsGranted, // For frontend compatibility
         dailyCreditsGranted,
         dailyCreditsLastGrant: user.dailyCreditsLastGrant
       });
