@@ -98,14 +98,9 @@ export function createUtilityRoutes(_deps: Dependencies = {}) {
    * (avoids build-time VITE_ env var issues)
    */
   router.get('/config', (_req: Request, res: Response) => {
-    // Only expose PUBLIC keys - never expose secrets!
-    // Check multiple env var names for flexibility
-    const stripePublishableKey = process.env.STRIPE_PUBLISHABLE_KEY || 
-                                  process.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-    
+    // Public frontend config
     res.json({
-      stripePublishableKey: stripePublishableKey,
-      // Add other public frontend config as needed
+      // Add public frontend config as needed
     });
   });
 

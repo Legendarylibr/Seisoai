@@ -91,7 +91,7 @@ interface NavigationProps {
   onShowStripePayment?: () => void;
 }
 
-const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, onShowStripePayment }: NavigationProps) => {
+const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, onShowStripePayment: _onShowStripePayment }: NavigationProps) => {
   const walletContext = useSimpleWallet();
   
   const isConnected = walletContext.isConnected;
@@ -153,11 +153,10 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
     walletContext.disconnectWallet();
   }, [walletContext]);
 
-  // Unified payment - Stripe handles both cards and stablecoins
+  // Payment handler for crypto payments
   const handleBuyCredits = useCallback(() => {
-    // Both handlers point to the same Stripe modal now
-    onShowStripePayment?.() || onShowTokenPayment?.();
-  }, [onShowStripePayment, onShowTokenPayment]);
+    onShowTokenPayment?.();
+  }, [onShowTokenPayment]);
 
   return (
     <header className="sticky top-0 z-40" style={{ 

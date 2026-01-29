@@ -68,7 +68,6 @@ Disallow: /api/payments/
 Disallow: /api/generate/
 Disallow: /api/wan-animate/
 Disallow: /api/extract-layers
-Disallow: /api/stripe/
 Disallow: /api/webhook
 Disallow: /api/webhooks
 

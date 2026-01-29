@@ -165,13 +165,13 @@ export function createFalCircuitBreaker<T extends unknown[], R>(
 }
 
 /**
- * Create circuit breaker for Stripe API calls
+ * Create circuit breaker for payment API calls
  */
-export function createStripeCircuitBreaker<T extends unknown[], R>(
+export function createPaymentCircuitBreaker<T extends unknown[], R>(
   fn: (...args: T) => Promise<R>
 ): CircuitBreaker<T, R> {
   return createCircuitBreaker(fn, {
-    name: 'stripe',
+    name: 'payment',
     timeout: 30000,           // 30 seconds
     errorThresholdPercentage: 50,
     resetTimeout: 30000,
@@ -198,7 +198,7 @@ export function createBlockchainCircuitBreaker<T extends unknown[], R>(
 export default {
   createCircuitBreaker,
   createFalCircuitBreaker,
-  createStripeCircuitBreaker,
+  createPaymentCircuitBreaker,
   createBlockchainCircuitBreaker,
   getCircuitStats,
   getAllCircuitStats,

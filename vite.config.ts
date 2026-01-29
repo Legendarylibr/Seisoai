@@ -4,12 +4,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
   // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
-  const env = loadEnv(mode, process.cwd(), '');
-  
-  // Get Stripe key from either process.env (Railway) or loaded env file
-  const stripeKey = process.env.VITE_STRIPE_PUBLISHABLE_KEY || env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-  
-  console.log(`[vite.config] VITE_STRIPE_PUBLISHABLE_KEY is ${stripeKey ? 'SET' : 'NOT SET'} (length: ${stripeKey.length})`);
+  loadEnv(mode, process.cwd(), '');
   
   return {
     plugins: [react()],
@@ -21,8 +16,6 @@ export default defineConfig(({ mode }) => {
     
     define: {
       global: 'globalThis',
-      // Explicitly define Stripe key to ensure it's available at build time
-      'import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY': JSON.stringify(stripeKey),
     },
     
     optimizeDeps: {
@@ -87,8 +80,6 @@ export default defineConfig(({ mode }) => {
             if (id.includes('@walletconnect') || id.includes('@web3modal')) return 'vendor-walletconnect';
             // Blockchain libraries - large, separate chunk
             if (id.includes('ethers')) return 'vendor-ethers';
-            // Payment processing - separate for security/isolation
-            if (id.includes('@stripe')) return 'vendor-stripe';
             
             // Solana deps - separate chunk for better code splitting
             if (id.includes('@solana')) {

@@ -136,7 +136,6 @@ export function createGDPRRoutes(deps: Dependencies) {
           retention: 'Account data retained until deletion request or 90 days of inactivity with 0 credits',
           thirdParties: [
             'FAL.ai (AI generation)',
-            'Stripe (payment processing)',
             'MongoDB Atlas (data storage)',
           ],
         },
@@ -396,7 +395,6 @@ export function createGDPRRoutes(deps: Dependencies) {
         },
         thirdParties: [
           { name: 'FAL.ai', purpose: 'AI model inference', location: 'USA' },
-          { name: 'Stripe', purpose: 'Payment processing', location: 'USA' },
           { name: 'MongoDB Atlas', purpose: 'Data storage', location: 'USA/EU' },
           { name: 'Railway', purpose: 'Application hosting', location: 'USA' },
         ],

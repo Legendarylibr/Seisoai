@@ -12,7 +12,6 @@ import createDiscordRoutes from './discord';
 import createUtilityRoutes from './utility';
 import createGenerationRoutes from './generate';
 import createPaymentRoutes from './payments';
-import createStripeRoutes from './stripe';
 import createUserRoutes from './user';
 import createWanAnimateRoutes from './wan-animate';
 import createAdminRoutes from './admin';
@@ -125,16 +124,6 @@ export function createApiRoutes(deps: Dependencies) {
   const paymentRoutes = createPaymentRoutes(deps);
   router.use('/payments', paymentRoutes);
   router.use('/payment', paymentRoutes);
-
-  // Stripe payments & subscriptions
-  const stripeRoutes = createStripeRoutes(deps);
-  router.use('/stripe', stripeRoutes);
-  
-  // Subscription verification alias
-  router.post('/subscription/verify', (req, res, next) => {
-    req.url = '/subscription-verify';
-    stripeRoutes(req, res, next);
-  });
 
   // ============================================
   // Admin (with IP allowlist)

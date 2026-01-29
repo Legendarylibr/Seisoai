@@ -44,10 +44,6 @@ stringData:
   # API Keys
   FAL_API_KEY: "your-fal-api-key"
   
-  # Stripe
-  STRIPE_SECRET_KEY: "sk_live_xxx"
-  STRIPE_WEBHOOK_SECRET: "whsec_xxx"
-  
   # Payment Wallets
   ETH_PAYMENT_WALLET: "0x..."
   POLYGON_PAYMENT_WALLET: "0x..."

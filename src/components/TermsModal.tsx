@@ -40,7 +40,7 @@ const TermsOfService = memo(function TermsOfService() {
       <p>By using Seiso AI, you agree to these terms. If you disagree, please do not use the service.</p>
 
       <h3 className="font-bold">Service</h3>
-      <p>Seiso AI provides AI-powered image, video, and music generation using FAL.ai endpoints. All features require credits, purchasable via Stripe or cryptocurrency.</p>
+      <p>Seiso AI provides AI-powered image, video, and music generation using FAL.ai endpoints. All features require credits, purchasable via cryptocurrency (USDC, USDT on EVM chains and Solana).</p>
 
       <h3 className="font-bold">Accounts</h3>
       <p>Access via email or crypto wallet. You're responsible for account security. Accounts may be suspended for policy violations.</p>
@@ -87,7 +87,7 @@ const TermsOfService = memo(function TermsOfService() {
           <li>Russia (payment services restricted)</li>
           <li>Other sanctioned territories per OFAC regulations</li>
         </ul>
-        <p style={{ color: '#bf360c' }}>Stripe payments may have additional country restrictions. By using this service, you confirm you are not accessing it from a restricted territory and are not on any sanctions list.</p>
+        <p style={{ color: '#bf360c' }}>Cryptocurrency payments may have additional restrictions based on blockchain network availability. By using this service, you confirm you are not accessing it from a restricted territory and are not on any sanctions list.</p>
       </div>
     </div>
   );
@@ -103,7 +103,7 @@ const PrivacyPolicy = memo(function PrivacyPolicy() {
       <ul className="list-disc list-inside ml-2">
         <li>Account info (email or wallet address only)</li>
         <li>Prompts and generated content (auto-deleted after 30 days)</li>
-        <li>Payment records (processed by Stripe, we only store transaction IDs)</li>
+        <li>Payment records (blockchain transaction hashes only)</li>
         <li>Temporary abuse prevention data (auto-deleted after 7 days)</li>
       </ul>
 
@@ -115,23 +115,21 @@ const PrivacyPolicy = memo(function PrivacyPolicy() {
       </ul>
 
       <h3 className="font-bold">Data Sharing</h3>
-      <p>We share data with FAL.ai (generation) and Stripe (payments). We don't sell your data.</p>
+      <p>We share data with FAL.ai (generation). We don't sell your data.</p>
 
       <h3 className="font-bold">Payment Privacy</h3>
       <div 
         className="p-3 mt-1"
         style={{ background: '#e8f5e9', boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}` }}
       >
-        <p className="font-bold mb-2" style={{ color: '#2e7d32' }}>Your card details never touch our servers.</p>
+        <p className="font-bold mb-2" style={{ color: '#2e7d32' }}>Your wallet credentials never touch our servers.</p>
         <ul className="list-disc list-inside ml-2" style={{ color: '#1b5e20' }}>
-          <li>Payment forms are hosted directly by Stripe</li>
-          <li>Card numbers, CVV, and expiry go straight to Stripe</li>
-          <li>We only receive a confirmation ID after successful payment</li>
-          <li>No payment card data is stored or logged by us</li>
-          <li>PCI-DSS compliant via Stripe's secure infrastructure</li>
+          <li>All payments are processed on-chain (Ethereum, Polygon, Base, Solana, etc.)</li>
+          <li>We never access your private keys or seed phrases</li>
+          <li>We only verify blockchain transaction hashes after payment</li>
+          <li>Supported tokens: USDC, USDT, DAI, WETH</li>
         </ul>
       </div>
-      <p className="mt-2">For stablecoin payments (USDC), Stripe handles the entire transaction. Your wallet connects directly to Stripe - we never access your private keys or wallet credentials.</p>
 
       <h3 className="font-bold">Data Retention & Auto-Deletion</h3>
       <ul className="list-disc list-inside ml-2">

@@ -278,12 +278,6 @@ seisoai.com, *.seisoai.com, localhost (dev)
 
 ## Payment Security
 
-### Stripe Integration
-
-- Webhook signature verification
-- Idempotency keys for requests
-- Secure checkout sessions
-
 ### Blockchain Verification
 
 - On-chain transaction verification
@@ -371,4 +365,3 @@ Before deployment, verify:
 - [ ] Security webhook URL set
 - [ ] Admin secret is strong
 - [ ] Discord bot API key set
-- [ ] Stripe webhook secret configured

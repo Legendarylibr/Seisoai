@@ -276,7 +276,7 @@ export function recordVideoGeneration(success: boolean): void {
 /**
  * Record a payment
  */
-export function recordPayment(type: 'crypto' | 'stripe', status: string, chain: string, amountUsd?: number): void {
+export function recordPayment(type: 'crypto', status: string, chain: string, amountUsd?: number): void {
   paymentsTotal.inc({ type, status, chain });
   if (amountUsd && status === 'success') {
     paymentAmountTotal.inc({ type, chain }, amountUsd);

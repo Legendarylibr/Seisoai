@@ -143,8 +143,6 @@ The API will be available at `http://localhost:3001`
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
 | POST | `/api/payments/verify` | Verify blockchain payment | JWT |
-| POST | `/api/stripe/create-payment-intent` | Create Stripe payment | JWT |
-| POST | `/api/stripe/webhook` | Stripe webhook handler | Stripe Sig |
 
 ### Generations
 

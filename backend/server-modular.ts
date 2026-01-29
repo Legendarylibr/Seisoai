@@ -18,7 +18,6 @@ import config, { PRODUCTION_DOMAIN, PRODUCTION_URL } from './config/env.js';
 import { connectDatabase } from './config/database.js';
 
 // Services
-import { initializeStripe } from './services/stripe.js';
 import { TTLCache } from './services/cache.js';
 import { initializeRedis, closeRedis } from './services/redis.js';
 import { initializeQueues, closeAll as closeQueues } from './services/jobQueue.js';
@@ -99,9 +98,9 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://js.stripe.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.stripe.com", "https://checkout.stripe.com", "https://hooks.stripe.com", "https://static.cloudflareinsights.com"],
-      imgSrc: ["'self'", "data:", "https:", "blob:", "https://*.stripe.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://static.cloudflareinsights.com"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
       connectSrc: [
         "'self'",
         ...localhostSources, // Only include localhost in development
@@ -112,10 +111,6 @@ app.use(helmet({
         "https://solana-mainnet.g.alchemy.com",
         "https://mainnet.helius-rpc.com",
         "https://api.devnet.solana.com",
-        "https://js.stripe.com",
-        "https://api.stripe.com",
-        "https://hooks.stripe.com",
-        "https://checkout.stripe.com",
         "https://static.cloudflareinsights.com",
         "https:",
         "wss:"
@@ -123,7 +118,7 @@ app.use(helmet({
       fontSrc: ["'self'", "data:", "https://fonts.gstatic.com", "https:"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'", "data:", "blob:", "https:"],
-      frameSrc: ["'self'", "https://js.stripe.com", "https://checkout.stripe.com", "https://hooks.stripe.com"],
+      frameSrc: ["'self'"],
       frameAncestors: frameAncestors, // SECURITY: Restricted in production
     },
   },
@@ -151,7 +146,7 @@ app.options('*', cors({
   origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Stripe-Signature', 'Cache-Control', 'Pragma', 'Accept', 'Origin', 'X-CSRF-Token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cache-Control', 'Pragma', 'Accept', 'Origin', 'X-CSRF-Token'],
   exposedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
   maxAge: 86400,
   optionsSuccessStatus: 200
@@ -252,7 +247,7 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Stripe-Signature', 'Cache-Control', 'Pragma', 'Accept', 'Origin', 'X-CSRF-Token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cache-Control', 'Pragma', 'Accept', 'Origin', 'X-CSRF-Token'],
   exposedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'], // SECURITY: Expose CSRF token header
   maxAge: 86400, // Cache preflight for 24 hours
   optionsSuccessStatus: 200
@@ -265,8 +260,6 @@ app.use('/api', (_req: Request, res: Response, next: NextFunction) => {
 });
 
 // Body parsing with optimized limits
-// Stripe webhook needs raw body
-app.use('/api/stripe/webhook', express.raw({ type: 'application/json', limit: '1mb' }));
 // SECURITY FIX: Reduced from 150mb to 50mb to prevent DoS attacks
 // Audio routes need larger body limit for video uploads, but 50MB is sufficient
 app.use('/api/audio', express.json({ limit: '50mb' }));
@@ -528,15 +521,6 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
-// Legacy checkout route at root level for backwards compatibility
-// Forward /create-checkout-session to /api/stripe/checkout-session
-import createStripeRoutes from './routes/stripe';
-const stripeRoutes = createStripeRoutes(routeDeps);
-app.post('/create-checkout-session', (req: Request, res: Response, next: NextFunction) => {
-  req.url = '/checkout-session';
-  stripeRoutes(req, res, next);
-});
-
 // Fallback for SPA routing (production only)
 if (config.isProduction) {
   app.get('*', (_req: Request, res: Response) => {
@@ -590,9 +574,6 @@ async function startServer(): Promise<void> {
 
     // Initialize job queues (requires Redis)
     initializeQueues();
-
-    // Initialize Stripe
-    await initializeStripe();
 
     // DISABLED: ERC-8004 Agent Registry - not used initially
     // Uncomment when ready to enable agent functionality

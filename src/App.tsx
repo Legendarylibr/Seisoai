@@ -24,7 +24,6 @@ logger.info('[SEISOAI BUILD] v2026.01.06.1');
 // PERFORMANCE: Lazy load heavy modals and gallery - not needed on initial render
 // TokenPaymentModal handles on-chain stablecoin payments (USDC on Ethereum, Solana, Polygon, Base, etc.)
 const TokenPaymentModal = lazy(() => import('./components/TokenPaymentModal'));
-const PaymentSuccessModal = lazy(() => import('./components/PaymentSuccessModal'));
 const ImageGallery = lazy(() => import('./components/ImageGallery'));
 const VideoGenerator = lazy(() => import('./components/VideoGenerator'));
 const MusicGenerator = lazy(() => import('./components/MusicGenerator'));
@@ -65,14 +64,6 @@ function Win95LoadingFallback({ text }: { text: string }): JSX.Element {
   );
 }
 
-interface SubscriptionSuccess {
-  sessionId: string;
-  planName: string;
-  planPrice: string;
-  credits?: number;
-  error?: string;
-}
-
 function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState('chat');
 
@@ -109,9 +100,8 @@ interface AppWithCreditsCheckProps {
 function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCheckProps): JSX.Element {
   const { isConnected, address, refreshCredits, hasFreeAccess, isNFTHolder, isTokenHolder } = useSimpleWallet();
   const { multiImageModel } = useImageGenerator();
-  // Unified payment modal - Stripe handles both cards and stablecoins (USDC)
+  // Payment modal - crypto payments only (USDC, USDT on EVM chains + Solana)
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [subscriptionSuccess, setSubscriptionSuccess] = useState<SubscriptionSuccess | null>(null);
   const [userPrompt, setUserPrompt] = useState('');
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsPage, setTermsPage] = useState<LegalPage>('terms');
@@ -138,85 +128,19 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
     }
   }, [isConnected, address, hasFreeAccess, isNFTHolder, isTokenHolder]);
 
-  // Handle subscription verification from Stripe checkout redirect
+  // Clean up any stale URL parameters (e.g., from old bookmarks)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionId = urlParams.get('session_id');
     const canceled = urlParams.get('canceled');
 
-    const cleanupUrl = (): void => {
+    // Clean up legacy Stripe-related URL parameters
+    if (sessionId || canceled) {
       window.history.replaceState({}, document.title, window.location.pathname);
-    };
-
-    if (sessionId) {
-      const verifySubscription = async (): Promise<void> => {
-        try {
-          const body: Record<string, string> = { sessionId };
-          if (address) {
-            body.walletAddress = address;
-          }
-
-          // Ensure CSRF token is available before making POST request
-          const csrfToken = await ensureCSRFToken();
-          
-          const headers: Record<string, string> = { 
-            'Content-Type': 'application/json',
-            ...(csrfToken && { 'X-CSRF-Token': csrfToken })
-          };
-
-          const response = await fetch(`${API_URL}/api/subscription/verify`, {
-            method: 'POST',
-            headers,
-            credentials: 'include',
-            body: JSON.stringify(body)
-          });
-
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.error || 'Failed to verify subscription payment');
-          }
-
-          // Show success modal
-          setSubscriptionSuccess({
-            sessionId,
-            planName: data.planName || 'Subscription',
-            planPrice: data.planPrice || (data.amount ? `$${data.amount}/month` : 'Activated'),
-            credits: data.credits
-          });
-
-          // Refresh credits
-          if (refreshCredits) {
-            setTimeout(() => refreshCredits(), 1000);
-          }
-
-          logger.info('Subscription verified successfully', { 
-            sessionId, 
-            credits: data.credits, 
-            planName: data.planName 
-          });
-        } catch (error) {
-          const err = error as Error;
-          logger.error('Subscription verification failed:', { error: err.message });
-          // Still show some feedback even on error
-          setSubscriptionSuccess({
-            sessionId,
-            planName: 'Subscription',
-            planPrice: 'Processing...',
-            error: err.message
-          });
-        } finally {
-          cleanupUrl();
-        }
-      };
-
-      verifySubscription();
-    } else if (canceled) {
-      logger.info('Subscription checkout was canceled');
-      cleanupUrl();
     }
-  }, [address, refreshCredits]);
+  }, []);
 
-  // Unified payment handler - Stripe handles both cards and stablecoins (USDC on Ethereum, Solana, Polygon, Base)
+  // Payment handler - crypto payments (USDC, USDT on Ethereum, Solana, Polygon, Base)
   const handleShowPayment = useCallback((): void => {
     setShowPaymentModal(true);
   }, []);
@@ -368,18 +292,6 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
               setShowPaymentModal(false);
               if (refreshCredits) refreshCredits();
             }}
-          />
-        </Suspense>
-      )}
-
-      {subscriptionSuccess && (
-        <Suspense fallback={null}>
-          <PaymentSuccessModal
-            isOpen={!!subscriptionSuccess}
-            onClose={() => setSubscriptionSuccess(null)}
-            sessionId={subscriptionSuccess.sessionId}
-            planName={subscriptionSuccess.planName}
-            planPrice={subscriptionSuccess.planPrice}
           />
         </Suspense>
       )}

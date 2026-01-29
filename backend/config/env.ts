@@ -102,9 +102,6 @@ export interface Config {
   SESSION_SECRET?: string;
   ENCRYPTION_KEY?: string;
   FAL_API_KEY?: string;
-  STRIPE_SECRET_KEY?: string;
-  STRIPE_PUBLISHABLE_KEY?: string;
-  STRIPE_WEBHOOK_SECRET?: string;
   ALLOWED_ORIGINS?: string;
   ETH_RPC_URL?: string;
   POLYGON_RPC_URL?: string;
@@ -155,9 +152,6 @@ export const config: Config = {
   
   // APIs
   FAL_API_KEY: process.env.FAL_API_KEY,
-  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
-  STRIPE_PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY,
-  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
   
   // CORS
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,

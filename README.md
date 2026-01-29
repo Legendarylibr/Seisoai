@@ -1,189 +1,151 @@
-# Seisoai - AI Image Generator
+# SeisoAI
 
-A modern, responsive web application for generating AI images using FAL.ai as the backend. Users can select from popular visual styles without typing prompts, and optionally upload ControlNet input images for more control over the generation process.
+AI-powered creative platform for generating images, videos, music, and more. Built with React, Node.js, and powered by FAL.ai.
 
-## 🔒 Security Notice
+## Features
 
-**CRITICAL**: This application requires proper environment configuration before deployment. See [SECURITY_CHECKLIST.md](./SECURITY_CHECKLIST.md) for complete security setup instructions.
+- **Image Generation** - Create stunning AI images with multiple models and styles
+- **Video Generation** - Generate AI videos from text or images
+- **Music Generation** - Create AI music with stem separation and mixing
+- **3D Model Generation** - Convert images to 3D models
+- **Chat Assistant** - AI-powered creative assistant
+- **Prompt Lab** - Optimize and enhance your prompts
+- **Public Gallery** - Share and browse community creations
+- **Referral System** - Earn credits by referring friends
+- **Achievements** - Gamified progression system
+- **Discord Bot** - Full Discord integration
 
-## ⚠️ Before Running
+## Tech Stack
 
-1. **Copy environment files**:
+- **Frontend**: React 18, Vite, TypeScript, Tailwind CSS
+- **Backend**: Node.js, Express, TypeScript
+- **Database**: MongoDB
+- **Cache**: Redis
+- **AI Provider**: FAL.ai
+- **Payments**: Crypto (USDC, USDT, DAI on EVM chains + Solana)
+- **Wallets**: MetaMask, Phantom, WalletConnect, and more
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 22+ (see `.nvmrc`)
+- MongoDB (local or Atlas)
+- Redis (optional, recommended for production)
+- FAL.ai API key
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/Legendarylibr/Seisoai.git
+   cd Seisoai
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   cd backend && npm install
+   ```
+
+3. **Configure environment**
    ```bash
    cp env.example .env
    cp backend/env.example backend/.env
    ```
 
-2. **Configure all required environment variables** (see Security Checklist)
+4. **Set required environment variables** in both `.env` files:
+   - `FAL_API_KEY` - Get from [fal.ai](https://fal.ai)
+   - `MONGODB_URI` - Your MongoDB connection string
+   - `JWT_SECRET` - Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+   - `ENCRYPTION_KEY` - Generate with same command above
+   - Payment wallet addresses for receiving crypto payments
 
-3. **Never commit real API keys or wallet addresses to version control**
+5. **Start development servers**
+   ```bash
+   # Terminal 1: Frontend
+   npm run dev
 
-## Features
-
-- 🎨 **Style Selection**: Choose from 8 popular visual styles (Cyberpunk, Ghibli, Dark Fantasy, Vaporwave, Anime, etc.)
-- 🖼️ **ControlNet Support**: Upload images for pose, depth, scribble, or edge detection control
-- 📱 **Responsive Design**: Works perfectly on desktop, tablet, and mobile devices
-- ⚡ **Real-time Generation**: Live loading states and smooth transitions
-- 💾 **Download & Regenerate**: Save generated images and create variations
-- 🎯 **No Prompts Required**: Pre-configured prompts for each style
-- 🌟 **Modern UI**: Clean, glass-morphism design with Tailwind CSS
-- 💳 **Multiple Payment Options**: Pay with credit cards (Stripe) or crypto tokens (USDC, USDT, etc.)
-- 🔗 **Wallet Integration**: Connect EVM and Solana wallets for authentication and payments
-- 🎁 **NFT Holder Benefits**: Discounts and bonus credits for NFT collection holders
-
-## Tech Stack
-
-- **Frontend**: React 18 with Vite
-- **Styling**: Tailwind CSS with custom animations
-- **State Management**: React Context API
-- **Icons**: Lucide React
-- **Backend**: FAL.ai API
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js (v16 or higher)
-- npm or yarn
-- FAL.ai API key
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd ai-image-generator
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Set up environment variables:
-Create a `.env` file in the root directory:
-```env
-VITE_FAL_API_KEY=your_fal_api_key_here
-```
-
-4. Start the development server:
-```bash
-npm run dev
-```
-
-5. Open your browser and navigate to `http://localhost:5173`
-
-### Building for Production
-
-```bash
-npm run build
-```
-
-The built files will be in the `dist` directory.
-
-## Payment Setup
-
-### Stripe Configuration (for Credit Card Payments)
-
-1. **Create a Stripe Account**: Sign up at [stripe.com](https://stripe.com)
-
-2. **Get API Keys**: 
-   - Go to your Stripe Dashboard → Developers → API Keys
-   - Copy your Publishable Key and Secret Key
-
-3. **Configure Environment Variables** (LIVE MODE):
-   ```env
-   # Frontend (.env)
-   VITE_STRIPE_PUBLISHABLE_KEY=pk_live_your_stripe_publishable_key_here
-   
-   # Backend (backend/.env)
-   STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
-   STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+   # Terminal 2: Backend
+   npm run start:backend
    ```
-   
-   **Important**: Make sure to enable LIVE MODE in your Stripe dashboard and use live keys (`pk_live_...` and `sk_live_...`) for production. Test keys (`pk_test_...` and `sk_test_...`) are for development only.
 
-4. **Set up Webhooks** (for production):
-   - In Stripe Dashboard → Developers → Webhooks
-   - Add endpoint: `https://yourdomain.com/api/stripe/webhook`
-   - Select events: `payment_intent.succeeded`
-   - Copy the webhook secret to your backend `.env`
+6. **Open** `http://localhost:5173`
 
-### Crypto Payment Configuration
+## Payment System
 
-The app also supports payments with various cryptocurrencies:
+SeisoAI uses cryptocurrency payments exclusively:
 
-- **EVM Chains**: USDC, USDT, DAI, WETH on Ethereum, Polygon, Arbitrum, Optimism, Base
+### Supported Tokens
+- **EVM Chains**: USDC, USDT, DAI, WETH
+- **Networks**: Ethereum, Polygon, Arbitrum, Optimism, Base
 - **Solana**: USDC, USDT, SOL
 
-Configure payment wallet addresses in your environment files (see `env.example` for details).
+### Wallet Support
+- MetaMask, Rabby, Coinbase Wallet, Rainbow, Trust Wallet
+- Phantom, Solflare (Solana)
+- WalletConnect (200+ wallets)
 
-## Usage
+## Project Structure
 
-1. **Select a Style**: Choose from the grid of visual styles (Cyberpunk, Ghibli, Dark Fantasy, etc.)
-2. **Upload Control Image** (Optional): Select a ControlNet type and upload an image for more control
-3. **Generate**: Click the "Generate Image" button to create your AI artwork
-4. **Download**: Save your generated image or regenerate with the same settings
-
-## Available Styles
-
-- **Cyberpunk**: Neon-lit futuristic cityscapes
-- **Studio Ghibli**: Whimsical animated landscapes
-- **Dark Fantasy**: Mysterious magical realms
-- **Vaporwave**: Retro-futuristic aesthetics
-- **Anime**: Japanese animation style
-- **Steampunk**: Victorian-era technology
-- **Minimalist**: Clean and simple designs
-- **Watercolor**: Soft painted effects
-
-## ControlNet Types
-
-- **Pose**: Human pose detection
-- **Depth**: Depth map generation
-- **Scribble**: Hand-drawn sketches
-- **Canny**: Edge detection
-
-## API Configuration
-
-The application uses FAL.ai's Flux model for image generation. Make sure to:
-
-1. Get your API key from [FAL.ai](https://fal.ai)
-2. Add it to your `.env` file as `REACT_APP_FAL_API_KEY`
-3. Ensure you have sufficient credits for image generation
-
-## Customization
-
-### Adding New Styles
-
-Edit `src/utils/styles.js` to add new visual styles:
-
-```javascript
-{
-  id: 'your-style',
-  name: 'Your Style',
-  description: 'Description of your style',
-  emoji: '🎨',
-  prompt: 'Your detailed prompt here',
-  gradient: 'from-color-500 to-color-600'
-}
+```
+seisoai/
+├── src/                    # React frontend
+│   ├── components/         # UI components
+│   ├── contexts/           # React contexts
+│   ├── services/           # API services
+│   └── utils/              # Utilities
+├── backend/                # Express API
+│   ├── routes/             # API routes
+│   ├── services/           # Business logic
+│   ├── middleware/         # Express middleware
+│   └── models/             # Mongoose models
+├── discord-bot/            # Discord bot
+│   └── src/                # Bot source
+├── docs/                   # Documentation
+└── k8s/                    # Kubernetes configs
 ```
 
-### Modifying Prompts
+## Deployment
 
-Each style has a pre-configured prompt that gets sent to the FAL.ai API. You can modify these in the `VISUAL_STYLES` array in `src/utils/styles.js`.
+### Railway (Recommended)
+```bash
+railway up
+```
 
-## Contributing
+See [RAILWAY_SETUP.md](./RAILWAY_SETUP.md) for detailed instructions.
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+### Docker
+```bash
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+### Kubernetes
+```bash
+kubectl apply -f k8s/
+```
+
+## Documentation
+
+- [Contributing Guide](./CONTRIBUTING.md)
+- [Scaling Guide](./docs/SCALING.md)
+- [Backend Security](./backend/SECURITY.md)
+- [Discord Bot](./discord-bot/README.md)
+
+## Environment Variables
+
+See `env.example` and `backend/env.example` for all configuration options.
+
+### Critical Variables
+
+| Variable | Description |
+|----------|-------------|
+| `FAL_API_KEY` | FAL.ai API key for AI generation |
+| `MONGODB_URI` | MongoDB connection string |
+| `JWT_SECRET` | Secret for JWT tokens (min 32 chars) |
+| `ENCRYPTION_KEY` | AES-256 encryption key (64 hex chars) |
+| `ALCHEMY_API_KEY` | Alchemy API key for blockchain RPC |
 
 ## License
 
-This project is open source and available under the [MIT License](LICENSE).
-
-## Support
-
-If you encounter any issues or have questions, please open an issue on GitHub.
+[MIT License](./LICENSE)
