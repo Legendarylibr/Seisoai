@@ -12,6 +12,7 @@ import { isValidWalletAddress } from '../utils/validation';
 import { requireAuth, sendError, sendServerError } from '../utils/responses';
 import { PRODUCTION_DOMAIN } from '../config/env';
 import type { IUser } from '../models/User';
+import { qualifiesForDailyCredits, grantDailyCredits, isNFTHolder, isTokenHolder } from '../middleware/credits';
 
 // Constants
 const PRICING = {
@@ -446,9 +447,12 @@ export function createUserRoutes(deps: Dependencies = {}) {
   });
 
   /**
-   * Check NFT holdings for wallet
+   * Check NFT holdings for wallet and grant daily credits
    * POST /api/nft/check-holdings
    * SECURITY: Requires authentication and only operates on authenticated user's wallet
+   * 
+   * NFT holders get 20 credits per day, Token holders get 20 credits per day
+   * Credits are added to main balance (same as paid credits)
    */
   router.post('/check-holdings', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -463,52 +467,46 @@ export function createUserRoutes(deps: Dependencies = {}) {
         ? req.user.walletAddress.toLowerCase() 
         : req.user.walletAddress;
 
-      logger.info('Checking NFT holdings', { 
+      logger.info('Checking NFT/Token holdings', { 
         walletAddress: normalizedAddress.substring(0, 10) + '...',
         userId: req.user.userId
       });
 
-      const user = req.user;
+      let user = req.user;
       const ownedCollections = user.nftCollections || [];
-      const isHolder = ownedCollections.length > 0;
+      const tokenHoldings = user.tokenHoldings || [];
+      const nftHolder = isNFTHolder(user);
+      const tokenHolder = isTokenHolder(user);
 
-      // Grant NFT holder credits if applicable
-      if (isHolder && ownedCollections.length > 0) {
-        const User = mongoose.model<IUser>('User');
-        const targetCredits = 5;
-        const currentCredits = user.credits || 0;
-        const nftGrantTxHash = `NFT_GRANT_${normalizedAddress}`;
-
-        const hasBeenGranted = user.paymentHistory?.some(
-          (p: { txHash?: string }) => p.txHash === nftGrantTxHash
-        );
-
-        if (currentCredits < targetCredits && !hasBeenGranted) {
-          const creditsToGrant = targetCredits - currentCredits;
-          await User.findOneAndUpdate(
-            { userId: user.userId },
-            {
-              $inc: { credits: creditsToGrant, totalCreditsEarned: creditsToGrant },
-              $push: {
-                paymentHistory: {
-                  txHash: nftGrantTxHash,
-                  tokenSymbol: 'NFT',
-                  amount: 0,
-                  credits: creditsToGrant,
-                  timestamp: new Date()
-                }
-              }
-            }
-          );
-          logger.info('NFT credits granted', { userId: user.userId, credits: creditsToGrant });
+      // Grant daily credits if eligible (20 per day for NFT holders, 20 for token holders)
+      const getUserModel = () => mongoose.model<IUser>('User');
+      let dailyCreditsGranted = 0;
+      
+      if (qualifiesForDailyCredits(user)) {
+        const result = await grantDailyCredits(user, getUserModel);
+        if (result.granted) {
+          user = result.user;
+          dailyCreditsGranted = result.amount;
+          logger.info('Daily credits granted on holdings check', { 
+            userId: user.userId, 
+            credits: dailyCreditsGranted,
+            isNFT: nftHolder,
+            isToken: tokenHolder
+          });
         }
       }
 
       res.json({
         success: true,
-        isHolder,
+        isHolder: nftHolder || tokenHolder,
+        isNFTHolder: nftHolder,
+        isTokenHolder: tokenHolder,
         collections: ownedCollections,
-        pricing: getPricing(isHolder)
+        tokenHoldings: tokenHoldings,
+        pricing: getPricing(nftHolder),
+        credits: user.credits,
+        dailyCreditsGranted,
+        dailyCreditsLastGrant: user.dailyCreditsLastGrant
       });
     } catch (error) {
       logger.error('Check holdings error:', { error: (error as Error).message });

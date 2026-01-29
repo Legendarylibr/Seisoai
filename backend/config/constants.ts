@@ -54,6 +54,20 @@ export interface CacheConfig {
   DUPLICATE_PREVENTION_TTL: number;
 }
 
+// Daily credits configuration for NFT/Token holders
+export interface DailyCreditsConfig {
+  NFT_HOLDER_DAILY_CREDITS: number;
+  TOKEN_HOLDER_DAILY_CREDITS: number;
+  MINIMUM_TOKEN_BALANCE: number;
+}
+
+// SEISO Token configuration
+export interface TokenConfig {
+  CONTRACT_ADDRESS: string;
+  CHAIN_ID: number;
+  DECIMALS: number;
+}
+
 export interface JWTConfig {
   ACCESS_TOKEN_EXPIRY: string;
   REFRESH_TOKEN_EXPIRY: string;
@@ -155,6 +169,21 @@ export const CACHE: CacheConfig = {
   DUPLICATE_PREVENTION_TTL: 30 * 1000 // 30 seconds
 };
 
+// Daily credits for NFT and Token holders (20 credits per day each)
+export const DAILY_CREDITS: DailyCreditsConfig = {
+  NFT_HOLDER_DAILY_CREDITS: 20,
+  TOKEN_HOLDER_DAILY_CREDITS: 20,
+  MINIMUM_TOKEN_BALANCE: 1  // Minimum tokens required for daily credits
+};
+
+// SEISO ERC-20 Token configuration
+// TODO: Update CONTRACT_ADDRESS when token is deployed
+export const SEISO_TOKEN: TokenConfig = {
+  CONTRACT_ADDRESS: '',  // Empty until token is deployed
+  CHAIN_ID: 1,           // Ethereum mainnet (update as needed)
+  DECIMALS: 18           // Standard ERC-20 decimals
+};
+
 // JWT settings
 export const JWT: JWTConfig = {
   ACCESS_TOKEN_EXPIRY: '24h',
@@ -180,6 +209,8 @@ export default {
   FILE_LIMITS,
   CACHE,
   JWT,
-  SUPPORTED_CHAINS
+  SUPPORTED_CHAINS,
+  DAILY_CREDITS,
+  SEISO_TOKEN
 };
 

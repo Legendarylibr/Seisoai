@@ -2,15 +2,16 @@
  * Credits middleware
  * Handles credit checks and deductions for paid operations
  * 
- * NFT and Token holders get FREE generation:
- * - Users with NFT collections get free access
- * - Users with SEISO tokens get free access (when token is deployed)
+ * NFT and Token holders get DAILY credits:
+ * - NFT holders get 20 credits per day
+ * - SEISO token holders get 20 credits per day (when token is deployed)
+ * - Daily credits reset at midnight UTC
  */
 import type { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
 import type { Model } from 'mongoose';
-import { CREDITS } from '../config/constants';
+import { CREDITS, DAILY_CREDITS, SEISO_TOKEN } from '../config/constants';
 
 // Types
 interface CreditsRequest extends Request {
@@ -32,48 +33,181 @@ interface CreditsRequest extends Request {
 // Batch processing premium (15% convenience fee for batch mode)
 const BATCH_PREMIUM = 0.15;
 
-// Token configuration - placeholder for future ERC-20 token
-// TODO: Update with actual token contract address when deployed
-const SEISO_TOKEN_CONFIG = {
-  contractAddress: '', // Empty until token is deployed
-  minimumBalance: 1    // Minimum tokens required for free access
-};
-
 /**
- * Check if user has NFT holdings that grant free access
+ * Check if user has NFT holdings that qualify for daily credits
  */
-function isNFTHolder(user: IUser): boolean {
+export function isNFTHolder(user: IUser): boolean {
   return !!(user.nftCollections && user.nftCollections.length > 0);
 }
 
 /**
- * Check if user has token holdings that grant free access
- * TODO: Implement actual token balance check when token is deployed
+ * Check if user has SEISO token holdings that qualify for daily credits
+ * Checks tokenHoldings array for sufficient balance
  */
-function isTokenHolder(_user: IUser): boolean {
-  // Token not yet deployed - always return false
-  if (!SEISO_TOKEN_CONFIG.contractAddress) {
+export function isTokenHolder(user: IUser): boolean {
+  // Token not yet deployed - check if contract address is configured
+  if (!SEISO_TOKEN.CONTRACT_ADDRESS) {
     return false;
   }
   
-  // TODO: Check user's token holdings from database or on-chain
-  // For now, return false until token integration is complete
-  return false;
+  // Check if user has any token holdings with sufficient balance
+  if (!user.tokenHoldings || user.tokenHoldings.length === 0) {
+    return false;
+  }
+  
+  // Find SEISO token holding and check balance
+  const seisoHolding = user.tokenHoldings.find(
+    (h: { contractAddress?: string }) => h.contractAddress?.toLowerCase() === SEISO_TOKEN.CONTRACT_ADDRESS.toLowerCase()
+  );
+  
+  if (!seisoHolding || !seisoHolding.balance) {
+    return false;
+  }
+  
+  // Check if balance meets minimum requirement
+  try {
+    const balance = BigInt(seisoHolding.balance);
+    const minimumWei = BigInt(DAILY_CREDITS.MINIMUM_TOKEN_BALANCE) * BigInt(10 ** SEISO_TOKEN.DECIMALS);
+    return balance >= minimumWei;
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Check if user qualifies for free generation access
+ * Check if user qualifies for daily credits (NFT or Token holder)
  */
-export function hasFreeGenerationAccess(user: IUser): boolean {
+export function qualifiesForDailyCredits(user: IUser): boolean {
   return isNFTHolder(user) || isTokenHolder(user);
 }
 
 /**
+ * Check if daily credits need to be granted (new day in UTC)
+ */
+function needsDailyCreditsGrant(user: IUser): boolean {
+  if (!user.dailyCreditsLastGrant) {
+    return true;
+  }
+  
+  const lastGrant = new Date(user.dailyCreditsLastGrant);
+  const now = new Date();
+  
+  // Check if it's a new day (UTC)
+  return lastGrant.toISOString().slice(0, 10) !== now.toISOString().slice(0, 10);
+}
+
+/**
+ * Calculate total daily credits for a user based on their holdings
+ * NFT holders get 20, Token holders get 20, both get 40
+ */
+export function calculateDailyCredits(user: IUser): number {
+  let dailyCredits = 0;
+  
+  if (isNFTHolder(user)) {
+    dailyCredits += DAILY_CREDITS.NFT_HOLDER_DAILY_CREDITS;
+  }
+  
+  if (isTokenHolder(user)) {
+    dailyCredits += DAILY_CREDITS.TOKEN_HOLDER_DAILY_CREDITS;
+  }
+  
+  return dailyCredits;
+}
+
+/**
+ * Grant daily credits for NFT/Token holders
+ * Adds credits directly to user's main credits balance (same as paid credits)
+ * Returns the updated user document
+ */
+export async function grantDailyCredits(
+  user: IUser, 
+  getUserModel: () => Model<IUser>
+): Promise<{ granted: boolean; amount: number; user: IUser }> {
+  // Check if user qualifies for daily credits
+  if (!qualifiesForDailyCredits(user)) {
+    return { granted: false, amount: 0, user };
+  }
+  
+  // Check if grant is needed (new day)
+  if (!needsDailyCreditsGrant(user)) {
+    return { granted: false, amount: 0, user };
+  }
+  
+  // Calculate daily credits based on holdings
+  const dailyCreditsAmount = calculateDailyCredits(user);
+  
+  if (dailyCreditsAmount === 0) {
+    return { granted: false, amount: 0, user };
+  }
+  
+  // Add daily credits to main credits balance (same as paid credits)
+  const User = getUserModel();
+  const updatedUser = await User.findOneAndUpdate(
+    { userId: user.userId },
+    {
+      $inc: { 
+        credits: dailyCreditsAmount,
+        totalCreditsEarned: dailyCreditsAmount
+      },
+      $set: {
+        dailyCreditsLastGrant: new Date()
+      },
+      $push: {
+        paymentHistory: {
+          $each: [{
+            txHash: `DAILY_GRANT_${Date.now()}`,
+            tokenSymbol: 'DAILY',
+            amount: 0,
+            credits: dailyCreditsAmount,
+            timestamp: new Date(),
+            type: 'nft_bonus'  // Using nft_bonus type for daily holder grants
+          }],
+          $slice: -30  // Keep last 30 entries
+        }
+      }
+    },
+    { new: true }
+  );
+  
+  if (!updatedUser) {
+    return { granted: false, amount: 0, user };
+  }
+  
+  logger.info('Daily credits granted to main balance', {
+    userId: user.userId,
+    amount: dailyCreditsAmount,
+    newBalance: updatedUser.credits,
+    isNFT: isNFTHolder(user),
+    isToken: isTokenHolder(user)
+  });
+  
+  return { granted: true, amount: dailyCreditsAmount, user: updatedUser };
+}
+
+/**
+ * Get user's available credits
+ * Daily credits are now added directly to main balance
+ */
+export function getTotalAvailableCredits(user: IUser): number {
+  return user.credits || 0;
+}
+
+/**
+ * Legacy function - now returns false as we use daily credits instead
+ * @deprecated Use qualifiesForDailyCredits and grantDailyCredits instead
+ */
+export function hasFreeGenerationAccess(_user: IUser): boolean {
+  // No longer bypass credits - use daily credits system instead
+  return false;
+}
+
+/**
  * Create middleware that checks if user has enough credits
+ * Uses daily credits first (for NFT/Token holders), then regular credits
  * SECURITY: User must already be authenticated via JWT (set on req.user)
  */
 export const createRequireCredits = (
-  _getUserModel: () => Model<IUser>, 
+  getUserModel: () => Model<IUser>, 
   getUserFromRequest: (req: Request) => Promise<IUser | null>
 ) => {
   return (requiredCredits: number) => {
@@ -104,21 +238,21 @@ export const createRequireCredits = (
           return;
         }
 
-        req.user = user;
-
-        // Check for free access (NFT/Token holders)
-        if (hasFreeGenerationAccess(user)) {
-          logger.info('Free generation access granted', {
-            userId: user.userId || user.walletAddress,
-            isNFT: isNFTHolder(user),
-            isToken: isTokenHolder(user),
-            path: req.path
-          });
-          req.hasFreeAccess = true;
-          req.creditsRequired = 0;
-          next();
-          return;
+        // Check and grant daily credits if eligible (NFT/Token holders)
+        if (qualifiesForDailyCredits(user)) {
+          const result = await grantDailyCredits(user, getUserModel);
+          if (result.granted) {
+            user = result.user;
+            logger.info('Daily credits reset for holder', {
+              userId: user.userId,
+              dailyCredits: result.amount,
+              isNFT: isNFTHolder(user),
+              isToken: isTokenHolder(user)
+            });
+          }
         }
+
+        req.user = user;
 
         // SECURITY: Validate requiredCredits is a positive number (allows decimals like 0.5)
         if (typeof requiredCredits !== 'number' || requiredCredits <= 0 || !Number.isFinite(requiredCredits)) {
@@ -140,16 +274,20 @@ export const createRequireCredits = (
           return;
         }
 
-        if ((user.credits || 0) < requiredCredits) {
+        // Check available credits
+        const availableCredits = user.credits || 0;
+        
+        if (availableCredits < requiredCredits) {
           res.status(402).json({
             success: false,
-            error: `Insufficient credits. You have ${user.credits || 0} credits but need ${requiredCredits}.`,
+            error: `Insufficient credits. You have ${availableCredits} credits but need ${requiredCredits}.`,
             creditsRequired: requiredCredits,
-            creditsAvailable: user.credits || 0
+            creditsAvailable: availableCredits
           });
           return;
         }
-
+        
+        req.creditsRequired = requiredCredits;
         next();
       } catch (error) {
         const err = error as Error;
@@ -167,10 +305,11 @@ export const createRequireCredits = (
  * Create middleware for model-based credit requirements
  * Different models have different credit costs
  * Supports batch generation with numImages parameter
+ * Uses daily credits first (for NFT/Token holders), then regular credits
  * SECURITY: User must already be authenticated via JWT (set on req.user)
  */
 export const createRequireCreditsForModel = (
-  _getUserModel: () => Model<IUser>, 
+  getUserModel: () => Model<IUser>, 
   getUserFromRequest: (req: Request) => Promise<IUser | null>
 ) => {
   return () => {
@@ -192,21 +331,19 @@ export const createRequireCreditsForModel = (
           return;
         }
 
-        req.user = user;
-
-        // Check for free access (NFT/Token holders)
-        if (hasFreeGenerationAccess(user)) {
-          logger.info('Free generation access granted for model', {
-            userId: user.userId || user.walletAddress,
-            isNFT: isNFTHolder(user),
-            isToken: isTokenHolder(user),
-            path: req.path
-          });
-          req.hasFreeAccess = true;
-          req.creditsRequired = 0;
-          next();
-          return;
+        // Check and grant daily credits if eligible (NFT/Token holders)
+        if (qualifiesForDailyCredits(user)) {
+          const result = await grantDailyCredits(user, getUserModel);
+          if (result.granted) {
+            user = result.user;
+            logger.info('Daily credits reset for model generation', {
+              userId: user.userId,
+              dailyCredits: result.amount
+            });
+          }
         }
+
+        req.user = user;
 
         // Determine credit cost based on model
         // Uses centralized constants from config/constants.ts
@@ -234,12 +371,15 @@ export const createRequireCreditsForModel = (
         // Calculate total credits required
         const requiredCredits = Math.ceil(creditsPerImage * validImageCount * 10) / 10; // Round to 1 decimal
 
-        if ((user.credits || 0) < requiredCredits) {
+        // Check available credits
+        const availableCredits = user.credits || 0;
+
+        if (availableCredits < requiredCredits) {
           res.status(402).json({
             success: false,
-            error: `Insufficient credits. You have ${user.credits || 0} credits but need ${requiredCredits}.`,
+            error: `Insufficient credits. You have ${availableCredits} credits but need ${requiredCredits}.`,
             creditsRequired: requiredCredits,
-            creditsAvailable: user.credits || 0
+            creditsAvailable: availableCredits
           });
           return;
         }
@@ -261,10 +401,11 @@ export const createRequireCreditsForModel = (
 /**
  * Create middleware for video credit requirements
  * Videos cost 2 credits per second with a minimum of 2
+ * Grants daily credits to NFT/Token holders before checking
  * SECURITY: User must already be authenticated via JWT (set on req.user)
  */
 export const createRequireCreditsForVideo = (
-  _getUserModel: () => Model<IUser>, 
+  getUserModel: () => Model<IUser>, 
   getUserFromRequest: (req: Request) => Promise<IUser | null>
 ) => {
   return () => {
@@ -286,31 +427,30 @@ export const createRequireCreditsForVideo = (
           return;
         }
 
-        req.user = user;
-
-        // Check for free access (NFT/Token holders)
-        if (hasFreeGenerationAccess(user)) {
-          logger.info('Free video generation access granted', {
-            userId: user.userId || user.walletAddress,
-            isNFT: isNFTHolder(user),
-            isToken: isTokenHolder(user),
-            path: req.path
-          });
-          req.hasFreeAccess = true;
-          req.creditsRequired = 0;
-          next();
-          return;
+        // Check and grant daily credits if eligible (NFT/Token holders)
+        if (qualifiesForDailyCredits(user)) {
+          const result = await grantDailyCredits(user, getUserModel);
+          if (result.granted) {
+            user = result.user;
+            logger.info('Daily credits granted for video generation', {
+              userId: user.userId,
+              amount: result.amount
+            });
+          }
         }
+
+        req.user = user;
 
         // Minimum credits for video generation
         const minimumCredits = CREDITS.VIDEO_GENERATION_MINIMUM;
+        const availableCredits = user.credits || 0;
 
-        if ((user.credits || 0) < minimumCredits) {
+        if (availableCredits < minimumCredits) {
           res.status(402).json({
             success: false,
-            error: `Insufficient credits for video generation. You have ${user.credits || 0} credits but need at least ${minimumCredits}.`,
+            error: `Insufficient credits for video generation. You have ${availableCredits} credits but need at least ${minimumCredits}.`,
             creditsRequired: minimumCredits,
-            creditsAvailable: user.credits || 0
+            creditsAvailable: availableCredits
           });
           return;
         }
@@ -374,6 +514,10 @@ export default {
   calculateCredits,
   hasFreeGenerationAccess,
   isNFTHolder,
-  isTokenHolder
+  isTokenHolder,
+  qualifiesForDailyCredits,
+  grantDailyCredits,
+  calculateDailyCredits,
+  getTotalAvailableCredits
 };
 

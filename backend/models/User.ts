@@ -16,6 +16,13 @@ interface NFTCollection {
   lastChecked?: Date;
 }
 
+interface TokenHolding {
+  contractAddress?: string;
+  chainId?: string;
+  balance?: string;  // String to handle large numbers
+  lastChecked?: Date;
+}
+
 interface PaymentHistoryItem {
   txHash?: string;
   tokenSymbol?: string;
@@ -92,6 +99,9 @@ export interface IUser extends Document {
   totalCreditsEarned: number;
   totalCreditsSpent: number;
   nftCollections: NFTCollection[];
+  tokenHoldings: TokenHolding[];  // ERC-20 token holdings for daily credits
+  // Daily credits grant tracking for NFT/Token holders
+  dailyCreditsLastGrant?: Date;   // When daily credits were last granted (resets at midnight UTC)
   paymentHistory: PaymentHistoryItem[];
   generationHistory: GenerationHistoryItem[];
   gallery: GalleryItem[];
@@ -236,6 +246,22 @@ const userSchema = new mongoose.Schema<IUser>({
       lastChecked: { type: Date, default: Date.now }
     }],
     validate: [arrayLimit10, 'NFT collections exceed limit of 10']
+  },
+  // ERC-20 Token holdings for daily credits eligibility
+  tokenHoldings: {
+    type: [{
+      contractAddress: String,
+      chainId: String,
+      balance: String,  // String to handle large numbers (wei)
+      lastChecked: { type: Date, default: Date.now }
+    }],
+    validate: [arrayLimit10, 'Token holdings exceed limit of 10']
+  },
+  // Daily credits grant tracking - NFT and Token holders get 20 credits per day
+  // Credits are added to main credits balance, this tracks when last grant occurred
+  dailyCreditsLastGrant: {
+    type: Date,
+    default: null
   },
   // NOTE: Full payment history stored in separate Payment collection
   // DATA MINIMIZATION: Reduced from 100 to 30 - only recent transactions needed
