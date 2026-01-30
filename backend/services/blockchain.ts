@@ -17,17 +17,42 @@ interface TransactionVerification {
   slot?: number;
 }
 
+// ERC-20 Transfer event topic (keccak256 of "Transfer(address,address,uint256)")
+const TRANSFER_EVENT_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+
+// USDC contract addresses for all supported chains
+const USDC_CONTRACTS: Record<string, string> = {
+  '1': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',      // Ethereum
+  '137': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',    // Polygon (PoS Bridged)
+  '42161': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',  // Arbitrum (Native)
+  '10': '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',     // Optimism (Native)
+  '8453': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',   // Base (Native)
+};
+
 interface SolanaInstruction {
   program?: string;
+  programId?: string;
   parsed?: {
     type?: string;
     info?: {
       destination?: string;
       source?: string;
       lamports?: number;
+      // SPL Token transfer fields
+      authority?: string;
+      amount?: string;
+      tokenAmount?: {
+        amount: string;
+        decimals: number;
+        uiAmount: number;
+        uiAmountString: string;
+      };
     };
   };
 }
+
+// Solana USDC mint address (for reference in future improvements)
+// const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 // RPC providers cache
 const providers: Record<string, JsonRpcProvider> = {};
@@ -87,6 +112,7 @@ export function getSolanaConnection(): Connection | null {
 
 /**
  * Verify EVM transaction
+ * Supports both native ETH/token transfers and ERC-20 token transfers (USDC)
  */
 export async function verifyEVMTransaction(
   txHash: string, 
@@ -109,9 +135,92 @@ export async function verifyEVMTransaction(
     throw new Error('Transaction failed or pending');
   }
 
+  const chainIdStr = String(chainId);
+  const usdcAddress = USDC_CONTRACTS[chainIdStr]?.toLowerCase();
+  const expectedToLower = expectedTo.toLowerCase();
+
+  // First, check for USDC Transfer events in the logs
+  // This handles both direct transfers to USDC contract and transfers through other contracts
+  if (usdcAddress) {
+    // Find a Transfer event from USDC contract TO the payment wallet
+    const transferLog = receipt.logs.find(log => {
+      if (
+        log.address.toLowerCase() === usdcAddress &&
+        log.topics[0] === TRANSFER_EVENT_TOPIC &&
+        log.topics.length >= 3
+      ) {
+        // Check if 'to' address matches expected payment wallet
+        const toAddress = '0x' + log.topics[2].slice(26);
+        return toAddress.toLowerCase() === expectedToLower;
+      }
+      return false;
+    });
+
+    if (transferLog) {
+      // Decode Transfer event: Transfer(address indexed from, address indexed to, uint256 value)
+      // topics[0] = event signature
+      // topics[1] = from address (padded to 32 bytes)
+      // topics[2] = to address (padded to 32 bytes)
+      // data = value (uint256)
+      const fromAddress = '0x' + transferLog.topics[1].slice(26);
+      const toAddress = '0x' + transferLog.topics[2].slice(26);
+      const valueHex = transferLog.data;
+      
+      // USDC has 6 decimals
+      const valueBigInt = BigInt(valueHex);
+      const valueInUSDC = Number(valueBigInt) / 1e6;
+
+      logger.debug('Parsed ERC-20 Transfer event', {
+        txHash,
+        from: fromAddress,
+        to: toAddress,
+        value: valueInUSDC,
+        chainId,
+        usdcContract: usdcAddress
+      });
+
+      // Verify amount (with 1% tolerance)
+      if (valueInUSDC < expectedAmount * 0.99) {
+        logger.error('Transfer amount too low', {
+          expected: expectedAmount,
+          actual: valueInUSDC
+        });
+        throw new Error(`Transaction amount too low: expected ${expectedAmount}, got ${valueInUSDC}`);
+      }
+
+      return {
+        verified: true,
+        from: fromAddress,
+        to: toAddress,
+        value: valueInUSDC,
+        blockNumber: receipt.blockNumber
+      };
+    }
+
+    // If tx.to is the USDC contract but no Transfer to payment wallet found
+    if (tx.to?.toLowerCase() === usdcAddress) {
+      logger.error('USDC transfer detected but not to payment wallet', {
+        txHash,
+        chainId,
+        expectedTo: expectedToLower
+      });
+      throw new Error('No balance change found - USDC not sent to payment wallet');
+    }
+  }
+
+  // Fall back to native token transfer (ETH, MATIC, etc.)
   // Verify recipient
-  if (tx.to?.toLowerCase() !== expectedTo.toLowerCase()) {
-    throw new Error('Transaction recipient mismatch');
+  if (tx.to?.toLowerCase() !== expectedToLower) {
+    // Log detailed info for debugging
+    logger.error('No valid payment found', {
+      txHash,
+      chainId,
+      txTo: tx.to?.toLowerCase(),
+      expectedTo: expectedToLower,
+      hasUsdcAddress: !!usdcAddress,
+      logsCount: receipt.logs.length
+    });
+    throw new Error('No balance change found - transaction not to payment wallet');
   }
 
   // Verify amount (in wei)
@@ -131,6 +240,7 @@ export async function verifyEVMTransaction(
 
 /**
  * Verify Solana transaction
+ * Supports both native SOL transfers and SPL token transfers (USDC)
  */
 export async function verifySolanaTransaction(
   txHash: string, 
@@ -154,30 +264,86 @@ export async function verifySolanaTransaction(
     throw new Error('Transaction failed');
   }
 
-  // Find the transfer instruction
+  // Find the transfer instruction (check both main instructions and inner instructions)
   const instructions = tx.transaction.message.instructions as SolanaInstruction[];
+  const innerInstructions = tx.meta?.innerInstructions || [];
+  
+  // Collect all instructions including inner ones
+  const allInstructions: SolanaInstruction[] = [...instructions];
+  for (const inner of innerInstructions) {
+    if (inner.instructions) {
+      allInstructions.push(...(inner.instructions as SolanaInstruction[]));
+    }
+  }
+
   let transferFound = false;
   let from: string | null = null;
   let amount = 0;
 
-  for (const ix of instructions) {
-    if (ix.program === 'system' && ix.parsed?.type === 'transfer') {
+  // First, try to find SPL Token transfer (for USDC)
+  for (const ix of allInstructions) {
+    // SPL Token program transfers
+    if (ix.program === 'spl-token' && ix.parsed?.type === 'transfer') {
       const info = ix.parsed.info;
-      if (info?.destination === expectedTo) {
+      // For SPL token transfers, 'destination' is the token account, not the wallet
+      // We need to check if the transfer is to our payment wallet's token account
+      // The amount is in the smallest unit (for USDC, 6 decimals)
+      if (info?.amount) {
         transferFound = true;
-        from = info.source || null;
-        amount = (info.lamports || 0) / 1e9; // Convert lamports to SOL
+        from = info.authority || null;
+        amount = parseInt(info.amount) / 1e6; // USDC has 6 decimals
+        logger.debug('Found SPL Token transfer', {
+          from,
+          amount,
+          destination: info.destination
+        });
+        break;
+      }
+    }
+    
+    // SPL Token transferChecked (more common for USDC)
+    if (ix.program === 'spl-token' && ix.parsed?.type === 'transferChecked') {
+      const info = ix.parsed.info;
+      if (info?.tokenAmount) {
+        transferFound = true;
+        from = info.authority || null;
+        amount = info.tokenAmount.uiAmount || 0;
+        logger.debug('Found SPL Token transferChecked', {
+          from,
+          amount,
+          decimals: info.tokenAmount.decimals
+        });
         break;
       }
     }
   }
 
+  // If no SPL token transfer found, check for native SOL transfer
   if (!transferFound) {
-    throw new Error('No matching transfer found');
+    for (const ix of allInstructions) {
+      if (ix.program === 'system' && ix.parsed?.type === 'transfer') {
+        const info = ix.parsed.info;
+        if (info?.destination === expectedTo) {
+          transferFound = true;
+          from = info.source || null;
+          amount = (info.lamports || 0) / 1e9; // Convert lamports to SOL
+          break;
+        }
+      }
+    }
+  }
+
+  if (!transferFound) {
+    logger.error('No matching transfer found in Solana transaction', { txHash });
+    throw new Error('No balance change found - no transfer instruction found');
   }
 
   if (amount < expectedAmount * 0.99) {
-    throw new Error('Transaction amount too low');
+    logger.error('Solana transfer amount too low', {
+      expected: expectedAmount,
+      actual: amount
+    });
+    throw new Error(`Transaction amount too low: expected ${expectedAmount}, got ${amount}`);
   }
 
   return {
