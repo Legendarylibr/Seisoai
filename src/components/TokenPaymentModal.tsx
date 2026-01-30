@@ -1469,8 +1469,8 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
             </div>
           )}
 
-          {/* Network Selection - Show when user has USDC on multiple chains */}
-          {networksWithUSDC.length > 1 && (
+          {/* Network Selection - Always show for EVM wallets */}
+          {walletType === 'evm' && (
             <div 
               className="p-2.5 rounded"
               style={{
@@ -1508,8 +1508,17 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
                 </button>
               </div>
               <div className="space-y-1.5">
-                {networksWithUSDC.map((network) => {
+                {/* Show all supported networks */}
+                {[
+                  { chainId: 1, name: 'Ethereum', usdcAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
+                  { chainId: 137, name: 'Polygon', usdcAddress: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' },
+                  { chainId: 42161, name: 'Arbitrum', usdcAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' },
+                  { chainId: 10, name: 'Optimism', usdcAddress: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85' },
+                  { chainId: 8453, name: 'Base', usdcAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }
+                ].map((network) => {
                   const isCurrentNetwork = network.chainId === currentChainId;
+                  const networkBalance = tokenBalances[network.chainId]?.balance || 0;
+                  const hasBalance = networkBalance > 0;
                   return (
                     <button
                       key={network.chainId}
@@ -1525,7 +1534,8 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
                           : 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
                         color: '#000000',
                         textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
-                        cursor: isCurrentNetwork ? 'default' : 'pointer'
+                        cursor: isCurrentNetwork ? 'default' : 'pointer',
+                        opacity: hasBalance || isCurrentNetwork ? 1 : 0.7
                       }}
                       onMouseEnter={(e) => {
                         if (!isCurrentNetwork) {
@@ -1562,7 +1572,12 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
                             {network.name}
                             {isCurrentNetwork && <span className="ml-1 text-[9px]" style={{ color: '#006600' }}>✓ Active</span>}
                           </div>
-                          <div className="text-[10px]" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{network.balance.toFixed(2)} USDC</div>
+                          <div className="text-[10px]" style={{ 
+                            color: hasBalance ? '#000000' : '#666666', 
+                            textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' 
+                          }}>
+                            {networkBalance.toFixed(2)} USDC
+                          </div>
                         </div>
                       </div>
                       {!isCurrentNetwork && (
@@ -1575,8 +1590,8 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
             </div>
           )}
 
-          {/* Single Network Balance - Show when only one network has USDC */}
-          {networksWithUSDC.length === 1 && currentNetworkBalance > 0 && (
+          {/* Solana Network Info - Show for Solana wallets */}
+          {walletType === 'solana' && (
             <div 
               className="p-2.5 rounded"
               style={{
@@ -1586,29 +1601,22 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
               }}
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Balance:</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-bold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{currentNetworkBalance.toFixed(2)} USDC</span>
-                  <button
-                    onClick={() => checkUSDCBalanceAcrossNetworks()}
-                    className="p-0.5 rounded transition-all duration-200"
-                    title="Refresh"
-                    style={{
-                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                      border: '2px outset #f0f0f0',
-                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)'
-                    }}
-                    onMouseDown={(e) => {
-                      e.currentTarget.style.border = '2px inset #c0c0c0';
-                      e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
-                    }}
-                    onMouseUp={(e) => {
-                      e.currentTarget.style.border = '2px outset #f0f0f0';
-                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)';
-                    }}
-                  >
-                    <RefreshCw className="w-3 h-3" style={{ color: '#000000' }} />
-                  </button>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs">◎</span>
+                  <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                    Solana Network
+                  </span>
+                </div>
+                <div 
+                  className="px-2 py-0.5 text-[10px] font-semibold rounded"
+                  style={{
+                    background: 'linear-gradient(to bottom, #d0f0d0, #c0e0c0)',
+                    border: '2px outset #e0e0e0',
+                    color: '#000000',
+                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                  }}
+                >
+                  ✓ Active
                 </div>
               </div>
             </div>
