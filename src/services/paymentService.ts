@@ -1,7 +1,7 @@
 // Payment service for USDC and ERC-20 tokens on EVM chains and Solana
 import { ethers } from 'ethers';
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, apiFetch } from '../utils/apiConfig';
 
 // Standard ERC-20 ABI for token transfers
 const ERC20_ABI = [
@@ -319,9 +319,8 @@ export const getPaymentWalletFromBackend = async (chainId: string, walletType: s
   }
   
   try {
-    const response = await fetch(`${API_URL}/api/payment/get-address`, {
+    const response = await apiFetch(`${API_URL}/api/payment/get-address`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chainId, walletType })
     });
     
@@ -414,9 +413,8 @@ export const verifyPayment = async (
     // Fetch payment wallet from backend
     const paymentWallet = await getPaymentWalletFromBackend(chainId, walletType);
     
-    const response = await fetch(`${API_URL}/api/payments/verify`, {
+    const response = await apiFetch(`${API_URL}/api/payments/verify`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         txHash,
         walletAddress,

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { ethers } from 'ethers';
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, apiFetch } from '../utils/apiConfig';
 import { 
   calculateCredits,
   verifyPayment,
@@ -805,11 +805,8 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
           
           // Credit after confirmation
           try {
-            const creditResponse = await fetch(`${API_URL}/api/payments/credit`, {
+            const creditResponse = await apiFetch(`${API_URL}/api/payments/credit`, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
               body: JSON.stringify({
                 txHash: txSignature,
                 walletAddress: address,
@@ -1087,11 +1084,8 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
             
             // Credit after confirmation (transaction is guaranteed to be on-chain)
             try {
-              const creditResponse = await fetch(`${API_URL}/api/payments/credit`, {
+              const creditResponse = await apiFetch(`${API_URL}/api/payments/credit`, {
                 method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                   txHash: tx.hash,
                   walletAddress: address,
