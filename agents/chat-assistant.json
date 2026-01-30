@@ -13,7 +13,7 @@
       "endpoint": "https://seisoai.com/api/chat-assistant"
     }
   ],
-  "x402Support": false,
+  "x402Support": true,
   "active": true,
   "registrations": [],
   "supportedTrust": ["reputation"]

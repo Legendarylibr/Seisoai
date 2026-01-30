@@ -88,23 +88,87 @@ export interface SupportedChains {
   solana: ChainInfo;
 }
 
-// Credit costs - 20% above API cost, Nano Banana at 50% off (loss leader)
+// Credit costs - at API cost (no markup)
 // 1 credit = $0.10
+// NOTE: Credits system is deprecated - x402 pay-per-request is now the primary payment method
 export const CREDITS: CreditsConfig = {
-  IMAGE_GENERATION: 0.6,         // Flux Pro Kontext ($0.05 API × 1.2 = $0.06)
-  IMAGE_GENERATION_FLUX_2: 0.3,  // Flux 2 ($0.025 API × 1.2 = $0.03)
-  IMAGE_GENERATION_NANO: 1.25,   // Nano Banana Pro ($0.25 API × 0.5 = $0.125 - LOSS LEADER)
-  IMAGE_GENERATION_MULTI: 0.6,   // Multi-image (same as Flux Pro)
-  VIDEO_GENERATION_PER_SECOND: 2,
+  IMAGE_GENERATION: 0.5,         // Flux Pro Kontext ($0.05 API)
+  IMAGE_GENERATION_FLUX_2: 0.25, // Flux 2 ($0.025 API)
+  IMAGE_GENERATION_NANO: 2.5,    // Nano Banana Pro ($0.25 API)
+  IMAGE_GENERATION_MULTI: 0.5,   // Multi-image (same as Flux Pro)
+  VIDEO_GENERATION_PER_SECOND: 2.2, // Veo 3.1 fast ($0.22/s API)
   VIDEO_GENERATION_MINIMUM: 2,
-  VIDEO_LTX_PER_SECOND: 1.0,     // LTX-2 19B - Budget video ($0.04/s API, priced at $0.10/s for ~150% margin)
-  VIDEO_LTX_MINIMUM: 3,          // LTX-2 minimum credits
-  MUSIC_GENERATION_PER_MINUTE: 0.25, // Music ($0.02/min API × 1.2 = $0.024/min)
-  VIDEO_TO_AUDIO: 0.5,           // MMAudio V2 - Video to synced audio ($0.04 API × 1.2 ≈ $0.05)
-  LAYER_EXTRACTION: 0.3,         // Same as Flux 2
-  MODEL_3D_NORMAL: 3,            // Hunyuan3D V3 with full textures + PBR
-  MODEL_3D_LOWPOLY: 3,           // Hunyuan3D V3 with optimized mesh + textures
-  MODEL_3D_GEOMETRY: 2           // Hunyuan3D V3 geometry only (no textures)
+  VIDEO_LTX_PER_SECOND: 0.4,     // LTX-2 19B ($0.04/s API)
+  VIDEO_LTX_MINIMUM: 2,          // LTX-2 minimum credits
+  MUSIC_GENERATION_PER_MINUTE: 0.2, // Music ($0.02/min API)
+  VIDEO_TO_AUDIO: 0.4,           // MMAudio V2 ($0.04 API)
+  LAYER_EXTRACTION: 0.25,        // Same as Flux 2 ($0.025 API)
+  MODEL_3D_NORMAL: 2.5,          // Hunyuan3D V3 with full textures + PBR ($0.25 API)
+  MODEL_3D_LOWPOLY: 2.5,         // Hunyuan3D V3 with optimized mesh + textures ($0.25 API)
+  MODEL_3D_GEOMETRY: 2           // Hunyuan3D V3 geometry only ($0.20 API)
+};
+
+// x402 Payment Configuration (pay-per-request at API cost)
+// All prices in USD - used by x402 middleware for HTTP 402 payments
+// @see https://docs.cdp.coinbase.com/x402/welcome
+export interface X402PricesConfig {
+  // Image Generation
+  IMAGE_FLUX_PRO: string;
+  IMAGE_FLUX_2: string;
+  IMAGE_NANO_BANANA: string;
+  IMAGE_MULTI: string;
+  // Video Generation
+  VIDEO_LTX_PER_SECOND: string;
+  VIDEO_VEO_FAST: string;
+  VIDEO_VEO_QUALITY: string;
+  // Audio
+  MUSIC_PER_MINUTE: string;
+  VIDEO_TO_AUDIO: string;
+  VOICE_CLONE: string;
+  STEM_SEPARATE: string;
+  SFX: string;
+  // Image Tools
+  LAYER_EXTRACTION: string;
+  UPSCALE_2X: string;
+  UPSCALE_4X: string;
+  FACE_SWAP: string;
+  INPAINT: string;
+  OUTPAINT: string;
+  DESCRIBE: string;
+  // 3D Models
+  MODEL_3D_NORMAL: string;
+  MODEL_3D_LOWPOLY: string;
+  MODEL_3D_GEOMETRY: string;
+}
+
+export const X402_PRICES: X402PricesConfig = {
+  // Image Generation (at API cost)
+  IMAGE_FLUX_PRO: '$0.05',
+  IMAGE_FLUX_2: '$0.025',
+  IMAGE_NANO_BANANA: '$0.25',
+  IMAGE_MULTI: '$0.05',
+  // Video Generation
+  VIDEO_LTX_PER_SECOND: '$0.04',
+  VIDEO_VEO_FAST: '$0.22',
+  VIDEO_VEO_QUALITY: '$0.55',
+  // Audio
+  MUSIC_PER_MINUTE: '$0.02',
+  VIDEO_TO_AUDIO: '$0.04',
+  VOICE_CLONE: '$0.10',
+  STEM_SEPARATE: '$0.20',
+  SFX: '$0.10',
+  // Image Tools
+  LAYER_EXTRACTION: '$0.025',
+  UPSCALE_2X: '$0.02',
+  UPSCALE_4X: '$0.04',
+  FACE_SWAP: '$0.20',
+  INPAINT: '$0.20',
+  OUTPAINT: '$0.20',
+  DESCRIBE: '$0.05',
+  // 3D Models
+  MODEL_3D_NORMAL: '$0.25',
+  MODEL_3D_LOWPOLY: '$0.25',
+  MODEL_3D_GEOMETRY: '$0.20',
 };
 
 // Free image limits
@@ -218,6 +282,7 @@ export const SUPPORTED_CHAINS: SupportedChains = {
 
 export default {
   CREDITS,
+  X402_PRICES,
   FREE_IMAGE_LIMITS,
   RATE_LIMITS,
   PAGINATION,

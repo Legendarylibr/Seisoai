@@ -55,6 +55,7 @@ import {
   requireCreditsForVideo,
   requireCredits
 } from './middleware/credits.js';
+import { applyX402Middleware, getX402Config } from './middleware/x402.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { createValidateInput } from './middleware/validation.js';
 import { cdnCacheMiddleware, cdnSecurityMiddleware } from './middleware/cdn.js';
@@ -359,6 +360,19 @@ app.use('/api/', csrfProtection);
 
 // Apply general rate limiting to all API routes
 app.use('/api/', generalRateLimiter);
+
+// x402 Payment Middleware (pay-per-request via blockchain)
+// This intercepts configured routes and handles HTTP 402 Payment Required flow
+const x402Applied = applyX402Middleware(app);
+if (x402Applied) {
+  const x402Config = getX402Config();
+  logger.info('x402 payment middleware enabled', {
+    network: x402Config.network,
+    isTestnet: x402Config.isTestnet
+  });
+} else {
+  logger.warn('x402 payment middleware not enabled - set X402_WALLET_ADDRESS to enable');
+}
 
 // Prepare dependency injection for routes
 const routeDeps = {

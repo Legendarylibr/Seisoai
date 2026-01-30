@@ -128,6 +128,10 @@ export interface Config {
   ERC8004_REPUTATION_REGISTRY?: string;
   ERC8004_VALIDATION_REGISTRY?: string;
   ERC8004_CHAIN_ID?: number;
+  // x402 Payment Protocol
+  X402_WALLET_ADDRESS?: string;
+  X402_NETWORK?: string;
+  X402_FACILITATOR_URL?: string;
   isProduction: boolean;
   isDevelopment: boolean;
 }
@@ -192,6 +196,11 @@ export const config: Config = {
   ERC8004_REPUTATION_REGISTRY: process.env.ERC8004_REPUTATION_REGISTRY,
   ERC8004_VALIDATION_REGISTRY: process.env.ERC8004_VALIDATION_REGISTRY,
   ERC8004_CHAIN_ID: process.env.ERC8004_CHAIN_ID ? parseInt(process.env.ERC8004_CHAIN_ID, 10) : undefined,
+  
+  // x402 Payment Protocol
+  X402_WALLET_ADDRESS: process.env.X402_WALLET_ADDRESS || process.env.EVM_PAYMENT_WALLET_ADDRESS,
+  X402_NETWORK: process.env.X402_NETWORK || 'eip155:8453',
+  X402_FACILITATOR_URL: process.env.X402_FACILITATOR_URL,
   
   // Flags
   isProduction: process.env.NODE_ENV === 'production',
