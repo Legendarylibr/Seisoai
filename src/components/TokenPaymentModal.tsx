@@ -6,7 +6,7 @@ import { API_URL } from '../utils/apiConfig';
 import { 
   calculateCredits,
   verifyPayment,
-  getPaymentWallet
+  getPaymentWalletFromBackend
 } from '../services/paymentService';
 import { getLatestBlockhash as proxyGetBlockhash, getUsdcBalance as proxyGetUsdcBalance, getAccountInfo as proxyGetAccountInfo } from '../services/rpcProxyService';
 import { X, Coins, RefreshCw, ChevronDown, ChevronUp, Wallet, Copy, Check, ExternalLink } from 'lucide-react';
@@ -765,26 +765,13 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
           }
           
           // Build and send Solana USDC transaction
-          // Reconcile frontend vs backend payment address for safety
-          let solanaPaymentAddress = getPaymentWallet('solana', 'solana');
-          try {
-            const resp = await fetch(`${API_URL}/api/payment/get-address`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ walletAddress: address })
-            });
-            if (resp.ok) {
-              const data = await resp.json();
-              if (data?.solanaPaymentAddress && data.solanaPaymentAddress !== solanaPaymentAddress) {
-                if (import.meta.env.MODE !== 'production') {
-                  logger.warn('Frontend Solana address differs from backend. Using backend value.');
-                }
-                solanaPaymentAddress = data.solanaPaymentAddress;
-              }
-            }
-          } catch (_) {
-            // Non-fatal; continue with local value
+          // Fetch payment address from backend (authoritative source)
+          const solanaPaymentAddress = await getPaymentWalletFromBackend('solana', 'solana');
+          
+          if (!solanaPaymentAddress) {
+            throw new Error('Payment wallet not configured. Please contact support.');
           }
+          
           const txSignature = await buildSolanaUSDCTransaction(amount, solanaPaymentAddress);
           
           logger.info('Solana transaction signed', { txSignature });
@@ -1061,9 +1048,14 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
           // Convert amount to USDC units (6 decimals)
           const amountWei = ethers.parseUnits(amount, 6);
           
-          // Use chainId from above (already fetched)
-          const paymentAddress = getPaymentWallet(chainId, 'evm');
-          logger.debug('Building USDC transaction', { amount });
+          // Fetch payment address from backend (authoritative source)
+          const paymentAddress = await getPaymentWalletFromBackend(chainId, 'evm');
+          
+          if (!paymentAddress || paymentAddress === '0x0000000000000000000000000000000000000000') {
+            throw new Error('Payment wallet not configured. Please contact support.');
+          }
+          
+          logger.debug('Building USDC transaction', { amount, paymentAddress });
           
           // Build the transaction data
           const txData = usdcContract.interface.encodeFunctionData('transfer', [paymentAddress, amountWei]);

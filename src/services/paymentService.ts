@@ -53,14 +53,15 @@ const validatePaymentConfig = (): boolean => {
 };
 
 // Payment configuration - configurable tokens
+// Note: paymentWallets are fetched from backend at runtime via getPaymentWalletFromBackend()
 const PAYMENT_CONFIG: PaymentConfigType = {
   paymentWallets: {
-    '1': import.meta.env.VITE_ETH_PAYMENT_WALLET || '0x0000000000000000000000000000000000000000',
-    '137': import.meta.env.VITE_POLYGON_PAYMENT_WALLET || '0x0000000000000000000000000000000000000000',
-    '42161': import.meta.env.VITE_ARBITRUM_PAYMENT_WALLET || '0x0000000000000000000000000000000000000000',
-    '10': import.meta.env.VITE_OPTIMISM_PAYMENT_WALLET || '0x0000000000000000000000000000000000000000',
-    '8453': import.meta.env.VITE_BASE_PAYMENT_WALLET || '0x0000000000000000000000000000000000000000',
-    'solana': import.meta.env.VITE_SOLANA_PAYMENT_WALLET || 'CkhFmeUNxdr86SZEPg6bLgagFkRyaDMTmFzSVL69oadA'
+    '1': '', // Fetched from backend
+    '137': '', // Fetched from backend
+    '42161': '', // Fetched from backend
+    '10': '', // Fetched from backend
+    '8453': '', // Fetched from backend
+    'solana': '' // Fetched from backend
   },
   evmTokens: {
     '1': {
@@ -300,13 +301,73 @@ export const validatePayment = (
   };
 };
 
-export const getPaymentWallet = (chainId: string, walletType: string = 'evm'): string => {
-  validatePaymentConfig();
+// Cache for payment wallet addresses fetched from backend
+const paymentWalletCache: Record<string, { address: string; timestamp: number }> = {};
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Fetch payment wallet address from backend
+ * This is the preferred method - gets the authoritative address from the server
+ */
+export const getPaymentWalletFromBackend = async (chainId: string, walletType: string = 'evm'): Promise<string> => {
+  const cacheKey = `${walletType}-${chainId}`;
+  const cached = paymentWalletCache[cacheKey];
   
-  if (walletType === 'solana') {
-    return PAYMENT_CONFIG.paymentWallets['solana'];
+  // Return cached value if still valid
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.address;
   }
-  return PAYMENT_CONFIG.paymentWallets[chainId] || PAYMENT_CONFIG.paymentWallets['1'];
+  
+  try {
+    const response = await fetch(`${API_URL}/api/payment/get-address`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chainId, walletType })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to get payment address: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.success || !data.paymentAddress) {
+      throw new Error(data.error || 'Payment wallet not configured on server');
+    }
+    
+    // Validate address format
+    if (walletType !== 'solana' && !data.paymentAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+      throw new Error('Invalid EVM payment address format from server');
+    }
+    
+    // Cache the result
+    paymentWalletCache[cacheKey] = {
+      address: data.paymentAddress,
+      timestamp: Date.now()
+    };
+    
+    return data.paymentAddress;
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to fetch payment wallet from backend', { error: err.message, chainId, walletType });
+    throw new Error(`Payment configuration error: ${err.message}`);
+  }
+};
+
+/**
+ * @deprecated Use getPaymentWalletFromBackend() instead for runtime fetching
+ * This synchronous version is kept for backwards compatibility but will throw if wallet not cached
+ */
+export const getPaymentWallet = (chainId: string, walletType: string = 'evm'): string => {
+  const cacheKey = `${walletType}-${chainId}`;
+  const cached = paymentWalletCache[cacheKey];
+  
+  if (cached) {
+    return cached.address;
+  }
+  
+  // Throw error instead of returning zero address
+  throw new Error('Payment wallet not loaded. Call getPaymentWalletFromBackend() first.');
 };
 
 export const transferToPaymentWallet = async (
@@ -316,7 +377,14 @@ export const transferToPaymentWallet = async (
   signer: ethers.Signer
 ): Promise<{ success: boolean; txHash: string; paymentWallet: string }> => {
   try {
-    const paymentWallet = getPaymentWallet(chainId, 'evm');
+    // Fetch payment wallet from backend (authoritative source)
+    const paymentWallet = await getPaymentWalletFromBackend(chainId, 'evm');
+    
+    // Validate we got a real address, not zero address
+    if (!paymentWallet || paymentWallet === '0x0000000000000000000000000000000000000000') {
+      throw new Error('Payment wallet not configured. Please contact support.');
+    }
+    
     const contract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
     
     const tx = await contract.transfer(paymentWallet, amount);
@@ -343,6 +411,9 @@ export const verifyPayment = async (
   walletType: string = 'evm'
 ): Promise<{ success: boolean; credits?: number; message?: string }> => {
   try {
+    // Fetch payment wallet from backend
+    const paymentWallet = await getPaymentWalletFromBackend(chainId, walletType);
+    
     const response = await fetch(`${API_URL}/api/payments/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -353,7 +424,7 @@ export const verifyPayment = async (
         amount: parseFloat(amount),
         chainId,
         walletType,
-        paymentWallet: getPaymentWallet(chainId, walletType)
+        paymentWallet
       })
     });
 
