@@ -1,6 +1,8 @@
 /**
  * Image Tools routes
  * Face swap, inpainting, image description, and other image utilities
+ * 
+ * NOTE: Uses x402 for all payments - no legacy credit system
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
@@ -21,55 +23,14 @@ interface AuthenticatedRequest extends Request {
 }
 
 /**
- * Refund credits to a user after a failed generation
+ * Log generation failure (x402 handles all payments, no refunds needed)
  */
-async function refundCredits(
-  user: IUser,
-  credits: number,
-  reason: string
-): Promise<IUser | null> {
-  try {
-    // Validate credits is a valid positive number
-    if (!Number.isFinite(credits) || credits <= 0) {
-      logger.error('Cannot refund invalid credits amount', { credits, reason, userId: user.userId });
-      return null;
-    }
-    
-    const User = mongoose.model<IUser>('User');
-    const updateQuery = buildUserUpdateQuery(user);
-    
-    if (!updateQuery) {
-      logger.error('Cannot refund credits: no valid user identifier', { userId: user.userId });
-      return null;
-    }
-
-    const updatedUser = await User.findOneAndUpdate(
-      updateQuery,
-      {
-        $inc: { credits: credits, totalCreditsSpent: -credits }
-      },
-      { new: true }
-    );
-
-    if (updatedUser) {
-      logger.info('Credits refunded for failed image tool', {
-        userId: user.userId || user.email || user.walletAddress,
-        creditsRefunded: credits,
-        newBalance: updatedUser.credits,
-        reason
-      });
-    }
-
-    return updatedUser;
-  } catch (error) {
-    const err = error as Error;
-    logger.error('Failed to refund credits', {
-      userId: user.userId,
-      credits,
-      reason,
-      error: err.message
+function logGenerationFailure(user: IUser | undefined, reason: string): void {
+  if (user) {
+    logger.warn('Generation failed (x402 payment already processed)', {
+      userId: user.userId || user.walletAddress,
+      reason
     });
-    return null;
   }
 }
 
@@ -154,7 +115,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
       const requestId = result.request_id;
 
       if (!requestId) {
-        await refundCredits(user, creditsRequired, 'No request ID returned');
+        logGenerationFailure(user, 'No request ID returned');
         res.status(500).json({ success: false, error: 'Failed to submit face swap request' });
         return;
       }
@@ -183,18 +144,16 @@ export function createImageToolsRoutes(deps: Dependencies) {
               logger.info('Face swap completed', { requestId, userId: user.userId });
               res.json({
                 success: true,
-                image_url: imageUrl,
-                remainingCredits: updateResult.credits,
-                creditsDeducted: creditsRequired
+                image_url: imageUrl
               });
               return;
             } else {
-              await refundCredits(user, creditsRequired, 'No image URL in response');
+              logGenerationFailure(user, 'No image URL in response');
               res.status(500).json({ success: false, error: 'No image generated' });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
-            await refundCredits(user, creditsRequired, 'Face swap failed');
+            logGenerationFailure(user, 'Face swap failed');
             res.status(500).json({ success: false, error: 'Face swap failed' });
             return;
           }
@@ -203,7 +162,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
         }
       }
 
-      await refundCredits(user, creditsRequired, 'Face swap timed out');
+      logGenerationFailure(user, 'Face swap timed out');
       res.status(504).json({ success: false, error: 'Face swap timed out' });
     } catch (error) {
       const err = error as Error;
@@ -313,7 +272,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
       const requestId = result.request_id;
 
       if (!requestId) {
-        await refundCredits(user, creditsRequired, 'No request ID returned');
+        logGenerationFailure(user, 'No request ID returned');
         res.status(500).json({ success: false, error: 'Failed to submit inpaint request' });
         return;
       }
@@ -349,17 +308,15 @@ export function createImageToolsRoutes(deps: Dependencies) {
               res.json({
                 success: true,
                 image_url: imageUrl,
-                remainingCredits: updateResult.credits,
-                creditsDeducted: creditsRequired
               });
               return;
             } else {
-              await refundCredits(user, creditsRequired, 'No image URL in response');
+              logGenerationFailure(user, 'No image URL in response');
               res.status(500).json({ success: false, error: 'No image generated' });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
-            await refundCredits(user, creditsRequired, 'Inpaint failed');
+            logGenerationFailure(user, 'Inpaint failed');
             res.status(500).json({ success: false, error: 'Inpaint failed' });
             return;
           }
@@ -368,7 +325,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
         }
       }
 
-      await refundCredits(user, creditsRequired, 'Inpaint timed out');
+      logGenerationFailure(user, 'Inpaint timed out');
       res.status(504).json({ success: false, error: 'Inpaint timed out' });
     } catch (error) {
       const err = error as Error;
@@ -457,7 +414,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
       if (!response.ok) {
         const errorText = await response.text();
         logger.error('Image describe API error', { status: response.status, error: errorText });
-        await refundCredits(user, creditsRequired, `API error: ${response.status}`);
+        logGenerationFailure(user, `API error: ${response.status}`);
         res.status(500).json({ success: false, error: 'Image description failed' });
         return;
       }
@@ -466,7 +423,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
       const description = data.output || data.text || data.response || '';
 
       if (!description) {
-        await refundCredits(user, creditsRequired, 'No description generated');
+        logGenerationFailure(user, 'No description generated');
         res.status(500).json({ success: false, error: 'No description generated' });
         return;
       }
@@ -476,9 +433,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
       res.json({
         success: true,
         description,
-        prompt: description, // Alias for convenience
-        remainingCredits: updateResult.credits,
-        creditsDeducted: creditsRequired
+        prompt: description // Alias for convenience
       });
     } catch (error) {
       const err = error as Error;
@@ -581,7 +536,7 @@ Be specific and detailed about each element.`,
       if (!describeResponse.ok) {
         const errorText = await describeResponse.text();
         logger.error('Image describe API error', { status: describeResponse.status, error: errorText });
-        await refundCredits(user, creditsRequired, `API error: ${describeResponse.status}`);
+        logGenerationFailure(user, `API error: ${describeResponse.status}`);
         res.status(500).json({ success: false, error: 'Image analysis failed' });
         return;
       }
@@ -590,7 +545,7 @@ Be specific and detailed about each element.`,
       const description = describeData.output || describeData.text || describeData.response || '';
 
       if (!description) {
-        await refundCredits(user, creditsRequired, 'No description generated');
+        logGenerationFailure(user, 'No description generated');
         res.status(500).json({ success: false, error: 'Failed to analyze image' });
         return;
       }
@@ -652,9 +607,7 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
         res.json({
           success: true,
           description,
-          prompts: Array(validNumOutputs).fill(description),
-          remainingCredits: updateResult.credits,
-          creditsDeducted: creditsRequired
+          prompts: Array(validNumOutputs).fill(description)
         });
         return;
       }
@@ -725,9 +678,7 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
         success: true,
         description,
         prompts,
-        useControlNet,
-        remainingCredits: updateResult.credits,
-        creditsDeducted: creditsRequired
+        useControlNet
       });
     } catch (error) {
       const err = error as Error;
@@ -841,7 +792,7 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
       const requestId = result.request_id;
 
       if (!requestId) {
-        await refundCredits(user, creditsRequired, 'No request ID returned');
+        logGenerationFailure(user, 'No request ID returned');
         res.status(500).json({ success: false, error: 'Failed to submit outpaint request' });
         return;
       }
@@ -877,17 +828,15 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
               res.json({
                 success: true,
                 image_url: imageUrl,
-                remainingCredits: updateResult.credits,
-                creditsDeducted: creditsRequired
               });
               return;
             } else {
-              await refundCredits(user, creditsRequired, 'No image URL in response');
+              logGenerationFailure(user, 'No image URL in response');
               res.status(500).json({ success: false, error: 'No image generated' });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
-            await refundCredits(user, creditsRequired, 'Outpaint failed');
+            logGenerationFailure(user, 'Outpaint failed');
             res.status(500).json({ success: false, error: 'Outpaint failed' });
             return;
           }
@@ -896,7 +845,7 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
         }
       }
 
-      await refundCredits(user, creditsRequired, 'Outpaint timed out');
+      logGenerationFailure(user, 'Outpaint timed out');
       res.status(504).json({ success: false, error: 'Outpaint timed out' });
     } catch (error) {
       const err = error as Error;

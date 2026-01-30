@@ -1,11 +1,13 @@
 /**
  * SocialShareButtons Component
  * Reusable social sharing buttons with share-to-earn tracking
+ * 
+ * Uses wallet-based authentication (no email required)
  */
 import React, { useState } from 'react';
 import { Share2, Twitter, ExternalLink, Copy, Check, Gift } from 'lucide-react';
 import { BTN, WIN95, hoverHandlers } from '../utils/buttonStyles';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
+import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { 
   trackSocialShare, 
   getReferralCode, 
@@ -48,7 +50,7 @@ const SocialShareButtons: React.FC<SocialShareButtonsProps> = ({
   onCreditsEarned,
   compact = false 
 }) => {
-  const { isAuthenticated } = useEmailAuth();
+  const { isConnected, address } = useSimpleWallet();
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [sharing, setSharing] = useState<Platform | null>(null);
@@ -57,9 +59,9 @@ const SocialShareButtons: React.FC<SocialShareButtonsProps> = ({
 
   // Get referral code on first open
   const handleOpen = async () => {
-    if (!isOpen && isAuthenticated) {
+    if (!isOpen && isConnected && address) {
       try {
-        const result = await getReferralCode();
+        const result = await getReferralCode(address);
         if (result) {
           setReferralCode(result.code);
         }
@@ -98,9 +100,9 @@ const SocialShareButtons: React.FC<SocialShareButtonsProps> = ({
         window.open(shareUrls[platform], '_blank', 'width=600,height=400');
       }
       
-      // Track the share if authenticated
-      if (isAuthenticated) {
-        const result = await trackSocialShare(platform, contentId);
+      // Track the share if wallet connected
+      if (isConnected && address) {
+        const result = await trackSocialShare(platform, contentId, address);
         if (result.creditsAwarded > 0) {
           setEarnedMessage(`+${result.creditsAwarded} credit earned!`);
           setTimeout(() => setEarnedMessage(null), 3000);
@@ -122,9 +124,9 @@ const SocialShareButtons: React.FC<SocialShareButtonsProps> = ({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       
-      // Track as Discord share
-      if (isAuthenticated) {
-        const result = await trackSocialShare('discord', getContentId());
+      // Track as Discord share if wallet connected
+      if (isConnected && address) {
+        const result = await trackSocialShare('discord', getContentId(), address);
         if (result.creditsAwarded > 0) {
           setEarnedMessage(`+${result.creditsAwarded} credit earned!`);
           setTimeout(() => setEarnedMessage(null), 3000);
@@ -206,7 +208,7 @@ const SocialShareButtons: React.FC<SocialShareButtonsProps> = ({
               </div>
               
               {/* Earn credits hint */}
-              {isAuthenticated && (
+              {isConnected && (
                 <p className="mt-2 text-[10px] text-center" style={{ color: WIN95.textDisabled }}>
                   Earn 1 credit per share (max 5/week)
                 </p>
@@ -263,7 +265,7 @@ const SocialShareButtons: React.FC<SocialShareButtonsProps> = ({
         </button>
       </div>
       
-      {isAuthenticated && (
+      {isConnected && (
         <p className="text-[10px]" style={{ color: WIN95.textDisabled }}>
           Earn 1 credit per share (max 5/week)
         </p>

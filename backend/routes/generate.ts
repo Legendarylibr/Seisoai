@@ -23,62 +23,28 @@ interface Dependencies {
   requireCreditsForModel: () => RequestHandler;
   requireCreditsForVideo: () => RequestHandler;
   requireCredits: (credits: number) => RequestHandler;
+  x402Enabled?: boolean; // When true, x402 handles payments - skip credit deduction
 }
 
 /**
- * Refund credits to a user after a failed generation
- * @param user - The user to refund
- * @param credits - Number of credits to refund
- * @param reason - Reason for the refund (for logging)
- * @returns The updated user document or null if refund failed
+ * Log generation failure (x402 handles all payments, no refunds needed)
+ * 
+ * With x402, payment is handled at the protocol level before the request reaches
+ * the route handler. If a generation fails, the payment has already been processed
+ * and the user should be informed, but no credit refund is needed.
+ * 
+ * @param user - The user who made the request
+ * @param reason - Reason for the failure
  */
-async function refundCredits(
-  user: IUser,
-  credits: number,
+function logGenerationFailure(
+  user: IUser | undefined,
   reason: string
-): Promise<IUser | null> {
-  try {
-    // Validate credits is a valid positive number
-    if (!Number.isFinite(credits) || credits <= 0) {
-      logger.error('Cannot refund invalid credits amount', { credits, reason, userId: user.userId });
-      return null;
-    }
-    
-    const User = mongoose.model<IUser>('User');
-    const updateQuery = buildUserUpdateQuery(user);
-    
-    if (!updateQuery) {
-      logger.error('Cannot refund credits: no valid user identifier', { userId: user.userId });
-      return null;
-    }
-
-    const updatedUser = await User.findOneAndUpdate(
-      updateQuery,
-      {
-        $inc: { credits: credits, totalCreditsSpent: -credits }
-      },
-      { new: true }
-    );
-
-    if (updatedUser) {
-      logger.info('Credits refunded for failed generation', {
-        userId: user.userId || user.email || user.walletAddress,
-        creditsRefunded: credits,
-        newBalance: updatedUser.credits,
-        reason
-      });
-    }
-
-    return updatedUser;
-  } catch (error) {
-    const err = error as Error;
-    logger.error('Failed to refund credits', {
-      userId: user.userId,
-      credits,
-      reason,
-      error: err.message
+): void {
+  if (user) {
+    logger.warn('Generation failed (x402 payment already processed)', {
+      userId: user.userId || user.walletAddress,
+      reason
     });
-    return null;
   }
 }
 
@@ -86,6 +52,7 @@ interface AuthenticatedRequest extends Request {
   user?: IUser;
   creditsRequired?: number;
   hasFreeAccess?: boolean;
+  x402Payment?: boolean; // When true, x402 handled payment - skip credit refund
 }
 
 interface FalImageResponse {
@@ -801,16 +768,27 @@ export function createGenerationRoutes(deps: Dependencies) {
     authenticateFlexible,
     requireCreditsForModel,
     requireCreditsForVideo,
-    requireCredits
+    requireCredits,
+    x402Enabled = false
   } = deps;
 
   const flexibleAuth = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
+  
+  // x402 handles all payments - no credit deduction/refund needed
+  // The x402 middleware intercepts requests and handles 402 Payment Required flow
+  // Payment is verified before the route handler is called
+  
+  // Middleware to mark requests as x402 payment (always true since x402 is required)
+  const markX402Payment = (req: AuthenticatedRequest, _res: Response, next: () => void) => {
+    req.x402Payment = true;
+    next();
+  };
 
   /**
    * Generate image
    * POST /api/generate/image
    */
-  router.post('/image', requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/image', markX402Payment, requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -845,11 +823,17 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Skip credit deduction for NFT/Token holders with free access
+      // x402 handles all payments - always skip credit deduction
+      const skipCreditLogic = true;
       let remainingCredits = user.credits || 0;
       let actualCreditsDeducted = 0;
       
-      if (!hasFreeAccess) {
+      if (skipCreditLogic) {
+        // x402 already handled payment - no credit deduction needed
+        logger.debug('x402 payment - skipping credit deduction', {
+          userId: user.userId || user.walletAddress
+        });
+      } else if (!hasFreeAccess) {
         const updateResult = await User.findOneAndUpdate(
           {
             ...updateQuery,
@@ -1144,12 +1128,11 @@ export function createGenerationRoutes(deps: Dependencies) {
       if (!response.ok) {
         const errorText = await response.text();
         logger.error('FAL API error', { status: response.status, error: errorText });
-        // Refund credits on API failure
-        await refundCredits(user, creditsRequired, `FAL API error: ${response.status}`);
+        // Log failure (x402 handles payments)
+        logGenerationFailure(user, `FAL API error: ${response.status}`);
         res.status(500).json({
           success: false,
-          error: `Image generation failed: ${response.status}`,
-          creditsRefunded: creditsRequired
+          error: `Image generation failed: ${response.status}`
         });
         return;
       }
@@ -1196,16 +1179,11 @@ export function createGenerationRoutes(deps: Dependencies) {
     } catch (error) {
       const err = error as Error;
       logger.error('Image generation error:', { error: err.message });
-      // Refund credits on unexpected error
-      const user = req.user;
-      const creditsRequired = req.creditsRequired || 1;
-      if (user) {
-        await refundCredits(user, creditsRequired, `Image generation error: ${err.message}`);
-      }
+      // Log failure (x402 handles payments)
+      logGenerationFailure(req.user, `Image generation error: ${err.message}`);
       res.status(500).json({
         success: false,
-        error: err.message,
-        creditsRefunded: user ? creditsRequired : 0
+        error: err.message
       });
     }
   });
@@ -1215,7 +1193,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/image-stream
    * Uses Server-Sent Events for real-time progress updates
    */
-  router.post('/image-stream', requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/image-stream', markX402Payment, requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     // Set up SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -1254,11 +1232,17 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Skip credit deduction for NFT/Token holders with free access
+      // x402 handles all payments - always skip credit deduction
+      const skipCreditLogic = true;
       let remainingCredits = user.credits || 0;
       let actualCreditsDeducted = 0;
       
-      if (!hasFreeAccess) {
+      if (skipCreditLogic) {
+        // x402 already handled payment - no credit deduction needed
+        logger.debug('x402 payment (streaming) - skipping credit deduction', {
+          userId: user.userId || user.walletAddress
+        });
+      } else if (!hasFreeAccess) {
         const updateResult = await User.findOneAndUpdate(
           {
             ...updateQuery,
@@ -1432,11 +1416,9 @@ export function createGenerationRoutes(deps: Dependencies) {
       if (!submitResponse.ok) {
         const errorText = await submitResponse.text();
         logger.error('FLUX 2 queue submit error', { status: submitResponse.status, error: errorText });
-        // Refund credits on queue submit failure (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, `FLUX 2 queue submit error: ${submitResponse.status}`);
-        }
-        sendEvent('error', { error: `Failed to start generation: ${submitResponse.status}`, creditsRefunded: actualCreditsDeducted });
+        // Log failure (x402 handles payments)
+        logGenerationFailure(user, `FLUX 2 queue submit error: ${submitResponse.status}`);
+        sendEvent('error', { error: `Failed to start generation: ${submitResponse.status}` });
         res.end();
         return;
       }
@@ -1495,22 +1477,18 @@ export function createGenerationRoutes(deps: Dependencies) {
           completed = true;
           sendEvent('status', { message: 'Finalizing...', progress: 95 });
         } else if (isStatusFailed(streamStatus)) {
-          // Refund credits on generation failure (only if credits were actually deducted)
-          if (actualCreditsDeducted > 0) {
-            await refundCredits(user, actualCreditsDeducted, 'FLUX 2 streaming generation failed');
-          }
-          sendEvent('error', { error: 'Generation failed', creditsRefunded: actualCreditsDeducted });
+          // Log failure (x402 handles payments)
+          logGenerationFailure(user, 'FLUX 2 streaming generation failed');
+          sendEvent('error', { error: 'Generation failed' });
           res.end();
           return;
         }
       }
 
       if (!completed) {
-        // Refund credits on timeout (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, 'FLUX 2 streaming generation timed out');
-        }
-        sendEvent('error', { error: 'Generation timed out', creditsRefunded: actualCreditsDeducted });
+        // Log failure (x402 handles payments)
+        logGenerationFailure(user, 'FLUX 2 streaming generation timed out');
+        sendEvent('error', { error: 'Generation timed out' });
         res.end();
         return;
       }
@@ -1524,11 +1502,9 @@ export function createGenerationRoutes(deps: Dependencies) {
       );
 
       if (!resultResponse.ok) {
-        // Refund credits if result fetch fails (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, 'Failed to fetch FLUX 2 streaming result');
-        }
-        sendEvent('error', { error: 'Failed to fetch result', creditsRefunded: actualCreditsDeducted });
+        // Log failure (x402 handles payments)
+        logGenerationFailure(user, 'Failed to fetch FLUX 2 streaming result');
+        sendEvent('error', { error: 'Failed to fetch result' });
         res.end();
         return;
       }
@@ -1559,16 +1535,9 @@ export function createGenerationRoutes(deps: Dependencies) {
     } catch (error) {
       const err = error as Error;
       logger.error('FLUX 2 streaming error:', { error: err.message });
-      // Refund credits on unexpected error (only if not a free access user)
-      const user = req.user;
-      const creditsRequired = req.creditsRequired || 1;
-      const hasFreeAccess = req.hasFreeAccess || false;
-      // Only refund if credits were actually deducted (non-free users)
-      if (user && !hasFreeAccess) {
-        await refundCredits(user, creditsRequired, `FLUX 2 streaming error: ${err.message}`);
-      }
-      const creditsRefunded = (user && !hasFreeAccess) ? creditsRequired : 0;
-      sendEvent('error', { error: err.message, creditsRefunded });
+      // Log failure (x402 handles payments)
+      logGenerationFailure(req.user, `FLUX 2 streaming error: ${err.message}`);
+      sendEvent('error', { error: err.message });
       res.end();
     }
   });
@@ -1578,7 +1547,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/video
    * Modes: text-to-video, image-to-video, first-last-frame
    */
-  router.post('/video', requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/video', markX402Payment, requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -1657,10 +1626,13 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
+      // x402 handles all payments - always skip credit deduction
+      const skipCreditLogic = true;
+      
       // Calculate credits based on duration, audio, quality, and model using shared utility
-      const creditsToDeduct = calculateVideoCredits(duration, generate_audio, quality, model);
+      const creditsToDeduct = skipCreditLogic ? 0 : calculateVideoCredits(duration, generate_audio, quality, model);
 
-      // Deduct credits atomically
+      // Skip credit deduction when x402 handles payment
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
       
@@ -1672,25 +1644,36 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      const updateResult = await User.findOneAndUpdate(
-        {
-          ...updateQuery,
-          credits: { $gte: creditsToDeduct }
-        },
-        {
-          $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct }
-        },
-        { new: true }
-      );
-
-      if (!updateResult) {
-        const currentUser = await User.findOne(updateQuery);
-        const currentCredits = currentUser?.credits || 0;
-        res.status(402).json({
-          success: false,
-          error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsToDeduct}.`
+      // Track remaining credits for response
+      let remainingCredits = user.credits || 0;
+      
+      if (skipCreditLogic) {
+        // x402 already handled payment - no credit deduction needed
+        logger.debug('x402 payment (video) - skipping credit deduction', {
+          userId: user.userId || user.walletAddress
         });
-        return;
+      } else {
+        const updateResult = await User.findOneAndUpdate(
+          {
+            ...updateQuery,
+            credits: { $gte: creditsToDeduct }
+          },
+          {
+            $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct }
+          },
+          { new: true }
+        );
+
+        if (!updateResult) {
+          const currentUser = await User.findOne(updateQuery);
+          const currentCredits = currentUser?.credits || 0;
+          res.status(402).json({
+            success: false,
+            error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsToDeduct}.`
+          });
+          return;
+        }
+        remainingCredits = updateResult.credits;
       }
 
       // Validate required inputs
@@ -1851,9 +1834,9 @@ export function createGenerationRoutes(deps: Dependencies) {
         } catch {
           logger.error('Failed to parse Veo 3.1 error response');
         }
-        // Refund credits on video submit failure
-        await refundCredits(user, creditsToDeduct, `Veo 3.1 submit error: ${submitResponse.status}`);
-        res.status(submitResponse.status).json({ success: false, error: errorMessage, creditsRefunded: creditsToDeduct });
+        // Log failure (x402 handles payments)
+        logGenerationFailure(user, `Veo 3.1 submit error: ${submitResponse.status}`);
+        res.status(submitResponse.status).json({ success: false, error: errorMessage });
         return;
       }
 
@@ -1929,7 +1912,7 @@ export function createGenerationRoutes(deps: Dependencies) {
             file_name: syncVideoMeta?.file_name || `video-${requestId}.mp4`,
             file_size: syncVideoMeta?.file_size
           },
-          remainingCredits: updateResult.credits,
+          remainingCredits,
           creditsDeducted: creditsToDeduct
         });
         return;
@@ -2021,7 +2004,7 @@ export function createGenerationRoutes(deps: Dependencies) {
               file_name: statusVideoMeta?.file_name || `video-${requestId}.mp4`,
               file_size: statusVideoMeta?.file_size
             },
-            remainingCredits: updateResult.credits,
+            remainingCredits,
             creditsDeducted: creditsToDeduct
           });
           return;
@@ -2049,9 +2032,9 @@ export function createGenerationRoutes(deps: Dependencies) {
               fetchUrl,
               errorDetails
             });
-            // Refund credits on fetch result failure
-            await refundCredits(user, creditsToDeduct, `Failed to fetch video result: ${resultResponse.status}`);
-            res.status(500).json({ success: false, error: `Failed to fetch video result (${resultResponse.status})`, creditsRefunded: creditsToDeduct });
+            // Log failure (x402 handles payments)
+            logGenerationFailure(user, `Failed to fetch video result: ${resultResponse.status}`);
+            res.status(500).json({ success: false, error: `Failed to fetch video result (${resultResponse.status})` });
             return;
           }
 
@@ -2116,7 +2099,7 @@ export function createGenerationRoutes(deps: Dependencies) {
                 file_name: videoMeta?.file_name || `video-${requestId}.mp4`,
                 file_size: videoMeta?.file_size
               },
-              remainingCredits: updateResult.credits,
+              remainingCredits,
               creditsDeducted: creditsToDeduct
             });
             return;
@@ -2127,47 +2110,35 @@ export function createGenerationRoutes(deps: Dependencies) {
             resultData: JSON.stringify(resultData).substring(0, 1000),
             checkedPaths: ['video.url', 'data.video.url', 'output.video.url', 'response.video.url', 'result.video.url', 'payload.video.url', 'url', 'video_url', 'output.url']
           });
-          // Refund credits when video URL not found
-          await refundCredits(user, creditsToDeduct, 'Video completed but no URL found');
-          res.status(500).json({ success: false, error: 'Video generation completed but no video URL found', creditsRefunded: creditsToDeduct });
+          // Log failure (x402 handles payments)
+          logGenerationFailure(user, 'Video completed but no URL found');
+          res.status(500).json({ success: false, error: 'Video generation completed but no video URL found' });
           return;
         }
 
         // Check for failed status
         if (isStatusFailed(normalizedStatus)) {
           logger.error('Video generation failed', { requestId, status: normalizedStatus });
-          // Refund credits on generation failure
-          await refundCredits(user, creditsToDeduct, `Video generation failed: ${normalizedStatus}`);
-          res.status(500).json({ success: false, error: 'Video generation failed', creditsRefunded: creditsToDeduct });
+          // Log failure (x402 handles payments)
+          logGenerationFailure(user, `Video generation failed: ${normalizedStatus}`);
+          res.status(500).json({ success: false, error: 'Video generation failed' });
           return;
         }
       }
 
       // Timeout
       logger.error('Video generation timeout', { requestId, elapsed: maxWaitTime / 1000 + 's' });
-      // Refund credits on timeout
-      await refundCredits(user, creditsToDeduct, 'Video generation timed out');
-      res.status(504).json({ success: false, error: 'Video generation timed out. Please try again.', creditsRefunded: creditsToDeduct });
+      // Log failure (x402 handles payments)
+      logGenerationFailure(user, 'Video generation timed out');
+      res.status(504).json({ success: false, error: 'Video generation timed out. Please try again.' });
     } catch (error) {
       const err = error as Error;
       logger.error('Video generation error:', { error: err.message });
-      // Refund credits on unexpected error
-      const user = req.user;
-      // Calculate credits for refund using shared utility
-      const { duration = '8s', generate_audio = true, quality = 'fast', model = 'veo' } = req.body as {
-        duration?: string;
-        generate_audio?: boolean;
-        quality?: string;
-        model?: string;
-      };
-      const creditsToRefund = calculateVideoCredits(duration, generate_audio, quality, model);
-      if (user) {
-        await refundCredits(user, creditsToRefund, `Video generation error: ${err.message}`);
-      }
+      // Log failure (x402 handles payments)
+      logGenerationFailure(req.user, `Video generation error: ${err.message}`);
       res.status(500).json({
         success: false,
-        error: err.message,
-        creditsRefunded: user ? creditsToRefund : 0
+        error: err.message
       });
     }
   });
@@ -2176,7 +2147,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * Generate music
    * POST /api/generate/music
    */
-  router.post('/music', requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/music', markX402Payment, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -2214,11 +2185,17 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Skip credit deduction for NFT/Token holders with free access
+      // x402 handles all payments - always skip credit deduction
+      const skipCreditLogic = true;
       let remainingCredits = user.credits || 0;
       let actualCreditsDeducted = 0;
       
-      if (!hasFreeAccess) {
+      if (skipCreditLogic) {
+        // x402 already handled payment - no credit deduction needed
+        logger.debug('x402 payment (music) - skipping credit deduction', {
+          userId: user.userId || user.walletAddress
+        });
+      } else if (!hasFreeAccess) {
         const updateResult = await User.findOneAndUpdate(
           {
             ...updateQuery,
@@ -2369,20 +2346,16 @@ export function createGenerationRoutes(deps: Dependencies) {
               return;
             } else {
               logger.error('Music completed but no audio in response', { requestId, resultData: JSON.stringify(resultData).substring(0, 500) });
-              // Refund credits when no audio in response (only if credits were actually deducted)
-              if (actualCreditsDeducted > 0) {
-                await refundCredits(user, actualCreditsDeducted, 'Music completed but no audio in response');
-              }
-              res.status(500).json({ success: false, error: 'No audio in response', creditsRefunded: actualCreditsDeducted });
+              // Log failure (x402 handles payments)
+              logGenerationFailure(user, 'Music completed but no audio in response');
+              res.status(500).json({ success: false, error: 'No audio in response' });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
             logger.error('Music generation failed', { requestId, statusData });
-            // Refund credits on music generation failure (only if credits were actually deducted)
-            if (actualCreditsDeducted > 0) {
-              await refundCredits(user, actualCreditsDeducted, `Music generation failed: ${normalizedStatus}`);
-            }
-            res.status(500).json({ success: false, error: 'Music generation failed', creditsRefunded: actualCreditsDeducted });
+            // Log failure (x402 handles payments)
+            logGenerationFailure(user, `Music generation failed: ${normalizedStatus}`);
+            res.status(500).json({ success: false, error: 'Music generation failed' });
             return;
           }
 
@@ -2404,11 +2377,9 @@ export function createGenerationRoutes(deps: Dependencies) {
               consecutiveErrors,
               lastError: pollErr.message 
             });
-            // Refund credits on repeated polling errors (only if credits were actually deducted)
-            if (actualCreditsDeducted > 0) {
-              await refundCredits(user, actualCreditsDeducted, 'Music generation polling errors');
-            }
-            res.status(500).json({ success: false, error: 'Music generation failed - polling errors', creditsRefunded: actualCreditsDeducted });
+            // Log failure (x402 handles payments)
+            logGenerationFailure(user, 'Music generation polling errors');
+            res.status(500).json({ success: false, error: 'Music generation failed - polling errors' });
             return;
           }
         }
@@ -2416,28 +2387,17 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Timeout reached
       logger.warn('Music generation timed out', { requestId, pollCount, elapsedMs: Date.now() - startTime });
-      // Refund credits on timeout (only if credits were actually deducted)
-      if (actualCreditsDeducted > 0) {
-        await refundCredits(user, actualCreditsDeducted, 'Music generation timed out');
-      }
-      res.status(504).json({ success: false, error: 'Music generation timed out. Please try again.', creditsRefunded: actualCreditsDeducted });
+      // Log failure (x402 handles payments)
+      logGenerationFailure(user, 'Music generation timed out');
+      res.status(504).json({ success: false, error: 'Music generation timed out. Please try again.' });
     } catch (error) {
       const err = error as Error;
       logger.error('Music generation error:', { error: err.message });
-      // Refund credits on unexpected error (only if not a free access user)
-      const user = req.user;
-      const hasFreeAccess = req.hasFreeAccess || false;
-      // Calculate credits for refund using shared utility
-      const { duration = 30 } = req.body as { duration?: number };
-      const clampedDuration = Math.max(10, Math.min(180, duration));
-      const creditsToRefund = hasFreeAccess ? 0 : calculateMusicCredits(clampedDuration);
-      if (user && creditsToRefund > 0) {
-        await refundCredits(user, creditsToRefund, `Music generation error: ${err.message}`);
-      }
+      // Log failure (x402 handles payments)
+      logGenerationFailure(req.user, `Music generation error: ${err.message}`);
       res.status(500).json({
         success: false,
-        error: err.message,
-        creditsRefunded: creditsToRefund
+        error: err.message
       });
     }
   });
@@ -2522,7 +2482,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/upscale
    * Uses fal.ai creative-upscaler for 2x/4x upscaling
    */
-  router.post('/upscale', requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/upscale', markX402Payment, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -2574,11 +2534,17 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Skip credit deduction for NFT/Token holders with free access
+      // x402 handles all payments - always skip credit deduction
+      const skipCreditLogic = true;
       let remainingCredits = user.credits || 0;
       let actualCreditsDeducted = 0;
       
-      if (!hasFreeAccess) {
+      if (skipCreditLogic) {
+        // x402 already handled payment - no credit deduction needed
+        logger.debug('x402 payment (upscale) - skipping credit deduction', {
+          userId: user.userId || user.walletAddress
+        });
+      } else if (!hasFreeAccess) {
         const updateResult = await User.findOneAndUpdate(
           {
             ...updateQuery,
@@ -2638,14 +2604,11 @@ export function createGenerationRoutes(deps: Dependencies) {
       if (!response.ok) {
         const errorText = await response.text();
         logger.error('Upscale API error', { status: response.status, error: errorText });
-        // Refund credits on API failure (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, `Upscale API error: ${response.status}`);
-        }
+        // Log failure (x402 handles payments)
+        logGenerationFailure(user, `Upscale API error: ${response.status}`);
         res.status(500).json({
           success: false,
-          error: `Upscale failed: ${response.status}`,
-          creditsRefunded: actualCreditsDeducted
+          error: `Upscale failed: ${response.status}`
         });
         return;
       }
@@ -2661,14 +2624,11 @@ export function createGenerationRoutes(deps: Dependencies) {
       }
 
       if (!upscaledUrl) {
-        // Refund credits if no image returned (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, 'No upscaled image returned');
-        }
+        // Log failure (x402 handles payments)
+        logGenerationFailure(user, 'No upscaled image returned');
         res.status(500).json({
           success: false,
-          error: 'No upscaled image returned',
-          creditsRefunded: actualCreditsDeducted
+          error: 'No upscaled image returned'
         });
         return;
       }
@@ -2690,18 +2650,11 @@ export function createGenerationRoutes(deps: Dependencies) {
     } catch (error) {
       const err = error as Error;
       logger.error('Upscale error:', { error: err.message });
-      // Refund credits on unexpected error (only if not a free access user)
-      const user = req.user;
-      const hasFreeAccess = req.hasFreeAccess || false;
-      const { scale = 2 } = req.body as { scale?: number };
-      const creditsToRefund = hasFreeAccess ? 0 : calculateUpscaleCredits(scale === 4 ? 4 : 2);
-      if (user && creditsToRefund > 0) {
-        await refundCredits(user, creditsToRefund, `Upscale error: ${err.message}`);
-      }
+      // Log failure (x402 handles payments)
+      logGenerationFailure(req.user, `Upscale error: ${err.message}`);
       res.status(500).json({
         success: false,
-        error: err.message,
-        creditsRefunded: creditsToRefund
+        error: err.message
       });
     }
   });
@@ -2711,7 +2664,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/video-to-audio
    * Uses fal.ai MMAudio V2 for synchronized audio generation
    */
-  router.post('/video-to-audio', requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/video-to-audio', markX402Payment, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -2771,11 +2724,17 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Skip credit deduction for NFT/Token holders with free access
+      // x402 handles all payments - always skip credit deduction
+      const skipCreditLogic = true;
       let remainingCredits = user.credits || 0;
       let actualCreditsDeducted = 0;
       
-      if (!hasFreeAccess) {
+      if (skipCreditLogic) {
+        // x402 already handled payment - no credit deduction needed
+        logger.debug('x402 payment (video-to-audio) - skipping credit deduction', {
+          userId: user.userId || user.walletAddress
+        });
+      } else if (!hasFreeAccess) {
         const updateResult = await User.findOneAndUpdate(
           {
             ...updateQuery,
@@ -2842,14 +2801,11 @@ export function createGenerationRoutes(deps: Dependencies) {
       if (!submitResponse.ok) {
         const errorText = await submitResponse.text();
         logger.error('MMAudio V2 submit error', { status: submitResponse.status, error: errorText });
-        // Refund credits on submit failure (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, `MMAudio submit error: ${submitResponse.status}`);
-        }
+        // Log failure (x402 handles payments)
+        logGenerationFailure(user, `MMAudio submit error: ${submitResponse.status}`);
         res.status(500).json({
           success: false,
-          error: `Failed to start audio generation: ${submitResponse.status}`,
-          creditsRefunded: actualCreditsDeducted
+          error: `Failed to start audio generation: ${submitResponse.status}`
         });
         return;
       }
@@ -2859,13 +2815,11 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       if (!requestId) {
         logger.error('No request_id from MMAudio', { submitData });
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, 'No request_id from MMAudio');
-        }
+        // Log failure (x402 handles payments)
+        logGenerationFailure(user, 'No request_id from MMAudio');
         res.status(500).json({
           success: false,
-          error: 'Failed to submit audio generation request',
-          creditsRefunded: actualCreditsDeducted
+          error: 'Failed to submit audio generation request'
         });
         return;
       }
@@ -2928,13 +2882,11 @@ export function createGenerationRoutes(deps: Dependencies) {
           );
 
           if (!resultResponse.ok) {
-            if (actualCreditsDeducted > 0) {
-              await refundCredits(user, actualCreditsDeducted, 'Failed to fetch MMAudio result');
-            }
+            // Log failure (x402 handles payments)
+            logGenerationFailure(user, 'Failed to fetch MMAudio result');
             res.status(500).json({
               success: false,
-              error: 'Failed to fetch audio result',
-              creditsRefunded: actualCreditsDeducted
+              error: 'Failed to fetch audio result'
             });
             return;
           }
@@ -2976,26 +2928,22 @@ export function createGenerationRoutes(deps: Dependencies) {
           }
 
           logger.error('No audio URL in MMAudio result', { resultData: JSON.stringify(resultData).substring(0, 500) });
-          if (actualCreditsDeducted > 0) {
-            await refundCredits(user, actualCreditsDeducted, 'No audio in MMAudio result');
-          }
+          // Log failure (x402 handles payments)
+          logGenerationFailure(user, 'No audio in MMAudio result');
           res.status(500).json({
             success: false,
-            error: 'Audio generation completed but no audio URL found',
-            creditsRefunded: actualCreditsDeducted
+            error: 'Audio generation completed but no audio URL found'
           });
           return;
         }
 
         if (isStatusFailed(normalizedStatus)) {
           logger.error('MMAudio generation failed', { requestId, status: normalizedStatus });
-          if (actualCreditsDeducted > 0) {
-            await refundCredits(user, actualCreditsDeducted, `MMAudio failed: ${normalizedStatus}`);
-          }
+          // Log failure (x402 handles payments)
+          logGenerationFailure(user, `MMAudio failed: ${normalizedStatus}`);
           res.status(500).json({
             success: false,
-            error: 'Audio generation failed',
-            creditsRefunded: actualCreditsDeducted
+            error: 'Audio generation failed'
           });
           return;
         }
@@ -3003,28 +2951,21 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Timeout
       logger.error('MMAudio generation timeout', { requestId });
-      if (actualCreditsDeducted > 0) {
-        await refundCredits(user, actualCreditsDeducted, 'MMAudio timeout');
-      }
+      // Log failure (x402 handles payments)
+      logGenerationFailure(user, 'MMAudio timeout');
       res.status(504).json({
         success: false,
-        error: 'Audio generation timed out. Please try again.',
-        creditsRefunded: actualCreditsDeducted
+        error: 'Audio generation timed out. Please try again.'
       });
 
     } catch (error) {
       const err = error as Error;
       logger.error('Video-to-audio error:', { error: err.message });
-      const user = req.user;
-      const hasFreeAccess = req.hasFreeAccess || false;
-      const creditsToRefund = hasFreeAccess ? 0 : calculateVideoToAudioCredits();
-      if (user && creditsToRefund > 0) {
-        await refundCredits(user, creditsToRefund, `Video-to-audio error: ${err.message}`);
-      }
+      // Log failure (x402 handles payments)
+      logGenerationFailure(req.user, `Video-to-audio error: ${err.message}`);
       res.status(500).json({
         success: false,
-        error: err.message,
-        creditsRefunded: creditsToRefund
+        error: err.message
       });
     }
   });

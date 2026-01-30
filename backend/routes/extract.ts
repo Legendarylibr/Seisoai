@@ -1,13 +1,13 @@
 /**
  * Extract layers route
  * Extract image layers using AI
+ * 
+ * NOTE: Uses x402 for all payments - no legacy credit system
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
-import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import config from '../config/env';
-import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 
 // Types
@@ -22,55 +22,14 @@ interface AuthenticatedRequest extends Request {
 const FAL_API_KEY = config.FAL_API_KEY;
 
 /**
- * Refund credits to a user after a failed generation
+ * Log generation failure (x402 handles all payments, no refunds needed)
  */
-async function refundCredits(
-  user: IUser,
-  credits: number,
-  reason: string
-): Promise<IUser | null> {
-  try {
-    // Validate credits is a valid positive number
-    if (!Number.isFinite(credits) || credits <= 0) {
-      logger.error('Cannot refund invalid credits amount', { credits, reason, userId: user.userId });
-      return null;
-    }
-    
-    const User = mongoose.model<IUser>('User');
-    const updateQuery = buildUserUpdateQuery(user);
-    
-    if (!updateQuery) {
-      logger.error('Cannot refund credits: no valid user identifier', { userId: user.userId });
-      return null;
-    }
-
-    const updatedUser = await User.findOneAndUpdate(
-      updateQuery,
-      {
-        $inc: { credits: credits, totalCreditsSpent: -credits }
-      },
-      { new: true }
-    );
-
-    if (updatedUser) {
-      logger.info('Credits refunded for failed layer extraction', {
-        userId: user.userId || user.email || user.walletAddress,
-        creditsRefunded: credits,
-        newBalance: updatedUser.credits,
-        reason
-      });
-    }
-
-    return updatedUser;
-  } catch (error) {
-    const err = error as Error;
-    logger.error('Failed to refund credits', {
-      userId: user.userId,
-      credits,
-      reason,
-      error: err.message
+function logGenerationFailure(user: IUser | undefined, reason: string): void {
+  if (user) {
+    logger.warn('Generation failed (x402 payment already processed)', {
+      userId: user.userId || user.walletAddress,
+      reason
     });
-    return null;
   }
 }
 
@@ -81,6 +40,7 @@ export function createExtractRoutes(deps: Dependencies) {
   /**
    * Extract layers from image
    * POST /api/extract-layers
+   * Payment handled by x402 middleware
    */
   router.post('/extract-layers', 
     requireCredits(1), 
@@ -91,34 +51,6 @@ export function createExtractRoutes(deps: Dependencies) {
           res.status(401).json({ 
             success: false, 
             error: 'User authentication required' 
-          });
-          return;
-        }
-
-        const creditsToDeduct = 1;
-
-        // Deduct credits
-        const User = mongoose.model<IUser>('User');
-        const updateQuery = buildUserUpdateQuery(user);
-        
-        if (!updateQuery) {
-          res.status(400).json({ 
-            success: false, 
-            error: 'User account required' 
-          });
-          return;
-        }
-
-        const updateResult = await User.findOneAndUpdate(
-          { ...updateQuery, credits: { $gte: creditsToDeduct } },
-          { $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct } },
-          { new: true }
-        );
-
-        if (!updateResult) {
-          res.status(400).json({
-            success: false,
-            error: 'Insufficient credits'
           });
           return;
         }
@@ -158,12 +90,11 @@ export function createExtractRoutes(deps: Dependencies) {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({})) as { detail?: string };
-          // Refund credits on API failure
-          await refundCredits(user, creditsToDeduct, `Layer extraction API error: ${response.status}`);
+          // Log failure (x402 handles payments)
+          logGenerationFailure(user, `Layer extraction API error: ${response.status}`);
           res.status(response.status).json({
             success: false,
-            error: errorData.detail || 'Failed to extract layers',
-            creditsRefunded: creditsToDeduct
+            error: errorData.detail || 'Failed to extract layers'
           });
           return;
         }
@@ -179,12 +110,11 @@ export function createExtractRoutes(deps: Dependencies) {
         }
 
         if (!imageUrl) {
-          // Refund credits if no image returned
-          await refundCredits(user, creditsToDeduct, 'No image returned from layer extraction');
+          // Log failure (x402 handles payments)
+          logGenerationFailure(user, 'No image returned from layer extraction');
           res.status(500).json({
             success: false,
-            error: 'No image returned from layer extraction',
-            creditsRefunded: creditsToDeduct
+            error: 'No image returned from layer extraction'
           });
           return;
         }
@@ -192,23 +122,16 @@ export function createExtractRoutes(deps: Dependencies) {
         // Return as 'images' array to match frontend expectations
         res.json({
           success: true,
-          images: [imageUrl],
-          remainingCredits: updateResult.credits,
-          creditsDeducted: creditsToDeduct
+          images: [imageUrl]
         });
       } catch (error) {
         const err = error as Error;
         logger.error('Extract layers error', { error: err.message });
-        // Refund credits on unexpected error
-        const user = req.user;
-        const creditsToRefund = 1;
-        if (user) {
-          await refundCredits(user, creditsToRefund, `Layer extraction error: ${err.message}`);
-        }
+        // Log failure (x402 handles payments)
+        logGenerationFailure(req.user, `Layer extraction error: ${err.message}`);
         res.status(500).json({ 
           success: false, 
-          error: 'Failed to extract layers',
-          creditsRefunded: user ? creditsToRefund : 0
+          error: 'Failed to extract layers'
         });
       }
     }

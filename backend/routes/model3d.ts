@@ -2,6 +2,8 @@
  * 3D Model Generation Routes
  * Uses fal.ai Hunyuan3D V3 for Image-to-3D conversion
  * https://fal.ai/models/fal-ai/hunyuan3d-v3/image-to-3d/api
+ * 
+ * NOTE: Uses x402 for all payments - no legacy credit system
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
@@ -84,55 +86,14 @@ async function updateGalleryItemWithResult(
 }
 
 /**
- * Refund credits to a user after a failed generation
+ * Log generation failure (x402 handles all payments, no refunds needed)
  */
-async function refundCredits(
-  user: IUser,
-  credits: number,
-  reason: string
-): Promise<IUser | null> {
-  try {
-    // Validate credits is a valid positive number
-    if (!Number.isFinite(credits) || credits <= 0) {
-      logger.error('Cannot refund invalid credits amount', { credits, reason, userId: user.userId });
-      return null;
-    }
-    
-    const User = mongoose.model<IUser>('User');
-    const updateQuery = buildUserUpdateQuery(user);
-    
-    if (!updateQuery) {
-      logger.error('Cannot refund credits: no valid user identifier', { userId: user.userId });
-      return null;
-    }
-
-    const updatedUser = await User.findOneAndUpdate(
-      updateQuery,
-      {
-        $inc: { credits: credits, totalCreditsSpent: -credits }
-      },
-      { new: true }
-    );
-
-    if (updatedUser) {
-      logger.info('Credits refunded for failed 3D generation', {
-        userId: user.userId || user.email || user.walletAddress,
-        creditsRefunded: credits,
-        newBalance: updatedUser.credits,
-        reason
-      });
-    }
-
-    return updatedUser;
-  } catch (error) {
-    const err = error as Error;
-    logger.error('Failed to refund credits', {
-      userId: user.userId,
-      credits,
-      reason,
-      error: err.message
+function logGenerationFailure(user: IUser | undefined, reason: string): void {
+  if (user) {
+    logger.warn('Generation failed (x402 payment already processed)', {
+      userId: user.userId || user.walletAddress,
+      reason
     });
-    return null;
   }
 }
 
@@ -347,11 +308,11 @@ export function createModel3dRoutes(deps: Dependencies) {
       if (!submitResponse.ok) {
         const errorText = await submitResponse.text();
         logger.error('Hunyuan3D submit error', { status: submitResponse.status, error: errorText });
-        await refundCredits(user, creditsRequired, `Hunyuan3D submit error: ${submitResponse.status}`);
+        // Log failure (x402 handles payments)
+        logGenerationFailure(user, `Hunyuan3D submit error: ${submitResponse.status}`);
         res.status(500).json({
           success: false,
-          error: `Failed to start 3D generation: ${submitResponse.status}`,
-          creditsRefunded: creditsRequired
+          error: `Failed to start 3D generation: ${submitResponse.status}`
         });
         return;
       }
@@ -361,11 +322,11 @@ export function createModel3dRoutes(deps: Dependencies) {
 
       if (!requestId) {
         logger.error('No request_id from Hunyuan3D', { submitData });
-        await refundCredits(user, creditsRequired, 'No request_id from Hunyuan3D');
+        // Log failure (x402 handles payments)
+        logGenerationFailure(user, 'No request_id from Hunyuan3D');
         res.status(500).json({
           success: false,
-          error: 'Failed to submit 3D generation request',
-          creditsRefunded: creditsRequired
+          error: 'Failed to submit 3D generation request'
         });
         return;
       }
@@ -445,29 +406,17 @@ export function createModel3dRoutes(deps: Dependencies) {
         requestId: requestId,
         generationId: generationId,
         statusEndpoint: `/api/model3d/status/${requestId}`,
-        message: '3D model generation started. Polling for completion...',
-        remainingCredits: updateResult.credits,
-        creditsDeducted: creditsRequired
+        message: '3D model generation started. Polling for completion...'
       });
 
     } catch (error) {
       const err = error as Error;
       logger.error('3D model generation error:', { error: err.message });
-      const user = req.user;
-      // Determine credits to refund based on generate_type from request
-      const genType = req.body?.generate_type || 'Normal';
-      const creditsToRefund = genType === 'Geometry' 
-        ? CREDITS.MODEL_3D_GEOMETRY 
-        : genType === 'LowPoly' 
-          ? CREDITS.MODEL_3D_LOWPOLY 
-          : CREDITS.MODEL_3D_NORMAL;
-      if (user) {
-        await refundCredits(user, creditsToRefund, `3D generation error: ${err.message}`);
-      }
+      // Log failure (x402 handles payments)
+      logGenerationFailure(req.user, `3D generation error: ${err.message}`);
       res.status(500).json({
         success: false,
-        error: err.message,
-        creditsRefunded: user ? creditsToRefund : 0
+        error: err.message
       });
     }
   });
