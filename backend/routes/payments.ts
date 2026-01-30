@@ -27,9 +27,8 @@ interface AuthenticatedRequest extends Request {
   authType?: string;
 }
 
-// NFT holder rate for credits
-const NFT_HOLDER_CREDITS_PER_USDC = 16.67;
-const STANDARD_CREDITS_PER_USDC = 6.67;
+// Everyone gets the same rate: 16.67 credits per USDC ($0.06 per credit)
+const CREDITS_PER_USDC = 16.67;
 
 export function createPaymentRoutes(deps: Dependencies = {}) {
   const router = Router();
@@ -371,7 +370,7 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
 
       // Check NFT holder status (before atomic update)
       const isNFTHolder = user.nftCollections && user.nftCollections.length > 0;
-      const creditsPerUSDC = isNFTHolder ? NFT_HOLDER_CREDITS_PER_USDC : STANDARD_CREDITS_PER_USDC;
+      const creditsPerUSDC = CREDITS_PER_USDC;
       const credits = Math.floor(amount * creditsPerUSDC);
       
       // SECURITY: Validate credits are positive integer

@@ -389,7 +389,7 @@ const SimpleWalletConnect: React.FC = () => {
         >
           <div className="flex items-center justify-between">
             <span style={{ color: WIN95.textDisabled }}>Pricing:</span>
-            <span className="font-bold">${isNFTHolder ? '0.06' : '0.15'}/credit</span>
+            <span className="font-bold">$0.06/credit</span>
           </div>
           {isNFTHolder && (
             <div className="flex items-center gap-1 text-[9px] mt-1 pt-1" style={{ borderTop: `1px solid ${WIN95.bgDark}` }}>

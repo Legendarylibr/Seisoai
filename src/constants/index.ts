@@ -30,12 +30,10 @@ export const DURATION_LIMITS = {
   VIDEO_MAX_SECONDS: 10,
 } as const;
 
-// Credit pricing
+// Credit pricing - everyone gets the same rate
 export const PRICING = {
-  COST_PER_CREDIT_DEFAULT: 0.15,
-  COST_PER_CREDIT_NFT_HOLDER: 0.06,
-  CREDITS_PER_USDC_DEFAULT: 6.67,
-  CREDITS_PER_USDC_NFT_HOLDER: 16.67,
+  COST_PER_CREDIT: 0.06,
+  CREDITS_PER_USDC: 16.67,
 } as const;
 
 // API retry configuration

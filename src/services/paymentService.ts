@@ -263,9 +263,9 @@ export const calculateCredits = (
     throw new Error(`Token ${tokenSymbol} not supported on chain ${chainId}`);
   }
   
-  // Standard pricing: 6.67 credits per USDC ($0.15 per credit)
+  // Everyone gets 16.67 credits per USDC ($0.06 per credit)
   const baseCreditRate = tokenConfig.creditRate;
-  const pricingMultiplier = 6.67;
+  const pricingMultiplier = 16.67;
   const adjustedCreditRate = baseCreditRate * pricingMultiplier;
   
   return Math.floor(amount * adjustedCreditRate);

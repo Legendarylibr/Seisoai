@@ -14,12 +14,10 @@ import { PRODUCTION_DOMAIN } from '../config/env';
 import type { IUser } from '../models/User';
 import { qualifiesForDailyCredits, grantDailyCredits, isNFTHolder, isTokenHolder } from '../middleware/credits';
 
-// Constants
+// Constants - everyone gets the same rate
 const PRICING = {
-  COST_PER_CREDIT_DEFAULT: 0.15,
-  COST_PER_CREDIT_NFT_HOLDER: 0.06,
-  CREDITS_PER_USDC_DEFAULT: 6.67,
-  CREDITS_PER_USDC_NFT_HOLDER: 16.67,
+  COST_PER_CREDIT: 0.06,
+  CREDITS_PER_USDC: 16.67,
 } as const;
 
 const GALLERY_MAX_ITEMS = 100;
@@ -36,12 +34,12 @@ interface AuthenticatedRequest extends Request {
 }
 
 /**
- * Get pricing based on NFT holder status
+ * Get pricing - same for everyone
  */
-function getPricing(isNFTHolder: boolean) {
+function getPricing() {
   return {
-    costPerCredit: isNFTHolder ? PRICING.COST_PER_CREDIT_NFT_HOLDER : PRICING.COST_PER_CREDIT_DEFAULT,
-    creditsPerUSDC: isNFTHolder ? PRICING.CREDITS_PER_USDC_NFT_HOLDER : PRICING.CREDITS_PER_USDC_DEFAULT
+    costPerCredit: PRICING.COST_PER_CREDIT,
+    creditsPerUSDC: PRICING.CREDITS_PER_USDC
   };
 }
 
@@ -375,7 +373,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
         totalCreditsSpent: user.totalCreditsSpent || 0,
         walletAddress: user.walletAddress,
         isNFTHolder: nftHolder,
-        pricing: getPricing(nftHolder),
+        pricing: getPricing(),
         dailyCreditsGranted
       });
     } catch (error) {
@@ -401,7 +399,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
         totalCreditsEarned: req.user.totalCreditsEarned || 0,
         totalCreditsSpent: req.user.totalCreditsSpent || 0,
         isNFTHolder,
-        pricing: getPricing(isNFTHolder)
+        pricing: getPricing()
       });
     } catch (error) {
       logger.error('Check credits error:', { error: (error as Error).message });
@@ -522,7 +520,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
         isTokenHolder: tokenHolder,
         collections: ownedCollections,
         tokenHoldings: tokenHoldings,
-        pricing: getPricing(nftHolder),
+        pricing: getPricing(),
         credits: user.credits,
         creditsGranted: dailyCreditsGranted, // For frontend compatibility
         dailyCreditsGranted,

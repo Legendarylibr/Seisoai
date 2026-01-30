@@ -1318,10 +1318,8 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount)) return 0;
     
-    // Dynamic pricing: $0.06 per credit for NFT holders, $0.15 for regular users
-    // NFT holders: 16.67 credits per USDC ($0.06 per credit)
-    // Regular users: 6.67 credits per USDC ($0.15 per credit)
-    const creditsPerUSDC = isNFTHolder ? 16.67 : 6.67;
+    // Everyone gets 16.67 credits per USDC ($0.06 per credit)
+    const creditsPerUSDC = 16.67;
     return Math.floor(numAmount * creditsPerUSDC);
   };
 
@@ -1500,8 +1498,7 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
             <div className="flex items-center justify-between text-[10px]">
               <span style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Rate:</span>
               <span className="font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                1 USDC = {isNFTHolder ? '16.67' : '6.67'} Credits
-                {isNFTHolder && <span className="ml-1" style={{ color: '#006600' }}>(NFT)</span>}
+                1 USDC = 16.67 Credits
               </span>
             </div>
           </div>
