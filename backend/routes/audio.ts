@@ -1,8 +1,6 @@
 /**
  * Audio routes
  * Voice cloning, TTS, audio separation, and sound effects
- * 
- * NOTE: Uses x402 for all payments - no legacy credit system
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
@@ -23,14 +21,55 @@ interface AuthenticatedRequest extends Request {
 }
 
 /**
- * Log generation failure (x402 handles all payments, no refunds needed)
+ * Refund credits to a user after a failed generation
  */
-function logGenerationFailure(user: IUser | undefined, reason: string): void {
-  if (user) {
-    logger.warn('Generation failed (x402 payment already processed)', {
-      userId: user.userId || user.walletAddress,
-      reason
+async function refundCredits(
+  user: IUser,
+  credits: number,
+  reason: string
+): Promise<IUser | null> {
+  try {
+    // Validate credits is a valid positive number
+    if (!Number.isFinite(credits) || credits <= 0) {
+      logger.error('Cannot refund invalid credits amount', { credits, reason, userId: user.userId });
+      return null;
+    }
+    
+    const User = mongoose.model<IUser>('User');
+    const updateQuery = buildUserUpdateQuery(user);
+    
+    if (!updateQuery) {
+      logger.error('Cannot refund credits: no valid user identifier', { userId: user.userId });
+      return null;
+    }
+
+    const updatedUser = await User.findOneAndUpdate(
+      updateQuery,
+      {
+        $inc: { credits: credits, totalCreditsSpent: -credits }
+      },
+      { new: true }
+    );
+
+    if (updatedUser) {
+      logger.info('Credits refunded for failed audio generation', {
+        userId: user.userId || user.email || user.walletAddress,
+        creditsRefunded: credits,
+        newBalance: updatedUser.credits,
+        reason
+      });
+    }
+
+    return updatedUser;
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to refund credits', {
+      userId: user.userId,
+      credits,
+      reason,
+      error: err.message
     });
+    return null;
   }
 }
 
@@ -130,7 +169,7 @@ export function createAudioRoutes(deps: Dependencies) {
       const requestId = result.request_id;
 
       if (!requestId) {
-        logGenerationFailure(user, 'No request ID returned');
+        await refundCredits(user, creditsRequired, 'No request ID returned');
         res.status(500).json({ success: false, error: 'Failed to submit TTS request' });
         return;
       }
@@ -159,16 +198,18 @@ export function createAudioRoutes(deps: Dependencies) {
               logger.info('Voice clone completed', { requestId, userId: user.userId });
               res.json({
                 success: true,
-                audio_url: audioUrl
+                audio_url: audioUrl,
+                remainingCredits: updateResult.credits,
+                creditsDeducted: creditsRequired
               });
               return;
             } else {
-              logGenerationFailure(user, 'No audio URL in response');
+              await refundCredits(user, creditsRequired, 'No audio URL in response');
               res.status(500).json({ success: false, error: 'No audio generated' });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
-            logGenerationFailure(user, 'TTS generation failed');
+            await refundCredits(user, creditsRequired, 'TTS generation failed');
             res.status(500).json({ success: false, error: 'Voice generation failed' });
             return;
           }
@@ -177,7 +218,7 @@ export function createAudioRoutes(deps: Dependencies) {
         }
       }
 
-      logGenerationFailure(user, 'TTS generation timed out');
+      await refundCredits(user, creditsRequired, 'TTS generation timed out');
       res.status(504).json({ success: false, error: 'Voice generation timed out' });
     } catch (error) {
       const err = error as Error;
@@ -257,7 +298,7 @@ export function createAudioRoutes(deps: Dependencies) {
       const requestId = result.request_id;
 
       if (!requestId) {
-        logGenerationFailure(user, 'No request ID returned');
+        await refundCredits(user, creditsRequired, 'No request ID returned');
         res.status(500).json({ success: false, error: 'Failed to submit separation request' });
         return;
       }
@@ -291,11 +332,13 @@ export function createAudioRoutes(deps: Dependencies) {
                 drums: resultData.drums?.url || null,
                 bass: resultData.bass?.url || null,
                 other: resultData.other?.url || null
-              }
+              },
+              remainingCredits: updateResult.credits,
+              creditsDeducted: creditsRequired
             });
             return;
           } else if (isStatusFailed(normalizedStatus)) {
-            logGenerationFailure(user, 'Audio separation failed');
+            await refundCredits(user, creditsRequired, 'Audio separation failed');
             res.status(500).json({ success: false, error: 'Audio separation failed' });
             return;
           }
@@ -304,7 +347,7 @@ export function createAudioRoutes(deps: Dependencies) {
         }
       }
 
-      logGenerationFailure(user, 'Audio separation timed out');
+      await refundCredits(user, creditsRequired, 'Audio separation timed out');
       res.status(504).json({ success: false, error: 'Audio separation timed out' });
     } catch (error) {
       const err = error as Error;
@@ -403,7 +446,7 @@ export function createAudioRoutes(deps: Dependencies) {
       const requestId = result.request_id;
 
       if (!requestId) {
-        logGenerationFailure(user, 'No request ID returned');
+        await refundCredits(user, creditsRequired, 'No request ID returned');
         res.status(500).json({ success: false, error: 'Failed to submit lip sync request' });
         return;
       }
@@ -434,16 +477,18 @@ export function createAudioRoutes(deps: Dependencies) {
               logger.info('Lip sync completed', { requestId, userId: user.userId });
               res.json({
                 success: true,
-                video_url: videoUrl
+                video_url: videoUrl,
+                remainingCredits: updateResult.credits,
+                creditsDeducted: creditsRequired
               });
               return;
             } else {
-              logGenerationFailure(user, 'No video URL in response');
+              await refundCredits(user, creditsRequired, 'No video URL in response');
               res.status(500).json({ success: false, error: 'No video generated' });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
-            logGenerationFailure(user, 'Lip sync failed');
+            await refundCredits(user, creditsRequired, 'Lip sync failed');
             res.status(500).json({ success: false, error: 'Lip sync generation failed' });
             return;
           }
@@ -452,7 +497,7 @@ export function createAudioRoutes(deps: Dependencies) {
         }
       }
 
-      logGenerationFailure(user, 'Lip sync timed out');
+      await refundCredits(user, creditsRequired, 'Lip sync timed out');
       res.status(504).json({ success: false, error: 'Lip sync generation timed out' });
     } catch (error) {
       const err = error as Error;
@@ -538,7 +583,7 @@ export function createAudioRoutes(deps: Dependencies) {
       const requestId = result.request_id;
 
       if (!requestId) {
-        logGenerationFailure(user, 'No request ID returned');
+        await refundCredits(user, creditsRequired, 'No request ID returned');
         res.status(500).json({ success: false, error: 'Failed to submit SFX request' });
         return;
       }
@@ -568,16 +613,18 @@ export function createAudioRoutes(deps: Dependencies) {
               res.json({
                 success: true,
                 audio_url: audioUrl,
-                duration: clampedDuration
+                duration: clampedDuration,
+                remainingCredits: updateResult.credits,
+                creditsDeducted: creditsRequired
               });
               return;
             } else {
-              logGenerationFailure(user, 'No audio URL in response');
+              await refundCredits(user, creditsRequired, 'No audio URL in response');
               res.status(500).json({ success: false, error: 'No audio generated' });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
-            logGenerationFailure(user, 'SFX generation failed');
+            await refundCredits(user, creditsRequired, 'SFX generation failed');
             res.status(500).json({ success: false, error: 'SFX generation failed' });
             return;
           }
@@ -586,7 +633,7 @@ export function createAudioRoutes(deps: Dependencies) {
         }
       }
 
-      logGenerationFailure(user, 'SFX generation timed out');
+      await refundCredits(user, creditsRequired, 'SFX generation timed out');
       res.status(504).json({ success: false, error: 'SFX generation timed out' });
     } catch (error) {
       const err = error as Error;

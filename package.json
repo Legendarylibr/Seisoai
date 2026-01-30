@@ -24,19 +24,13 @@
     "clean": "rm -rf dist node_modules/.vite"
   },
   "dependencies": {
-    "@coinbase/x402": "^2.1.0",
     "@fal-ai/client": "^1.6.2",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@google/model-viewer": "^4.1.0",
-    "@rainbow-me/rainbowkit": "^2.2.10",
     "@solana/spl-token": "^0.1.8",
     "@solana/web3.js": "^1.98.4",
-    "@tanstack/react-query": "^5.90.20",
     "@walletconnect/ethereum-provider": "^2.23.1",
-    "@x402/core": "^2.2.0",
-    "@x402/evm": "^2.2.0",
-    "@x402/express": "^2.2.0",
     "axios": "^1.12.2",
     "buffer": "^6.0.3",
     "ethers": "^6.7.1",
@@ -44,9 +38,7 @@
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "tsx": "^4.7.1",
-    "viem": "^2.45.1",
-    "wagmi": "^2.19.5"
+    "tsx": "^4.7.1"
   },
   "devDependencies": {
     "@types/node": "^24.9.2",

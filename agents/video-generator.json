@@ -13,7 +13,7 @@
       "endpoint": "https://seisoai.com/api/wan-animate"
     }
   ],
-  "x402Support": true,
+  "x402Support": false,
   "active": true,
   "registrations": [],
   "supportedTrust": ["reputation"]

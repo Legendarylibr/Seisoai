@@ -1,13 +1,11 @@
 /**
  * AchievementBadge Component
  * Displays achievements, badges, and user progress
- * 
- * Uses wallet-based authentication (no email required)
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Trophy, Star, Gift, Award, TrendingUp, Users, Flame, Target } from 'lucide-react';
 import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
-import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
@@ -57,7 +55,7 @@ const categoryLabels: Record<string, string> = {
 };
 
 const AchievementDashboard: React.FC<AchievementDashboardProps> = ({ isOpen, onClose }) => {
-  const { isConnected, address } = useSimpleWallet();
+  const { isAuthenticated, userId } = useEmailAuth();
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [stats, setStats] = useState<AchievementStats | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -65,19 +63,21 @@ const AchievementDashboard: React.FC<AchievementDashboardProps> = ({ isOpen, onC
   const [activeTab, setActiveTab] = useState<'all' | 'generation' | 'social' | 'streak' | 'milestone'>('all');
   const [showLeaderboard, setShowLeaderboard] = useState(false);
 
-  // Fetch achievements using wallet address
+  // Fetch achievements
   const fetchAchievements = useCallback(async () => {
-    if (!isConnected || !address) return;
+    if (!isAuthenticated) return;
     
     setIsLoading(true);
     try {
       const csrfToken = await ensureCSRFToken();
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'X-Wallet-Address': address
+        'Content-Type': 'application/json'
       };
       
       if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+      
+      const token = localStorage.getItem('authToken');
+      if (token) headers['Authorization'] = `Bearer ${token}`;
       
       const [achievementsRes, leaderboardRes] = await Promise.all([
         fetch(`${API_URL}/api/achievements`, {
@@ -105,13 +105,13 @@ const AchievementDashboard: React.FC<AchievementDashboardProps> = ({ isOpen, onC
     } finally {
       setIsLoading(false);
     }
-  }, [isConnected, address]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    if (isOpen && isConnected && address) {
+    if (isOpen && isAuthenticated) {
       fetchAchievements();
     }
-  }, [isOpen, isConnected, address, fetchAchievements]);
+  }, [isOpen, isAuthenticated, fetchAchievements]);
 
   // Filter achievements by category
   const filteredAchievements = activeTab === 'all' 
@@ -155,9 +155,9 @@ const AchievementDashboard: React.FC<AchievementDashboardProps> = ({ isOpen, onC
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4" style={{ background: WIN95.bg }}>
-          {!isConnected ? (
+          {!isAuthenticated ? (
             <div className="text-center py-8">
-              <p style={{ color: WIN95.text }}>Please connect your wallet to view your achievements.</p>
+              <p style={{ color: WIN95.text }}>Please sign in to view your achievements.</p>
             </div>
           ) : isLoading ? (
             <div className="text-center py-8">
@@ -226,31 +226,28 @@ const AchievementDashboard: React.FC<AchievementDashboardProps> = ({ isOpen, onC
                     </p>
                   ) : (
                     <div className="space-y-1">
-                      {leaderboard.map((entry) => {
-                        const isCurrentUser = address && entry.userId.toLowerCase() === address.toLowerCase();
-                        return (
-                          <div 
-                            key={entry.rank}
-                            className="flex items-center gap-2 py-2 px-2 text-xs"
-                            style={{ 
-                              background: isCurrentUser ? WIN95.highlight : 
-                                         entry.rank % 2 === 0 ? WIN95.inputBg : 'transparent',
-                              color: isCurrentUser ? WIN95.highlightText : WIN95.text
-                            }}
-                          >
-                            <span className="w-6 font-bold">
-                              {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}
-                            </span>
-                            <span className="flex-1 truncate">
-                              {isCurrentUser ? 'You' : `${entry.userId.substring(0, 12)}...`}
-                            </span>
-                            <span className="font-mono">{entry.achievementCount} badges</span>
-                            <span className="font-mono text-[10px]" style={{ opacity: 0.7 }}>
-                              {entry.totalGenerations} gens
-                            </span>
-                          </div>
-                        );
-                      })}
+                      {leaderboard.map((entry) => (
+                        <div 
+                          key={entry.rank}
+                          className="flex items-center gap-2 py-2 px-2 text-xs"
+                          style={{ 
+                            background: entry.userId === userId ? WIN95.highlight : 
+                                       entry.rank % 2 === 0 ? WIN95.inputBg : 'transparent',
+                            color: entry.userId === userId ? WIN95.highlightText : WIN95.text
+                          }}
+                        >
+                          <span className="w-6 font-bold">
+                            {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}
+                          </span>
+                          <span className="flex-1 truncate">
+                            {entry.userId === userId ? 'You' : `${entry.userId.substring(0, 12)}...`}
+                          </span>
+                          <span className="font-mono">{entry.achievementCount} badges</span>
+                          <span className="font-mono text-[10px]" style={{ opacity: 0.7 }}>
+                            {entry.totalGenerations} gens
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

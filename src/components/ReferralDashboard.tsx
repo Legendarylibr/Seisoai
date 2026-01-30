@@ -1,13 +1,11 @@
 /**
  * ReferralDashboard Component
  * Displays referral code, share links, stats, and leaderboard
- * 
- * Uses wallet-based authentication (no email required)
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Copy, Check, Users, Gift, Trophy, Share2, ExternalLink } from 'lucide-react';
 import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
-import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { useEmailAuth } from '../contexts/EmailAuthContext';
 import {
   getReferralStats,
   getReferralLeaderboard,
@@ -23,22 +21,22 @@ interface ReferralDashboardProps {
 }
 
 const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }) => {
-  const { isConnected, address } = useSimpleWallet();
+  const { isAuthenticated, userId } = useEmailAuth();
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'stats' | 'leaderboard'>('stats');
 
-  // Fetch data on mount using wallet address
+  // Fetch data on mount
   const fetchData = useCallback(async () => {
-    if (!isConnected || !address) return;
+    if (!isAuthenticated) return;
     
     setIsLoading(true);
     try {
       const [statsData, leaderboardData] = await Promise.all([
-        getReferralStats(address),
-        getReferralLeaderboard(10, address)
+        getReferralStats(),
+        getReferralLeaderboard(10)
       ]);
       
       if (statsData) setStats(statsData);
@@ -48,13 +46,13 @@ const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }
     } finally {
       setIsLoading(false);
     }
-  }, [isConnected, address]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    if (isOpen && isConnected && address) {
+    if (isOpen && isAuthenticated) {
       fetchData();
     }
-  }, [isOpen, isConnected, address, fetchData]);
+  }, [isOpen, isAuthenticated, fetchData]);
 
   // Handle copy to clipboard
   const handleCopy = async (text: string, type: string) => {
@@ -123,9 +121,9 @@ const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }
 
         {/* Content */}
         <div className="p-4 overflow-y-auto flex-1" style={{ background: WIN95.bg }}>
-          {!isConnected ? (
+          {!isAuthenticated ? (
             <div className="text-center py-8">
-              <p style={{ color: WIN95.text }}>Please connect your wallet to access the referral program.</p>
+              <p style={{ color: WIN95.text }}>Please sign in to access the referral program.</p>
             </div>
           ) : isLoading ? (
             <div className="text-center py-8">

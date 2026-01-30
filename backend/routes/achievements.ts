@@ -1,17 +1,12 @@
 /**
  * Achievement Routes
  * Endpoints for achievements, badges, and leaderboards
- * 
- * Supports both JWT-based and wallet-based authentication
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
-import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { sendError, sendServerError, requireAuth } from '../utils/responses';
 import type { IUser } from '../models/User';
-import { getOrCreateUser } from '../services/user';
-import { isValidWalletAddress, normalizeWalletAddress } from '../utils/validation';
 import {
   getUserAchievements,
   checkAndUnlockAchievements,
@@ -31,71 +26,18 @@ interface AuthenticatedRequest extends Request {
   requestId?: string;
 }
 
-/**
- * Wallet-based authentication middleware for achievements
- * Supports JWT auth (existing) or wallet address in X-Wallet-Address header
- * 
- * SECURITY: Validates wallet address format before accepting
- */
-const createWalletAuth = (strictAuth: RequestHandler) => {
-  return async (req: AuthenticatedRequest, res: Response, next: () => void) => {
-    // First, try JWT auth
-    const authHeader = req.headers['authorization'];
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      return strictAuth(req, res, next);
-    }
-
-    // Fallback to wallet address from header
-    const walletAddress = req.headers['x-wallet-address'] as string;
-    if (walletAddress) {
-      // SECURITY: Validate wallet address format (Ethereum or Solana)
-      if (!isValidWalletAddress(walletAddress)) {
-        logger.warn('Invalid wallet address format in X-Wallet-Address header', { 
-          address: walletAddress.substring(0, 20) + '...' 
-        });
-        res.status(400).json({
-          success: false,
-          error: 'Invalid wallet address format'
-        });
-        return;
-      }
-      
-      const normalized = normalizeWalletAddress(walletAddress);
-      if (normalized) {
-        try {
-          const user = await getOrCreateUser(normalized);
-          req.user = user;
-          return next();
-        } catch (error) {
-          logger.error('Failed to authenticate with wallet', { error: (error as Error).message });
-        }
-      }
-    }
-
-    // No valid auth
-    res.status(401).json({
-      success: false,
-      error: 'Authentication required. Provide JWT token or X-Wallet-Address header.'
-    });
-  };
-};
-
 export function createAchievementRoutes(deps: Dependencies = {}) {
   const router = Router();
   const { authenticateFlexible, authenticateToken } = deps;
 
   const authMiddleware = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
   const strictAuth = authenticateToken || ((_req: Request, _res: Response, next: () => void) => next());
-  
-  // Wallet-aware auth that supports both JWT and wallet address
-  const walletAuth = createWalletAuth(strictAuth);
 
   /**
    * Get all achievements with user's progress
    * GET /api/achievements
-   * Supports JWT or wallet address auth (X-Wallet-Address header)
    */
-  router.get('/', walletAuth, async (req: AuthenticatedRequest, res: Response) => {
+  router.get('/', strictAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       if (!requireAuth(req, res)) return;
       
@@ -136,9 +78,8 @@ export function createAchievementRoutes(deps: Dependencies = {}) {
   /**
    * Check for new achievements and unlock them
    * POST /api/achievements/check
-   * Supports JWT or wallet address auth (X-Wallet-Address header)
    */
-  router.post('/check', walletAuth, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/check', strictAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       if (!requireAuth(req, res)) return;
       
@@ -168,9 +109,8 @@ export function createAchievementRoutes(deps: Dependencies = {}) {
   /**
    * Record daily login and update streak
    * POST /api/achievements/login
-   * Supports JWT or wallet address auth (X-Wallet-Address header)
    */
-  router.post('/login', walletAuth, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/login', strictAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       if (!requireAuth(req, res)) return;
       

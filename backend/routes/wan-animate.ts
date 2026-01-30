@@ -1,8 +1,6 @@
 /**
  * WAN Animate routes
  * Video generation with WAN 2.2 model
- * 
- * NOTE: Uses x402 for all payments - no legacy credit system
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
@@ -30,14 +28,55 @@ interface AuthenticatedRequest extends Request {
 }
 
 /**
- * Log generation failure (x402 handles all payments, no refunds needed)
+ * Refund credits to a user after a failed generation
  */
-function logGenerationFailure(user: IUser | undefined, reason: string): void {
-  if (user) {
-    logger.warn('Generation failed (x402 payment already processed)', {
-      userId: user.userId || user.walletAddress,
-      reason
+async function refundCredits(
+  user: IUser,
+  credits: number,
+  reason: string
+): Promise<IUser | null> {
+  try {
+    // Validate credits is a valid positive number
+    if (!Number.isFinite(credits) || credits <= 0) {
+      logger.error('Cannot refund invalid credits amount', { credits, reason, userId: user.userId });
+      return null;
+    }
+    
+    const User = mongoose.model<IUser>('User');
+    const updateQuery = buildUserUpdateQuery(user);
+    
+    if (!updateQuery) {
+      logger.error('Cannot refund credits: no valid user identifier', { userId: user.userId });
+      return null;
+    }
+
+    const updatedUser = await User.findOneAndUpdate(
+      updateQuery,
+      {
+        $inc: { credits: credits, totalCreditsSpent: -credits }
+      },
+      { new: true }
+    );
+
+    if (updatedUser) {
+      logger.info('Credits refunded for failed WAN generation', {
+        userId: user.userId || user.email || user.walletAddress,
+        creditsRefunded: credits,
+        newBalance: updatedUser.credits,
+        reason
+      });
+    }
+
+    return updatedUser;
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to refund credits', {
+      userId: user.userId,
+      credits,
+      reason,
+      error: err.message
     });
+    return null;
   }
 }
 
@@ -436,11 +475,12 @@ export function createWanAnimateRoutes(deps: Dependencies) {
 
       if (!submitResponse.ok) {
         const errorData = await submitResponse.json().catch(() => ({})) as { detail?: string };
-        // Log failure (x402 handles payments)
-        logGenerationFailure(user, `WAN animate submit error: ${submitResponse.status}`);
+        // Refund credits on submit failure
+        await refundCredits(user, minimumCredits, `WAN animate submit error: ${submitResponse.status}`);
         res.status(submitResponse.status).json({ 
           success: false, 
-          error: errorData.detail || 'Failed to submit animation request'
+          error: errorData.detail || 'Failed to submit animation request',
+          creditsRefunded: minimumCredits
         });
         return;
       }
@@ -449,9 +489,9 @@ export function createWanAnimateRoutes(deps: Dependencies) {
       const requestId = submitData.request_id || submitData.requestId;
 
       if (!requestId) {
-        // Log failure (x402 handles payments)
-        logGenerationFailure(user, 'WAN animate: no request ID returned');
-        res.status(500).json({ success: false, error: 'No request ID returned' });
+        // Refund credits when no request ID returned
+        await refundCredits(user, minimumCredits, 'WAN animate: no request ID returned');
+        res.status(500).json({ success: false, error: 'No request ID returned', creditsRefunded: minimumCredits });
         return;
       }
 
@@ -460,14 +500,20 @@ export function createWanAnimateRoutes(deps: Dependencies) {
       res.json({
         success: true,
         requestId,
-        status: 'queued'
+        status: 'queued',
+        remainingCredits: updateResult.credits,
+        creditsDeducted: minimumCredits
       });
     } catch (error) {
       const err = error as Error;
       logger.error('WAN animate submit error', { error: err.message });
-      // Log failure (x402 handles payments)
-      logGenerationFailure(req.user, `WAN animate error: ${err.message}`);
-      res.status(500).json({ success: false, error: 'Failed to submit animation' });
+      // Refund credits on unexpected error
+      const user = req.user;
+      const minimumCredits = 2;
+      if (user) {
+        await refundCredits(user, minimumCredits, `WAN animate error: ${err.message}`);
+      }
+      res.status(500).json({ success: false, error: 'Failed to submit animation', creditsRefunded: user ? minimumCredits : 0 });
     }
   });
 

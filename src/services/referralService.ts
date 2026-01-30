@@ -1,8 +1,6 @@
 /**
  * Referral Service (Frontend)
  * Handles referral code operations and social sharing
- * 
- * Uses wallet-based authentication (X-Wallet-Address header)
  */
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
@@ -36,16 +34,20 @@ export interface LeaderboardEntry {
 }
 
 /**
- * Get authentication headers with wallet address
+ * Get authentication headers
  */
-function getAuthHeaders(walletAddress?: string): Record<string, string> {
+function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json'
   };
   
-  // Use wallet address for authentication
-  if (walletAddress) {
-    headers['X-Wallet-Address'] = walletAddress;
+  try {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  } catch {
+    // localStorage may be blocked in some browsers
   }
   
   return headers;
@@ -54,10 +56,10 @@ function getAuthHeaders(walletAddress?: string): Record<string, string> {
 /**
  * Get or generate referral code for current user
  */
-export async function getReferralCode(walletAddress: string): Promise<{ code: string; shareUrl: string } | null> {
+export async function getReferralCode(): Promise<{ code: string; shareUrl: string } | null> {
   try {
     const csrfToken = await ensureCSRFToken();
-    const headers = getAuthHeaders(walletAddress);
+    const headers = getAuthHeaders();
     if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
     const response = await fetch(`${API_URL}/api/referral/code`, {
@@ -84,12 +86,12 @@ export async function getReferralCode(walletAddress: string): Promise<{ code: st
 }
 
 /**
- * Validate a referral code (public endpoint - no auth required)
+ * Validate a referral code
  */
 export async function validateReferralCode(code: string): Promise<{ valid: boolean; error?: string }> {
   try {
     const csrfToken = await ensureCSRFToken();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers = getAuthHeaders();
     if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
     const response = await fetch(`${API_URL}/api/referral/validate`, {
@@ -113,10 +115,10 @@ export async function validateReferralCode(code: string): Promise<{ valid: boole
 /**
  * Apply a referral code for the current user
  */
-export async function applyReferralCode(code: string, walletAddress: string): Promise<{ success: boolean; bonusCredits?: number; error?: string }> {
+export async function applyReferralCode(code: string): Promise<{ success: boolean; bonusCredits?: number; error?: string }> {
   try {
     const csrfToken = await ensureCSRFToken();
-    const headers = getAuthHeaders(walletAddress);
+    const headers = getAuthHeaders();
     if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
     const response = await fetch(`${API_URL}/api/referral/apply`, {
@@ -142,10 +144,10 @@ export async function applyReferralCode(code: string, walletAddress: string): Pr
 /**
  * Get referral statistics
  */
-export async function getReferralStats(walletAddress: string): Promise<ReferralStats | null> {
+export async function getReferralStats(): Promise<ReferralStats | null> {
   try {
     const csrfToken = await ensureCSRFToken();
-    const headers = getAuthHeaders(walletAddress);
+    const headers = getAuthHeaders();
     if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
     const response = await fetch(`${API_URL}/api/referral/stats`, {
@@ -174,17 +176,10 @@ export async function getReferralStats(walletAddress: string): Promise<ReferralS
 /**
  * Get referral leaderboard
  */
-export async function getReferralLeaderboard(limit: number = 10, walletAddress?: string): Promise<LeaderboardEntry[]> {
+export async function getReferralLeaderboard(limit: number = 10): Promise<LeaderboardEntry[]> {
   try {
-    const headers: Record<string, string> = {};
-    // Optional wallet address to identify current user in leaderboard
-    if (walletAddress) {
-      headers['X-Wallet-Address'] = walletAddress;
-    }
-    
     const response = await fetch(`${API_URL}/api/referral/leaderboard?limit=${limit}`, {
       method: 'GET',
-      headers,
       credentials: 'include'
     });
 
@@ -206,12 +201,11 @@ export async function getReferralLeaderboard(limit: number = 10, walletAddress?:
  */
 export async function trackSocialShare(
   platform: 'twitter' | 'discord' | 'reddit' | 'facebook' | 'linkedin',
-  contentId: string,
-  walletAddress: string
+  contentId: string
 ): Promise<{ success: boolean; creditsAwarded: number; message?: string }> {
   try {
     const csrfToken = await ensureCSRFToken();
-    const headers = getAuthHeaders(walletAddress);
+    const headers = getAuthHeaders();
     if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
     const response = await fetch(`${API_URL}/api/referral/share`, {
