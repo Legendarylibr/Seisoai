@@ -90,7 +90,7 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
   const [paymentStatus, setPaymentStatus] = useState(''); // 'pending', 'detected', 'confirmed'
   const [networksWithUSDC, setNetworksWithUSDC] = useState([]);
   const [currentNetworkBalance, setCurrentNetworkBalance] = useState(0);
-  const [hasAttemptedAutoSwitch, setHasAttemptedAutoSwitch] = useState(false);
+  const [currentChainId, setCurrentChainId] = useState<number | null>(null);
 
   // Network detection and chain ID mapping
   const CHAIN_IDS = {
@@ -352,7 +352,6 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
       setPaymentStatus('');
       setCheckingPayment(false);
       setIsProcessing(false);
-      setHasAttemptedAutoSwitch(false); // Reset auto-switch flag
       
       // Set prefilled amount if provided, otherwise reset
       if (prefilledAmount) {
@@ -479,49 +478,10 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
       setTokenBalances(balances);
       setCurrentNetworkBalance(currentNetworkBalance);
       setNetworksWithUSDC(networksWithUSDC);
+      setCurrentChainId(currentChainId);
 
-      // If user has USDC on other networks but not current one, AUTO-SWITCH to best network
-      // Only attempt auto-switch once to prevent infinite loops
-      if (networksWithUSDC.length > 0 && currentNetworkBalance === 0 && !hasAttemptedAutoSwitch) {
-        const otherNetworks = networksWithUSDC.filter(n => n.chainId !== currentChainId);
-        
-        if (otherNetworks.length > 0) {
-          // Mark that we've attempted auto-switch
-          setHasAttemptedAutoSwitch(true);
-          
-          // Find the network with the highest USDC balance
-          const bestNetwork = otherNetworks.reduce((best, current) => 
-            current.balance > best.balance ? current : best
-          );
-          
-          logger.info('Auto-switching to network with USDC', { 
-            from: currentChainId, 
-            to: bestNetwork.chainId, 
-            networkName: bestNetwork.name,
-            balance: bestNetwork.balance 
-          });
-          
-          // Show a brief message and auto-switch
-          setError(`🔄 Switching to ${bestNetwork.name} where you have ${bestNetwork.balance.toFixed(2)} USDC...`);
-          
-          // Auto-switch to the best network
-          try {
-            await switchToNetwork(bestNetwork.chainId);
-            setError(''); // Clear the message after successful switch
-          } catch (switchError) {
-            logger.warn('Auto-switch failed, user can manually switch', { error: switchError.message });
-            const networkList = otherNetworks.map(n => `${n.name} (${n.balance.toFixed(2)} USDC)`).join(', ');
-            setError(`💡 You have USDC on: ${networkList}\n\nClick a network button below to switch.`);
-          }
-        }
-      } else if (networksWithUSDC.length > 0 && currentNetworkBalance === 0 && hasAttemptedAutoSwitch) {
-        // Already tried auto-switch, just show the message
-        const otherNetworks = networksWithUSDC.filter(n => n.chainId !== currentChainId);
-        if (otherNetworks.length > 0) {
-          const networkList = otherNetworks.map(n => `${n.name} (${n.balance.toFixed(2)} USDC)`).join(', ');
-          setError(`💡 You have USDC on: ${networkList}\n\nClick a network button below to switch.`);
-        }
-      }
+      // No auto-switching - let user choose their preferred network
+      // Network selector is shown when user has USDC on multiple chains
     } catch (error) {
       logger.error('Error checking USDC balance across networks', { error: error.message });
     }
@@ -1523,8 +1483,8 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
             </div>
           )}
 
-          {/* Network Switching Options - Show when current network doesn't have enough USDC */}
-          {networksWithUSDC.length > 0 && ((parseFloat(amount) || 0) > currentNetworkBalance || currentNetworkBalance === 0) && (
+          {/* Network Selection - Show when user has USDC on multiple chains */}
+          {networksWithUSDC.length > 1 && (
             <div 
               className="p-2.5 rounded"
               style={{
@@ -1533,61 +1493,104 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
                 boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
               }}
             >
-              <div className="flex items-center gap-1.5 mb-2">
-                <span className="text-xs">💡</span>
-                <h3 className="font-semibold text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
-                  {currentNetworkBalance === 0 ? 'Switch to a network with USDC' : 'You have USDC on these networks'}
-                </h3>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs">🔗</span>
+                  <h3 className="font-semibold text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                    Select Network
+                  </h3>
+                </div>
+                <button
+                  onClick={() => checkUSDCBalanceAcrossNetworks()}
+                  className="p-0.5 rounded transition-all duration-200"
+                  title="Refresh balances"
+                  style={{
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)'
+                  }}
+                  onMouseDown={(e) => {
+                    e.currentTarget.style.border = '2px inset #c0c0c0';
+                    e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.border = '2px outset #f0f0f0';
+                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)';
+                  }}
+                >
+                  <RefreshCw className="w-3 h-3" style={{ color: '#000000' }} />
+                </button>
               </div>
               <div className="space-y-1.5">
-                {networksWithUSDC.map((network) => (
-                  <button
-                    key={network.chainId}
-                    onClick={() => switchToNetwork(network.chainId)}
-                    className="w-full flex items-center justify-between p-2 rounded transition-all duration-200 text-left"
-                    style={{
-                      background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
-                      border: '2px outset #f0f0f0',
-                      boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
-                      color: '#000000',
-                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
-                    }}
-                    onMouseDown={(e) => {
-                      e.currentTarget.style.border = '2px inset #c0c0c0';
-                      e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
-                    }}
-                    onMouseUp={(e) => {
-                      e.currentTarget.style.border = '2px outset #f0f0f0';
-                      e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs">
-                        {network.chainId === 1 ? '⟠' : 
-                         network.chainId === 137 ? '⬟' :
-                         network.chainId === 42161 ? '🔷' :
-                         network.chainId === 10 ? '🔴' : '🔵'}
-                      </span>
-                      <div>
-                        <div className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{network.name}</div>
-                        <div className="text-[10px]" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{network.balance.toFixed(2)} USDC</div>
+                {networksWithUSDC.map((network) => {
+                  const isCurrentNetwork = network.chainId === currentChainId;
+                  return (
+                    <button
+                      key={network.chainId}
+                      onClick={() => !isCurrentNetwork && switchToNetwork(network.chainId)}
+                      className="w-full flex items-center justify-between p-2 rounded transition-all duration-200 text-left"
+                      style={{
+                        background: isCurrentNetwork 
+                          ? 'linear-gradient(to bottom, #d0e8d0, #c0d8c0, #b0c8b0)'
+                          : 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                        border: isCurrentNetwork ? '2px inset #a0c0a0' : '2px outset #f0f0f0',
+                        boxShadow: isCurrentNetwork 
+                          ? 'inset 2px 2px 0 rgba(0, 0, 0, 0.1)'
+                          : 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)',
+                        color: '#000000',
+                        textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)',
+                        cursor: isCurrentNetwork ? 'default' : 'pointer'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isCurrentNetwork) {
+                          e.currentTarget.style.background = 'linear-gradient(to bottom, #f8f8f8, #e8e8e8, #e0e0e0)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isCurrentNetwork) {
+                          e.currentTarget.style.background = 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)';
+                        }
+                      }}
+                      onMouseDown={(e) => {
+                        if (!isCurrentNetwork) {
+                          e.currentTarget.style.border = '2px inset #c0c0c0';
+                          e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
+                        }
+                      }}
+                      onMouseUp={(e) => {
+                        if (!isCurrentNetwork) {
+                          e.currentTarget.style.border = '2px outset #f0f0f0';
+                          e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)';
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs">
+                          {network.chainId === 1 ? '⟠' : 
+                           network.chainId === 137 ? '⬟' :
+                           network.chainId === 42161 ? '🔷' :
+                           network.chainId === 10 ? '🔴' : '🔵'}
+                        </span>
+                        <div>
+                          <div className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                            {network.name}
+                            {isCurrentNetwork && <span className="ml-1 text-[9px]" style={{ color: '#006600' }}>✓ Active</span>}
+                          </div>
+                          <div className="text-[10px]" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>{network.balance.toFixed(2)} USDC</div>
+                        </div>
                       </div>
-                    </div>
-                    <span className="text-[10px]" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>→</span>
-                  </button>
-                ))}
+                      {!isCurrentNetwork && (
+                        <span className="text-[10px]" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>Switch →</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Current Network Balance - Compact */}
-          {currentNetworkBalance > 0 && (
+          {/* Single Network Balance - Show when only one network has USDC */}
+          {networksWithUSDC.length === 1 && currentNetworkBalance > 0 && (
             <div 
               className="p-2.5 rounded"
               style={{
