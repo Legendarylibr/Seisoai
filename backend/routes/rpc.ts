@@ -9,6 +9,39 @@ import type { RequestHandler } from 'express';
 import logger from '../utils/logger';
 import config from '../config/env';
 
+// Alchemy RPC base URLs by chain ID
+const ALCHEMY_RPC_URLS: Record<string, string> = {
+  '1': 'https://eth-mainnet.g.alchemy.com/v2',
+  '137': 'https://polygon-mainnet.g.alchemy.com/v2',
+  '42161': 'https://arb-mainnet.g.alchemy.com/v2',
+  '10': 'https://opt-mainnet.g.alchemy.com/v2',
+  '8453': 'https://base-mainnet.g.alchemy.com/v2',
+};
+
+/**
+ * Get Alchemy RPC URL for a chain
+ * Falls back to individual RPC URL config if Alchemy key not set
+ */
+function getAlchemyRpcUrl(chainId: string): string | undefined {
+  // If Alchemy API key is configured, use it
+  if (config.ALCHEMY_API_KEY) {
+    const baseUrl = ALCHEMY_RPC_URLS[chainId];
+    if (baseUrl) {
+      return `${baseUrl}/${config.ALCHEMY_API_KEY}`;
+    }
+  }
+  
+  // Fallback to individual RPC URL config
+  switch (chainId) {
+    case '1': return config.ETH_RPC_URL;
+    case '137': return config.POLYGON_RPC_URL;
+    case '42161': return config.ARBITRUM_RPC_URL;
+    case '10': return config.OPTIMISM_RPC_URL;
+    case '8453': return config.BASE_RPC_URL;
+    default: return undefined;
+  }
+}
+
 // Types
 interface Dependencies {
   blockchainRpcLimiter?: RequestHandler;
@@ -110,15 +143,20 @@ export function createRpcRoutes(deps: Dependencies = {}) {
    * Solana RPC proxy
    * POST /api/solana/rpc
    * SECURITY: Only allows whitelisted read-only methods
+   * Uses Alchemy API key if configured, falls back to SOLANA_RPC_URL
    */
   router.post('/solana/rpc', limiter, async (req: Request, res: Response) => {
     try {
-      const rpcUrl = config.SOLANA_RPC_URL;
+      // Use Alchemy for Solana if configured, otherwise fall back to custom URL
+      let rpcUrl = config.SOLANA_RPC_URL;
+      if (!rpcUrl && config.ALCHEMY_API_KEY) {
+        rpcUrl = `https://solana-mainnet.g.alchemy.com/v2/${config.ALCHEMY_API_KEY}`;
+      }
       
       if (!rpcUrl) {
         res.status(503).json({ 
           success: false, 
-          error: 'Solana RPC not configured' 
+          error: 'Solana RPC not configured. Set ALCHEMY_API_KEY or SOLANA_RPC_URL.' 
         });
         return;
       }
@@ -163,6 +201,7 @@ export function createRpcRoutes(deps: Dependencies = {}) {
    * EVM RPC proxy
    * POST /api/evm/rpc
    * SECURITY: Only allows whitelisted read-only methods
+   * Uses Alchemy API key if configured, falls back to individual RPC URLs
    */
   router.post('/evm/rpc', limiter, async (req: Request, res: Response) => {
     try {
@@ -178,36 +217,40 @@ export function createRpcRoutes(deps: Dependencies = {}) {
         return;
       }
       
-      let rpcUrl: string | undefined;
-      switch (String(chainId)) {
+      // Normalize chainId to string number format
+      let normalizedChainId: string;
+      switch (String(chainId).toLowerCase()) {
         case '1':
         case 'ethereum':
-          rpcUrl = config.ETH_RPC_URL;
+          normalizedChainId = '1';
           break;
         case '137':
         case 'polygon':
-          rpcUrl = config.POLYGON_RPC_URL;
+          normalizedChainId = '137';
           break;
         case '42161':
         case 'arbitrum':
-          rpcUrl = config.ARBITRUM_RPC_URL;
+          normalizedChainId = '42161';
           break;
         case '10':
         case 'optimism':
-          rpcUrl = config.OPTIMISM_RPC_URL;
+          normalizedChainId = '10';
           break;
         case '8453':
         case 'base':
-          rpcUrl = config.BASE_RPC_URL;
+          normalizedChainId = '8453';
           break;
         default:
-          rpcUrl = config.ETH_RPC_URL;
+          normalizedChainId = '1'; // Default to Ethereum
       }
+      
+      // Get RPC URL (Alchemy if configured, otherwise individual URLs)
+      const rpcUrl = getAlchemyRpcUrl(normalizedChainId);
       
       if (!rpcUrl) {
         res.status(503).json({ 
           success: false, 
-          error: 'EVM RPC not configured for this chain' 
+          error: 'EVM RPC not configured. Set ALCHEMY_API_KEY or individual chain RPC URLs.' 
         });
         return;
       }
@@ -243,15 +286,17 @@ export function createRpcRoutes(deps: Dependencies = {}) {
    * GET /api/rpc/config
    */
   router.get('/rpc/config', limiter, (_req: Request, res: Response) => {
+    const hasAlchemy = !!config.ALCHEMY_API_KEY;
     res.json({
       success: true,
+      provider: hasAlchemy ? 'alchemy' : 'custom',
       chains: {
-        solana: !!config.SOLANA_RPC_URL,
-        ethereum: !!config.ETH_RPC_URL,
-        polygon: !!config.POLYGON_RPC_URL,
-        arbitrum: !!config.ARBITRUM_RPC_URL,
-        optimism: !!config.OPTIMISM_RPC_URL,
-        base: !!config.BASE_RPC_URL
+        solana: hasAlchemy || !!config.SOLANA_RPC_URL,
+        ethereum: hasAlchemy || !!config.ETH_RPC_URL,
+        polygon: hasAlchemy || !!config.POLYGON_RPC_URL,
+        arbitrum: hasAlchemy || !!config.ARBITRUM_RPC_URL,
+        optimism: hasAlchemy || !!config.OPTIMISM_RPC_URL,
+        base: hasAlchemy || !!config.BASE_RPC_URL
       }
     });
   });
