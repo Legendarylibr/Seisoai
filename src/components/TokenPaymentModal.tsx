@@ -1145,13 +1145,14 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
             gasPrice: feeData.gasPrice?.toString()
           });
           
-          // Build transaction object using legacy gasPrice (works across all wallets)
+          // Build transaction object (matching old working version exactly)
           const transaction = {
             to: usdcAddress,
+            from: address,
             data: txData,
             gasLimit: gasEstimate,
             gasPrice: feeData.gasPrice,
-            value: 0n // Must be bigint for ethers v6
+            value: 0n // ethers v6 requires bigint
           };
           
           logger.info('Sending transaction', {
