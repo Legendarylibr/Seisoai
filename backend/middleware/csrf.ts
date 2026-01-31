@@ -52,6 +52,14 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
+  // Skip CSRF check for payment-related read-only endpoints
+  // These are used for fetching payment config and checking transaction status
+  if (req.path.includes('/payment/get-address') || 
+      req.path.includes('/payment/check-payment') ||
+      req.path.includes('/payment/instant-check')) {
+    return next();
+  }
+
   // Get token from cookie
   const cookieToken = req.cookies?.[CSRF_TOKEN_COOKIE] || req.headers.cookie
     ?.split(';')
