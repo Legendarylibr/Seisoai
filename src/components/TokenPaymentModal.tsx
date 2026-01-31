@@ -1164,7 +1164,7 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
             from: string;
             data: string;
             gasLimit: bigint;
-            value: number;
+            value: bigint;
             maxFeePerGas?: bigint;
             maxPriorityFeePerGas?: bigint;
             gasPrice?: bigint;
@@ -1173,7 +1173,7 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
             from: address,
             data: txData,
             gasLimit: gasEstimate,
-            value: 0 // No ETH value for token transfer
+            value: 0n // No ETH value for token transfer (must be bigint for ethers v6)
           };
           
           // Use EIP-1559 (maxFeePerGas/maxPriorityFeePerGas) if available, otherwise use legacy gasPrice

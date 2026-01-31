@@ -79,6 +79,7 @@ const ALLOWED_RPC_METHODS = new Set([
   'getAccountInfo',
   'getTransaction',
   'getSignaturesForAddress',
+  'getSignatureStatuses',  // Required for transaction confirmation checks
   'getSlot',
   'getLatestBlockhash',
   'getTokenAccountBalance',
