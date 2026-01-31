@@ -2,6 +2,7 @@
 // Checks if a wallet holds qualifying NFTs or tokens for free access
 import logger from '../utils/logger';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+import { getAuthToken } from './emailAuthService';
 
 // Types
 export interface NFTCollection {
@@ -89,11 +90,19 @@ export const checkNFTHoldings = async (walletAddress: string): Promise<NFTHoldin
       
       // Ensure CSRF token is available
       const csrfToken = await ensureCSRFToken();
+      const authToken = getAuthToken();
+      
+      // Auth token is required for this endpoint
+      if (!authToken) {
+        logger.debug('No auth token available for NFT check - user not logged in');
+        return { isHolder: false, collections: [] };
+      }
       
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
           ...(csrfToken && { 'X-CSRF-Token': csrfToken })
         },
         credentials: 'include',
