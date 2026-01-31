@@ -54,8 +54,51 @@ interface SolanaInstruction {
 // Solana USDC mint address (for reference in future improvements)
 // const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
+// Alchemy RPC base URLs by chain ID
+const ALCHEMY_RPC_URLS: Record<string, string> = {
+  '1': 'https://eth-mainnet.g.alchemy.com/v2',
+  '137': 'https://polygon-mainnet.g.alchemy.com/v2',
+  '42161': 'https://arb-mainnet.g.alchemy.com/v2',
+  '10': 'https://opt-mainnet.g.alchemy.com/v2',
+  '8453': 'https://base-mainnet.g.alchemy.com/v2',
+};
+
 // RPC providers cache
 const providers: Record<string, JsonRpcProvider> = {};
+
+/**
+ * Get RPC URL for a chain (uses Alchemy if configured, falls back to individual URLs)
+ */
+function getRpcUrl(chainId: string): string | undefined {
+  // If Alchemy API key is configured, use it
+  if (config.ALCHEMY_API_KEY) {
+    const baseUrl = ALCHEMY_RPC_URLS[chainId];
+    if (baseUrl) {
+      return `${baseUrl}/${config.ALCHEMY_API_KEY}`;
+    }
+  }
+  
+  // Fallback to individual RPC URL config
+  switch (chainId) {
+    case '1':
+    case 'ethereum':
+      return config.ETH_RPC_URL;
+    case '137':
+    case 'polygon':
+      return config.POLYGON_RPC_URL;
+    case '42161':
+    case 'arbitrum':
+      return config.ARBITRUM_RPC_URL;
+    case '10':
+    case 'optimism':
+      return config.OPTIMISM_RPC_URL;
+    case '8453':
+    case 'base':
+      return config.BASE_RPC_URL;
+    default:
+      return undefined;
+  }
+}
 
 /**
  * Get RPC provider for a chain
@@ -66,33 +109,10 @@ export function getProvider(chainId: string | number): JsonRpcProvider | null {
     return providers[chainIdStr];
   }
 
-  let rpcUrl: string | undefined;
-  switch (chainIdStr) {
-    case '1':
-    case 'ethereum':
-      rpcUrl = config.ETH_RPC_URL;
-      break;
-    case '137':
-    case 'polygon':
-      rpcUrl = config.POLYGON_RPC_URL;
-      break;
-    case '42161':
-    case 'arbitrum':
-      rpcUrl = config.ARBITRUM_RPC_URL;
-      break;
-    case '10':
-    case 'optimism':
-      rpcUrl = config.OPTIMISM_RPC_URL;
-      break;
-    case '8453':
-    case 'base':
-      rpcUrl = config.BASE_RPC_URL;
-      break;
-    default:
-      return null;
-  }
+  const rpcUrl = getRpcUrl(chainIdStr);
 
   if (!rpcUrl) {
+    logger.error('No RPC URL configured for chain', { chainId: chainIdStr, hasAlchemyKey: !!config.ALCHEMY_API_KEY });
     return null;
   }
 
