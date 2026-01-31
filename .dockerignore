@@ -104,7 +104,7 @@ nixpacks.toml
 
 # Monitoring configs (mounted separately)
 grafana/
-prometheus.yml
+prometheus/prometheus.yml
 
 # Scripts not needed in container
 scripts/

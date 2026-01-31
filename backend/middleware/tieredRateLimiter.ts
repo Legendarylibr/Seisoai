@@ -12,7 +12,7 @@ import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import type { Request, Response, NextFunction } from 'express';
 import { getRedis } from '../services/redis.js';
-import { generateBrowserFingerprint } from '../abusePrevention.js';
+import { generateBrowserFingerprint } from '../utils/abusePrevention.js';
 import logger from '../utils/logger.js';
 
 /**

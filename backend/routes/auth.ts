@@ -12,7 +12,7 @@ import jwt, { type JwtPayload } from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import config from '../config/env';
-import { isDisposableEmail } from '../abusePrevention';
+import { isDisposableEmail } from '../utils/abusePrevention';
 import { blacklistToken } from '../middleware/auth';
 import { createEmailHash } from '../utils/emailHash';
 import { generateResetToken, hashResetToken, sendPasswordResetEmail } from '../services/email';

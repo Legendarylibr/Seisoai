@@ -66,7 +66,7 @@ const adminRateLimiter: RequestHandler = rateLimit({
   skipSuccessfulRequests: false, // Count all requests, not just failures
   // SECURITY: Use multi-factor key generation to prevent bypass via proxy/VPN
   keyGenerator: (req) => {
-    const { generateBrowserFingerprint } = require('../abusePrevention');
+    const { generateBrowserFingerprint } = require('../utils/abusePrevention');
     const fingerprint = generateBrowserFingerprint(req);
     const userAgent = req.headers['user-agent']?.substring(0, 50) || 'unknown';
     return `${req.ip || 'unknown'}-${fingerprint}-${userAgent}`;

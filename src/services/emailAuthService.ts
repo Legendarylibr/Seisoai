@@ -1,6 +1,6 @@
 // Email authentication service
 import logger from '../utils/logger';
-import { API_URL, getCSRFToken, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 
 // Constants
 const REQUEST_TIMEOUT = 30000; // 30 seconds

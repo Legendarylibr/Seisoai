@@ -4,10 +4,10 @@
 import crypto from 'crypto';
 import type { Request } from 'express';
 import type { RateLimitRequestHandler } from 'express-rate-limit';
-import type { IUser } from './models/User';
-import type { IIPFreeImage } from './models/IPFreeImage';
+import type { IUser } from '../models/User';
+import type { IIPFreeImage } from '../models/IPFreeImage';
 import type { Model } from 'mongoose';
-import logger from './utils/logger';
+import logger from './logger';
 
 /**
  * List of known temporary/disposable email domains

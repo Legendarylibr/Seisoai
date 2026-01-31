@@ -194,57 +194,6 @@ export const getTokenBalance = async (
   }
 };
 
-export const getSolanaTokenBalance = async (
-  walletAddress: string, 
-  mintAddress: string
-): Promise<{
-  balance: string;
-  formattedBalance: string;
-  decimals: string;
-}> => {
-  try {
-    const response = await fetch(import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getTokenAccountsByOwner',
-        params: [
-          walletAddress,
-          { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
-          { encoding: 'jsonParsed' }
-        ]
-      })
-    });
-    
-    const data = await response.json();
-    
-    if (data.result?.value) {
-      const tokenAccount = data.result.value.find((account: { account: { data: { parsed: { info: { mint: string } } } } }) => 
-        account.account.data.parsed.info.mint === mintAddress
-      );
-      
-      if (tokenAccount) {
-        const balance = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
-        const decimals = tokenAccount.account.data.parsed.info.tokenAmount.decimals;
-        
-        return {
-          balance: tokenAccount.account.data.parsed.info.tokenAmount.amount,
-          formattedBalance: balance.toString(),
-          decimals: decimals.toString()
-        };
-      }
-    }
-    
-    return { balance: '0', formattedBalance: '0', decimals: '6' };
-  } catch (error) {
-    const err = error as Error;
-    logger.error('Error getting Solana token balance', { error: err.message });
-    throw new Error(`Failed to get Solana token balance: ${err.message}`);
-  }
-};
-
 export const calculateCredits = (
   tokenSymbol: string, 
   amount: number, 
@@ -351,22 +300,6 @@ export const getPaymentWalletFromBackend = async (chainId: string, walletType: s
     logger.error('Failed to fetch payment wallet from backend', { error: err.message, chainId, walletType });
     throw new Error(`Payment configuration error: ${err.message}`);
   }
-};
-
-/**
- * @deprecated Use getPaymentWalletFromBackend() instead for runtime fetching
- * This synchronous version is kept for backwards compatibility but will throw if wallet not cached
- */
-export const getPaymentWallet = (chainId: string, walletType: string = 'evm'): string => {
-  const cacheKey = `${walletType}-${chainId}`;
-  const cached = paymentWalletCache[cacheKey];
-  
-  if (cached) {
-    return cached.address;
-  }
-  
-  // Throw error instead of returning zero address
-  throw new Error('Payment wallet not loaded. Call getPaymentWalletFromBackend() first.');
 };
 
 export const transferToPaymentWallet = async (

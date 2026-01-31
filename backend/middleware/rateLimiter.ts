@@ -10,7 +10,7 @@
 import rateLimit, { type RateLimitRequestHandler, type Options } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { RATE_LIMITS } from '../config/constants';
-import { generateBrowserFingerprint } from '../abusePrevention';
+import { generateBrowserFingerprint } from '../utils/abusePrevention';
 import { getRedis } from '../services/redis';
 import logger from '../utils/logger';
 

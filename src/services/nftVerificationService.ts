@@ -187,15 +187,6 @@ export const checkTokenHoldings = async (walletAddress: string): Promise<TokenHo
     const isSolanaAddress = !walletAddress.startsWith('0x');
     const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
     
-    // TODO: Call backend API to check token balance
-    // const apiEndpoint = `${API_URL}/api/token/check-holdings`;
-    // const response = await fetch(apiEndpoint, {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   credentials: 'include',
-    //   body: JSON.stringify({ walletAddress: normalizedAddress })
-    // });
-    
     logger.debug('Token check not yet implemented', { walletAddress: normalizedAddress });
     return { isHolder: false, tokens: [], hasFreeAccess: false };
     
@@ -241,8 +232,9 @@ export const getHolderStatus = async (walletAddress: string): Promise<HolderStat
 
 /**
  * Get NFT/Token holder benefits
+ * Used internally by getHolderStatus
  */
-export const getNFTBenefits = (): NFTBenefits => {
+const getNFTBenefits = (): NFTBenefits => {
   return {
     freeGenerations: true,
     creditBonus: 0.2, // 20% bonus on credit purchases
@@ -257,19 +249,5 @@ export const getNFTBenefits = (): NFTBenefits => {
   };
 };
 
-/**
- * Check if user qualifies for free generation
- * NFT holders and token holders get FREE generation
- */
-export const canGenerateForFree = (isNFTHolder: boolean, isTokenHolder: boolean = false): boolean => {
-  // NFT holders and token holders get FREE generation
-  return isNFTHolder || isTokenHolder;
-};
-
-/**
- * Check if user can generate (free access or has credits)
- */
-export const canGenerate = (isNFTHolder: boolean, isTokenHolder: boolean, credits: number): boolean => {
-  // Free access for holders, or need credits
-  return canGenerateForFree(isNFTHolder, isTokenHolder) || credits > 0;
-};
+// Export for potential future use
+export { getNFTBenefits };

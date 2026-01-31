@@ -2,7 +2,7 @@
  * Validation utility tests
  */
 import { describe, it, expect } from '@jest/globals';
-import { isDisposableEmail, generateBrowserFingerprint } from '../../abusePrevention.js';
+import { isDisposableEmail, generateBrowserFingerprint } from '../../utils/abusePrevention.js';
 
 describe('Validation Utilities', () => {
   describe('isDisposableEmail', () => {
