@@ -46,6 +46,12 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
+  // Skip CSRF check for RPC proxy endpoints (stateless blockchain data proxy)
+  // These don't modify server state - blockchain ops are secured by wallet signatures
+  if (req.path.includes('/evm/rpc') || req.path.includes('/solana/rpc')) {
+    return next();
+  }
+
   // Get token from cookie
   const cookieToken = req.cookies?.[CSRF_TOKEN_COOKIE] || req.headers.cookie
     ?.split(';')
