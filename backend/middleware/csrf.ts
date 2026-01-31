@@ -60,6 +60,13 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
+  // Skip CSRF check for token gate endpoints (read-only balance checks)
+  // These only read blockchain state and don't modify any server data
+  if (req.path.includes('/token-gate/check') || 
+      req.path.includes('/token-gate/refresh')) {
+    return next();
+  }
+
   // Get token from cookie
   const cookieToken = req.cookies?.[CSRF_TOKEN_COOKIE] || req.headers.cookie
     ?.split(';')

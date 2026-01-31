@@ -3,6 +3,30 @@ import { checkNFTHoldings, checkTokenHoldings, NFTCollection, TokenHolding } fro
 import logger from '../utils/logger';
 import { API_URL } from '../utils/apiConfig';
 
+// Token Gate Types
+export interface TokenGateConfig {
+  enabled: boolean;
+  contractAddress: string;
+  chainId: string;
+  chainName: string;
+  minimumBalance: number;
+  tokenName: string;
+  symbol?: string;
+  isERC20: boolean;
+}
+
+export interface TokenGateStatus {
+  hasAccess: boolean;
+  balance: number;
+  requiredBalance: number;
+  contractAddress: string;
+  chainId: string;
+  chainName: string;
+  tokenName: string;
+  isERC20: boolean;
+  isLoading: boolean;
+}
+
 // Types
 type WalletType = 'evm' | 'solana' | null;
 
@@ -27,6 +51,11 @@ interface SimpleWalletContextValue {
   tokenHoldings: TokenHolding[];
   walletType: WalletType;
   connectedWalletId: string | null;
+  // Token Gate
+  tokenGateStatus: TokenGateStatus;
+  tokenGateConfig: TokenGateConfig | null;
+  refreshTokenGate: () => Promise<void>;
+  // Actions
   connectWallet: (selectedWallet?: string) => Promise<void>;
   disconnectWallet: () => Promise<void>;
   fetchCredits: (walletAddress: string, retries?: number, force?: boolean) => Promise<number>;
@@ -144,6 +173,19 @@ interface SimpleWalletProviderProps {
   children: ReactNode;
 }
 
+// Default token gate status
+const DEFAULT_TOKEN_GATE_STATUS: TokenGateStatus = {
+  hasAccess: false,
+  balance: 0,
+  requiredBalance: 1,
+  contractAddress: '',
+  chainId: '',
+  chainName: '',
+  tokenName: '',
+  isERC20: true,
+  isLoading: true
+};
+
 export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
@@ -158,12 +200,115 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
   const [tokenHoldings, setTokenHoldings] = useState<TokenHolding[]>([]);
   const [walletType, setWalletType] = useState<WalletType>(null);
   const [connectedWalletId, setConnectedWalletId] = useState<string | null>(null);
+  const [tokenGateStatus, setTokenGateStatus] = useState<TokenGateStatus>(DEFAULT_TOKEN_GATE_STATUS);
+  const [tokenGateConfig, setTokenGateConfig] = useState<TokenGateConfig | null>(null);
   const walletConnectProviderRef = useRef<Awaited<ReturnType<typeof getWalletConnectProvider>> | null>(null);
   const lastFetchRef = useRef(0);
   
   // Computed: has free access if NFT or token holder on EVM chains only
   // Solana users do NOT get free generations
   const hasFreeAccess = (isNFTHolder || isTokenHolder) && walletType === 'evm';
+
+  // Fetch token gate config on mount
+  useEffect(() => {
+    const fetchTokenGateConfig = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/user/token-gate/config`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.tokenGate) {
+            setTokenGateConfig(data.tokenGate);
+            // If token gate is disabled, set hasAccess to true
+            if (!data.tokenGate.enabled) {
+              setTokenGateStatus(prev => ({ ...prev, hasAccess: true, isLoading: false }));
+            }
+          }
+        }
+      } catch (err) {
+        logger.error('Failed to fetch token gate config', { error: err instanceof Error ? err.message : 'Unknown' });
+      }
+    };
+    fetchTokenGateConfig();
+  }, []);
+
+  // Check token gate access
+  const checkTokenGateAccess = useCallback(async (walletAddress: string): Promise<void> => {
+    if (!walletAddress) {
+      setTokenGateStatus({ ...DEFAULT_TOKEN_GATE_STATUS, isLoading: false });
+      return;
+    }
+
+    setTokenGateStatus(prev => ({ ...prev, isLoading: true }));
+
+    try {
+      const response = await fetch(`${API_URL}/api/user/token-gate/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress: walletAddress.toLowerCase() })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setTokenGateStatus({
+            hasAccess: data.hasAccess,
+            balance: data.balance,
+            requiredBalance: data.requiredBalance,
+            contractAddress: data.contractAddress,
+            chainId: data.chainId,
+            chainName: data.chainName,
+            tokenName: data.tokenName,
+            isERC20: data.isERC20,
+            isLoading: false
+          });
+          logger.info('Token gate check completed', {
+            hasAccess: data.hasAccess,
+            balance: data.balance
+          });
+        }
+      } else {
+        setTokenGateStatus(prev => ({ ...prev, hasAccess: false, isLoading: false }));
+      }
+    } catch (err) {
+      logger.error('Token gate check failed', { error: err instanceof Error ? err.message : 'Unknown' });
+      setTokenGateStatus(prev => ({ ...prev, hasAccess: false, isLoading: false }));
+    }
+  }, []);
+
+  // Refresh token gate (clears cache)
+  const refreshTokenGate = useCallback(async (): Promise<void> => {
+    if (!address) return;
+
+    setTokenGateStatus(prev => ({ ...prev, isLoading: true }));
+
+    try {
+      const response = await fetch(`${API_URL}/api/user/token-gate/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress: address.toLowerCase() })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setTokenGateStatus({
+            hasAccess: data.hasAccess,
+            balance: data.balance,
+            requiredBalance: data.requiredBalance,
+            contractAddress: data.contractAddress,
+            chainId: data.chainId,
+            chainName: data.chainName,
+            tokenName: data.tokenName,
+            isERC20: data.isERC20,
+            isLoading: false
+          });
+        }
+      }
+    } catch (err) {
+      logger.error('Token gate refresh failed', { error: err instanceof Error ? err.message : 'Unknown' });
+      setTokenGateStatus(prev => ({ ...prev, isLoading: false }));
+    }
+  }, [address]);
 
   const fetchCredits = useCallback(async (walletAddress: string, _retries?: number, force: boolean = false): Promise<number> => {
     if (!walletAddress) { setCredits(0); setTotalCreditsEarned(0); setTotalCreditsSpent(0); return 0; }
@@ -259,6 +404,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     setTokenHoldings([]);
     setWalletType(null);
     setConnectedWalletId(null);
+    setTokenGateStatus(DEFAULT_TOKEN_GATE_STATUS);
   }, []);
 
   const connectWallet = useCallback(async (selectedWallet: string = 'metamask'): Promise<void> => {
@@ -394,6 +540,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
       setConnectedWalletId(selectedWallet);
       await fetchCredits(walletAddress, 0, true);
       checkHolderStatus(walletAddress).catch(() => { /* ignore */ });
+      checkTokenGateAccess(walletAddress).catch(() => { /* ignore */ });
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error';
       setError(errorMessage);
@@ -462,10 +609,12 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
   const value = useMemo<SimpleWalletContextValue>(() => ({
     isConnected, address, credits, totalCreditsEarned, totalCreditsSpent, isLoading, error,
     isNFTHolder, isTokenHolder, hasFreeAccess, nftCollections, tokenHoldings,
+    tokenGateStatus, tokenGateConfig, refreshTokenGate,
     connectWallet, disconnectWallet, fetchCredits, refreshCredits,
     checkHolderStatus, walletType, connectedWalletId, setCreditsManually
   }), [isConnected, address, credits, totalCreditsEarned, totalCreditsSpent, isLoading, error,
       isNFTHolder, isTokenHolder, hasFreeAccess, nftCollections, tokenHoldings,
+      tokenGateStatus, tokenGateConfig, refreshTokenGate,
       connectWallet, disconnectWallet, fetchCredits, refreshCredits,
       checkHolderStatus, walletType, connectedWalletId, setCreditsManually]);
 

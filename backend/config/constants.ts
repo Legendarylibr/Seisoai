@@ -199,6 +199,32 @@ export const QUALIFYING_NFT_CONTRACTS: QualifyingNFT[] = [
   // { contractAddress: '0x...', chainId: '137', name: 'Seiso Polygon' },
 ];
 
+// Token Gate Configuration
+// Platform access is restricted to holders of this token/NFT
+export interface TokenGateConfig {
+  enabled: boolean;
+  contractAddress: string;
+  chainId: string;
+  chainName: string;
+  minimumBalance: number;  // Minimum tokens/NFTs required (use 1 for any holder)
+  name: string;
+  symbol?: string;
+  isERC20: boolean;        // true for ERC-20 tokens, false for NFTs (ERC-721/1155)
+  decimals?: number;       // Only for ERC-20 tokens
+}
+
+export const TOKEN_GATE: TokenGateConfig = {
+  enabled: true,
+  contractAddress: '0xe9b67cB49FD08c81c06C6c728b4359bD56b98B07',
+  chainId: '8453',         // Base
+  chainName: 'Base',
+  minimumBalance: 1,       // Hold at least 1 token/NFT
+  name: 'Seiso Access Token',
+  symbol: 'SEISO',
+  isERC20: true,           // Set to false if this is an NFT collection
+  decimals: 18             // Standard ERC-20 decimals
+};
+
 // JWT settings
 export const JWT: JWTConfig = {
   ACCESS_TOKEN_EXPIRY: '24h',
@@ -226,6 +252,7 @@ export default {
   JWT,
   SUPPORTED_CHAINS,
   DAILY_CREDITS,
-  SEISO_TOKEN
+  SEISO_TOKEN,
+  TOKEN_GATE
 };
 

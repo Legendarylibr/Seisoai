@@ -8,11 +8,13 @@ import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { findUserByIdentifier, getOrCreateUser } from '../services/user';
 import { getAllNFTs, isAlchemyConfigured } from '../services/alchemy';
+import { checkNFTBalance } from '../services/blockchain';
 import { isValidWalletAddress } from '../utils/validation';
 import { requireAuth, sendError, sendServerError } from '../utils/responses';
 import { PRODUCTION_DOMAIN } from '../config/env';
 import type { IUser } from '../models/User';
 import { qualifiesForDailyCredits, grantDailyCredits, isNFTHolder, isTokenHolder } from '../middleware/credits';
+import { checkTokenGateAccess, getTokenGateConfig, clearTokenGateCache } from '../middleware/tokenGate';
 
 // Constants - everyone gets the same rate
 const PRICING = {
@@ -529,6 +531,86 @@ export function createUserRoutes(deps: Dependencies = {}) {
     } catch (error) {
       logger.error('Check holdings error:', { error: (error as Error).message });
       sendServerError(res, error as Error, req.requestId);
+    }
+  });
+
+  /**
+   * Check token gate access
+   * GET /api/user/token-gate/config
+   * Returns token gate configuration (public endpoint)
+   */
+  router.get('/token-gate/config', (_req: Request, res: Response) => {
+    const config = getTokenGateConfig();
+    res.json({
+      success: true,
+      tokenGate: config
+    });
+  });
+
+  /**
+   * Check token gate access for a wallet
+   * POST /api/user/token-gate/check
+   * Checks if a wallet has access through token gate
+   */
+  router.post('/token-gate/check', async (req: Request, res: Response) => {
+    try {
+      const { walletAddress } = req.body as { walletAddress?: string };
+
+      if (!walletAddress) {
+        sendError(res, 'Wallet address required', 400);
+        return;
+      }
+
+      if (!isValidWalletAddress(walletAddress)) {
+        sendError(res, 'Invalid wallet address format', 400);
+        return;
+      }
+
+      const status = await checkTokenGateAccess(walletAddress.toLowerCase());
+
+      res.json({
+        success: true,
+        ...status
+      });
+    } catch (error) {
+      logger.error('Token gate check error:', { error: (error as Error).message });
+      sendServerError(res, error as Error);
+    }
+  });
+
+  /**
+   * Refresh token gate cache for a wallet
+   * POST /api/user/token-gate/refresh
+   * Clears cache and re-checks token gate access
+   */
+  router.post('/token-gate/refresh', async (req: Request, res: Response) => {
+    try {
+      const { walletAddress } = req.body as { walletAddress?: string };
+
+      if (!walletAddress) {
+        sendError(res, 'Wallet address required', 400);
+        return;
+      }
+
+      if (!isValidWalletAddress(walletAddress)) {
+        sendError(res, 'Invalid wallet address format', 400);
+        return;
+      }
+
+      // Clear cache first
+      clearTokenGateCache(walletAddress);
+
+      // Re-check access
+      const status = await checkTokenGateAccess(walletAddress.toLowerCase());
+
+      res.json({
+        success: true,
+        refreshed: true,
+        ...status
+      });
+    } catch (error) {
+      logger.error('Token gate refresh error:', { error: (error as Error).message });
+      sendServerError(res, error as Error);
     }
   });
 
