@@ -865,9 +865,9 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
             throw new Error('Transaction confirmation timeout');
           }
           
-          // Credit after confirmation
+          // Verify payment and add credits (uses /verify endpoint which doesn't require JWT)
           try {
-            const creditResponse = await apiFetch(`${API_URL}/api/payments/credit`, {
+            const verifyResponse = await apiFetch(`${API_URL}/api/payments/verify`, {
               method: 'POST',
               body: JSON.stringify({
                 txHash: txSignature,
@@ -879,17 +879,17 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
               })
             });
             
-            const creditData = await creditResponse.json();
+            const verifyData = await verifyResponse.json();
             
-            if (creditData.success) {
-              logger.info('Credits added successfully', { credits: creditData.credits, totalCredits: creditData.totalCredits });
-              setError(`✅ Payment confirmed! ${creditData.credits} credits added. New balance: ${creditData.totalCredits} credits.`);
+            if (verifyData.success) {
+              logger.info('Credits added successfully', { credits: verifyData.credits, totalCredits: verifyData.totalCredits });
+              setError(`✅ Payment confirmed! ${verifyData.credits} credits added. New balance: ${verifyData.totalCredits} credits.`);
               setPaymentStatus('confirmed');
               
               // Optimistically update credits immediately
-              const newTotal = (typeof creditData.totalCredits !== 'undefined')
-                ? Number(creditData.totalCredits)
-                : Number(credits || 0) + Number(creditData.credits || 0);
+              const newTotal = (typeof verifyData.totalCredits !== 'undefined')
+                ? Number(verifyData.totalCredits)
+                : Number(credits || 0) + Number(verifyData.credits || 0);
               if (!Number.isNaN(newTotal)) {
                 setCreditsManually(newTotal);
               }
@@ -906,11 +906,11 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
                 onClose();
               }, 2000);
             } else {
-              throw new Error(creditData.error || 'Failed to credit');
+              throw new Error(verifyData.error || 'Failed to verify and credit');
             }
-          } catch (creditError) {
-            logger.error('Error crediting:', { error: creditError.message, transactionSignature });
-            setError(`Transaction confirmed but crediting failed: ${creditError.message}`);
+          } catch (verifyError) {
+            logger.error('Error verifying payment:', { error: verifyError.message, txSignature });
+            setError(`Transaction confirmed but verification failed: ${verifyError.message}`);
           }
           
         } catch (solanaError) {
@@ -1201,9 +1201,9 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
           
           if (receipt.status === 1) {
             
-            // Credit after confirmation (transaction is guaranteed to be on-chain)
+            // Verify payment and add credits (uses /verify endpoint which doesn't require JWT)
             try {
-              const creditResponse = await apiFetch(`${API_URL}/api/payments/credit`, {
+              const verifyResponse = await apiFetch(`${API_URL}/api/payments/verify`, {
                 method: 'POST',
                 body: JSON.stringify({
                   txHash: tx.hash,
@@ -1215,16 +1215,16 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
                 })
               });
               
-              const creditData = await creditResponse.json();
+              const verifyData = await verifyResponse.json();
               
-              if (creditData.success) {
-                setError(`✅ Payment confirmed! ${creditData.credits} credits added. New balance: ${creditData.totalCredits} credits.`);
+              if (verifyData.success) {
+                setError(`✅ Payment confirmed! ${verifyData.credits} credits added. New balance: ${verifyData.totalCredits} credits.`);
                 setPaymentStatus('confirmed');
                 
                 // Optimistically update credits immediately
-                const newTotal = (typeof creditData.totalCredits !== 'undefined')
-                  ? Number(creditData.totalCredits)
-                  : Number(credits || 0) + Number(creditData.credits || 0);
+                const newTotal = (typeof verifyData.totalCredits !== 'undefined')
+                  ? Number(verifyData.totalCredits)
+                  : Number(credits || 0) + Number(verifyData.credits || 0);
                 if (!Number.isNaN(newTotal)) {
                   setCreditsManually(newTotal);
                 }
@@ -1241,11 +1241,11 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
                   onClose();
                 }, 2000);
               } else {
-                throw new Error(creditData.error || 'Failed to credit');
+                throw new Error(verifyData.error || 'Failed to verify and credit');
               }
-            } catch (creditError) {
-              logger.error('Error crediting:', { error: creditError.message, transactionHash });
-              setError(`Transaction confirmed but crediting failed: ${creditError.message}`);
+            } catch (verifyError) {
+              logger.error('Error verifying payment:', { error: verifyError.message, txHash: tx.hash });
+              setError(`Transaction confirmed but verification failed: ${verifyError.message}`);
             }
           } else {
             throw new Error('Transaction failed on blockchain');

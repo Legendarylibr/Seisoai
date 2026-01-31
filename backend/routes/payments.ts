@@ -149,8 +149,8 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      // Calculate credits (1 credit per dollar equivalent)
-      const credits = Math.floor(amount * 5); // 5 credits per dollar
+      // Calculate credits using the same rate as /credit endpoint
+      const credits = Math.floor(amount * CREDITS_PER_USDC);
 
       // Add credits to user (using verified sender address)
       const User = mongoose.model<IUser>('User');
