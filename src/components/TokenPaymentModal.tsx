@@ -8,7 +8,7 @@ import {
   verifyPayment,
   getPaymentWalletFromBackend
 } from '../services/paymentService';
-import { getLatestBlockhash as proxyGetBlockhash, getUsdcBalance as proxyGetUsdcBalance, getAccountInfo as proxyGetAccountInfo } from '../services/rpcProxyService';
+import { getLatestBlockhash as proxyGetBlockhash, getUsdcBalance as proxyGetUsdcBalance, getAccountInfo as proxyGetAccountInfo, getSignatureStatus as proxyGetSignatureStatus, getTokenAccountBalance as proxyGetTokenAccountBalance } from '../services/rpcProxyService';
 import { X, Coins, RefreshCw, ChevronDown, ChevronUp, Wallet, Copy, Check, ExternalLink } from 'lucide-react';
 
 interface TokenPaymentModalProps {
@@ -396,8 +396,11 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
       if (walletType === 'evm' && window.ethereum) {
         // Check USDC balance across all supported EVM networks
         await checkUSDCBalanceAcrossNetworks();
+      } else if (walletType === 'solana' && address) {
+        // Fetch actual Solana USDC balance
+        await checkSolanaUSDCBalance();
       } else {
-        // Simplified - just set a placeholder balance for Solana
+        // Fallback - set placeholder
         setTokenBalances(prev => ({
           ...prev,
           [token.symbol]: '0.0'
@@ -405,6 +408,65 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
       }
     } catch (error) {
       logger.error('Error loading token balance', { error: error.message });
+    }
+  };
+
+  // Check Solana USDC balance
+  const checkSolanaUSDCBalance = async () => {
+    try {
+      const { PublicKey } = await import('@solana/web3.js');
+      const { getAssociatedTokenAddressSync } = await import('@solana/spl-token');
+      
+      // USDC mint address on Solana
+      const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+      const userPublicKey = new PublicKey(address);
+      
+      // Get user's USDC token account address
+      const userTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, userPublicKey);
+      
+      logger.debug('Checking Solana USDC balance', { tokenAccount: userTokenAccount.toBase58() });
+      
+      // Use proxy to get token balance
+      const balanceResult = await proxyGetTokenAccountBalance(userTokenAccount.toBase58());
+      
+      if (balanceResult) {
+        const balance = balanceResult.uiAmount || 0;
+        logger.debug('Solana USDC balance', { balance });
+        
+        setTokenBalances(prev => ({
+          ...prev,
+          solana: {
+            balance: balance,
+            network: 'Solana',
+            chainId: 'solana'
+          }
+        }));
+        setCurrentNetworkBalance(balance);
+      } else {
+        // No token account found - balance is 0
+        logger.debug('No Solana USDC token account found');
+        setTokenBalances(prev => ({
+          ...prev,
+          solana: {
+            balance: 0,
+            network: 'Solana',
+            chainId: 'solana'
+          }
+        }));
+        setCurrentNetworkBalance(0);
+      }
+    } catch (error) {
+      logger.error('Error checking Solana USDC balance', { error: error.message });
+      // Set balance to 0 on error
+      setTokenBalances(prev => ({
+        ...prev,
+        solana: {
+          balance: 0,
+          network: 'Solana',
+          chainId: 'solana'
+        }
+      }));
+      setCurrentNetworkBalance(0);
     }
   };
 
@@ -1059,17 +1121,45 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
           
           // Get gas estimate
           const gasEstimate = await usdcContract.transfer.estimateGas(paymentAddress, amountWei);
-          const gasPrice = await ethersProvider.getFeeData();
+          const feeData = await ethersProvider.getFeeData();
           
-          // Build transaction object
-          const transaction = {
+          logger.debug('Fee data', { 
+            gasPrice: feeData.gasPrice?.toString(), 
+            maxFeePerGas: feeData.maxFeePerGas?.toString(),
+            maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString()
+          });
+          
+          // Build transaction object - use EIP-1559 if available, fallback to legacy
+          const transaction: {
+            to: string;
+            from: string;
+            data: string;
+            gasLimit: bigint;
+            value: number;
+            maxFeePerGas?: bigint;
+            maxPriorityFeePerGas?: bigint;
+            gasPrice?: bigint;
+          } = {
             to: usdcAddress,
             from: address,
             data: txData,
             gasLimit: gasEstimate,
-            gasPrice: gasPrice.gasPrice,
             value: 0 // No ETH value for token transfer
           };
+          
+          // Use EIP-1559 (maxFeePerGas/maxPriorityFeePerGas) if available, otherwise use legacy gasPrice
+          if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
+            // EIP-1559 transaction (modern chains like Ethereum, Polygon, Arbitrum, Optimism, Base)
+            transaction.maxFeePerGas = feeData.maxFeePerGas;
+            transaction.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+            logger.debug('Using EIP-1559 gas pricing');
+          } else if (feeData.gasPrice) {
+            // Legacy transaction (older chains)
+            transaction.gasPrice = feeData.gasPrice;
+            logger.debug('Using legacy gas pricing');
+          } else {
+            throw new Error('Could not determine gas price. Please try again.');
+          }
           
           
           // Send transaction to wallet
@@ -1600,23 +1690,56 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
                 boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2)'
               }}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
                   <span className="text-xs">◎</span>
-                  <span className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                  <h3 className="font-semibold text-xs" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
                     Solana Network
-                  </span>
+                  </h3>
                 </div>
-                <div 
-                  className="px-2 py-0.5 text-[10px] font-semibold rounded"
+                <button
+                  onClick={() => checkSolanaUSDCBalance()}
+                  className="p-0.5 rounded transition-all duration-200"
+                  title="Refresh balance"
                   style={{
-                    background: 'linear-gradient(to bottom, #d0f0d0, #c0e0c0)',
-                    border: '2px outset #e0e0e0',
-                    color: '#000000',
-                    textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)'
+                    background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',
+                    border: '2px outset #f0f0f0',
+                    boxShadow: 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)'
+                  }}
+                  onMouseDown={(e) => {
+                    e.currentTarget.style.border = '2px inset #c0c0c0';
+                    e.currentTarget.style.boxShadow = 'inset 3px 3px 0 rgba(0, 0, 0, 0.25)';
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.border = '2px outset #f0f0f0';
+                    e.currentTarget.style.boxShadow = 'inset 2px 2px 0 rgba(255, 255, 255, 1), inset -2px -2px 0 rgba(0, 0, 0, 0.4)';
                   }}
                 >
-                  ✓ Active
+                  <RefreshCw className="w-3 h-3" style={{ color: '#000000' }} />
+                </button>
+              </div>
+              <div 
+                className="w-full flex items-center justify-between p-2 rounded"
+                style={{
+                  background: 'linear-gradient(to bottom, #d0e8d0, #c0d8c0, #b0c8b0)',
+                  border: '2px inset #a0c0a0',
+                  boxShadow: 'inset 2px 2px 0 rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs">◎</span>
+                  <div>
+                    <div className="text-xs font-semibold" style={{ color: '#000000', textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' }}>
+                      Solana
+                      <span className="ml-1 text-[9px]" style={{ color: '#006600' }}>✓ Active</span>
+                    </div>
+                    <div className="text-[10px]" style={{ 
+                      color: (tokenBalances.solana?.balance || 0) > 0 ? '#000000' : '#666666', 
+                      textShadow: '1px 1px 0 rgba(255, 255, 255, 0.8)' 
+                    }}>
+                      {(tokenBalances.solana?.balance || currentNetworkBalance || 0).toFixed(2)} USDC
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
