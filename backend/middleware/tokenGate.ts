@@ -4,7 +4,7 @@
  */
 import type { Request, Response, NextFunction } from 'express';
 import { ethers } from 'ethers';
-import { TOKEN_GATE } from '../config/constants';
+import { TOKEN_GATE, QUALIFYING_NFT_CONTRACTS } from '../config/constants';
 import { getProvider } from '../services/blockchain';
 import { LRUCache } from '../services/cache';
 import logger from '../utils/logger';
@@ -48,7 +48,42 @@ const ERC1155_ABI = [
 ];
 
 /**
+ * Check if a wallet holds any qualifying NFTs
+ */
+async function checkQualifyingNFTs(walletAddress: string): Promise<{ hasNFT: boolean; nftName: string; balance: number }> {
+  const normalizedAddress = walletAddress.toLowerCase();
+  
+  for (const nft of QUALIFYING_NFT_CONTRACTS) {
+    try {
+      const provider = getProvider(nft.chainId);
+      if (!provider) continue;
+      
+      const contract = new ethers.Contract(nft.contractAddress, ERC721_ABI, provider);
+      const rawBalance = await contract.balanceOf(normalizedAddress);
+      const balance = Number(rawBalance);
+      
+      if (balance > 0) {
+        logger.info('Qualifying NFT found', {
+          wallet: normalizedAddress.substring(0, 10) + '...',
+          nft: nft.name,
+          balance
+        });
+        return { hasNFT: true, nftName: nft.name, balance };
+      }
+    } catch (error) {
+      logger.debug('NFT check failed for contract', { 
+        contract: nft.contractAddress, 
+        error: (error as Error).message 
+      });
+    }
+  }
+  
+  return { hasNFT: false, nftName: '', balance: 0 };
+}
+
+/**
  * Check if a wallet holds the required tokens/NFTs for platform access
+ * Checks: 1) Main token gate, 2) Qualifying NFT collections
  */
 export async function checkTokenGateAccess(walletAddress: string): Promise<TokenGateStatus> {
   if (!TOKEN_GATE.enabled) {
@@ -95,7 +130,6 @@ export async function checkTokenGateAccess(walletAddress: string): Promise<Token
   const provider = getProvider(TOKEN_GATE.chainId);
   if (!provider) {
     logger.error('Token gate: No RPC provider for chain', { chainId: TOKEN_GATE.chainId });
-    // Fail open in case of RPC issues - log but allow access
     return {
       hasAccess: false,
       balance: 0,
@@ -110,21 +144,32 @@ export async function checkTokenGateAccess(walletAddress: string): Promise<Token
 
   try {
     let balance = 0;
+    let hasAccess = false;
+    let accessSource = 'token';
     
+    // First, check the main token gate (ERC-20 or NFT)
     if (TOKEN_GATE.isERC20) {
-      // Check ERC-20 token balance
       const contract = new ethers.Contract(TOKEN_GATE.contractAddress, ERC20_ABI, provider);
       const rawBalance = await contract.balanceOf(normalizedAddress);
       const decimals = TOKEN_GATE.decimals || 18;
       balance = parseFloat(ethers.formatUnits(rawBalance, decimals));
     } else {
-      // Check NFT balance (ERC-721)
       const contract = new ethers.Contract(TOKEN_GATE.contractAddress, ERC721_ABI, provider);
       const rawBalance = await contract.balanceOf(normalizedAddress);
       balance = Number(rawBalance);
     }
 
-    const hasAccess = balance >= TOKEN_GATE.minimumBalance;
+    hasAccess = balance >= TOKEN_GATE.minimumBalance;
+
+    // If no access from main token, check qualifying NFT collections
+    if (!hasAccess && QUALIFYING_NFT_CONTRACTS.length > 0) {
+      const nftCheck = await checkQualifyingNFTs(normalizedAddress);
+      if (nftCheck.hasNFT) {
+        hasAccess = true;
+        balance = nftCheck.balance;
+        accessSource = `nft:${nftCheck.nftName}`;
+      }
+    }
 
     const status: TokenGateStatus = {
       hasAccess,
@@ -145,6 +190,7 @@ export async function checkTokenGateAccess(walletAddress: string): Promise<Token
       wallet: normalizedAddress.substring(0, 10) + '...',
       balance,
       hasAccess,
+      accessSource,
       chain: TOKEN_GATE.chainName
     });
 

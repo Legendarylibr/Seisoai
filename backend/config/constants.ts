@@ -193,10 +193,17 @@ export interface QualifyingNFT {
 }
 
 export const QUALIFYING_NFT_CONTRACTS: QualifyingNFT[] = [
-  // Add your NFT contract addresses here
-  // Example:
-  // { contractAddress: '0x...', chainId: '1', name: 'Seiso Genesis' },
-  // { contractAddress: '0x...', chainId: '137', name: 'Seiso Polygon' },
+  // NFT collections that grant platform access and daily credits (same as token gate)
+  { 
+    contractAddress: '0x8e84dcaf616c3e04ed45d3e0912b81e7283a48da', 
+    chainId: '8453', 
+    name: 'Seiso NFT Collection 1' 
+  },
+  { 
+    contractAddress: '0x1e71ea45fb939c92045ff32239a8922395eeb31b', 
+    chainId: '8453', 
+    name: 'RWOK' 
+  },
 ];
 
 // Token Gate Configuration
