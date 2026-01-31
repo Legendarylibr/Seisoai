@@ -37,57 +37,29 @@ const TermsOfService = memo(function TermsOfService() {
       <h2 className="text-sm font-bold">Terms of Service</h2>
       <p className="text-[10px]" style={{ color: WIN95.textDisabled }}>Last Updated: January 2026</p>
       
-      <p>By using Seiso AI, you agree to these terms. If you disagree, please do not use the service.</p>
+      <p>By using Seiso AI, you agree to these terms.</p>
 
       <h3 className="font-bold">Service</h3>
-      <p>Seiso AI provides AI-powered image, video, and music generation using FAL.ai endpoints. All features require credits, purchasable via cryptocurrency (USDC, USDT on EVM chains and Solana).</p>
+      <p>AI-powered image, video, and music generation. Credits purchased with crypto only (USDC, USDT on EVM chains and Solana).</p>
 
-      <h3 className="font-bold">Accounts</h3>
-      <p>Access via email or crypto wallet. You're responsible for account security. Accounts may be suspended for policy violations.</p>
+      <h3 className="font-bold">Accounts & Credits</h3>
+      <p>Access via email or wallet. Credits are non-refundable except for technical failures. You're responsible for account security.</p>
 
-      <h3 className="font-bold">Credits & Subscriptions</h3>
-      <ul className="list-disc list-inside ml-2">
-        <li>Credits are non-refundable except for technical failures</li>
-        <li>Subscriptions auto-renew until cancelled</li>
-        <li>Unused credits may expire at billing cycle end</li>
-      </ul>
-
-      <h3 className="font-bold">Content</h3>
-      <p>You retain rights to your prompts. Generated content is licensed for personal and commercial use. Similar outputs may be generated for other users.</p>
+      <h3 className="font-bold">Content Rights</h3>
+      <p>You retain rights to prompts. Generated content licensed for personal and commercial use. You're responsible for checking IP before commercial use.</p>
 
       <h3 className="font-bold">Prohibited Use</h3>
-      <p>See Content Policy. Violations result in account termination without refund.</p>
+      <p>See Content Policy. Violations = termination without refund.</p>
 
       <h3 className="font-bold">Disclaimer</h3>
-      <p>Service provided "as is" without warranties. We're not liable for indirect damages or AI output quality.</p>
+      <p>Service "as is" without warranties. Not liable for indirect damages. Disputes via binding arbitration.</p>
 
-      <h3 className="font-bold">Indemnification</h3>
-      <p>You agree to indemnify and hold harmless Seiso AI from any claims, damages, or expenses arising from your use of the service or violation of these terms.</p>
-
-      <h3 className="font-bold">IP & Generated Content</h3>
-      <p>AI outputs may unintentionally resemble existing works. You assume responsibility for checking generated content before commercial use. We make no guarantees regarding IP clearance.</p>
-
-      <h3 className="font-bold">Dispute Resolution</h3>
-      <p>Disputes shall be resolved through binding arbitration rather than court. You waive rights to participate in class actions. Small claims court remains available.</p>
-
-      <h3 className="font-bold">Geographic Restrictions</h3>
+      <h3 className="font-bold">Restricted Regions</h3>
       <div 
-        className="p-3 mt-1"
+        className="p-2 mt-1"
         style={{ background: '#fff3e0', boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}` }}
       >
-        <p className="font-bold mb-2" style={{ color: '#e65100' }}>Service Availability Notice</p>
-        <p className="mb-2" style={{ color: '#bf360c' }}>Seiso AI may not be available in certain countries or regions due to legal restrictions, payment processor limitations, or AI provider policies.</p>
-        <p className="font-bold mb-1" style={{ color: '#bf360c' }}>Service is NOT available in:</p>
-        <ul className="list-disc list-inside ml-2 mb-2" style={{ color: '#bf360c' }}>
-          <li>North Korea</li>
-          <li>Iran</li>
-          <li>Syria</li>
-          <li>Cuba</li>
-          <li>Crimea, Donetsk, and Luhansk regions</li>
-          <li>Russia (payment services restricted)</li>
-          <li>Other sanctioned territories per OFAC regulations</li>
-        </ul>
-        <p style={{ color: '#bf360c' }}>Cryptocurrency payments may have additional restrictions based on blockchain network availability. By using this service, you confirm you are not accessing it from a restricted territory and are not on any sanctions list.</p>
+        <p style={{ color: '#bf360c' }}>Not available in: North Korea, Iran, Syria, Cuba, Crimea/Donetsk/Luhansk, Russia, and OFAC-sanctioned territories. By using the service, you confirm you're not in a restricted region.</p>
       </div>
     </div>
   );
@@ -221,28 +193,10 @@ const RefundPolicy = memo(function RefundPolicy() {
       <p className="text-[10px]" style={{ color: WIN95.textDisabled }}>Last Updated: January 2026</p>
 
       <h3 className="font-bold">Credits</h3>
-      <p>Non-refundable except for:</p>
-      <ul className="list-disc list-inside ml-2">
-        <li>Technical failures (generation failed but credits deducted)</li>
-        <li>Duplicate charges</li>
-        <li>Unauthorized transactions</li>
-      </ul>
+      <p>Non-refundable except for technical failures, duplicate charges, or unauthorized transactions.</p>
 
-      <h3 className="font-bold">Subscriptions</h3>
-      <ul className="list-disc list-inside ml-2">
-        <li>Cancel anytime; service continues until period end</li>
-        <li>No partial refunds</li>
-        <li>Unused credits expire at cycle end</li>
-      </ul>
-
-      <h3 className="font-bold">Crypto Payments</h3>
-      <p>Refunds issued in original cryptocurrency. Network fees non-refundable.</p>
-
-      <h3 className="font-bold">Request Refund</h3>
-      <p>Contact support with transaction ID and reason. Processed within 5-7 days.</p>
-
-      <h3 className="font-bold">Termination</h3>
-      <p>No refunds for accounts terminated due to policy violations.</p>
+      <h3 className="font-bold">Crypto Refunds</h3>
+      <p>Issued in original cryptocurrency. Network fees non-refundable. Contact support with tx hash. No refunds for policy violations.</p>
     </div>
   );
 });

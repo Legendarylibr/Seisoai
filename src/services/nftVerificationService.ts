@@ -2,7 +2,7 @@
 // Checks if a wallet holds qualifying NFTs or tokens for free access
 import logger from '../utils/logger';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
-import { getAuthToken } from './emailAuthService';
+import { getAuthToken } from '../utils/apiConfig';
 
 // Types
 export interface NFTCollection {

@@ -1,7 +1,7 @@
 // Gallery and generation history service
 import logger from '../utils/logger';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
-import { getAuthToken } from './emailAuthService';
+import { getAuthToken } from '../utils/apiConfig';
 
 // Types
 export interface GenerationData {

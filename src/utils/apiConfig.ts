@@ -13,10 +13,10 @@ declare global {
 }
 
 /**
- * Get stored auth token (same logic as emailAuthService but without circular import)
+ * Get stored auth token
  * Checks localStorage first, then falls back to window property for in-app browsers
  */
-const getStoredAuthToken = (): string | null => {
+export const getAuthToken = (): string | null => {
   // Check localStorage first
   try {
     const token = localStorage.getItem('authToken');
@@ -137,7 +137,7 @@ export const getApiHeaders = (
   
   // Add Authorization header with JWT token if available (and not already set)
   if (!headers['Authorization']) {
-    const authToken = getStoredAuthToken();
+    const authToken = getAuthToken();
     if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }

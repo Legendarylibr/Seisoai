@@ -8,7 +8,7 @@
  */
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
-import { getAuthToken } from './emailAuthService';
+import { getAuthToken } from '../utils/apiConfig';
 
 export interface Model3dGenerationParams {
   input_image_url: string;

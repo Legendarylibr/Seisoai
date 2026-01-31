@@ -17,7 +17,6 @@ import { blacklistToken } from '../middleware/auth';
 import { createEmailHash } from '../utils/emailHash';
 import { generateResetToken, hashResetToken, sendPasswordResetEmail } from '../services/email';
 import { alertPasswordReset, alertAccountLockout } from '../services/securityAlerts';
-import { sendWelcomeEmail } from '../services/emailMarketing';
 import { applyReferralCode } from '../services/referralService';
 import type { IUser } from '../models/User';
 
@@ -161,13 +160,6 @@ export function createAuthRoutes(deps: Dependencies = {}) {
             error: referralResult.error 
           });
         }
-      }
-
-      // Send welcome email (non-blocking)
-      if (user.userId) {
-        sendWelcomeEmail(user.userId).catch(err => {
-          logger.warn('Failed to send welcome email', { userId: user.userId, error: err.message });
-        });
       }
 
       // Generate tokens

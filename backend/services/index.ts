@@ -12,8 +12,6 @@ export * from './circuitBreaker';
 export * from './jobQueue';
 export * from './referralService';
 export { default as referralService } from './referralService';
-export * from './emailMarketing';
-export { default as emailMarketing } from './emailMarketing';
 export * from './achievementService';
 export { default as achievementService } from './achievementService';
 

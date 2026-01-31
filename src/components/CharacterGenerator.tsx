@@ -14,7 +14,7 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generate3dModel } from '../services/model3dService';
 import { addGeneration } from '../services/galleryService';
-import { getAuthToken } from '../services/emailAuthService';
+import { getAuthToken } from '../utils/apiConfig';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import { optimizeImage } from '../utils/imageOptimizer';
 import { 
