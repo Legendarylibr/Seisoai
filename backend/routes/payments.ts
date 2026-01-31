@@ -132,14 +132,22 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
 
       // SECURITY FIX: Verify that the walletAddress being credited matches the transaction sender
       // This prevents attackers from claiming credits for payments made by others
-      const normalizedWallet = walletAddress.toLowerCase();
-      const normalizedSender = txInfo.from.toLowerCase();
+      // Note: EVM addresses are case-insensitive (hex), but Solana addresses are case-sensitive (Base58)
+      let addressesMatch = false;
+      if (walletType === 'solana') {
+        // Solana addresses are case-sensitive Base58
+        addressesMatch = walletAddress === txInfo.from;
+      } else {
+        // EVM addresses are case-insensitive hex
+        addressesMatch = walletAddress.toLowerCase() === txInfo.from.toLowerCase();
+      }
       
-      if (normalizedWallet !== normalizedSender) {
+      if (!addressesMatch) {
         logger.warn('SECURITY: Payment verification wallet mismatch', {
           txHash,
-          claimedWallet: normalizedWallet.substring(0, 10) + '...',
-          actualSender: normalizedSender.substring(0, 10) + '...',
+          claimedWallet: walletAddress.substring(0, 10) + '...',
+          actualSender: txInfo.from.substring(0, 10) + '...',
+          walletType,
           ip: req.ip
         });
         res.status(403).json({
@@ -153,9 +161,12 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
       const credits = Math.floor(amount * CREDITS_PER_USDC);
 
       // Add credits to user (using verified sender address)
+      // For EVM, normalize to lowercase for consistent lookups
+      // For Solana, use exact address (case-sensitive)
+      const lookupAddress = walletType === 'solana' ? txInfo.from : txInfo.from.toLowerCase();
       const User = mongoose.model<IUser>('User');
       const user = await User.findOneAndUpdate(
-        { walletAddress: normalizedSender },
+        { walletAddress: lookupAddress },
         {
           $inc: { credits, totalCreditsEarned: credits },
           $push: {

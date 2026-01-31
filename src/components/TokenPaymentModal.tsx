@@ -138,10 +138,9 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
         throw new Error('Phantom wallet not found');
       }
 
-      const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
+      const { PublicKey, Transaction } = await import('@solana/web3.js');
       const { 
         createTransferInstruction, 
-        getAssociatedTokenAddress, 
         createAssociatedTokenAccountInstruction,
         getAssociatedTokenAddressSync,
         TOKEN_PROGRAM_ID,
@@ -157,12 +156,6 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
         logger.error('Backend Solana RPC proxy failed', { error: proxyError.message });
         throw new Error(`Solana RPC proxy unavailable: ${proxyError.message}. Please ensure the backend server is running.`);
       }
-      
-      // Create a dummy connection object for local transaction building operations only
-      // All actual RPC calls (getAccountInfo, getLatestBlockhash, etc.) go through the proxy
-      const connection = new Connection('https://api.mainnet-beta.solana.com', {
-        commitment: 'confirmed'
-      });
       
       // USDC mint address on Solana
       const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
@@ -1136,60 +1129,36 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
             amount: amountStr, 
             amountWei: amountWei.toString(),
             paymentAddress,
-            chainId 
+            chainId,
+            network: network?.name
           });
           
-          // Build the transaction data
+          // Build the transaction data manually (this approach worked in previous versions)
           const txData = usdcContract.interface.encodeFunctionData('transfer', [paymentAddress, amountWei]);
-          
-          logger.info('Transaction data encoded', {
-            txData: txData.substring(0, 74) + '...', // Log first part of data (method + first param)
-            paymentAddress,
-            amountWei: amountWei.toString()
-          });
           
           // Get gas estimate
           const gasEstimate = await usdcContract.transfer.estimateGas(paymentAddress, amountWei);
           const feeData = await ethersProvider.getFeeData();
           
-          logger.debug('Fee data', { 
-            gasPrice: feeData.gasPrice?.toString(), 
-            maxFeePerGas: feeData.maxFeePerGas?.toString(),
-            maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString()
+          logger.debug('Gas estimation', { 
+            gasEstimate: gasEstimate.toString(),
+            gasPrice: feeData.gasPrice?.toString()
           });
           
-          // Build transaction object - use EIP-1559 if available, fallback to legacy
-          const transaction: {
-            to: string;
-            from: string;
-            data: string;
-            gasLimit: bigint;
-            value: bigint;
-            maxFeePerGas?: bigint;
-            maxPriorityFeePerGas?: bigint;
-            gasPrice?: bigint;
-          } = {
+          // Build transaction object using legacy gasPrice (works across all wallets)
+          const transaction = {
             to: usdcAddress,
-            from: address,
             data: txData,
             gasLimit: gasEstimate,
-            value: 0n // No ETH value for token transfer (must be bigint for ethers v6)
+            gasPrice: feeData.gasPrice,
+            value: 0n // Must be bigint for ethers v6
           };
           
-          // Use EIP-1559 (maxFeePerGas/maxPriorityFeePerGas) if available, otherwise use legacy gasPrice
-          if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
-            // EIP-1559 transaction (modern chains like Ethereum, Polygon, Arbitrum, Optimism, Base)
-            transaction.maxFeePerGas = feeData.maxFeePerGas;
-            transaction.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
-            logger.debug('Using EIP-1559 gas pricing');
-          } else if (feeData.gasPrice) {
-            // Legacy transaction (older chains)
-            transaction.gasPrice = feeData.gasPrice;
-            logger.debug('Using legacy gas pricing');
-          } else {
-            throw new Error('Could not determine gas price. Please try again.');
-          }
-          
+          logger.info('Sending transaction', {
+            to: transaction.to,
+            gasLimit: transaction.gasLimit.toString(),
+            gasPrice: transaction.gasPrice?.toString()
+          });
           
           // Send transaction to wallet
           const tx = await signer.sendTransaction(transaction);

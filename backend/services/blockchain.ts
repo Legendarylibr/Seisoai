@@ -41,6 +41,7 @@ interface SolanaInstruction {
       // SPL Token transfer fields
       authority?: string;
       amount?: string;
+      mint?: string;
       tokenAmount?: {
         amount: string;
         decimals: number;
@@ -51,8 +52,8 @@ interface SolanaInstruction {
   };
 }
 
-// Solana USDC mint address (for reference in future improvements)
-// const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+// Solana USDC mint address
+const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 // Alchemy RPC base URLs by chain ID
 const ALCHEMY_RPC_URLS: Record<string, string> = {
@@ -301,21 +302,24 @@ export async function verifySolanaTransaction(
   let amount = 0;
 
   // First, try to find SPL Token transfer (for USDC)
+  let destination: string | null = null;
+  
   for (const ix of allInstructions) {
     // SPL Token program transfers
     if (ix.program === 'spl-token' && ix.parsed?.type === 'transfer') {
       const info = ix.parsed.info;
       // For SPL token transfers, 'destination' is the token account, not the wallet
-      // We need to check if the transfer is to our payment wallet's token account
       // The amount is in the smallest unit (for USDC, 6 decimals)
       if (info?.amount) {
         transferFound = true;
         from = info.authority || null;
+        destination = info.destination || null;
         amount = parseInt(info.amount) / 1e6; // USDC has 6 decimals
         logger.debug('Found SPL Token transfer', {
           from,
           amount,
-          destination: info.destination
+          destination,
+          source: info.source
         });
         break;
       }
@@ -327,11 +331,14 @@ export async function verifySolanaTransaction(
       if (info?.tokenAmount) {
         transferFound = true;
         from = info.authority || null;
+        destination = info.destination || null;
         amount = info.tokenAmount.uiAmount || 0;
         logger.debug('Found SPL Token transferChecked', {
           from,
           amount,
-          decimals: info.tokenAmount.decimals
+          destination,
+          decimals: info.tokenAmount.decimals,
+          mint: info.mint
         });
         break;
       }
