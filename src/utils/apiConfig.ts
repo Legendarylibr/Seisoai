@@ -5,6 +5,32 @@
 const CSRF_TOKEN_COOKIE = 'XSRF-TOKEN';
 const CSRF_TOKEN_HEADER = 'X-CSRF-Token';
 
+// Declare global type for auth token fallback (used when localStorage is blocked in in-app browsers)
+declare global {
+  interface Window {
+    __seisoAuthToken?: string | null;
+  }
+}
+
+/**
+ * Get stored auth token (same logic as emailAuthService but without circular import)
+ * Checks localStorage first, then falls back to window property for in-app browsers
+ */
+const getStoredAuthToken = (): string | null => {
+  // Check localStorage first
+  try {
+    const token = localStorage.getItem('authToken');
+    if (token) return token;
+  } catch {
+    // localStorage blocked (e.g., in-app browsers) - check window fallback
+  }
+  // Fallback to window property (set by emailAuthService for in-app browsers)
+  if (typeof window !== 'undefined' && window.__seisoAuthToken) {
+    return window.__seisoAuthToken;
+  }
+  return null;
+};
+
 /**
  * Get the API URL for making requests to the backend
  * 
@@ -98,7 +124,7 @@ export const ensureCSRFToken = async (): Promise<string | null> => {
 };
 
 /**
- * Get headers for API requests including CSRF token for state-changing methods
+ * Get headers for API requests including CSRF token and JWT auth token
  */
 export const getApiHeaders = (
   method: string,
@@ -108,6 +134,14 @@ export const getApiHeaders = (
     'Content-Type': 'application/json',
     ...additionalHeaders
   };
+  
+  // Add Authorization header with JWT token if available (and not already set)
+  if (!headers['Authorization']) {
+    const authToken = getStoredAuthToken();
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+  }
   
   // Add CSRF token for state-changing methods
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())) {

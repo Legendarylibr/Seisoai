@@ -98,10 +98,17 @@ const safeGetItem = (key: string): string | null => {
 /**
  * Helper function to safely set to localStorage with memory fallback
  * Stores in both localStorage (when available) and memory (always)
+ * Also sets window property for authToken to allow apiConfig.ts to access it without circular import
  */
 const safeSetItem = (key: string, value: string): boolean => {
   // Always store in memory as fallback (for in-app browsers like Instagram)
   memoryStorage.set(key, value);
+  
+  // Also set window property for authToken to allow apiConfig.ts to access it
+  // This avoids circular imports while supporting in-app browsers
+  if (key === 'authToken' && typeof window !== 'undefined') {
+    (window as { __seisoAuthToken?: string }).__seisoAuthToken = value;
+  }
   
   if (!isLocalStorageAvailable()) {
     if (isInAppBrowser()) {
@@ -128,6 +135,11 @@ const safeSetItem = (key: string, value: string): boolean => {
 const safeRemoveItem = (key: string): void => {
   // Always remove from memory
   memoryStorage.delete(key);
+  
+  // Also clear window property for authToken
+  if (key === 'authToken' && typeof window !== 'undefined') {
+    (window as { __seisoAuthToken?: string | null }).__seisoAuthToken = null;
+  }
   
   if (!isLocalStorageAvailable()) return;
   try {
