@@ -5,16 +5,12 @@
 
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 
-// Types
+// Types - Raw JSON-RPC response from backend proxy
 interface RpcResponse<T = unknown> {
-  success: boolean;
-  result?: {
-    jsonrpc: string;
-    result?: T;
-    error?: { message: string };
-    id: number;
-  };
-  error?: string;
+  jsonrpc: string;
+  result?: T;
+  error?: { code?: number; message: string };
+  id: number;
 }
 
 interface BlockhashResult {
@@ -52,21 +48,14 @@ export async function solanaRpc<T = unknown>(method: string, params: unknown[] =
       throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
     }
     
+    // Backend returns raw JSON-RPC response: { jsonrpc: "2.0", result: {...}, id: 1 }
     const data = await response.json() as RpcResponse<T>;
     
-    if (!data.success) {
-      throw new Error(data.error || 'Solana RPC call failed');
+    if (data.error) {
+      throw new Error(data.error.message || 'Solana RPC error');
     }
     
-    // Backend returns: { success: true, result: { jsonrpc: "2.0", result: {...}, id: 1 } }
-    // Extract the actual RPC result
-    const rpcResponse = data.result;
-    
-    if (rpcResponse?.error) {
-      throw new Error(rpcResponse.error.message || 'Solana RPC error');
-    }
-    
-    return rpcResponse?.result as T;
+    return data.result as T;
   } catch (error) {
     const err = error as Error;
     // Re-throw with more context
@@ -95,24 +84,18 @@ export async function evmRpc<T = unknown>(chainId: number, method: string, param
   });
   
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
   }
   
+  // Backend returns raw JSON-RPC response: { jsonrpc: "2.0", result: {...}, id: 1 }
   const data = await response.json() as RpcResponse<T>;
   
-  if (!data.success) {
-    throw new Error(data.error || 'EVM RPC call failed');
+  if (data.error) {
+    throw new Error(data.error.message || 'EVM RPC error');
   }
   
-  // Backend returns: { success: true, result: { jsonrpc: "2.0", result: {...}, id: 1 } }
-  // Extract the actual RPC result
-  const rpcResponse = data.result;
-  
-  if (rpcResponse?.error) {
-    throw new Error(rpcResponse.error.message || 'EVM RPC error');
-  }
-  
-  return rpcResponse?.result as T;
+  return data.result as T;
 }
 
 /**
