@@ -1105,19 +1105,48 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
           }
           
           // Convert amount to USDC units (6 decimals)
-          const amountWei = ethers.parseUnits(amount, 6);
+          // Ensure amount is a valid number string
+          const amountStr = String(amount).trim();
+          if (!amountStr || isNaN(parseFloat(amountStr)) || parseFloat(amountStr) <= 0) {
+            throw new Error(`Invalid amount: "${amount}". Please enter a valid amount.`);
+          }
+          
+          const amountWei = ethers.parseUnits(amountStr, 6);
+          
+          // Verify the amount is not zero
+          if (amountWei === 0n) {
+            throw new Error('Amount cannot be zero. Please enter a valid amount.');
+          }
+          
+          logger.info('USDC amount conversion', { 
+            inputAmount: amount, 
+            amountStr,
+            amountWei: amountWei.toString(),
+            amountFloat: parseFloat(amountStr)
+          });
           
           // Fetch payment address from backend (authoritative source)
-          const paymentAddress = await getPaymentWalletFromBackend(chainId, 'evm');
+          const paymentAddress = await getPaymentWalletFromBackend(String(chainId), 'evm');
           
           if (!paymentAddress || paymentAddress === '0x0000000000000000000000000000000000000000') {
             throw new Error('Payment wallet not configured. Please contact support.');
           }
           
-          logger.debug('Building USDC transaction', { amount, paymentAddress });
+          logger.info('Building USDC transaction', { 
+            amount: amountStr, 
+            amountWei: amountWei.toString(),
+            paymentAddress,
+            chainId 
+          });
           
           // Build the transaction data
           const txData = usdcContract.interface.encodeFunctionData('transfer', [paymentAddress, amountWei]);
+          
+          logger.info('Transaction data encoded', {
+            txData: txData.substring(0, 74) + '...', // Log first part of data (method + first param)
+            paymentAddress,
+            amountWei: amountWei.toString()
+          });
           
           // Get gas estimate
           const gasEstimate = await usdcContract.transfer.estimateGas(paymentAddress, amountWei);
