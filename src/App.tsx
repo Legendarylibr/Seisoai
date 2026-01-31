@@ -167,12 +167,14 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
       <div className="flex-1 min-h-0 overflow-hidden p-0.5 sm:p-1 lg:p-2" style={{ flex: '1 1 0%' }}>
         {activeTab === 'chat' && (
           <div className="h-full min-h-0 flex flex-col" style={{ flex: '1 1 0%' }}>
-            <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
-              <ChatAssistant 
-                onShowTokenPayment={handleShowTokenPayment}
-                onShowStripePayment={handleShowStripePayment}
-              />
-            </Suspense>
+            <AuthGuard>
+              <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
+                <ChatAssistant 
+                  onShowTokenPayment={handleShowTokenPayment}
+                  onShowStripePayment={handleShowStripePayment}
+                />
+              </Suspense>
+            </AuthGuard>
           </div>
         )}
         
@@ -290,25 +292,29 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         
         {activeTab === 'video' && (
           <div className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
-            <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
-              <VideoGenerator 
-                onShowTokenPayment={handleShowTokenPayment}
-                onShowStripePayment={handleShowStripePayment}
-                onModelChange={setVideoModel}
-                onGenerationModeChange={setVideoGenerationMode}
-              />
-            </Suspense>
+            <AuthGuard>
+              <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
+                <VideoGenerator 
+                  onShowTokenPayment={handleShowTokenPayment}
+                  onShowStripePayment={handleShowStripePayment}
+                  onModelChange={setVideoModel}
+                  onGenerationModeChange={setVideoGenerationMode}
+                />
+              </Suspense>
+            </AuthGuard>
           </div>
         )}
         
         {activeTab === 'music' && (
           <div className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
-            <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
-              <MusicGenerator 
-                onShowTokenPayment={handleShowTokenPayment}
-                onShowStripePayment={handleShowStripePayment}
-              />
-            </Suspense>
+            <AuthGuard>
+              <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
+                <MusicGenerator 
+                  onShowTokenPayment={handleShowTokenPayment}
+                  onShowStripePayment={handleShowStripePayment}
+                />
+              </Suspense>
+            </AuthGuard>
           </div>
         )}
         
@@ -326,9 +332,11 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         
         {activeTab === 'gallery' && (
           <div className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
-            <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
-              <ImageGallery />
-            </Suspense>
+            <AuthGuard>
+              <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
+                <ImageGallery />
+              </Suspense>
+            </AuthGuard>
           </div>
         )}
       </div>
