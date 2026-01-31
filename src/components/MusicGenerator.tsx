@@ -403,12 +403,12 @@ const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator() {
   }, []);
 
   return (
-    <div className="fade-in h-full flex flex-col" style={{ background: '#1a4a5e' }}>
+    <div className="fade-in h-full flex flex-col" style={{ background: '#1a4a5e', minHeight: 0, flex: '1 1 0%' }}>
       {/* Menu bar style how to use */}
       <CollapsibleMusicHowToUse />
       
       {/* Main content */}
-      <div className="flex-1 min-h-0 p-1 sm:p-1.5 flex flex-col lg:flex-row gap-1 sm:gap-1.5 overflow-hidden">
+      <div className="flex-1 min-h-0 p-0.5 sm:p-1.5 flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 overflow-hidden" style={{ flex: '1 1 0%' }}>
         {/* Left panel - Controls */}
         <div className="lg:w-[45%] flex flex-col min-h-0">
           {/* Scrollable controls area */}

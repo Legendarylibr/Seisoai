@@ -1269,7 +1269,9 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
   return (
     <div className="h-full flex flex-col relative overflow-hidden" style={{ 
       background: 'linear-gradient(135deg, #1a3a4a 0%, #0f2027 100%)',
-      backgroundImage: 'radial-gradient(circle at 20% 30%, rgba(102, 126, 234, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 70%, rgba(118, 75, 162, 0.1) 0%, transparent 50%)'
+      backgroundImage: 'radial-gradient(circle at 20% 30%, rgba(102, 126, 234, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 70%, rgba(118, 75, 162, 0.1) 0%, transparent 50%)',
+      minHeight: 0,
+      flex: '1 1 0%'
     }}>
       {/* Sign-in overlay when not connected */}
       {!isConnected && (
@@ -1289,14 +1291,15 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
       
       {/* Main chat window - minimal margins for max content */}
       <div 
-        className="flex-1 mx-1 sm:mx-2 lg:mx-3 mt-1 flex flex-col min-h-0 rounded-lg sm:rounded-xl overflow-hidden"
+        className="flex-1 mx-0.5 sm:mx-2 lg:mx-3 mt-0.5 sm:mt-1 flex flex-col min-h-0 rounded-lg sm:rounded-xl overflow-hidden"
         style={{
           ...PANEL.window,
           boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
           filter: !isConnected ? 'blur(2px)' : 'none',
           opacity: !isConnected ? 0.75 : 1,
           transition: 'filter 0.3s ease, opacity 0.3s ease',
-          border: `1px solid ${WIN95.border.dark}`
+          border: `1px solid ${WIN95.border.dark}`,
+          flex: '1 1 0%'
         }}
       >
         {/* Title bar - compact */}
@@ -1549,7 +1552,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
 
       {/* Status bar - hidden on mobile, minimal on desktop */}
       <div 
-        className="hidden sm:flex items-center mx-2 lg:mx-4 my-1 rounded-lg overflow-hidden flex-shrink-0"
+        className="hidden sm:flex items-center mx-2 lg:mx-4 my-0.5 sm:my-1 rounded-lg overflow-hidden flex-shrink-0"
         style={{ 
           ...PANEL.window,
           fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',

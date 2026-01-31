@@ -155,7 +155,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
   }, []);
 
   return (
-    <div className="h-dvh animated-bg flex flex-col overflow-hidden" style={{ position: 'relative', zIndex: 0 }}>
+    <div className="h-dvh animated-bg flex flex-col overflow-hidden" style={{ position: 'relative', zIndex: 0, maxHeight: '100dvh' }}>
       <Navigation 
         activeTab={activeTab} 
         setActiveTab={setActiveTab}
@@ -164,9 +164,9 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         onShowStripePayment={handleShowStripePayment}
       />
       
-      <div className="flex-1 min-h-0 overflow-hidden p-0.5 sm:p-1 lg:p-2">
+      <div className="flex-1 min-h-0 overflow-hidden p-0.5 sm:p-1 lg:p-2" style={{ flex: '1 1 0%' }}>
         {activeTab === 'chat' && (
-          <div className="h-full min-h-0 flex flex-col">
+          <div className="h-full min-h-0 flex flex-col" style={{ flex: '1 1 0%' }}>
             <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
               <ChatAssistant 
                 onShowTokenPayment={handleShowTokenPayment}
@@ -177,13 +177,13 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'generate' && (
-          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl" style={{ flex: '1 1 0%' }}>
             <AuthGuard>
-              <div className="h-full flex flex-col lg:flex-row gap-1 sm:gap-1.5 lg:gap-2">
+              <div className="h-full flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2">
                 {/* Left Column - Controls */}
-                <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
+                <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0 max-h-[45vh] lg:max-h-none">
                   {/* Scrollable controls on desktop, flows naturally on mobile */}
-                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1 sm:space-y-1.5 pb-1">
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5 sm:space-y-1.5 pb-0.5 sm:pb-1">
                     <SimpleWalletConnect />
                     <PromptOptimizer value={userPrompt} onPromptChange={setUserPrompt} />
                     <StyleSelector />
@@ -192,7 +192,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                     <MultiImageModelSelector />
                   </div>
                   {/* Generate button */}
-                  <div className="flex-shrink-0 pt-1 pb-1 sm:pb-2 lg:pb-0">
+                  <div className="flex-shrink-0 pt-0.5 sm:pt-1 pb-0.5 sm:pb-2 lg:pb-0">
                     <GenerateButton 
                       customPrompt={userPrompt}
                       onShowTokenPayment={handleShowTokenPayment}
@@ -202,7 +202,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                 </div>
                 
                 {/* Right Column - Output */}
-                <div className="flex-1 min-h-[250px] sm:min-h-[300px] lg:min-h-0">
+                <div className="flex-1 min-h-[180px] sm:min-h-[300px] lg:min-h-0">
                   <ImageOutput />
                 </div>
               </div>
@@ -211,13 +211,13 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'batch' && (
-          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl">
+          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl" style={{ flex: '1 1 0%' }}>
             <AuthGuard>
-              <div className="h-full flex flex-col lg:flex-row gap-1 sm:gap-1.5 lg:gap-2">
+              <div className="h-full flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2">
                 {/* Left Column - Batch Controls */}
-                <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
+                <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0 max-h-[45vh] lg:max-h-none">
                   {/* Scrollable controls on desktop, flows naturally on mobile */}
-                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1 sm:space-y-1.5 pb-1 sm:pb-2 lg:pb-0">
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5 sm:space-y-1.5 pb-0.5 sm:pb-2 lg:pb-0">
                     <SimpleWalletConnect />
                     <StyleSelector />
                     <MultiImageModelSelector />
@@ -229,7 +229,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                 </div>
                 
                 {/* Right Column - Output */}
-                <div className="flex-1 min-h-[250px] sm:min-h-[300px] lg:min-h-0">
+                <div className="flex-1 min-h-[180px] sm:min-h-[300px] lg:min-h-0">
                   <ImageOutput />
                 </div>
               </div>
@@ -238,7 +238,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'video' && (
-          <div className="h-full min-h-0 overflow-hidden">
+          <div className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
             <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
               <VideoGenerator 
                 onShowTokenPayment={handleShowTokenPayment}
@@ -251,7 +251,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'music' && (
-          <div className="h-full min-h-0 overflow-hidden">
+          <div className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
             <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
               <MusicGenerator 
                 onShowTokenPayment={handleShowTokenPayment}
@@ -274,7 +274,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         
         
         {activeTab === 'gallery' && (
-          <div className="h-full min-h-0 overflow-hidden">
+          <div className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
             <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
               <ImageGallery />
             </Suspense>

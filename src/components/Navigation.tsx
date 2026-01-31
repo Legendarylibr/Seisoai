@@ -427,42 +427,69 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
             </div>
           </div>
 
-          {/* Mobile Navigation Menu - only show when authenticated */}
+          {/* Mobile Navigation Menu - overlay style to not push content */}
           {showMobileMenu && isConnected && (
-            <div className="md:hidden pt-2 mt-2 slide-up" style={{ borderTop: `1px solid ${WIN95.bgDark}` }}>
-              <nav className="flex flex-col gap-1">
-                {tabs.map((tab) => {
-                  const Icon = tab.icon;
-                  const isActive = activeTab === tab.id;
-                  return (
-                    <Win95NavButton 
-                      key={tab.id} 
-                      onClick={() => { setActiveTab(tab.id); setShowMobileMenu(false); }}
-                      active={isActive}
-                      className="w-full justify-start"
-                    >
-                      <Icon className="w-4 h-4" />
-                      <span>{tab.name}</span>
-                    </Win95NavButton>
-                  );
-                })}
-                <div style={{ borderTop: `1px solid ${WIN95.bgDark}`, marginTop: '4px', paddingTop: '4px' }} />
-                <Win95NavButton 
-                  onClick={() => { setShowReferralDashboard(true); setShowMobileMenu(false); }}
-                  className="w-full justify-start"
-                >
-                  <Gift className="w-4 h-4" />
-                  <span>Referral Program</span>
-                </Win95NavButton>
-                <Win95NavButton 
-                  onClick={() => { setShowAchievements(true); setShowMobileMenu(false); }}
-                  className="w-full justify-start"
-                >
-                  <Trophy className="w-4 h-4" />
-                  <span>Achievements</span>
-                </Win95NavButton>
-              </nav>
-            </div>
+            <>
+              {/* Backdrop to close menu */}
+              <div 
+                className="md:hidden fixed inset-0 z-40" 
+                style={{ background: 'rgba(0,0,0,0.3)' }}
+                onClick={() => setShowMobileMenu(false)}
+              />
+              {/* Menu panel */}
+              <div 
+                className="md:hidden fixed top-0 right-0 z-50 h-full w-64 max-w-[80vw] pt-2 pb-4 px-2 slide-up overflow-y-auto"
+                style={{ 
+                  background: WIN95.bg,
+                  boxShadow: `-2px 0 8px rgba(0,0,0,0.3), inset 1px 1px 0 ${WIN95.border.light}`
+                }}
+              >
+                {/* Close button at top */}
+                <div className="flex justify-end mb-2">
+                  <button 
+                    onClick={() => setShowMobileMenu(false)}
+                    className="p-2"
+                    style={BTN.base}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: WIN95.text }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <nav className="flex flex-col gap-1">
+                  {tabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <Win95NavButton 
+                        key={tab.id} 
+                        onClick={() => { setActiveTab(tab.id); setShowMobileMenu(false); }}
+                        active={isActive}
+                        className="w-full justify-start"
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{tab.name}</span>
+                      </Win95NavButton>
+                    );
+                  })}
+                  <div style={{ borderTop: `1px solid ${WIN95.bgDark}`, marginTop: '4px', paddingTop: '4px' }} />
+                  <Win95NavButton 
+                    onClick={() => { setShowReferralDashboard(true); setShowMobileMenu(false); }}
+                    className="w-full justify-start"
+                  >
+                    <Gift className="w-4 h-4" />
+                    <span>Referral Program</span>
+                  </Win95NavButton>
+                  <Win95NavButton 
+                    onClick={() => { setShowAchievements(true); setShowMobileMenu(false); }}
+                    className="w-full justify-start"
+                  >
+                    <Trophy className="w-4 h-4" />
+                    <span>Achievements</span>
+                  </Win95NavButton>
+                </nav>
+              </div>
+            </>
           )}
         </div>
       </div>

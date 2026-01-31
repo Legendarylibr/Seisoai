@@ -318,7 +318,7 @@ const ImageGallery: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col" style={{ background: WIN95.bg }}>
+    <div className="h-full flex flex-col" style={{ background: WIN95.bg, minHeight: 0, flex: '1 1 0%' }}>
       {/* Title bar */}
       <div 
         className="flex items-center justify-between px-2 py-1"

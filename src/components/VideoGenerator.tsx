@@ -665,12 +665,12 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
   }, [generatedVideoUrl]);
 
   return (
-    <div className="fade-in h-full flex flex-col" style={{ background: WIN95.bg }}>
+    <div className="fade-in h-full flex flex-col" style={{ background: WIN95.bg, minHeight: 0, flex: '1 1 0%' }}>
       {/* How to Use Guide */}
       <CollapsibleVideoHowToUse />
       
       {/* Main content */}
-      <div className="flex-1 min-h-0 p-1 sm:p-1.5 flex flex-col lg:flex-row gap-1 sm:gap-1.5 lg:gap-2 overflow-hidden">
+      <div className="flex-1 min-h-0 p-0.5 sm:p-1.5 flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2 overflow-hidden" style={{ flex: '1 1 0%' }}>
         {/* Left panel - Controls */}
         <div className="lg:w-[45%] flex flex-col min-h-0">
           {/* Scrollable controls area */}
@@ -1238,9 +1238,9 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
         </div>
       </div>
       
-      {/* Status bar */}
+      {/* Status bar - more compact on mobile */}
       <div 
-        className="flex items-center mx-1 sm:mx-2 mb-1 sm:mb-2 flex-shrink-0"
+        className="hidden sm:flex items-center mx-1 sm:mx-2 mb-0.5 sm:mb-2 flex-shrink-0"
         style={{ 
           background: WIN95.bg,
           boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
