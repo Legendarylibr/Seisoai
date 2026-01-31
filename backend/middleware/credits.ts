@@ -2,16 +2,17 @@
  * Credits middleware
  * Handles credit checks and deductions for paid operations
  * 
- * NFT and Token holders get DAILY credits:
- * - NFT holders get 20 credits per day
- * - SEISO token holders get 20 credits per day (when token is deployed)
+ * Token Gate holders get DAILY credits:
+ * - Token gate holders (SEISO on Base) get 20 credits per day
+ * - NFT holders also get 20 credits per day (legacy support)
  * - Daily credits reset at midnight UTC
  */
 import type { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
 import type { Model } from 'mongoose';
-import { CREDITS, DAILY_CREDITS, SEISO_TOKEN } from '../config/constants';
+import { CREDITS, DAILY_CREDITS, SEISO_TOKEN, TOKEN_GATE } from '../config/constants';
+import { checkTokenGateAccess } from './tokenGate';
 
 // Types
 interface CreditsRequest extends Request {
@@ -75,10 +76,52 @@ export function isTokenHolder(user: IUser): boolean {
 }
 
 /**
- * Check if user qualifies for daily credits (NFT or Token holder)
+ * Check if user passes the token gate (holds SEISO token on Base)
+ * This is checked on-chain via RPC
+ */
+export async function isTokenGateHolder(user: IUser): Promise<boolean> {
+  // Token gate must be enabled
+  if (!TOKEN_GATE.enabled) {
+    return false;
+  }
+  
+  // User must have a wallet address
+  if (!user.walletAddress) {
+    return false;
+  }
+  
+  try {
+    const status = await checkTokenGateAccess(user.walletAddress);
+    return status.hasAccess;
+  } catch (error) {
+    logger.error('Error checking token gate status for credits:', { 
+      error: (error as Error).message,
+      userId: user.userId 
+    });
+    return false;
+  }
+}
+
+/**
+ * Check if user qualifies for daily credits (NFT, Token, or Token Gate holder)
+ * Synchronous version - checks stored holdings only
  */
 export function qualifiesForDailyCredits(user: IUser): boolean {
   return isNFTHolder(user) || isTokenHolder(user);
+}
+
+/**
+ * Check if user qualifies for daily credits (includes token gate check)
+ * Async version - also checks on-chain token gate status
+ */
+export async function qualifiesForDailyCreditsAsync(user: IUser): Promise<boolean> {
+  // First check sync methods (NFT collections, stored token holdings)
+  if (isNFTHolder(user) || isTokenHolder(user)) {
+    return true;
+  }
+  
+  // Then check token gate (on-chain)
+  return await isTokenGateHolder(user);
 }
 
 /**
@@ -98,7 +141,8 @@ function needsDailyCreditsGrant(user: IUser): boolean {
 
 /**
  * Calculate total daily credits for a user based on their holdings
- * NFT holders get 20, Token holders get 20, both get 40
+ * NFT holders get 20, Token holders get 20
+ * Sync version - only checks stored holdings
  */
 export function calculateDailyCredits(user: IUser): number {
   let dailyCredits = 0;
@@ -115,7 +159,35 @@ export function calculateDailyCredits(user: IUser): number {
 }
 
 /**
- * Grant daily credits for NFT/Token holders
+ * Calculate total daily credits including token gate check
+ * Token gate holders get 20 credits per day
+ */
+export async function calculateDailyCreditsAsync(user: IUser): Promise<number> {
+  let dailyCredits = 0;
+  
+  // Check NFT holdings (stored)
+  if (isNFTHolder(user)) {
+    dailyCredits += DAILY_CREDITS.NFT_HOLDER_DAILY_CREDITS;
+  }
+  
+  // Check token holdings (stored)
+  if (isTokenHolder(user)) {
+    dailyCredits += DAILY_CREDITS.TOKEN_HOLDER_DAILY_CREDITS;
+  }
+  
+  // Check token gate (on-chain) - only if not already getting credits from above
+  if (dailyCredits === 0 && TOKEN_GATE.enabled) {
+    const isGateHolder = await isTokenGateHolder(user);
+    if (isGateHolder) {
+      dailyCredits = DAILY_CREDITS.TOKEN_HOLDER_DAILY_CREDITS; // 20 credits for token gate holders
+    }
+  }
+  
+  return dailyCredits;
+}
+
+/**
+ * Grant daily credits for NFT/Token/TokenGate holders
  * Adds credits directly to user's main credits balance (same as paid credits)
  * Returns the updated user document
  */
@@ -123,18 +195,13 @@ export async function grantDailyCredits(
   user: IUser, 
   getUserModel: () => Model<IUser>
 ): Promise<{ granted: boolean; amount: number; user: IUser }> {
-  // Check if user qualifies for daily credits
-  if (!qualifiesForDailyCredits(user)) {
-    return { granted: false, amount: 0, user };
-  }
-  
   // Check if grant is needed (new day)
   if (!needsDailyCreditsGrant(user)) {
     return { granted: false, amount: 0, user };
   }
   
-  // Calculate daily credits based on holdings
-  const dailyCreditsAmount = calculateDailyCredits(user);
+  // Calculate daily credits based on holdings (includes token gate check)
+  const dailyCreditsAmount = await calculateDailyCreditsAsync(user);
   
   if (dailyCreditsAmount === 0) {
     return { granted: false, amount: 0, user };
@@ -160,7 +227,7 @@ export async function grantDailyCredits(
             amount: 0,
             credits: dailyCreditsAmount,
             timestamp: new Date(),
-            type: 'nft_bonus'  // Using nft_bonus type for daily holder grants
+            type: 'token_gate_bonus'  // Token gate daily credits
           }],
           $slice: -30  // Keep last 30 entries
         }
@@ -178,7 +245,8 @@ export async function grantDailyCredits(
     amount: dailyCreditsAmount,
     newBalance: updatedUser.credits,
     isNFT: isNFTHolder(user),
-    isToken: isTokenHolder(user)
+    isToken: isTokenHolder(user),
+    isTokenGate: TOKEN_GATE.enabled
   });
   
   return { granted: true, amount: dailyCreditsAmount, user: updatedUser };
@@ -238,16 +306,15 @@ export const createRequireCredits = (
           return;
         }
 
-        // Check and grant daily credits if eligible (NFT/Token holders)
-        if (qualifiesForDailyCredits(user)) {
+        // Check and grant daily credits if eligible (NFT/Token/TokenGate holders)
+        const qualifies = await qualifiesForDailyCreditsAsync(user);
+        if (qualifies) {
           const result = await grantDailyCredits(user, getUserModel);
           if (result.granted) {
             user = result.user;
-            logger.info('Daily credits reset for holder', {
+            logger.info('Daily credits granted for token gate holder', {
               userId: user.userId,
-              dailyCredits: result.amount,
-              isNFT: isNFTHolder(user),
-              isToken: isTokenHolder(user)
+              dailyCredits: result.amount
             });
           }
         }
@@ -331,12 +398,13 @@ export const createRequireCreditsForModel = (
           return;
         }
 
-        // Check and grant daily credits if eligible (NFT/Token holders)
-        if (qualifiesForDailyCredits(user)) {
+        // Check and grant daily credits if eligible (NFT/Token/TokenGate holders)
+        const qualifies = await qualifiesForDailyCreditsAsync(user);
+        if (qualifies) {
           const result = await grantDailyCredits(user, getUserModel);
           if (result.granted) {
             user = result.user;
-            logger.info('Daily credits reset for model generation', {
+            logger.info('Daily credits granted for model generation', {
               userId: user.userId,
               dailyCredits: result.amount
             });
@@ -427,8 +495,9 @@ export const createRequireCreditsForVideo = (
           return;
         }
 
-        // Check and grant daily credits if eligible (NFT/Token holders)
-        if (qualifiesForDailyCredits(user)) {
+        // Check and grant daily credits if eligible (NFT/Token/TokenGate holders)
+        const qualifies = await qualifiesForDailyCreditsAsync(user);
+        if (qualifies) {
           const result = await grantDailyCredits(user, getUserModel);
           if (result.granted) {
             user = result.user;
@@ -515,9 +584,12 @@ export default {
   hasFreeGenerationAccess,
   isNFTHolder,
   isTokenHolder,
+  isTokenGateHolder,
   qualifiesForDailyCredits,
+  qualifiesForDailyCreditsAsync,
   grantDailyCredits,
   calculateDailyCredits,
+  calculateDailyCreditsAsync,
   getTotalAvailableCredits
 };
 
