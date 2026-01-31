@@ -1,18 +1,6 @@
-# AI Image Generator Backend
+# SeisoAI Backend
 
-A comprehensive backend API for the AI Image Generator that stores user data by wallet address with automatic cleanup after 30 days.
-
-## 📝 For AI Agents: TypeScript Migration
-
-If you're helping with the JavaScript-to-TypeScript migration:
-
-- **📖 Detailed Guide**: See [REWRITE_GUIDE.md](./REWRITE_GUIDE.md) for complete conversion instructions
-- **✅ Checklist**: See [REWRITE_CHECKLIST.md](./REWRITE_CHECKLIST.md) for remaining files and quick reference
-- **🏗️ Architecture**: See [ARCHITECTURE.md](./ARCHITECTURE.md) for project structure
-
-**Remaining files to convert:**
-- `routes/generate.js` → `routes/generate.ts`
-- `routes/wan-animate.js` → `routes/wan-animate.ts`
+Express API backend for SeisoAI. Handles authentication, payments, AI generation, and user management.
 
 ## Features
 

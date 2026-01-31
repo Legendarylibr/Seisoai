@@ -102,7 +102,6 @@ seisoai/
 │   └── models/             # Mongoose models
 ├── discord-bot/            # Discord bot
 │   └── src/                # Bot source
-├── docs/                   # Documentation
 └── k8s/                    # Kubernetes configs
 ```
 
@@ -112,8 +111,6 @@ seisoai/
 ```bash
 railway up
 ```
-
-See [RAILWAY_SETUP.md](./RAILWAY_SETUP.md) for detailed instructions.
 
 ### Docker
 ```bash
@@ -128,7 +125,6 @@ kubectl apply -f k8s/
 ## Documentation
 
 - [Contributing Guide](./CONTRIBUTING.md)
-- [Scaling Guide](./docs/SCALING.md)
 - [Backend Security](./backend/SECURITY.md)
 - [Discord Bot](./discord-bot/README.md)
 
