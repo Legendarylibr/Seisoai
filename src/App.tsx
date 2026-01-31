@@ -181,15 +181,42 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
             <AuthGuard>
               <div className="h-full flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2">
                 {/* Left Column - Controls */}
-                <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0 max-h-[45vh] lg:max-h-none">
-                  {/* Scrollable controls on desktop, flows naturally on mobile */}
+                <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
+                  {/* Mobile: compact layout with prompt visible, Desktop: scrollable */}
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5 sm:space-y-1.5 pb-0.5 sm:pb-1">
-                    <SimpleWalletConnect />
+                    {/* Wallet connect - hidden on mobile since it's in nav */}
+                    <div className="hidden sm:block">
+                      <SimpleWalletConnect />
+                    </div>
+                    {/* Prompt - always visible first */}
                     <PromptOptimizer value={userPrompt} onPromptChange={setUserPrompt} />
-                    <StyleSelector />
-                    <AspectRatioSelector />
-                    <ReferenceImageInput />
-                    <MultiImageModelSelector />
+                    {/* Secondary controls - collapsed on mobile */}
+                    <details className="sm:hidden" open>
+                      <summary 
+                        className="text-[10px] font-bold px-2 py-1 cursor-pointer select-none"
+                        style={{
+                          background: 'var(--win95-bg)',
+                          color: 'var(--win95-text)',
+                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+                          boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)'
+                        }}
+                      >
+                        ▼ More Options (Style, Aspect, Reference, Model)
+                      </summary>
+                      <div className="space-y-0.5 mt-0.5">
+                        <StyleSelector />
+                        <AspectRatioSelector />
+                        <ReferenceImageInput />
+                        <MultiImageModelSelector />
+                      </div>
+                    </details>
+                    {/* Desktop: show all controls */}
+                    <div className="hidden sm:block space-y-1.5">
+                      <StyleSelector />
+                      <AspectRatioSelector />
+                      <ReferenceImageInput />
+                      <MultiImageModelSelector />
+                    </div>
                   </div>
                   {/* Generate button */}
                   <div className="flex-shrink-0 pt-0.5 sm:pt-1 pb-0.5 sm:pb-2 lg:pb-0">
@@ -202,7 +229,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                 </div>
                 
                 {/* Right Column - Output */}
-                <div className="flex-1 min-h-[180px] sm:min-h-[300px] lg:min-h-0">
+                <div className="flex-1 min-h-[120px] sm:min-h-[300px] lg:min-h-0">
                   <ImageOutput />
                 </div>
               </div>
@@ -215,12 +242,36 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
             <AuthGuard>
               <div className="h-full flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2">
                 {/* Left Column - Batch Controls */}
-                <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0 max-h-[45vh] lg:max-h-none">
-                  {/* Scrollable controls on desktop, flows naturally on mobile */}
+                <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
+                  {/* Mobile: compact layout, Desktop: scrollable */}
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5 sm:space-y-1.5 pb-0.5 sm:pb-2 lg:pb-0">
-                    <SimpleWalletConnect />
-                    <StyleSelector />
-                    <MultiImageModelSelector />
+                    {/* Wallet connect - hidden on mobile since it's in nav */}
+                    <div className="hidden sm:block">
+                      <SimpleWalletConnect />
+                    </div>
+                    {/* Secondary controls - collapsed on mobile */}
+                    <details className="sm:hidden" open>
+                      <summary 
+                        className="text-[10px] font-bold px-2 py-1 cursor-pointer select-none"
+                        style={{
+                          background: 'var(--win95-bg)',
+                          color: 'var(--win95-text)',
+                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+                          boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)'
+                        }}
+                      >
+                        ▼ Options (Style, Model)
+                      </summary>
+                      <div className="space-y-0.5 mt-0.5">
+                        <StyleSelector />
+                        <MultiImageModelSelector />
+                      </div>
+                    </details>
+                    {/* Desktop: show all controls */}
+                    <div className="hidden sm:block space-y-1.5">
+                      <StyleSelector />
+                      <MultiImageModelSelector />
+                    </div>
                     <GenerationQueue
                       onShowTokenPayment={handleShowTokenPayment}
                       onShowStripePayment={handleShowStripePayment}
@@ -229,7 +280,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                 </div>
                 
                 {/* Right Column - Output */}
-                <div className="flex-1 min-h-[180px] sm:min-h-[300px] lg:min-h-0">
+                <div className="flex-1 min-h-[120px] sm:min-h-[300px] lg:min-h-0">
                   <ImageOutput />
                 </div>
               </div>

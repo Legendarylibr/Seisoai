@@ -494,6 +494,46 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
         </div>
       </div>
 
+      {/* Mobile Tab Bar - Always visible on small screens */}
+      {isConnected && (
+        <div 
+          className="md:hidden flex items-center overflow-x-auto scrollbar-hide px-1 py-1 gap-0.5"
+          style={{ 
+            background: WIN95.bg,
+            borderTop: `1px solid ${WIN95.border.light}`,
+            borderBottom: `1px solid ${WIN95.bgDark}`,
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className="flex items-center gap-1 px-2 py-1 flex-shrink-0 transition-none select-none"
+                style={{
+                  background: isActive ? WIN95.bgDark : WIN95.buttonFace,
+                  color: isActive ? WIN95.highlightText : WIN95.text,
+                  border: 'none',
+                  boxShadow: isActive 
+                    ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
+                    : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {isConnected && <ReferralDashboard isOpen={showReferralDashboard} onClose={() => setShowReferralDashboard(false)} />}
       {isConnected && <AchievementBadge isOpen={showAchievements} onClose={() => setShowAchievements(false)} />}
     </header>
