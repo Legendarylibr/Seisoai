@@ -1,0 +1,107 @@
+// English translations
+export const en = {
+  // Navigation
+  nav: {
+    chat: 'Chat',
+    image: 'Image',
+    batch: 'Batch',
+    video: 'Video',
+    music: 'Music',
+    gallery: 'Gallery',
+    referralProgram: 'Referral Program',
+    achievements: 'Achievements',
+    refreshCredits: 'Refresh Credits',
+    buyCredits: 'Buy Credits',
+    buy: 'Buy',
+    disconnect: 'Disconnect',
+    credits: 'credits',
+    currentBalance: 'Current Balance:',
+    totalEarned: 'Total Earned:',
+    moreOptions: 'More Options (Style, Aspect, Reference, Model)',
+    options: 'Options (Style, Model)',
+    minimize: 'Minimize',
+    maximize: 'Maximize',
+    subtitle: 'Image • Video • Music Generator',
+  },
+  
+  // Common
+  common: {
+    loading: 'Loading...',
+    pleaseWait: 'Please wait...',
+    error: 'Error',
+    success: 'Success',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
+    save: 'Save',
+    close: 'Close',
+    generate: 'Generate',
+    download: 'Download',
+    share: 'Share',
+    copy: 'Copy',
+    delete: 'Delete',
+    edit: 'Edit',
+    view: 'View',
+  },
+  
+  // Loading messages
+  loadingMessages: {
+    chatAssistant: 'Loading Chat Assistant...',
+    videoGenerator: 'Loading Video Generator...',
+    musicGenerator: 'Loading Music Generator...',
+    gallery: 'Loading Gallery...',
+    characterCreator: 'Loading 3D Character Creator...',
+  },
+  
+  // Auth
+  auth: {
+    connectWallet: 'Connect Wallet',
+    walletConnected: 'Wallet Connected',
+    signIn: 'Sign In',
+    signOut: 'Sign Out',
+  },
+  
+  // Image Generation
+  imageGen: {
+    prompt: 'Prompt',
+    promptPlaceholder: 'Describe the image you want to create...',
+    style: 'Style',
+    aspectRatio: 'Aspect Ratio',
+    model: 'Model',
+    referenceImage: 'Reference Image',
+    generateImage: 'Generate Image',
+    generating: 'Generating...',
+  },
+  
+  // Video Generation
+  videoGen: {
+    prompt: 'Prompt',
+    promptPlaceholder: 'Describe the video you want to create...',
+    generateVideo: 'Generate Video',
+    generating: 'Generating...',
+  },
+  
+  // Music Generation
+  musicGen: {
+    prompt: 'Prompt',
+    promptPlaceholder: 'Describe the music you want to create...',
+    generateMusic: 'Generate Music',
+    generating: 'Generating...',
+  },
+  
+  // Settings
+  settings: {
+    language: 'Language',
+    english: 'English',
+    japanese: '日本語',
+    chinese: '中文',
+  },
+  
+  // Footer
+  footer: {
+    terms: 'Terms of Service',
+    privacy: 'Privacy Policy',
+    contact: 'Contact',
+  },
+} as const;
+
+export type Translations = typeof en;

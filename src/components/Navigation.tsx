@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, memo, useCallback, ReactNode } from 'react';
-import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, Clock, Gift, Trophy, type LucideIcon } from 'lucide-react';
+import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, Clock, Gift, Trophy, Globe, type LucideIcon } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { useLanguage, type Language } from '../i18n';
 import ReferralDashboard from './ReferralDashboard';
 import AchievementBadge from './AchievementBadge';
 import { WIN95, BTN, PANEL, TITLEBAR } from '../utils/buttonStyles';
@@ -93,6 +94,7 @@ interface NavigationProps {
 
 const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, onShowStripePayment: _onShowStripePayment }: NavigationProps) => {
   const walletContext = useSimpleWallet();
+  const { language, setLanguage, t } = useLanguage();
   
   const isConnected = walletContext.isConnected;
   const address = walletContext.address;
@@ -111,17 +113,25 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
   
   const [showMobileMenu, setShowMobileMenu] = useState<boolean>(false);
   const [showCreditsDropdown, setShowCreditsDropdown] = useState<boolean>(false);
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState<boolean>(false);
   const [showReferralDashboard, setShowReferralDashboard] = useState<boolean>(false);
   const [showAchievements, setShowAchievements] = useState<boolean>(false);
   const creditsDropdownRef = useRef<HTMLDivElement>(null);
+  const languageDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (creditsDropdownRef.current && !creditsDropdownRef.current.contains(e.target as Node)) setShowCreditsDropdown(false);
+      if (languageDropdownRef.current && !languageDropdownRef.current.contains(e.target as Node)) setShowLanguageDropdown(false);
     };
-    if (showCreditsDropdown) document.addEventListener('mousedown', handleClickOutside);
+    if (showCreditsDropdown || showLanguageDropdown) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showCreditsDropdown]);
+  }, [showCreditsDropdown, showLanguageDropdown]);
+
+  const handleLanguageChange = useCallback((lang: Language) => {
+    setLanguage(lang);
+    setShowLanguageDropdown(false);
+  }, [setLanguage]);
 
   if (!tabs || !Array.isArray(tabs)) {
     return (
@@ -170,8 +180,24 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
       >
         <img src="/seiso-logo.png" alt="Seiso AI" className="w-8 h-8 lg:w-10 lg:h-10 rounded-sm object-cover flex-shrink-0" style={{ imageRendering: 'auto', minWidth: '32px', minHeight: '32px' }} />
         <span className="text-[10px] lg:text-[11px] font-bold tracking-wide">Seiso AI</span>
-        <span className="hidden sm:inline text-[9px] lg:text-[10px] opacity-80 ml-1">— Image • Video • Music Generator</span>
+        <span className="hidden sm:inline text-[9px] lg:text-[10px] opacity-80 ml-1">— {t.nav.subtitle}</span>
         <div className="flex-1" />
+        {/* Language Toggle - Always visible */}
+        <button
+          onClick={() => handleLanguageChange(language === 'en' ? 'ja' : language === 'ja' ? 'zh' : 'en')}
+          className="flex items-center gap-1 px-2 py-0.5 mr-2 text-[9px] lg:text-[10px] font-bold"
+          style={{
+            background: WIN95.buttonFace,
+            boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
+            color: WIN95.text,
+            cursor: 'pointer',
+            fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+          }}
+          title={t.settings.language}
+        >
+          <Globe className="w-3 h-3" />
+          <span>{language === 'ja' ? '🇯🇵 日本語' : language === 'zh' ? '🇨🇳 中文' : '🇺🇸 EN'}</span>
+        </button>
         {/* Window control buttons */}
         <div className="flex gap-px">
           <button 
@@ -182,7 +208,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
               color: WIN95.text,
               lineHeight: 1
             }}
-            title="Minimize"
+            title={t.nav.minimize}
           >
             _
           </button>
@@ -194,7 +220,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
               color: WIN95.text,
               lineHeight: 1
             }}
-            title="Maximize"
+            title={t.nav.maximize}
           >
             □
           </button>
@@ -224,10 +250,10 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                 })}
                 {/* Quick Access Buttons */}
                 <div className="ml-2 pl-2" style={{ borderLeft: `1px solid ${WIN95.border.dark}` }}>
-                  <Win95NavButton onClick={() => setShowReferralDashboard(true)} title="Referral Program">
+                  <Win95NavButton onClick={() => setShowReferralDashboard(true)} title={t.nav.referralProgram}>
                     <Gift className="w-4 h-4" />
                   </Win95NavButton>
-                  <Win95NavButton onClick={() => setShowAchievements(true)} title="Achievements">
+                  <Win95NavButton onClick={() => setShowAchievements(true)} title={t.nav.achievements}>
                     <Trophy className="w-4 h-4" />
                   </Win95NavButton>
                 </div>
@@ -255,9 +281,9 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
 
                 {/* Credits Dropdown */}
                 <div className="relative" ref={creditsDropdownRef}>
-                  <Win95NavButton onClick={() => setShowCreditsDropdown(!showCreditsDropdown)}>
+                    <Win95NavButton onClick={() => setShowCreditsDropdown(!showCreditsDropdown)}>
                     <Coins className="w-3 h-3" />
-                    <span>{isLoading ? '...' : credits} credits</span>
+                    <span>{isLoading ? '...' : credits} {t.nav.credits}</span>
                     <ChevronDown className={`w-3 h-3 transition-transform ${showCreditsDropdown ? 'rotate-180' : ''}`} />
                   </Win95NavButton>
                   {showCreditsDropdown && (
@@ -271,11 +297,11 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                     >
                       <div className="px-3 py-2" style={{ borderBottom: `1px solid ${WIN95.bgDark}` }}>
                         <div className="flex justify-between text-[10px] mb-1" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                          <span style={{ color: WIN95.textDisabled }}>Current Balance:</span>
+                          <span style={{ color: WIN95.textDisabled }}>{t.nav.currentBalance}</span>
                           <span className="font-bold" style={{ color: WIN95.text }}>{credits}</span>
                         </div>
                         <div className="flex justify-between text-[10px]" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-                          <span style={{ color: WIN95.textDisabled }}>Total Earned:</span>
+                          <span style={{ color: WIN95.textDisabled }}>{t.nav.totalEarned}</span>
                           <span className="font-bold" style={{ color: WIN95.text }}>{totalCreditsEarned}</span>
                         </div>
                       </div>
@@ -297,7 +323,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                         }}
                       >
                         <Gift className="w-4 h-4" />
-                        <span>Referral Program</span>
+                        <span>{t.nav.referralProgram}</span>
                       </button>
                       <button 
                         onClick={() => { setShowAchievements(true); setShowCreditsDropdown(false); }} 
@@ -316,7 +342,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                         }}
                       >
                         <Trophy className="w-4 h-4" />
-                        <span>Achievements</span>
+                        <span>{t.nav.achievements}</span>
                       </button>
                       <button 
                         onClick={handleRefreshCredits} 
@@ -335,7 +361,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                         }}
                       >
                         <RefreshCw className="w-4 h-4" />
-                        <span>Refresh Credits</span>
+                        <span>{t.nav.refreshCredits}</span>
                       </button>
                     </div>
                   )}
@@ -358,14 +384,106 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                   }}
                 >
                   <Coins className="w-4 h-4" />
-                  <span>Buy Credits</span>
+                  <span>{t.nav.buyCredits}</span>
                 </button>
 
                 {/* Disconnect Wallet */}
                 <Win95NavButton onClick={walletContext.disconnectWallet}>
                   <LogOut className="w-3 h-3" />
-                  <span className="hidden lg:inline">Disconnect</span>
+                  <span className="hidden lg:inline">{t.nav.disconnect}</span>
                 </Win95NavButton>
+                
+                {/* Language Selector */}
+                <div className="relative" ref={languageDropdownRef}>
+                  <Win95NavButton onClick={() => setShowLanguageDropdown(!showLanguageDropdown)} title={t.settings.language}>
+                    <Globe className="w-3 h-3" />
+                    <span className="hidden lg:inline">{language === 'ja' ? '日本語' : 'EN'}</span>
+                    <ChevronDown className={`w-3 h-3 transition-transform ${showLanguageDropdown ? 'rotate-180' : ''}`} />
+                  </Win95NavButton>
+                  {showLanguageDropdown && (
+                    <div 
+                      className="absolute right-0 mt-1 w-36 z-50"
+                      style={{
+                        background: WIN95.bg,
+                        border: `1px solid ${WIN95.border.darker}`,
+                        boxShadow: `2px 2px 0 ${WIN95.border.darker}`
+                      }}
+                    >
+                      <button 
+                        onClick={() => handleLanguageChange('en')} 
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
+                        style={{ 
+                          color: language === 'en' ? WIN95.highlightText : WIN95.text, 
+                          background: language === 'en' ? WIN95.highlight : 'transparent',
+                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' 
+                        }}
+                        onMouseEnter={(e) => {
+                          if (language !== 'en') {
+                            e.currentTarget.style.background = WIN95.highlight;
+                            e.currentTarget.style.color = WIN95.highlightText;
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (language !== 'en') {
+                            e.currentTarget.style.background = 'transparent';
+                            e.currentTarget.style.color = WIN95.text;
+                          }
+                        }}
+                      >
+                        <span>🇺🇸</span>
+                        <span>{t.settings.english}</span>
+                      </button>
+                      <button 
+                        onClick={() => handleLanguageChange('ja')} 
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
+                        style={{ 
+                          color: language === 'ja' ? WIN95.highlightText : WIN95.text, 
+                          background: language === 'ja' ? WIN95.highlight : 'transparent',
+                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' 
+                        }}
+                        onMouseEnter={(e) => {
+                          if (language !== 'ja') {
+                            e.currentTarget.style.background = WIN95.highlight;
+                            e.currentTarget.style.color = WIN95.highlightText;
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (language !== 'ja') {
+                            e.currentTarget.style.background = 'transparent';
+                            e.currentTarget.style.color = WIN95.text;
+                          }
+                        }}
+                      >
+                        <span>🇯🇵</span>
+                        <span>{t.settings.japanese}</span>
+                      </button>
+                      <button 
+                        onClick={() => handleLanguageChange('zh')} 
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px]"
+                        style={{ 
+                          color: language === 'zh' ? WIN95.highlightText : WIN95.text, 
+                          background: language === 'zh' ? WIN95.highlight : 'transparent',
+                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' 
+                        }}
+                        onMouseEnter={(e) => {
+                          if (language !== 'zh') {
+                            e.currentTarget.style.background = WIN95.highlight;
+                            e.currentTarget.style.color = WIN95.highlightText;
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (language !== 'zh') {
+                            e.currentTarget.style.background = 'transparent';
+                            e.currentTarget.style.color = WIN95.text;
+                          }
+                        }}
+                      >
+                        <span>🇨🇳</span>
+                        <span>{t.settings.chinese}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
                 
                 {/* System Tray Clock */}
                 <SystemClock />
@@ -410,7 +528,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                       }}
                     >
                     <Coins className="w-3 h-3" />
-                    <span>Buy</span>
+                    <span>{t.nav.buy}</span>
                     </button>
                   </div>
                   {/* Disconnect wallet button */}
@@ -478,14 +596,42 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                     className="w-full justify-start"
                   >
                     <Gift className="w-4 h-4" />
-                    <span>Referral Program</span>
+                    <span>{t.nav.referralProgram}</span>
                   </Win95NavButton>
                   <Win95NavButton 
                     onClick={() => { setShowAchievements(true); setShowMobileMenu(false); }}
                     className="w-full justify-start"
                   >
                     <Trophy className="w-4 h-4" />
-                    <span>Achievements</span>
+                    <span>{t.nav.achievements}</span>
+                  </Win95NavButton>
+                  <div style={{ borderTop: `1px solid ${WIN95.bgDark}`, marginTop: '4px', paddingTop: '4px' }} />
+                  <div className="px-2 py-1 text-[10px] font-bold" style={{ color: WIN95.textDisabled, fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+                    {t.settings.language}
+                  </div>
+                  <Win95NavButton 
+                    onClick={() => { handleLanguageChange('en'); setShowMobileMenu(false); }}
+                    className="w-full justify-start"
+                    active={language === 'en'}
+                  >
+                    <span>🇺🇸</span>
+                    <span>{t.settings.english}</span>
+                  </Win95NavButton>
+                  <Win95NavButton 
+                    onClick={() => { handleLanguageChange('ja'); setShowMobileMenu(false); }}
+                    className="w-full justify-start"
+                    active={language === 'ja'}
+                  >
+                    <span>🇯🇵</span>
+                    <span>{t.settings.japanese}</span>
+                  </Win95NavButton>
+                  <Win95NavButton 
+                    onClick={() => { handleLanguageChange('zh'); setShowMobileMenu(false); }}
+                    className="w-full justify-start"
+                    active={language === 'zh'}
+                  >
+                    <span>🇨🇳</span>
+                    <span>{t.settings.chinese}</span>
                   </Win95NavButton>
                 </nav>
               </div>

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import logger from './utils/logger';
 import { ImageGeneratorProvider } from './contexts/ImageGeneratorContext';
 import { SimpleWalletProvider, useSimpleWallet } from './contexts/SimpleWalletContext';
+import { LanguageProvider, useLanguage } from './i18n';
 import SimpleWalletConnect from './components/SimpleWalletConnect';
 import StyleSelector from './components/StyleSelector';
 import ImageOutput from './components/ImageOutput';
@@ -64,18 +65,19 @@ function Win95LoadingFallback({ text }: { text: string }): JSX.Element {
   );
 }
 
-function App(): JSX.Element {
+function AppContent(): JSX.Element {
   const [activeTab, setActiveTab] = useState('chat');
+  const { t } = useLanguage();
 
   const tabs: Tab[] = [
-    { id: 'chat', name: 'Chat', icon: MessageCircle },
-    { id: 'generate', name: 'Image', icon: Sparkles },
-    { id: 'batch', name: 'Batch', icon: Layers },
-    { id: 'video', name: 'Video', icon: Film },
-    { id: 'music', name: 'Music', icon: Music },
+    { id: 'chat', name: t.nav.chat, icon: MessageCircle },
+    { id: 'generate', name: t.nav.image, icon: Sparkles },
+    { id: 'batch', name: t.nav.batch, icon: Layers },
+    { id: 'video', name: t.nav.video, icon: Film },
+    { id: 'music', name: t.nav.music, icon: Music },
     // TEMPORARILY DISABLED - 3D not working, re-enable when fixed
     // { id: '3d', name: '3D', icon: Box },
-    { id: 'gallery', name: 'Gallery', icon: Grid }
+    { id: 'gallery', name: t.nav.gallery, icon: Grid }
   ];
 
   return (
@@ -88,6 +90,14 @@ function App(): JSX.Element {
         />
       </ImageGeneratorProvider>
     </SimpleWalletProvider>
+  );
+}
+
+function App(): JSX.Element {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   );
 }
 

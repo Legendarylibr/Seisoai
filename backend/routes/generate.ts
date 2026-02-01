@@ -25,6 +25,124 @@ interface Dependencies {
   requireCredits: (credits: number) => RequestHandler;
 }
 
+// ============================================================================
+// ASIAN LANGUAGE TO ENGLISH PROMPT TRANSLATION (Japanese, Chinese)
+// ============================================================================
+
+/**
+ * Detect if text contains Japanese characters (Hiragana, Katakana)
+ */
+function containsJapaneseKana(text: string): boolean {
+  // Hiragana: \u3040-\u309F
+  // Katakana: \u30A0-\u30FF
+  const japaneseKanaRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
+  return japaneseKanaRegex.test(text);
+}
+
+/**
+ * Detect if text contains CJK characters (shared by Japanese Kanji and Chinese)
+ */
+function containsCJK(text: string): boolean {
+  // CJK Unified Ideographs: \u4E00-\u9FFF
+  // CJK Extension A: \u3400-\u4DBF
+  const cjkRegex = /[\u4E00-\u9FFF\u3400-\u4DBF]/;
+  return cjkRegex.test(text);
+}
+
+/**
+ * Detect the source language for translation
+ */
+function detectAsianLanguage(text: string): 'japanese' | 'chinese' | null {
+  if (containsJapaneseKana(text)) {
+    return 'japanese'; // Has kana = definitely Japanese
+  }
+  if (containsCJK(text)) {
+    // Has CJK but no kana - could be Chinese or Japanese kanji-only
+    // Default to Chinese since kanji-only Japanese is rare in prompts
+    return 'chinese';
+  }
+  return null;
+}
+
+interface TranslationResult {
+  translatedPrompt: string;
+  wasTranslated: boolean;
+  sourceLanguage?: 'japanese' | 'chinese';
+  error?: string;
+}
+
+/**
+ * Translate Japanese or Chinese prompt to English for AI generation
+ * This happens invisibly - user sees their language, AI gets English
+ */
+async function translateAsianToEnglish(prompt: string): Promise<TranslationResult> {
+  const sourceLanguage = detectAsianLanguage(prompt);
+  
+  // Skip if no Asian characters detected
+  if (!sourceLanguage) {
+    return { translatedPrompt: prompt, wasTranslated: false };
+  }
+
+  const FAL_API_KEY = getFalApiKey();
+  
+  if (!FAL_API_KEY) {
+    logger.warn('Translation skipped: FAL_API_KEY not configured');
+    return { translatedPrompt: prompt, wasTranslated: false, error: 'API key not configured' };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const languageName = sourceLanguage === 'japanese' ? 'Japanese' : 'Chinese';
+    const translationPrompt = `Translate the following ${languageName} text to English. This is a prompt for AI image/video/music generation, so preserve all descriptive details, style keywords, and artistic directions. Output ONLY the English translation, nothing else.
+
+${languageName} text: ${prompt}
+
+English translation:`;
+
+    const response = await fetch('https://fal.run/fal-ai/any-llm', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3-5-haiku',
+        prompt: translationPrompt,
+        max_tokens: 500
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      logger.warn('Translation request failed', { status: response.status, language: sourceLanguage });
+      return { translatedPrompt: prompt, wasTranslated: false, error: 'Translation request failed' };
+    }
+
+    const data = await response.json() as { output?: string; text?: string; response?: string };
+    const output = (data.output || data.text || data.response || '').trim();
+
+    if (output && output.length > 0) {
+      logger.debug('Prompt translated', { 
+        sourceLanguage,
+        original: prompt.substring(0, 50),
+        translated: output.substring(0, 50)
+      });
+      return { translatedPrompt: output, wasTranslated: true, sourceLanguage };
+    }
+
+    return { translatedPrompt: prompt, wasTranslated: false, error: 'Empty translation response' };
+
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Translation error', { error: err.message, language: sourceLanguage });
+    return { translatedPrompt: prompt, wasTranslated: false, error: err.message };
+  }
+}
+
 /**
  * Refund credits to a user after a failed generation
  * @param user - The user to refund
@@ -910,7 +1028,7 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Prompt is required for text-to-image, optional for image-to-image
       const hasImages = image_url || (image_urls && Array.isArray(image_urls) && image_urls.length > 0);
-      const trimmedPrompt = (prompt && typeof prompt === 'string') ? prompt.trim() : '';
+      let trimmedPrompt = (prompt && typeof prompt === 'string') ? prompt.trim() : '';
       
       if (!hasImages && !trimmedPrompt) {
         res.status(400).json({
@@ -918,6 +1036,24 @@ export function createGenerationRoutes(deps: Dependencies) {
           error: 'prompt is required for text-to-image generation'
         });
         return;
+      }
+
+      // Translate Japanese/Chinese prompts to English for better AI results
+      // This is invisible to the user - they see their language, AI gets English
+      if (trimmedPrompt) {
+        try {
+          const translationResult = await translateAsianToEnglish(trimmedPrompt);
+          if (translationResult.wasTranslated) {
+            logger.info('Prompt translated for generation', {
+              sourceLanguage: translationResult.sourceLanguage,
+              originalLength: trimmedPrompt.length,
+              translatedLength: translationResult.translatedPrompt.length
+            });
+            trimmedPrompt = translationResult.translatedPrompt;
+          }
+        } catch (err) {
+          logger.warn('Translation failed, using original prompt', { error: (err as Error).message });
+        }
       }
 
       // Determine image inputs first for optimization decision
@@ -1699,6 +1835,22 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
+      // Translate Japanese/Chinese prompts to English for better AI results
+      let videoPrompt = prompt.trim();
+      try {
+        const translationResult = await translateAsianToEnglish(videoPrompt);
+        if (translationResult.wasTranslated) {
+          logger.info('Video prompt translated', {
+            sourceLanguage: translationResult.sourceLanguage,
+            originalLength: videoPrompt.length,
+            translatedLength: translationResult.translatedPrompt.length
+          });
+          videoPrompt = translationResult.translatedPrompt;
+        }
+      } catch (err) {
+        logger.warn('Translation failed for video, using original', { error: (err as Error).message });
+      }
+
       if (modeConfig.requiresFirstFrame && !first_frame_url) {
         res.status(400).json({ success: false, error: 'first_frame_url is required for this mode' });
         return;
@@ -1763,7 +1915,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         const numFrames = Math.min(121, Math.max(25, ltxDurationSeconds * 25));
 
         requestBody = {
-          prompt: prompt.trim(),
+          prompt: videoPrompt,
           video_size: ltxVideoSize,
           num_frames: numFrames,
           generate_audio,
@@ -1784,7 +1936,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       } else {
         // Veo 3.1 model - quality option (existing)
         requestBody = {
-          prompt: prompt.trim(),
+          prompt: videoPrompt,
           aspect_ratio: apiAspectRatio,
           duration,
           resolution,
@@ -2265,18 +2417,34 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
+      // Translate Japanese/Chinese prompts to English for better AI results
+      let musicPrompt = prompt.trim();
+      try {
+        const translationResult = await translateAsianToEnglish(musicPrompt);
+        if (translationResult.wasTranslated) {
+          logger.info('Music prompt translated', {
+            sourceLanguage: translationResult.sourceLanguage,
+            originalLength: musicPrompt.length,
+            translatedLength: translationResult.translatedPrompt.length
+          });
+          musicPrompt = translationResult.translatedPrompt;
+        }
+      } catch (err) {
+        logger.warn('Translation failed for music, using original', { error: (err as Error).message });
+      }
+
       // Optimize prompt if enabled (off by default)
-      let finalPrompt = prompt.trim();
+      let finalPrompt = musicPrompt;
       let promptOptimizationResult: MusicOptimizationResult | null = null;
 
       if (optimizePrompt) {
         try {
-          promptOptimizationResult = await optimizePromptForMusic(prompt.trim(), selectedGenre);
+          promptOptimizationResult = await optimizePromptForMusic(musicPrompt, selectedGenre);
 
           if (promptOptimizationResult && !promptOptimizationResult.skipped && promptOptimizationResult.optimizedPrompt) {
             finalPrompt = promptOptimizationResult.optimizedPrompt;
             logger.debug('Music prompt optimized', { 
-              original: prompt.substring(0, 50),
+              original: musicPrompt.substring(0, 50),
               optimized: finalPrompt.substring(0, 50),
               selectedGenre
             });
