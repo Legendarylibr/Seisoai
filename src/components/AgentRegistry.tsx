@@ -26,7 +26,7 @@ interface AgentRegistryProps {
 }
 
 const AgentRegistry: React.FC<AgentRegistryProps> = ({ isOpen, onClose }) => {
-  const { walletAddress, isConnected } = useSimpleWallet();
+  const { address: walletAddress, isConnected } = useSimpleWallet();
   const [status, setStatus] = useState<ContractStatus | null>(null);
   const [definitions, setDefinitions] = useState<AgentDefinition[]>([]);
   const [registeredAgents, setRegisteredAgents] = useState<RegisteredAgent[]>([]);

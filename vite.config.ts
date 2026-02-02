@@ -117,9 +117,10 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       host: true,
       headers: {
-        // Use 'credentialless' instead of 'require-corp' to allow loading FFmpeg from CDNs
-        // 'credentialless' enables SharedArrayBuffer while allowing cross-origin resources without CORP headers
-        'Cross-Origin-Opener-Policy': 'same-origin',
+        // Use 'same-origin-allow-popups' to enable Coinbase Smart Wallet while maintaining security
+        // This allows the Base Account SDK to open popups for wallet authentication
+        // See: https://docs.base.org/smart-wallet/quickstart#cross-origin-opener-policy
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
         'Cross-Origin-Embedder-Policy': 'credentialless',
       },
       proxy: {
@@ -134,8 +135,8 @@ export default defineConfig(({ mode }) => {
       port: 4173,
       host: true,
       headers: {
-        // Use 'credentialless' instead of 'require-corp' to allow loading FFmpeg from CDNs
-        'Cross-Origin-Opener-Policy': 'same-origin',
+        // Use 'same-origin-allow-popups' to enable Coinbase Smart Wallet
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
         'Cross-Origin-Embedder-Policy': 'credentialless',
       },
       proxy: {

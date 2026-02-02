@@ -1,15 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { useAccount, useSwitchChain, useChainId } from 'wagmi';
 import { ethers } from 'ethers';
 import logger from '../utils/logger';
 import { API_URL, apiFetch } from '../utils/apiConfig';
-import { 
-  calculateCredits,
-  verifyPayment,
-  getPaymentWalletFromBackend
-} from '../services/paymentService';
-import { getLatestBlockhash as proxyGetBlockhash, getUsdcBalance as proxyGetUsdcBalance, getAccountInfo as proxyGetAccountInfo, getSignatureStatus as proxyGetSignatureStatus, getTokenAccountBalance as proxyGetTokenAccountBalance } from '../services/rpcProxyService';
-import { X, Coins, RefreshCw, ChevronDown, ChevronUp, Wallet, Copy, Check, ExternalLink } from 'lucide-react';
+import { getPaymentWalletFromBackend } from '../services/paymentService';
+import { getLatestBlockhash as proxyGetBlockhash, getAccountInfo as proxyGetAccountInfo } from '../services/rpcProxyService';
+import { X, Coins, RefreshCw, Check } from 'lucide-react';
 
 interface TokenPaymentModalProps {
   isOpen: boolean;
@@ -40,16 +37,10 @@ interface NetworkWithUSDC {
   balance: number;
 }
 
+// Window interface for Solana wallets (still needed for Solana payments)
 declare global {
   interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-      isMetaMask?: boolean;
-    };
     phantom?: {
-      ethereum?: {
-        request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-      };
       solana?: {
         isPhantom?: boolean;
         isConnected?: boolean;
@@ -74,10 +65,13 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
     credits, 
     fetchCredits,
     setCreditsManually,
-    walletType,
-    isNFTHolder,
-    connectedWalletId
+    walletType
   } = useSimpleWallet();
+
+  // Wagmi hooks for EVM wallet interaction
+  const { connector } = useAccount();
+  const wagmiChainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
 
   const [selectedToken, setSelectedToken] = useState(null);
   const [amount, setAmount] = useState('');
@@ -92,6 +86,18 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
   const [currentNetworkBalance, setCurrentNetworkBalance] = useState(0);
   const [currentChainId, setCurrentChainId] = useState<number | null>(null);
 
+  // Get EVM provider from wagmi connector
+  const getEvmProvider = useCallback(async () => {
+    if (walletType !== 'evm' || !connector) {
+      throw new Error('EVM wallet not connected');
+    }
+    const provider = await connector.getProvider();
+    if (!provider) {
+      throw new Error('Could not get wallet provider');
+    }
+    return provider as { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+  }, [connector, walletType]);
+
   // Network detection and chain ID mapping
   const CHAIN_IDS = {
     1: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
@@ -101,35 +107,22 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
     8453: { name: 'Base', symbol: 'ETH', decimals: 18 }
   };
 
-  // Get current network info
-  const getCurrentNetwork = async () => {
+  // Get current network info using wagmi
+  const getCurrentNetwork = useCallback(async () => {
     try {
       if (walletType === 'evm') {
-        // Use the correct provider - Phantom EVM uses window.phantom.ethereum
-        let provider = window.ethereum;
-        if (connectedWalletId === 'phantom-evm' || connectedWalletId === 'phantom') {
-          if (window.phantom?.ethereum) {
-            provider = window.phantom.ethereum;
-          }
-        }
-        
-        if (!provider) {
-          return null;
-        }
-        
-        const chainId = await provider.request({ method: 'eth_chainId' });
-        const chainIdNumber = parseInt(chainId, 16);
+        const chainIdNumber = wagmiChainId;
         const network = CHAIN_IDS[chainIdNumber];
         
-        logger.debug('Current network detected', { network: network?.name, chainId: chainIdNumber, walletId: connectedWalletId });
+        logger.debug('Current network detected', { network: network?.name, chainId: chainIdNumber });
         return { chainId: chainIdNumber, network };
       }
       return null;
     } catch (error) {
-      logger.error('Error getting current network', { error: error.message });
+      logger.error('Error getting current network', { error: error instanceof Error ? error.message : 'Unknown' });
       return null;
     }
-  };
+  }, [walletType, wagmiChainId]);
 
   // Build and send Solana USDC transaction
   const buildSolanaUSDCTransaction = async (amount, paymentAddress) => {
@@ -386,7 +379,7 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
 
   const loadTokenBalance = async (token) => {
     try {
-      if (walletType === 'evm' && window.ethereum) {
+      if (walletType === 'evm' && connector) {
         // Check USDC balance across all supported EVM networks
         await checkUSDCBalanceAcrossNetworks();
       } else if (walletType === 'solana' && address) {
@@ -400,7 +393,7 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
         }));
       }
     } catch (error) {
-      logger.error('Error loading token balance', { error: error.message });
+      logger.error('Error loading token balance', { error: error instanceof Error ? error.message : 'Unknown' });
     }
   };
 
@@ -567,31 +560,12 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
     return rpcUrl;
   };
 
-  // Switch to a specific network
-  const switchToNetwork = async (chainId) => {
+  // Switch to a specific network using wagmi
+  const switchToNetwork = useCallback(async (chainId: number) => {
     try {
-      // Use the correct provider - Phantom EVM uses window.phantom.ethereum
-      let provider = window.ethereum;
-      if (connectedWalletId === 'phantom-evm' || connectedWalletId === 'phantom') {
-        if (window.phantom?.ethereum) {
-          provider = window.phantom.ethereum;
-          logger.debug('Using Phantom EVM provider for network switch');
-        }
-      }
+      logger.info('Requesting network switch via wagmi', { chainId });
       
-      if (!provider) {
-        throw new Error('Ethereum wallet not found');
-      }
-
-      const hexChainId = '0x' + chainId.toString(16);
-      
-      logger.info('Requesting network switch', { chainId, hexChainId, walletId: connectedWalletId });
-      
-      // Try to switch network
-      await provider.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: hexChainId }],
-      });
+      await switchChainAsync({ chainId });
 
       logger.info('Network switch successful', { chainId });
       
@@ -600,29 +574,23 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
         checkUSDCBalanceAcrossNetworks();
       }, 1000);
 
-    } catch (switchError) {
-      // If network doesn't exist, try to add it
-      if (switchError.code === 4902) {
-        try {
-          await addNetwork(chainId);
-        } catch (addError) {
-          logger.error('Failed to add network', { error: addError.message });
-          setError(`Failed to add network. Please add it manually in your wallet.`);
-        }
-      } else if (switchError.code === 4001) {
+    } catch (switchError: unknown) {
+      const error = switchError as { code?: number; message?: string };
+      if (error.code === 4001) {
         // User rejected the switch
         logger.warn('User rejected network switch');
         setError(`Network switch cancelled. Please switch to a network with USDC to continue.`);
       } else {
-        logger.error('Failed to switch network', { error: switchError.message, code: switchError.code });
-        setError(`Failed to switch network: ${switchError.message}`);
+        logger.error('Failed to switch network', { error: error.message, code: error.code });
+        setError(`Failed to switch network: ${error.message}`);
       }
     }
-  };
+  }, [switchChainAsync]);
 
-  // Add network if it doesn't exist
-  const addNetwork = async (chainId) => {
-    const networkConfigs = {
+  // Add network if it doesn't exist - wagmi handles this via switchChainAsync
+  // Keeping for backwards compatibility but wagmi's switchChain should handle adding
+  const addNetwork = useCallback(async (chainId: number) => {
+    const networkConfigs: Record<number, { chainId: string; chainName: string; nativeCurrency: { name: string; symbol: string; decimals: number }; rpcUrls: string[]; blockExplorerUrls: string[] }> = {
       1: {
         chainId: '0x1',
         chainName: 'Ethereum Mainnet',
@@ -665,19 +633,12 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
       throw new Error(`Network configuration not found for chain ID ${chainId}`);
     }
 
-    // Use the correct provider - Phantom EVM uses window.phantom.ethereum
-    let provider = window.ethereum;
-    if (connectedWalletId === 'phantom-evm' || connectedWalletId === 'phantom') {
-      if (window.phantom?.ethereum) {
-        provider = window.phantom.ethereum;
-      }
-    }
-
+    const provider = await getEvmProvider();
     await provider.request({
       method: 'wallet_addEthereumChain',
       params: [config],
     });
-  };
+  }, [getEvmProvider]);
 
   const handleTokenSelect = (token) => {
     setSelectedToken(token);
@@ -770,13 +731,15 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
           // This shouldn't happen in normal flow, but handle gracefully
         }
       } else {
-        if (!window.ethereum) {
+        // Verify EVM wallet is connected via wagmi
+        if (!connector) {
           throw new Error('EVM wallet not found. Please refresh and reconnect.');
         }
         
         // Test if we can get accounts
         try {
-          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          const provider = await getEvmProvider();
+          const accounts = await provider.request({ method: 'eth_accounts' }) as string[];
           if (!accounts || accounts.length === 0) {
             throw new Error('No accounts found. Please reconnect your wallet.');
           }
@@ -930,87 +893,14 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
       } else {
         
         try {
-          // Get the correct provider based on which wallet was connected
-          let provider = window.ethereum;
+          // Get provider from wagmi connector - handles all wallet types automatically
+          const provider = await getEvmProvider();
           
-          // For Phantom EVM, ALWAYS use window.phantom.ethereum directly
-          // This is critical because window.ethereum might point to MetaMask or another wallet
-          if (connectedWalletId === 'phantom-evm' || connectedWalletId === 'phantom') {
-            if (window.phantom?.ethereum) {
-              provider = window.phantom.ethereum;
-              logger.debug('Using Phantom EVM provider directly');
-              
-              // Request accounts to ensure Phantom is unlocked and has the right account
-              try {
-                const accounts = await provider.request({ method: 'eth_requestAccounts' });
-                if (accounts[0]?.toLowerCase() !== address.toLowerCase()) {
-                  logger.warn('Phantom account mismatch', { expected: address, got: accounts[0] });
-                  setError(`⚠️ Phantom is connected with a different account.\n\nExpected: ${address.slice(0,10)}...\nPhantom has: ${accounts[0]?.slice(0,10)}...\n\nPlease switch accounts in Phantom and try again.`);
-                  return;
-                }
-              } catch (e) {
-                logger.error('Failed to get Phantom accounts', { error: e.message });
-                throw new Error('Failed to connect to Phantom. Please unlock your wallet and try again.');
-              }
-            } else {
-              throw new Error('Phantom wallet not found. Please make sure Phantom is installed and unlocked.');
-            }
-          } else {
-            // Helper to find provider matching connected wallet
-            const findConnectedProvider = () => {
-              const eth = window.ethereum;
-              if (!eth) return null;
-              
-              // Check for specific wallet based on connectedWalletId
-              switch (connectedWalletId) {
-                case 'rabby':
-                  if (window.rabby) return window.rabby;
-                  if (eth.isRabby) return eth;
-                  if (eth.providers?.length) {
-                    const rabby = eth.providers.find(p => p.isRabby);
-                    if (rabby) return rabby;
-                  }
-                  break;
-                case 'metamask':
-                  if (eth.providers?.length) {
-                    const mm = eth.providers.find(p => p.isMetaMask && !p.isRabby && !p.isCoinbaseWallet);
-                    if (mm) return mm;
-                  }
-                  if (eth.isMetaMask && !eth.isRabby) return eth;
-                  break;
-                case 'coinbase':
-                  if (window.coinbaseWalletExtension) return window.coinbaseWalletExtension;
-                  if (eth.isCoinbaseWallet) return eth;
-                  if (eth.providers?.length) {
-                    const cb = eth.providers.find(p => p.isCoinbaseWallet);
-                    if (cb) return cb;
-                  }
-                  break;
-                case 'trust':
-                  if (window.trustwallet) return window.trustwallet;
-                  if (eth.isTrust) return eth;
-                  break;
-                case 'okx':
-                  if (window.okxwallet) return window.okxwallet;
-                  if (eth.isOkxWallet) return eth;
-                  break;
-                case 'bitget':
-                  if (window.bitkeep?.ethereum) return window.bitkeep.ethereum;
-                  if (window.bitget?.ethereum) return window.bitget.ethereum;
-                  break;
-              }
-              return eth;
-            };
-            
-            provider = findConnectedProvider() || window.ethereum;
-          }
-          
-          // Get current network info from the CORRECT provider (not window.ethereum)
-          const providerChainId = await provider.request({ method: 'eth_chainId' });
-          const chainId = parseInt(providerChainId, 16);
+          // Get current network info using wagmi's chain ID
+          const chainId = wagmiChainId;
           const network = CHAIN_IDS[chainId];
           
-          logger.debug('Network detection', { providerChainId, chainId, network: network?.name, connectedWalletId });
+          logger.debug('Network detection', { chainId, network: network?.name });
           
           if (!chainId || !network) {
             throw new Error(`Unsupported network (Chain ID: ${chainId}). Please switch to Base, Ethereum, Polygon, Arbitrum, or Optimism.`);
@@ -1330,7 +1220,7 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
         setError('No USDC transfer detected to the payment wallet. Please send the transaction first.');
       }
     } catch (error) {
-      logger.error('Error checking payment:', { error: error.message, walletAddress, amount });
+      logger.error('Error checking payment:', { error: error.message, address, amount });
       setCheckingPayment(false);
       setError('Error checking payment: ' + error.message);
     }

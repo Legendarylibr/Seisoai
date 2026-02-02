@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import logger from './utils/logger';
 import { ImageGeneratorProvider } from './contexts/ImageGeneratorContext';
 import { SimpleWalletProvider, useSimpleWallet } from './contexts/SimpleWalletContext';
+import { WalletProvider } from './providers/WalletProvider';
 import { LanguageProvider, useLanguage } from './i18n';
 import SimpleWalletConnect from './components/SimpleWalletConnect';
 import StyleSelector from './components/StyleSelector';
@@ -81,15 +82,17 @@ function AppContent(): JSX.Element {
   ];
 
   return (
-    <SimpleWalletProvider>
-      <ImageGeneratorProvider>
-        <AppWithCreditsCheck 
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          tabs={tabs}
-        />
-      </ImageGeneratorProvider>
-    </SimpleWalletProvider>
+    <WalletProvider>
+      <SimpleWalletProvider>
+        <ImageGeneratorProvider>
+          <AppWithCreditsCheck 
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            tabs={tabs}
+          />
+        </ImageGeneratorProvider>
+      </SimpleWalletProvider>
+    </WalletProvider>
   );
 }
 

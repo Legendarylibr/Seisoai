@@ -1333,8 +1333,8 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                 </button>
                 <button
                   onClick={() => {
-                    if (walletContext.disconnect) {
-                      walletContext.disconnect();
+                    if (walletContext.disconnectWallet) {
+                      walletContext.disconnectWallet();
                     }
                   }}
                   className="p-1 sm:p-1.5 rounded hover:bg-white/20 transition-colors"
