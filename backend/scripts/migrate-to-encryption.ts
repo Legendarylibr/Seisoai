@@ -290,7 +290,7 @@ async function migrate(): Promise<void> {
   console.log('✅ Encryption key is configured\n');
 
   try {
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI!);
     console.log('✅ Connected to MongoDB\n');
 
     const stats: MigrationStats = {

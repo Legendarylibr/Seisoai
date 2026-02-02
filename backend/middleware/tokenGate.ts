@@ -43,7 +43,8 @@ const ERC721_ABI = [
 ];
 
 // ERC-1155 ABI for balanceOf (requires tokenId, but we check total)
-const ERC1155_ABI = [
+// Reserved for future ERC-1155 support
+export const ERC1155_ABI = [
   'function balanceOf(address owner, uint256 id) view returns (uint256)'
 ];
 

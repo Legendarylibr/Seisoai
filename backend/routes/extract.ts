@@ -9,6 +9,7 @@ import logger from '../utils/logger';
 import config from '../config/env';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
+import { applyClawMarkup } from '../middleware/credits';
 
 // Types
 interface Dependencies {
@@ -95,7 +96,7 @@ export function createExtractRoutes(deps: Dependencies) {
           return;
         }
 
-        const creditsToDeduct = 1;
+        const creditsToDeduct = applyClawMarkup(req, 1);
 
         // Deduct credits
         const User = mongoose.model<IUser>('User');
@@ -201,7 +202,7 @@ export function createExtractRoutes(deps: Dependencies) {
         logger.error('Extract layers error', { error: err.message });
         // Refund credits on unexpected error
         const user = req.user;
-        const creditsToRefund = 1;
+        const creditsToRefund = applyClawMarkup(req, 1);
         if (user) {
           await refundCredits(user, creditsToRefund, `Layer extraction error: ${err.message}`);
         }

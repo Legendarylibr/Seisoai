@@ -14,6 +14,7 @@ import { buildUserUpdateQuery } from '../services/user';
 // createEmailHash import removed - SECURITY: Use authenticated user from JWT instead
 import type { IUser } from '../models/User';
 import { calculateVideoCredits, calculateMusicCredits, calculateUpscaleCredits, calculateVideoToAudioCredits } from '../utils/creditCalculations';
+import { applyClawMarkup } from '../middleware/credits';
 import { encrypt, isEncryptionConfigured } from '../utils/encryption';
 import { withRetry } from '../utils/mongoRetry';
 
@@ -1793,8 +1794,8 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Calculate credits based on duration, audio, quality, and model using shared utility
-      const creditsToDeduct = calculateVideoCredits(duration, generate_audio, quality, model);
+      // Calculate credits based on duration, audio, quality, and model using shared utility (20% markup for Claw clients)
+      const creditsToDeduct = applyClawMarkup(req, calculateVideoCredits(duration, generate_audio, quality, model));
 
       // Deduct credits atomically
       const User = mongoose.model<IUser>('User');
@@ -2312,7 +2313,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         quality?: string;
         model?: string;
       };
-      const creditsToRefund = calculateVideoCredits(duration, generate_audio, quality, model);
+      const creditsToRefund = applyClawMarkup(req, calculateVideoCredits(duration, generate_audio, quality, model));
       if (user) {
         await refundCredits(user, creditsToRefund, `Video generation error: ${err.message}`);
       }
@@ -2351,7 +2352,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       const clampedDuration = Math.max(10, Math.min(180, duration));
 
       // Calculate credits based on duration using shared utility
-      const creditsRequired = calculateMusicCredits(clampedDuration);
+      const creditsRequired = applyClawMarkup(req, calculateMusicCredits(clampedDuration));
       const hasFreeAccess = req.hasFreeAccess || false;
       
       // Deduct credits (skip for free access users)
@@ -2598,7 +2599,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       // Calculate credits for refund using shared utility
       const { duration = 30 } = req.body as { duration?: number };
       const clampedDuration = Math.max(10, Math.min(180, duration));
-      const creditsToRefund = hasFreeAccess ? 0 : calculateMusicCredits(clampedDuration);
+      const creditsToRefund = hasFreeAccess ? 0 : applyClawMarkup(req, calculateMusicCredits(clampedDuration));
       if (user && creditsToRefund > 0) {
         await refundCredits(user, creditsToRefund, `Music generation error: ${err.message}`);
       }
@@ -2727,7 +2728,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       const validScale = scale === 4 ? 4 : 2;
       
       // Credits based on scale using shared utility
-      const creditsRequired = calculateUpscaleCredits(validScale);
+      const creditsRequired = applyClawMarkup(req, calculateUpscaleCredits(validScale));
       const hasFreeAccess = req.hasFreeAccess || false;
 
       // Deduct credits atomically (skip for free access users)
@@ -2862,7 +2863,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       const user = req.user;
       const hasFreeAccess = req.hasFreeAccess || false;
       const { scale = 2 } = req.body as { scale?: number };
-      const creditsToRefund = hasFreeAccess ? 0 : calculateUpscaleCredits(scale === 4 ? 4 : 2);
+      const creditsToRefund = hasFreeAccess ? 0 : applyClawMarkup(req, calculateUpscaleCredits(scale === 4 ? 4 : 2));
       if (user && creditsToRefund > 0) {
         await refundCredits(user, creditsToRefund, `Upscale error: ${err.message}`);
       }
@@ -2924,7 +2925,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       }
 
       // Credits for video-to-audio generation using shared utility
-      const creditsRequired = calculateVideoToAudioCredits();
+      const creditsRequired = applyClawMarkup(req, calculateVideoToAudioCredits());
       const hasFreeAccess = req.hasFreeAccess || false;
 
       // Deduct credits atomically (skip for free access users)
@@ -3185,7 +3186,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       logger.error('Video-to-audio error:', { error: err.message });
       const user = req.user;
       const hasFreeAccess = req.hasFreeAccess || false;
-      const creditsToRefund = hasFreeAccess ? 0 : calculateVideoToAudioCredits();
+      const creditsToRefund = hasFreeAccess ? 0 : applyClawMarkup(req, calculateVideoToAudioCredits());
       if (user && creditsToRefund > 0) {
         await refundCredits(user, creditsToRefund, `Video-to-audio error: ${err.message}`);
       }

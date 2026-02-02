@@ -88,6 +88,9 @@ export interface SupportedChains {
   solana: ChainInfo;
 }
 
+// Claw/OpenClaw client: 20% above API price when request identifies as Claw (X-Client: clawhub etc.)
+export const CLAW_CREDIT_MARKUP = 1.2;
+
 // Credit costs - 20% above API cost, Nano Banana at 50% off (loss leader)
 // 1 credit = $0.10
 export const CREDITS: CreditsConfig = {

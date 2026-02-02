@@ -11,14 +11,16 @@ import type { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
 import type { Model } from 'mongoose';
-import { CREDITS, DAILY_CREDITS, SEISO_TOKEN, TOKEN_GATE } from '../config/constants';
+import { CREDITS, CLAW_CREDIT_MARKUP, DAILY_CREDITS, SEISO_TOKEN, TOKEN_GATE } from '../config/constants';
 import { checkTokenGateAccess } from './tokenGate';
 
 // Types
-interface CreditsRequest extends Request {
+/** Request with optional Claw client flag (20% credit markup when true) */
+export interface CreditsRequest extends Request {
   user?: IUser;
   creditsRequired?: number;
   hasFreeAccess?: boolean;
+  isClawClient?: boolean;
   body: {
     model?: string;
     image_urls?: string[];
@@ -33,6 +35,15 @@ interface CreditsRequest extends Request {
 
 // Batch processing premium (15% convenience fee for batch mode)
 const BATCH_PREMIUM = 0.15;
+
+/**
+ * Apply Claw/OpenClaw markup (20% above base) when req.isClawClient is set.
+ * Use when computing credits in route handlers (video, music, workflows, etc.).
+ */
+export function applyClawMarkup(req: Request & { isClawClient?: boolean }, baseCredits: number): number {
+  if (!req.isClawClient || baseCredits <= 0) return baseCredits;
+  return Math.ceil(baseCredits * CLAW_CREDIT_MARKUP * 10) / 10;
+}
 
 /**
  * Check if user has NFT holdings that qualify for daily credits
@@ -354,7 +365,7 @@ export const createRequireCredits = (
           return;
         }
         
-        req.creditsRequired = requiredCredits;
+        req.creditsRequired = applyClawMarkup(req, requiredCredits);
         next();
       } catch (error) {
         const err = error as Error;
@@ -452,7 +463,7 @@ export const createRequireCreditsForModel = (
           return;
         }
 
-        req.creditsRequired = requiredCredits;
+        req.creditsRequired = applyClawMarkup(req, requiredCredits);
         next();
       } catch (error) {
         const err = error as Error;
@@ -524,7 +535,7 @@ export const createRequireCreditsForVideo = (
           return;
         }
 
-        req.creditsRequired = minimumCredits;
+        req.creditsRequired = applyClawMarkup(req, minimumCredits);
         next();
       } catch (error) {
         const err = error as Error;
@@ -580,6 +591,7 @@ export default {
   requireCredits,
   requireCreditsForModel,
   requireCreditsForVideo,
+  applyClawMarkup,
   calculateCredits,
   hasFreeGenerationAccess,
   isNFTHolder,

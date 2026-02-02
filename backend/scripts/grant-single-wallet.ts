@@ -133,7 +133,7 @@ async function main(): Promise<void> {
   console.log(`🎁 Granting ${creditsToGrant} credits to: ${identifier}`);
   console.log(`   Normalized: ${normalizedIdentifier}\n`);
 
-  await mongoose.connect(MONGODB_URI, {
+  await mongoose.connect(MONGODB_URI!, {
     maxPoolSize: 5,
     serverSelectionTimeoutMS: 8000,
   });

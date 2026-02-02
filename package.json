@@ -21,7 +21,9 @@
     "docker:build:frontend": "docker build -f Dockerfile.frontend -t seiso-frontend:latest .",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
-    "clean": "rm -rf dist node_modules/.vite"
+    "clean": "rm -rf dist node_modules/.vite",
+    "clawhub:login": "clawhub login",
+    "clawhub:publish": "clawhub publish ./skills/seisoai --slug seisoai --name \"Seisoai\" --version 1.0.0 --changelog \"Initial release\" --tags latest --no-input"
   },
   "dependencies": {
     "@coinbase/wallet-sdk": "^4.3.7",
@@ -53,6 +55,7 @@
     "@typescript-eslint/parser": "^8.46.2",
     "@vitejs/plugin-react": "^4.0.3",
     "autoprefixer": "^10.4.14",
+    "clawhub": "^0.5.0",
     "eslint": "^8.45.0",
     "eslint-plugin-react": "^7.32.2",
     "eslint-plugin-react-hooks": "^4.6.0",

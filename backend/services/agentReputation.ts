@@ -86,7 +86,8 @@ function getReputationRegistry(chainId: string | number): Contract | null {
 /**
  * Get Reputation Registry with signer for write operations
  */
-function getReputationRegistryWithSigner(chainId: string | number): Contract | null {
+// Reserved for future direct reputation writes
+export function getReputationRegistryWithSigner(chainId: string | number): Contract | null {
   const chainIdStr = String(chainId);
   const address = REPUTATION_REGISTRY_ADDRESSES[chainIdStr];
   
@@ -286,12 +287,12 @@ export async function getReputationSummary(
 
   try {
     // If no client addresses provided, get all clients
-    let clients = clientAddresses;
-    if (!clients || clients.length === 0) {
+    let clients: string[] = clientAddresses || [];
+    if (clients.length === 0) {
       clients = await contract.getClients(agentId);
     }
 
-    if (clients.length === 0) {
+    if (!clients || clients.length === 0) {
       return {
         count: 0,
         summaryValue: 0,

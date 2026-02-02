@@ -9,6 +9,7 @@ import logger from '../utils/logger';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
+import { applyClawMarkup } from '../middleware/credits';
 
 // Types
 interface Dependencies {
@@ -121,7 +122,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
         return;
       }
 
-      const creditsRequired = 2;
+      const creditsRequired = applyClawMarkup(req, 2);
 
       // Deduct credits
       const User = mongoose.model<IUser>('User');
@@ -271,7 +272,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
         return;
       }
 
-      const creditsRequired = 2;
+      const creditsRequired = applyClawMarkup(req, 2);
 
       // Deduct credits
       const User = mongoose.model<IUser>('User');
@@ -414,7 +415,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
         return;
       }
 
-      const creditsRequired = 0.5;
+      const creditsRequired = applyClawMarkup(req, 0.5);
 
       // Deduct credits
       const User = mongoose.model<IUser>('User');
@@ -532,7 +533,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
 
       const validNumOutputs = Math.min(Math.max(1, num_outputs), 100);
       const useControlNet = !!use_controlnet;
-      const creditsRequired = 0.5; // Just for the analysis, generation costs are separate
+      const creditsRequired = applyClawMarkup(req, 0.5); // Just for the analysis, generation costs are separate
 
       // Deduct credits
       const User = mongoose.model<IUser>('User');
@@ -782,7 +783,7 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
         return;
       }
 
-      const creditsRequired = 2;
+      const creditsRequired = applyClawMarkup(req, 2);
 
       // Deduct credits
       const User = mongoose.model<IUser>('User');

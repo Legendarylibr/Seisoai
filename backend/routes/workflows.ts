@@ -9,6 +9,7 @@ import logger from '../utils/logger';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
+import { applyClawMarkup } from '../middleware/credits';
 
 // Types
 interface Dependencies {
@@ -189,7 +190,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
         return;
       }
       
-      const creditsRequired = 1;
+      const creditsRequired = applyClawMarkup(req, 1);
       
       // Deduct credits
       const User = mongoose.model<IUser>('User');
@@ -307,7 +308,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
         return;
       }
       
-      const creditsRequired = 3;
+      const creditsRequired = applyClawMarkup(req, 3);
       
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
@@ -428,7 +429,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
         return;
       }
       
-      const creditsRequired = 1;
+      const creditsRequired = applyClawMarkup(req, 1);
       
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
@@ -545,7 +546,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
         return;
       }
       
-      const creditsRequired = 1;
+      const creditsRequired = applyClawMarkup(req, 1);
       
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
@@ -664,7 +665,7 @@ export function createWorkflowRoutes(deps: Dependencies) {
         return;
       }
       
-      const creditsRequired = 2;
+      const creditsRequired = applyClawMarkup(req, 2);
       
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);

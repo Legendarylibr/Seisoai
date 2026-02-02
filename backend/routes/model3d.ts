@@ -10,6 +10,7 @@ import logger from '../utils/logger';
 import { getFalApiKey, isStatusCompleted } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import { CREDITS } from '../config/constants';
+import { applyClawMarkup } from '../middleware/credits';
 import type { IUser } from '../models/User';
 import { encrypt, isEncryptionConfigured } from '../utils/encryption';
 
@@ -160,13 +161,14 @@ export function createModel3dRoutes(deps: Dependencies) {
         return;
       }
 
-      // Determine credit cost based on generate_type
+      // Determine credit cost based on generate_type (20% markup for Claw clients)
       const generateType = req.body?.generate_type || 'Normal';
-      const creditsRequired = generateType === 'Geometry' 
+      const baseCredits = generateType === 'Geometry' 
         ? CREDITS.MODEL_3D_GEOMETRY 
         : generateType === 'LowPoly' 
           ? CREDITS.MODEL_3D_LOWPOLY 
           : CREDITS.MODEL_3D_NORMAL;
+      const creditsRequired = applyClawMarkup(req, baseCredits);
 
       if ((user.credits || 0) < creditsRequired) {
         res.status(402).json({
@@ -256,12 +258,13 @@ export function createModel3dRoutes(deps: Dependencies) {
         return;
       }
 
-      // Credits based on generate_type (from centralized constants)
-      const creditsRequired = generate_type === 'Geometry' 
+      // Credits based on generate_type (from centralized constants; 20% markup for Claw clients)
+      const baseCredits3d = generate_type === 'Geometry' 
         ? CREDITS.MODEL_3D_GEOMETRY 
         : generate_type === 'LowPoly' 
           ? CREDITS.MODEL_3D_LOWPOLY 
           : CREDITS.MODEL_3D_NORMAL;
+      const creditsRequired = applyClawMarkup(req, baseCredits3d);
 
       // Deduct credits atomically
       const User = mongoose.model<IUser>('User');

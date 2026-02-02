@@ -38,7 +38,7 @@ async function migrate(): Promise<void> {
   console.log('🚀 Starting migration...\n');
 
   try {
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI!);
     console.log('✅ Connected to MongoDB\n');
 
     // Get all users with embedded data
@@ -68,7 +68,7 @@ async function migrate(): Promise<void> {
 
       // Migrate generationHistory
       if ((user as any).generationHistory && (user as any).generationHistory.length > 0) {
-        const generations = (user as any).generationHistory.map((gen: any, idx: number) => ({
+        const generations = (user as any).generationHistory.map((gen: { id?: string; prompt?: string; style?: string; imageUrl?: string; videoUrl?: string; requestId?: string; status?: string; creditsUsed?: number; timestamp?: Date }, idx: number) => ({
           userId,
           generationId: gen.id || `gen_${userId}_${idx}_${crypto.randomBytes(4).toString('hex')}`,
           prompt: gen.prompt || '',
@@ -82,7 +82,7 @@ async function migrate(): Promise<void> {
         }));
 
         // Use bulkWrite with upsert to avoid duplicates
-        const genOps = generations.map(gen => ({
+        const genOps = generations.map((gen: { generationId: string; userId: string; prompt: string; style?: string; imageUrl?: string; videoUrl?: string; requestId?: string; status: string; creditsUsed: number; createdAt: Date }) => ({
           updateOne: {
             filter: { generationId: gen.generationId },
             update: { $setOnInsert: gen },
@@ -99,7 +99,7 @@ async function migrate(): Promise<void> {
 
       // Migrate gallery
       if ((user as any).gallery && (user as any).gallery.length > 0) {
-        const galleryItems = (user as any).gallery.map((item: any, idx: number) => ({
+        const galleryItems = (user as any).gallery.map((item: { id?: string; imageUrl?: string; videoUrl?: string; prompt?: string; style?: string; creditsUsed?: number; timestamp?: Date }, idx: number) => ({
           userId,
           itemId: item.id || `gallery_${userId}_${idx}_${crypto.randomBytes(4).toString('hex')}`,
           imageUrl: item.imageUrl || '',
@@ -110,7 +110,7 @@ async function migrate(): Promise<void> {
           createdAt: item.timestamp || new Date()
         }));
 
-        const galleryOps = galleryItems.map(item => ({
+        const galleryOps = galleryItems.map((item: { itemId: string; userId: string; imageUrl: string; videoUrl?: string; prompt?: string; style?: string; creditsUsed: number; createdAt: Date }) => ({
           updateOne: {
             filter: { itemId: item.itemId },
             update: { $setOnInsert: item },
@@ -127,7 +127,7 @@ async function migrate(): Promise<void> {
 
       // Migrate paymentHistory
       if ((user as any).paymentHistory && (user as any).paymentHistory.length > 0) {
-        const payments = (user as any).paymentHistory.map((payment: any, idx: number) => ({
+        const payments = (user as any).paymentHistory.map((payment: { txHash?: string; tokenSymbol?: string; amount?: number; credits?: number; chainId?: number; walletType?: string; timestamp?: Date }, idx: number) => ({
           userId,
           paymentId: payment.txHash || `payment_${userId}_${idx}_${crypto.randomBytes(4).toString('hex')}`,
           txHash: payment.txHash,
@@ -140,7 +140,7 @@ async function migrate(): Promise<void> {
           createdAt: payment.timestamp || new Date()
         }));
 
-        const paymentOps = payments.map(payment => ({
+        const paymentOps = payments.map((payment: { paymentId: string; userId: string; txHash?: string; type: string; tokenSymbol?: string; amount?: number; credits: number; chainId?: number; walletType?: string; createdAt: Date }) => ({
           updateOne: {
             filter: { paymentId: payment.paymentId },
             update: { $setOnInsert: payment },

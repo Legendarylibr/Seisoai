@@ -55,6 +55,7 @@ import {
   requireCreditsForVideo,
   requireCredits
 } from './middleware/credits.js';
+import { detectClawClient } from './middleware/clawClient.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { createValidateInput } from './middleware/validation.js';
 import { cdnCacheMiddleware, cdnSecurityMiddleware } from './middleware/cdn.js';
@@ -359,6 +360,9 @@ app.use('/api/', csrfProtection);
 
 // Apply general rate limiting to all API routes
 app.use('/api/', generalRateLimiter);
+
+// Detect Claw/OpenClaw client for 20% credit markup (X-Client: clawhub, etc.)
+app.use('/api/', detectClawClient);
 
 // Prepare dependency injection for routes
 const routeDeps = {

@@ -185,7 +185,7 @@ export const createFreeImageLimiter = (): RateLimitRequestHandler => {
   let jwtVerify: typeof import('jsonwebtoken').verify | null = null;
   let jwtSecret: string | undefined;
   
-  const getJwtVerify = async () => {
+  const _getJwtVerify = async () => {
     if (!jwtVerify) {
       const jwt = await import('jsonwebtoken');
       jwtVerify = jwt.default.verify;
@@ -193,6 +193,8 @@ export const createFreeImageLimiter = (): RateLimitRequestHandler => {
     }
     return { verify: jwtVerify, secret: jwtSecret };
   };
+  // Suppress unused warning - kept for future JWT verification enhancement
+  void _getJwtVerify;
   
   return rateLimit({
     ...(store && { store }),
@@ -215,7 +217,7 @@ export const createFreeImageLimiter = (): RateLimitRequestHandler => {
     skip: (req) => {
       // First check if req.user is already set (from previous middleware)
       // If user is authenticated, skip rate limiting (credits middleware will check credits)
-      const user = (req as Request & { user?: { credits?: number } }).user;
+      const user = (req as unknown as { user?: { credits?: number } }).user;
       if (user) {
         // User is authenticated - skip rate limiting
         // The requireCredits middleware will handle credit validation

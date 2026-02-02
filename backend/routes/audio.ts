@@ -9,6 +9,7 @@ import logger from '../utils/logger';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, uploadToFal, isStatusCompleted, isStatusFailed } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
+import { applyClawMarkup } from '../middleware/credits';
 
 // Types
 interface Dependencies {
@@ -124,7 +125,7 @@ export function createAudioRoutes(deps: Dependencies) {
       }
 
       // Calculate credits based on text length (0.5 credits per 500 chars, min 1)
-      const creditsRequired = Math.max(1, Math.ceil(text.length / 500) * 0.5);
+      const creditsRequired = applyClawMarkup(req, Math.max(1, Math.ceil(text.length / 500) * 0.5));
 
       // Deduct credits
       const User = mongoose.model<IUser>('User');
@@ -263,7 +264,7 @@ export function createAudioRoutes(deps: Dependencies) {
         return;
       }
 
-      const creditsRequired = 2; // Fixed cost for separation
+      const creditsRequired = applyClawMarkup(req, 2); // Fixed cost for separation
 
       // Deduct credits
       const User = mongoose.model<IUser>('User');
@@ -406,7 +407,7 @@ export function createAudioRoutes(deps: Dependencies) {
         return;
       }
 
-      const creditsRequired = 3; // Fixed cost for lip sync
+      const creditsRequired = applyClawMarkup(req, 3); // Fixed cost for lip sync
 
       // Deduct credits
       const User = mongoose.model<IUser>('User');
@@ -544,7 +545,7 @@ export function createAudioRoutes(deps: Dependencies) {
       }
 
       const clampedDuration = Math.max(1, Math.min(30, duration));
-      const creditsRequired = Math.max(0.5, Math.ceil(clampedDuration / 10) * 0.5);
+      const creditsRequired = applyClawMarkup(req, Math.max(0.5, Math.ceil(clampedDuration / 10) * 0.5));
 
       // Deduct credits
       const User = mongoose.model<IUser>('User');

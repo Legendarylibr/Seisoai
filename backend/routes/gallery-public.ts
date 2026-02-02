@@ -22,7 +22,8 @@ interface GalleryQueryParams {
   sort?: 'newest' | 'popular';
 }
 
-interface PublicGalleryItem {
+// Reserved for future gallery features
+export interface PublicGalleryItem {
   id: string;
   type: 'image' | 'video' | '3d';
   url: string;

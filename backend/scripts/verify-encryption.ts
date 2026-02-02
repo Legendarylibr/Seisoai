@@ -116,7 +116,7 @@ async function verifyGenerationPrompts(): Promise<VerificationResult> {
 
 async function verifyGalleryPrompts(): Promise<VerificationResult> {
   const db = mongoose.connection.db!;
-  const items = await db.collection('galleryitems').find({ prompt: { $exists: true, $ne: null, $ne: '' } }).toArray();
+  const items = await db.collection('galleryitems').find({ prompt: { $exists: true, $nin: [null, ''] } }).toArray();
   
   const result: VerificationResult = {
     collection: 'galleryitems',
@@ -224,7 +224,7 @@ async function verify(): Promise<void> {
   console.log('='.repeat(60));
 
   try {
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI!);
     console.log('\n✅ Connected to MongoDB');
 
     // Run all verifications

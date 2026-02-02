@@ -128,6 +128,8 @@ export interface Config {
   ERC8004_REPUTATION_REGISTRY?: string;
   ERC8004_VALIDATION_REGISTRY?: string;
   ERC8004_CHAIN_ID?: number;
+  // Agent deployment signer (optional)
+  DEPLOYER_PRIVATE_KEY?: string;
   isProduction: boolean;
   isDevelopment: boolean;
 }
@@ -192,6 +194,8 @@ export const config: Config = {
   ERC8004_REPUTATION_REGISTRY: process.env.ERC8004_REPUTATION_REGISTRY,
   ERC8004_VALIDATION_REGISTRY: process.env.ERC8004_VALIDATION_REGISTRY,
   ERC8004_CHAIN_ID: process.env.ERC8004_CHAIN_ID ? parseInt(process.env.ERC8004_CHAIN_ID, 10) : undefined,
+  // Agent deployment signer (optional)
+  DEPLOYER_PRIVATE_KEY: process.env.DEPLOYER_PRIVATE_KEY,
   
   // Flags
   isProduction: process.env.NODE_ENV === 'production',

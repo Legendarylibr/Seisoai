@@ -9,6 +9,7 @@ import logger from '../utils/logger';
 import config from '../config/env';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
+import { applyClawMarkup } from '../middleware/credits';
 
 const FAL_API_KEY = config.FAL_API_KEY;
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
@@ -410,7 +411,7 @@ export function createWanAnimateRoutes(deps: Dependencies) {
         return;
       }
 
-      const minimumCredits = 2;
+      const minimumCredits = applyClawMarkup(req, 2);
       
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
@@ -509,7 +510,7 @@ export function createWanAnimateRoutes(deps: Dependencies) {
       logger.error('WAN animate submit error', { error: err.message });
       // Refund credits on unexpected error
       const user = req.user;
-      const minimumCredits = 2;
+      const minimumCredits = applyClawMarkup(req, 2);
       if (user) {
         await refundCredits(user, minimumCredits, `WAN animate error: ${err.message}`);
       }

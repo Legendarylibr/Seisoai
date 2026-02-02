@@ -5,7 +5,8 @@
 import { ethers, type Contract, type Signer } from 'ethers';
 import { getProvider } from './blockchain';
 import logger from '../utils/logger';
-import config from '../config/env';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import _config from '../config/env';
 
 // Contract ABIs (minimal interfaces for the functions we need)
 const IDENTITY_REGISTRY_ABI = [

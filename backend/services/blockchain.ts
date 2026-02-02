@@ -52,8 +52,8 @@ interface SolanaInstruction {
   };
 }
 
-// Solana USDC mint address
-const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+// Solana USDC mint address - reserved for future USDC verification
+export const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 // Alchemy RPC base URLs by chain ID
 const ALCHEMY_RPC_URLS: Record<string, string> = {
@@ -286,14 +286,14 @@ export async function verifySolanaTransaction(
   }
 
   // Find the transfer instruction (check both main instructions and inner instructions)
-  const instructions = tx.transaction.message.instructions as SolanaInstruction[];
+  const instructions = tx.transaction.message.instructions as unknown as SolanaInstruction[];
   const innerInstructions = tx.meta?.innerInstructions || [];
   
   // Collect all instructions including inner ones
   const allInstructions: SolanaInstruction[] = [...instructions];
   for (const inner of innerInstructions) {
     if (inner.instructions) {
-      allInstructions.push(...(inner.instructions as SolanaInstruction[]));
+      allInstructions.push(...(inner.instructions as unknown as SolanaInstruction[]));
     }
   }
 

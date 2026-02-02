@@ -156,7 +156,7 @@ async function auditGenerationPrompts(): Promise<AuditResult> {
 
 async function auditGalleryPrompts(): Promise<AuditResult> {
   const db = mongoose.connection.db!;
-  const items = await db.collection('galleryitems').find({ prompt: { $exists: true, $ne: null, $ne: '' } }).toArray();
+  const items = await db.collection('galleryitems').find({ prompt: { $exists: true, $nin: [null, ''] } }).toArray();
   
   const result: AuditResult = {
     collection: 'galleryitems',

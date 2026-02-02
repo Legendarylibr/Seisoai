@@ -90,14 +90,15 @@ export function sendValidationError(res: Response, errors: string[], requestId?:
  */
 export function sendServerError(
   res: Response,
-  error: Error,
+  error: Error | string,
   requestId?: string
 ): void {
   const isProduction = process.env.NODE_ENV === 'production';
+  const message = typeof error === 'string' ? error : error.message;
   
   res.status(500).json({
     success: false,
-    error: isProduction ? 'Internal server error' : error.message,
+    error: isProduction ? 'Internal server error' : message,
     ...(requestId && { requestId })
   });
 }

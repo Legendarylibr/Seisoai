@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 import crypto from 'crypto';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
-import Referral, { type IReferral } from '../models/Referral';
+import Referral from '../models/Referral';
 
 // Configuration
 const REFERRER_CREDITS = 5;  // Credits awarded to the referrer

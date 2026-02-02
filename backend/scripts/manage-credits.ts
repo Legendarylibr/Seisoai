@@ -177,7 +177,7 @@ async function ensureUserId(user: any): Promise<any> {
 }
 
 async function main(): Promise<void> {
-  await mongoose.connect(MONGODB_URI, {
+  await mongoose.connect(MONGODB_URI!, {
     maxPoolSize: 5,
     serverSelectionTimeoutMS: 8000,
   });
