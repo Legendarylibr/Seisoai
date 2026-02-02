@@ -168,7 +168,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
   }, []);
 
   return (
-    <div className="h-dvh animated-bg flex flex-col overflow-hidden" style={{ position: 'relative', zIndex: 0, maxHeight: '100dvh' }}>
+    <div className="h-dvh animated-bg flex flex-col">
       <Navigation 
         activeTab={activeTab} 
         setActiveTab={setActiveTab}
@@ -177,7 +177,8 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         onShowStripePayment={handleShowStripePayment}
       />
       
-      <div className="flex-1 min-h-0 flex flex-col" style={{ overflow: 'hidden' }}>
+      {/* Main content area - pb-6 accounts for fixed footer (24px) */}
+      <div className="flex-1 min-h-0 flex flex-col pb-6 overflow-auto">
         {activeTab === 'chat' && (
           <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
             <AuthGuard>
