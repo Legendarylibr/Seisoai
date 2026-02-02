@@ -120,7 +120,7 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     
     const gl = canvas.getContext('webgl', { alpha: false, antialias: true, preserveDrawingBuffer: true });
     if (!gl) {
-      console.warn('WebGL not available, using CSS fallback');
+      if (import.meta.env.DEV) console.warn('WebGL not available, using CSS fallback');
       setUseWebGL(false);
       return;
     }
@@ -133,7 +133,7 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     gl.shaderSource(vs, VERTEX_SHADER);
     gl.compileShader(vs);
     if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
-      console.error('Vertex shader error:', gl.getShaderInfoLog(vs));
+      if (import.meta.env.DEV) console.error('Vertex shader error:', gl.getShaderInfoLog(vs));
       setUseWebGL(false);
       return;
     }
@@ -141,7 +141,7 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     gl.shaderSource(fs, FRAGMENT_SHADER);
     gl.compileShader(fs);
     if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
-      console.error('Fragment shader error:', gl.getShaderInfoLog(fs));
+      if (import.meta.env.DEV) console.error('Fragment shader error:', gl.getShaderInfoLog(fs));
       setUseWebGL(false);
       return;
     }
@@ -154,7 +154,7 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     gl.linkProgram(program);
     
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error('Program link error:', gl.getProgramInfoLog(program));
+      if (import.meta.env.DEV) console.error('Program link error:', gl.getProgramInfoLog(program));
       setUseWebGL(false);
       return;
     }
@@ -187,13 +187,13 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
         stateRef.current.texture = texture;
         setImageLoaded(true);
-      } catch (e) {
-        console.error('Failed to create texture (CORS?):', e);
+      } catch {
+        if (import.meta.env.DEV) console.error('Failed to create texture (CORS?)');
         setUseWebGL(false);
       }
     };
     img.onerror = () => {
-      console.warn('Failed to load proxied image, using CSS fallback');
+      if (import.meta.env.DEV) console.warn('Failed to load proxied image, using CSS fallback');
       setUseWebGL(false);
       setImageLoaded(true); // Show CSS fallback
     };
@@ -201,7 +201,7 @@ const Panorama360Viewer = memo<Panorama360ViewerProps>(function Panorama360Viewe
     // Timeout - if image doesn't load in 10s, use CSS fallback
     const timeout = setTimeout(() => {
       if (!stateRef.current.texture) {
-        console.warn('WebGL image load timeout, using CSS fallback');
+        if (import.meta.env.DEV) console.warn('WebGL image load timeout, using CSS fallback');
         setUseWebGL(false);
         setImageLoaded(true);
       }

@@ -1265,7 +1265,7 @@ const TokenPaymentModal: React.FC<TokenPaymentModalProps> = ({ isOpen, onClose, 
       }}
     >
       <div 
-        className="w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col rounded"
+        className="w-full max-w-md mx-2 sm:mx-0 max-h-[90vh] overflow-hidden flex flex-col rounded"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'linear-gradient(to bottom, #f0f0f0, #e0e0e0, #d8d8d8)',

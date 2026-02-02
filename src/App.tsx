@@ -45,14 +45,14 @@ interface Tab {
 function Win95LoadingFallback({ text }: { text: string }): JSX.Element {
   return (
     <div 
-      className="h-full flex flex-col items-center justify-center p-8"
+      className="h-full flex flex-col items-center justify-center p-4 lg:p-8"
       style={{ 
         background: 'var(--win95-bg)',
         fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
       }}
     >
       <div 
-        className="p-6 text-center"
+        className="p-4 lg:p-6 text-center"
         style={{
           background: 'var(--win95-bg)',
           boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), inset 2px 2px 0 var(--win95-bg-light), inset -2px -2px 0 var(--win95-bg-dark)'
@@ -177,9 +177,9 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         onShowStripePayment={handleShowStripePayment}
       />
       
-      <div className="flex-1 min-h-0 overflow-hidden p-0.5 sm:p-1 lg:p-2" style={{ flex: '1 1 0%' }}>
+      <div className="flex-1 min-h-0 flex flex-col" style={{ overflow: 'hidden' }}>
         {activeTab === 'chat' && (
-          <div className="h-full min-h-0 flex flex-col" style={{ flex: '1 1 0%' }}>
+          <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
             <AuthGuard>
               <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
                 <ChatAssistant 
@@ -192,7 +192,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'generate' && (
-          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl" style={{ flex: '1 1 0%' }}>
+          <div className="container mx-auto max-w-7xl" style={{ height: '100%', width: '100%', overflow: 'auto' }}>
             <AuthGuard>
               <div className="h-full flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2">
                 {/* Left Column - Controls */}
@@ -253,7 +253,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'batch' && (
-          <div className="h-full min-h-0 overflow-hidden container mx-auto max-w-7xl" style={{ flex: '1 1 0%' }}>
+          <div className="container mx-auto max-w-7xl" style={{ height: '100%', width: '100%', overflow: 'auto' }}>
             <AuthGuard>
               <div className="h-full flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2">
                 {/* Left Column - Batch Controls */}
@@ -304,7 +304,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'video' && (
-          <div className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
+          <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
             <AuthGuard>
               <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
                 <VideoGenerator 
@@ -319,7 +319,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         
         {activeTab === 'music' && (
-          <div className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
+          <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
             <AuthGuard>
               <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
                 <MusicGenerator 
@@ -344,7 +344,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         
         
         {activeTab === 'gallery' && (
-          <div className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
+          <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
             <AuthGuard>
               <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
                 <ImageGallery />

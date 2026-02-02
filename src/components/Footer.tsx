@@ -8,12 +8,17 @@ interface FooterProps {
 const Footer = memo(function Footer({ onOpenTerms }: FooterProps) {
   return (
     <div 
-      className="flex-shrink-0 flex items-center justify-center gap-1.5 sm:gap-3 md:gap-4 px-1 sm:px-2 py-0.5 sm:py-1.5 text-[8px] sm:text-[10px] md:text-[11px]"
+      className="flex items-center justify-center gap-2 px-2 py-1 text-[10px]"
       style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
         background: WIN95.bg,
         borderTop: `1px solid ${WIN95.border.light}`,
         fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-        minHeight: 'auto'
+        zIndex: 40,
+        height: '24px'
       }}
     >
       <button

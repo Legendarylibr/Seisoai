@@ -39,8 +39,8 @@ const TokenGatePrompt: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-[400px] p-8">
-      <div className="max-w-md w-full">
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: '50px 8px 32px 8px', background: '#008080', zIndex: 30 }}>
+      <div className="w-full" style={{ margin: 'auto 0' }}>
         {/* Windows 98 style window */}
         <div style={{ 
           border: '2px solid',
@@ -50,16 +50,16 @@ const TokenGatePrompt: React.FC = () => {
           {/* Title bar */}
           <div style={{ 
             background: 'linear-gradient(90deg, #000080 0%, #1084d0 100%)',
-            padding: '2px 4px',
+            padding: '8px 12px',
             display: 'flex',
             alignItems: 'center',
-            gap: '4px'
+            gap: '8px'
           }}>
-            <Shield className="w-4 h-4 text-white" />
+            <Shield className="w-5 h-5 text-white flex-shrink-0" />
             <span style={{ 
               color: 'white', 
               fontWeight: 'bold', 
-              fontSize: '11px',
+              fontSize: '14px',
               fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
             }}>
               Token Gate - Access Required
@@ -71,7 +71,7 @@ const TokenGatePrompt: React.FC = () => {
             <div className="text-center mb-4">
               <Shield className="w-12 h-12 mx-auto mb-3" style={{ color: '#000080' }} />
               <h3 style={{ 
-                fontSize: '14px', 
+                fontSize: '18px', 
                 fontWeight: 'bold',
                 fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
                 color: '#000000',
@@ -80,7 +80,7 @@ const TokenGatePrompt: React.FC = () => {
                 Access Restricted
               </h3>
               <p style={{ 
-                fontSize: '11px',
+                fontSize: '14px',
                 fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
                 color: '#404040'
               }}>
@@ -97,11 +97,11 @@ const TokenGatePrompt: React.FC = () => {
               marginBottom: '12px'
             }}>
               <div style={{ 
-                fontSize: '11px',
+                fontSize: '14px',
                 fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '6px'
+                gap: '8px'
               }}>
                 <div className="flex justify-between">
                   <span style={{ color: '#404040' }}>Your Wallet:</span>
@@ -138,9 +138,9 @@ const TokenGatePrompt: React.FC = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
-                  padding: '6px 12px',
-                  fontSize: '11px',
+                  gap: '8px',
+                  padding: '12px 16px',
+                  fontSize: '14px',
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
                   backgroundColor: '#c0c0c0',
                   border: '2px solid',
@@ -150,7 +150,7 @@ const TokenGatePrompt: React.FC = () => {
                   color: '#000000'
                 }}
               >
-                <ExternalLink className="w-3 h-3" />
+                <ExternalLink className="w-4 h-4 flex-shrink-0" />
                 Buy {tokenGateConfig?.symbol || 'Tokens'} on Uniswap
               </a>
               
@@ -162,9 +162,9 @@ const TokenGatePrompt: React.FC = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
-                  padding: '6px 12px',
-                  fontSize: '11px',
+                  gap: '8px',
+                  padding: '12px 16px',
+                  fontSize: '14px',
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
                   backgroundColor: '#c0c0c0',
                   border: '2px solid',
@@ -174,7 +174,7 @@ const TokenGatePrompt: React.FC = () => {
                   color: '#000000'
                 }}
               >
-                <ExternalLink className="w-3 h-3" />
+                <ExternalLink className="w-4 h-4 flex-shrink-0" />
                 View Contract on BaseScan
               </a>
 
@@ -185,9 +185,9 @@ const TokenGatePrompt: React.FC = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
-                  padding: '6px 12px',
-                  fontSize: '11px',
+                  gap: '8px',
+                  padding: '12px 16px',
+                  fontSize: '14px',
                   fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
                   backgroundColor: '#c0c0c0',
                   border: '2px solid',
@@ -196,7 +196,7 @@ const TokenGatePrompt: React.FC = () => {
                   opacity: isRefreshing ? 0.7 : 1
                 }}
               >
-                <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 flex-shrink-0 ${isRefreshing ? 'animate-spin' : ''}`} />
                 {isRefreshing ? 'Checking...' : 'Refresh Balance'}
               </button>
             </div>
@@ -204,10 +204,10 @@ const TokenGatePrompt: React.FC = () => {
             {/* Contract info */}
             <div style={{ 
               marginTop: '12px',
-              padding: '8px',
+              padding: '10px',
               backgroundColor: '#ffffcc',
               border: '1px solid #cccc00',
-              fontSize: '10px',
+              fontSize: '12px',
               fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
               color: '#666600'
             }}>
@@ -236,7 +236,7 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null }) => {
   // For very fast loads (<100ms), skip the spinner entirely
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: '#008080', zIndex: 30 }}>
         <div className="text-center" style={{ animationDelay: '100ms', animation: 'fadeIn 0.15s ease-out 100ms forwards', opacity: 0 }}>
           <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-2" style={{ borderColor: '#000080', borderTopColor: 'transparent' }}></div>
           <p className="text-[11px]" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>Loading...</p>
@@ -248,11 +248,11 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null }) => {
   // Show error state
   if (error) {
     return (
-      <div className="flex items-center justify-center p-8">
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: '#008080', zIndex: 30 }}>
         <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-red-400 mb-2">Connection Error</h3>
-          <p className="text-gray-400 mb-4">{error}</p>
+          <AlertCircle className="w-10 h-10 text-red-400 mx-auto mb-3" />
+          <h3 className="text-base font-semibold text-red-400 mb-2">Connection Error</h3>
+          <p className="text-gray-400 mb-3 text-sm">{error}</p>
           <button 
             onClick={() => window.location.reload()}
             className="btn-primary"
@@ -267,7 +267,7 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null }) => {
   // Check if wallet is connected
   if (!isConnected || !address) {
     // Show wallet connection prompt when not authenticated
-    return fallback || <AuthPrompt />;
+    return <div style={{ height: '100%', width: '100%' }}>{fallback || <AuthPrompt />}</div>;
   }
 
   // Check token gate - only if enabled
@@ -275,7 +275,7 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null }) => {
     // Show loading while checking token gate
     if (tokenGateStatus.isLoading) {
       return (
-        <div className="flex items-center justify-center p-8">
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: '#008080', zIndex: 30 }}>
           <div className="text-center">
             <Shield className="w-8 h-8 mx-auto mb-2 animate-pulse" style={{ color: '#000080' }} />
             <p className="text-[11px]" style={{ color: '#404040', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
@@ -288,12 +288,12 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null }) => {
 
     // Show token gate prompt if no access
     if (!tokenGateStatus.hasAccess) {
-      return <TokenGatePrompt />;
+      return <div style={{ height: '100%', width: '100%' }}><TokenGatePrompt /></div>;
     }
   }
 
   // User is authenticated and has token gate access
-  return <div className="h-full">{children}</div>;
+  return <div style={{ height: '100%', width: '100%', minHeight: '100%' }}>{children}</div>;
 };
 
 export default AuthGuard;
