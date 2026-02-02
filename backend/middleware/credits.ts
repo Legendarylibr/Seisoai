@@ -21,6 +21,14 @@ export interface CreditsRequest extends Request {
   creditsRequired?: number;
   hasFreeAccess?: boolean;
   isClawClient?: boolean;
+  /** Set by x402 middleware when payment was verified and settled */
+  isX402Paid?: boolean;
+  /** x402 payment details (set after successful payment) */
+  x402Payment?: {
+    amount: string;
+    transactionHash?: string;
+    payer?: string;
+  };
   body: {
     model?: string;
     image_urls?: string[];
@@ -292,6 +300,18 @@ export const createRequireCredits = (
   return (requiredCredits: number) => {
     return async (req: CreditsRequest, res: Response, next: NextFunction): Promise<void> => {
       try {
+        // x402 BYPASS: If request was paid via x402, skip credit checks
+        // Payment was already verified and settled by x402 middleware
+        if (req.isX402Paid) {
+          logger.info('x402 payment detected, bypassing credit check', {
+            path: req.path,
+            payment: req.x402Payment
+          });
+          req.creditsRequired = 0; // No credits to deduct - already paid via x402
+          next();
+          return;
+        }
+
         // SECURITY: Check if user is already authenticated via JWT
         // This middleware should be used AFTER authenticateToken or authenticateFlexible
         let user = req.user;
@@ -393,6 +413,17 @@ export const createRequireCreditsForModel = (
   return () => {
     return async (req: CreditsRequest, res: Response, next: NextFunction): Promise<void> => {
       try {
+        // x402 BYPASS: If request was paid via x402, skip credit checks
+        if (req.isX402Paid) {
+          logger.info('x402 payment detected, bypassing model credit check', {
+            path: req.path,
+            payment: req.x402Payment
+          });
+          req.creditsRequired = 0;
+          next();
+          return;
+        }
+
         // SECURITY: Check if user is already authenticated via JWT
         let user = req.user;
         
@@ -490,6 +521,17 @@ export const createRequireCreditsForVideo = (
   return () => {
     return async (req: CreditsRequest, res: Response, next: NextFunction): Promise<void> => {
       try {
+        // x402 BYPASS: If request was paid via x402, skip credit checks
+        if (req.isX402Paid) {
+          logger.info('x402 payment detected, bypassing video credit check', {
+            path: req.path,
+            payment: req.x402Payment
+          });
+          req.creditsRequired = 0;
+          next();
+          return;
+        }
+
         // SECURITY: Check if user is already authenticated via JWT
         let user = req.user;
         

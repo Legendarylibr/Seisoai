@@ -56,6 +56,7 @@ import {
   requireCredits
 } from './middleware/credits.js';
 import { detectClawClient } from './middleware/clawClient.js';
+import { conditionalX402Middleware } from './middleware/x402Payment.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { createValidateInput } from './middleware/validation.js';
 import { cdnCacheMiddleware, cdnSecurityMiddleware } from './middleware/cdn.js';
@@ -363,6 +364,10 @@ app.use('/api/', generalRateLimiter);
 
 // Detect Claw/OpenClaw client for 20% credit markup (X-Client: clawhub, etc.)
 app.use('/api/', detectClawClient);
+
+// x402 Payment middleware - enables pay-per-request for AI agents using USDC on Base
+// Only activates for requests without auth that have x402 payment headers or are from Claw clients
+app.use('/api/', conditionalX402Middleware());
 
 // Prepare dependency injection for routes
 const routeDeps = {

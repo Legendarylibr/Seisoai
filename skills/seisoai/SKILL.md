@@ -1,71 +1,73 @@
 ---
 name: seisoai
-description: AI image, music, and video generation plus prompt lab and chat assistant via Seisoai API.
+description: AI image, music, video, and sound effects generation with x402 pay-per-request.
 metadata: {"openclaw":{"homepage":"https://seisoai.com","emoji":"🎨"}}
 ---
 
 # Seisoai
 
-Seisoai is an AI creative platform: image generation, music generation, video generation, prompt lab (prompt planning), and chat assistant. Use this skill when the user wants to generate images, music, or video, or get help with prompts or creative tasks.
+Generate AI images, music, videos, and sound effects. Pay per request with USDC on Base — no account needed.
 
 ## When to use
 
-- **Image generation**: User wants pictures from a text prompt (e.g. "generate an image of a sunset over mountains").
-- **Music generation**: User wants music or audio from a description or style.
-- **Video generation**: User wants short video from a prompt or from image + motion.
-- **Prompt lab**: User wants help brainstorming, refining, or planning prompts for creative work.
-- **Chat assistant**: User wants a conversational assistant that can trigger image/music/video generation or answer creative questions.
+- **Image generation**: User wants pictures from a text prompt
+- **Music generation**: User wants music or audio from a description
+- **Video generation**: User wants short video from a prompt or image
+- **Sound effects**: User wants audio effects from a description
+- **Prompt help**: User wants help brainstorming or refining prompts
 
 ## Base URL
 
-The Seisoai API base URL is configured per install. If set, use the value of `SEISOAI_API_URL` (or the URL from OpenClaw config `skills.entries.seisoai.config.apiUrl`). If not set, the public app is typically at `https://seisoai.com`; the API may be at the same origin under `/api` or as documented by the deployment.
+Default: `https://seisoai.com`
 
-## Key endpoints (relative to base URL)
+Override via config: `SEISOAI_API_URL` or `skills.entries.seisoai.config.apiUrl`
 
-All paths below are relative to the API base (e.g. `{base}/generate/image`).
+## Endpoints
 
-- **Image**: `POST /generate/image` — body: prompt, model options, aspect ratio, etc. Returns requestId; poll `GET /generate/status/:requestId` and `GET /generate/result/:requestId` for output URL.
-- **Music**: `POST /generate/music` — body: prompt/description, style. Same status/result polling.
-- **Video**: `POST /generate/video` — body: prompt or image + motion params. Same status/result polling.
-- **Upscale**: `POST /generate/upscale` — body: image URL or upload reference.
-- **Prompt lab (chat)**: `POST /prompt-lab/chat` — body: messages array (role + content). For prompt planning and suggestions.
-- **Chat assistant**: `POST /chat-assistant/message` — body: conversation messages. For multi-turn chat that can trigger generation.
-- **Chat assistant generate**: `POST /chat-assistant/generate` — direct generation triggered by chat flow.
-- **Image tools**: `POST /image-tools/describe` (image to text), `POST /image-tools/face-swap`, `POST /image-tools/inpaint`, `POST /image-tools/outpaint`, `POST /image-tools/batch-variate` — require auth and credits.
-- **Workflows**: `POST /workflows/ai-influencer/voice`, `POST /workflows/ai-influencer/lipsync`, `POST /workflows/music-video/music`, `POST /workflows/avatar-creator/generate`, `POST /workflows/remix-visualizer/separate` — various credits.
-- **Audio**: `POST /audio/voice-clone`, `POST /audio/separate`, `POST /audio/lip-sync`, `POST /audio/sfx`, `POST /audio/extract-audio` — require auth and credits.
-- **3D model**: `POST /model3d/generate` — 3D asset from prompt.
-- **Utility**: `GET /utility/health`, `GET /utility/config` — no auth.
+All endpoints use x402 payment. Make request → get 402 → sign USDC payment → retry with `PAYMENT-SIGNATURE` header.
 
-Most generation and tool endpoints require authentication (e.g. Bearer token or session) and consume user credits. Do not assume anonymous access for image/music/video generation.
+| Endpoint | Description | Price (USDC) |
+|----------|-------------|--------------|
+| `POST /api/generate/image` | Generate image from prompt | $0.06 |
+| `POST /api/generate/video` | Generate video from prompt | $0.60 |
+| `POST /api/generate/music` | Generate music (1 min) | $0.024 |
+| `POST /api/generate/upscale` | Upscale an image | $0.036 |
+| `POST /api/audio/sfx` | Generate sound effects | $0.036 |
+| `POST /api/wan-animate/submit` | Animate image to video | $0.60 |
+| `POST /api/image-tools/describe` | Describe an image | $0.012 |
+| `POST /api/prompt-lab/chat` | Prompt brainstorming | $0.0012 |
 
-## How to invoke from the agent
+Prices are 20% above Fal.ai API costs. Payments settle on Base mainnet.
 
-1. **User says "generate an image of X"**  
-   Call `POST {base}/generate/image` with a JSON body containing the prompt and any model/size options. Use the returned requestId to poll `GET /generate/status/:requestId` until complete, then `GET /generate/result/:requestId` and return the result URL or image to the user.
+## How to invoke
 
-2. **User says "make music that sounds like X"**  
-   Call `POST {base}/generate/music` with prompt/style, then poll status/result as above.
+### Image generation
 
-3. **User says "make a video of X"**  
-   Call `POST {base}/generate/video` with the prompt or image + motion, then poll status/result.
+```
+POST {base}/api/generate/image
+Content-Type: application/json
 
-4. **User wants help with prompts**  
-   Call `POST {base}/prompt-lab/chat` with a messages array; use the reply in your response.
+{"prompt": "a sunset over mountains", "model": "flux-pro"}
+```
 
-5. **User wants to chat with the Seisoai assistant**  
-   Call `POST {base}/chat-assistant/message` (or `/generate` for one-shot generation) with conversation history; relay the assistant reply and any generation results.
+Response: `{"requestId": "abc123"}` — then poll status.
 
-6. **Auth**  
-   If the user has provided an API key or auth token, send it in the `Authorization` header (e.g. `Bearer <token>`) or as required by the deployment. If the deployment uses cookies/session, the agent may need to use a browser or cookie jar for authenticated requests.
+### Poll for result
 
-## Pricing for Claw/OpenClaw users
+```
+GET {base}/api/generate/status/{requestId}
+GET {base}/api/generate/result/{requestId}
+```
 
-Requests that identify as coming from Claw/OpenClaw (e.g. header `X-Client: clawhub` or `X-Origin: openclaw`, or User-Agent containing `clawhub`/`openclaw`) are charged **20% above** the standard API credit price. Send one of these headers so pricing is applied correctly.
+### x402 payment flow
 
-## Config (optional)
+1. Call endpoint without auth
+2. Server returns `HTTP 402` with `PAYMENT-REQUIRED` header (base64 JSON with payment details)
+3. Sign USDC payment on Base using your wallet
+4. Retry same request with `PAYMENT-SIGNATURE` header containing signed payment
+5. Server verifies, settles payment, executes request
 
-In `~/.openclaw/openclaw.json` you can set:
+## Config
 
 ```json
 {
@@ -73,16 +75,11 @@ In `~/.openclaw/openclaw.json` you can set:
     "entries": {
       "seisoai": {
         "enabled": true,
-        "env": {
-          "SEISOAI_API_URL": "https://your-seisoai-api.example.com"
-        },
         "config": {
-          "apiUrl": "https://your-seisoai-api.example.com"
+          "apiUrl": "https://seisoai.com"
         }
       }
     }
   }
 }
 ```
-
-Use `SEISOAI_API_URL` or `config.apiUrl` as the base URL for all requests above.

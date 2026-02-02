@@ -104,6 +104,14 @@ export const createAuthenticateToken = (
 ) => {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // x402 BYPASS: If request was paid via x402, skip auth check
+      // Payment verification replaces the need for account authentication
+      if ((req as any).isX402Paid) {
+        logger.debug('x402 payment detected, bypassing token auth', { path: req.path });
+        next();
+        return;
+      }
+
       const authHeader = req.headers['authorization'];
       const token = authHeader && authHeader.split(' ')[1];
 
@@ -193,6 +201,14 @@ export const createAuthenticateFlexible = (
 ) => {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // x402 BYPASS: If request was paid via x402, skip auth check
+      // Payment verification replaces the need for account authentication
+      if ((req as any).isX402Paid) {
+        logger.debug('x402 payment detected, bypassing auth check', { path: req.path });
+        next();
+        return;
+      }
+
       const authHeader = req.headers['authorization'];
       const token = authHeader && authHeader.split(' ')[1];
 
