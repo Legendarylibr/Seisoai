@@ -8,7 +8,7 @@ import {
   Send, Sparkles, Image, Film, Music, Download, 
   Play, Pause, Check, X, RefreshCw, Volume2,
   Wand2, Zap, Clock, AlertCircle, Maximize2, User,
-  Upload, ImagePlus, LogOut
+  ImagePlus, LogOut
 } from 'lucide-react';
 import { WIN95, BTN, PANEL, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
@@ -203,7 +203,7 @@ const MessageBubble = memo(function MessageBubble({
   onCancelAction,
   onRetry,
   isActionLoading,
-  isFirst
+  isFirst: _isFirst
 }: { 
   message: ChatMessage;
   onConfirmAction?: (action: PendingAction) => void;
@@ -865,9 +865,9 @@ const MessageBubble = memo(function MessageBubble({
                           <div className="text-[12px] font-bold">Your Track</div>
                           <div className="text-[10px]" style={{ color: WIN95.textDisabled }}>
                             AI Generated Music
-                            {message.generatedContent.metadata?.file_name && (
+                            {message.generatedContent.metadata?.file_name ? (
                               <span> • WAV</span>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       </div>
