@@ -706,11 +706,22 @@ Write the prompt describing what to take from reference images and add to the ba
       switch (actionType) {
         case 'generate_image':
           contentType = 'image';
-          const imageModel = params.model || params.imageModel || 'flux';
           const imagePrompt = params.prompt as string;
           const hasReferenceImage = !!params.referenceImage;
+          const hasMultipleImages = Array.isArray(params.referenceImages) && params.referenceImages.length > 1;
+          
+          // For multi-image editing, force FLUX 2 as it handles multiple image inputs better
+          const imageModel = hasMultipleImages ? 'flux-2' : (params.model || params.imageModel || 'flux');
           const isFlux2 = imageModel === 'flux-2';
           const is360Request = /\b360\b/i.test(imagePrompt);
+          
+          // Build image URLs array for multi-image support
+          let imageUrls: string[] = [];
+          if (hasMultipleImages && params.referenceImages) {
+            imageUrls = params.referenceImages as string[];
+          } else if (hasReferenceImage && params.referenceImage) {
+            imageUrls = [params.referenceImage as string];
+          }
           
           // IMPORTANT: Default to 1 image, clamp to valid range (1-4)
           // Only allow multiple images if explicitly requested
@@ -723,6 +734,8 @@ Write the prompt describing what to take from reference images and add to the ba
             numImages: numImagesToGenerate,
             requestedNumImages,
             hasReferenceImage,
+            hasMultipleImages,
+            numReferenceImages: imageUrls.length,
             isFlux2,
             is360Request
           });
@@ -787,18 +800,21 @@ Write the prompt describing what to take from reference images and add to the ba
             isEdit,
             originalLength: imagePrompt.length,
             optimizedLength: optimizedPrompt.length,
-            wasOptimized: optimizedPrompt !== imagePrompt
+            wasOptimized: optimizedPrompt !== imagePrompt,
+            numImageUrls: imageUrls.length
           });
           
           // Only pass essential parameters to the API
           // Use clamped numImagesToGenerate (default 1, max 4)
+          // Pass image_urls (plural) for multi-image editing support
           result = await callInternalEndpoint('/api/generate/image', {
             prompt: optimizedPrompt,
             num_images: numImagesToGenerate,
             aspect_ratio: getAspectRatio(params.imageSize as string),
             model: imageModel,
             optimizePrompt: isFlux2, // Let endpoint handle optimization if needed
-            ...(hasReferenceImage && { image_url: params.referenceImage }),
+            // Pass multiple images as image_urls array for proper multi-image editing
+            ...(imageUrls.length > 0 && { image_urls: imageUrls }),
             ...fullParams
           }, req);
           break;
