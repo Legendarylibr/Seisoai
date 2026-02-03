@@ -46,7 +46,8 @@ export interface GenerationParams {
   style?: string;
   numImages?: number;
   imageSize?: string;
-  referenceImage?: string;
+  referenceImage?: string;      // Primary/base image for editing
+  referenceImages?: string[];   // Multiple reference images (base image + element sources)
   imageModel?: string; // flux, flux-2, nano-banana-pro
   // Video params
   duration?: string;
@@ -141,12 +142,16 @@ export interface ChatContext {
 
 /**
  * Send a message to the chat assistant
+ * @param message - The user's message
+ * @param history - Chat history
+ * @param context - User context (wallet, credits, etc.)
+ * @param referenceImages - Optional array of reference images (or single image for backwards compatibility)
  */
 export async function sendChatMessage(
   message: string,
   history: ChatMessage[] = [],
   context: ChatContext,
-  referenceImage?: string
+  referenceImages?: string | string[]
 ): Promise<ChatResponse> {
   try {
     const csrfToken = await ensureCSRFToken();
@@ -164,6 +169,11 @@ export async function sendChatMessage(
         break;
       }
     }
+    
+    // Normalize referenceImages to array format
+    const imageArray = referenceImages 
+      ? (Array.isArray(referenceImages) ? referenceImages : [referenceImages])
+      : [];
     
     const response = await fetch(`${API_URL}/api/chat-assistant/message`, {
       method: 'POST',
@@ -187,7 +197,9 @@ export async function sendChatMessage(
           lastGeneratedImageUrl,
           lastGeneratedPrompt
         },
-        referenceImage
+        // Support both single image (backwards compat) and multiple images
+        referenceImage: imageArray.length === 1 ? imageArray[0] : undefined,
+        referenceImages: imageArray.length > 0 ? imageArray : undefined
       })
     });
 

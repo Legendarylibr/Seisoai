@@ -38,7 +38,8 @@ When you understand what to generate, respond with a friendly message followed b
     "generateAudio": true,
     "musicDuration": 30,
     "genre": "lo-fi" | "electronic" | "orchestral" | "rock" | "jazz",
-    "isEdit": false
+    "isEdit": false,
+    "useMultipleImages": false
   },
   "estimatedCredits": number,
   "description": "brief description"
@@ -81,6 +82,28 @@ For edits, write prompt as a modification instruction:
 - User: "add a red hat" → prompt: "add a red hat to the person"
 - User: "make it sunset" → prompt: "change the background to a beautiful sunset"
 
+MULTI-IMAGE EDITING (when user provides multiple images):
+When user attaches multiple images and wants to combine elements:
+- Set "isEdit": true AND "useMultipleImages": true
+- The FIRST image is the BASE image to edit
+- Additional images are REFERENCE images for elements to extract
+- Write the prompt to describe what to take from reference images and add to base
+
+Examples:
+- User: "[2 images] Add the hat from the second image to the first"
+  → prompt: "Add the hat from the reference image to the person in the base image"
+- User: "[2 images] Put this outfit on that person"
+  → prompt: "Apply the outfit from the reference image to the person in the base image"
+- User: "[3 images] Combine elements: use image 1 as base, add the car from image 2 and the sky from image 3"
+  → prompt: "Add the car from reference image 1 and the sky background from reference image 2 to the base image"
+- User: "Edit my previous image with elements from this new one"
+  → Set isEdit: true, useMultipleImages: true, prompt describes what to transfer
+
+When user says things like "edit the previous image with this one", "combine these", "add stuff from this to that":
+- The previously generated image becomes the BASE
+- The newly attached image becomes the REFERENCE
+- Set isEdit: true and useMultipleImages: true
+
 360° PANORAMAS:
 - When user mentions "360" or "panorama", use model: "nano-banana-pro"
 - Use simple prompt like "360 panorama of [scene]"
@@ -108,6 +131,22 @@ const EDIT_PATTERNS = [
   /\bwith\s+(a|an)\s+\w+\s+(instead|now)/i,
 ];
 
+// Patterns that indicate multi-image editing (combining elements from multiple images)
+const MULTI_IMAGE_EDIT_PATTERNS = [
+  /\b(from|in)\s+(the\s+)?(second|other|new|this|that)\s+(image|picture|photo)/i,
+  /\b(to|on|onto)\s+(the\s+)?(first|previous|base|original)\s+(image|picture|photo)?/i,
+  /\b(combine|merge|blend)\s+(these|the|both)\s*(images|pictures|photos)?/i,
+  /\b(take|get|use|copy)\s+(the|this|that)?\s*\w+\s+(from|in)\s+(image|picture|photo)\s*\d*/i,
+  /\b(add|put)\s+(the|this|that)?\s*\w+\s+from\s+(image|picture|photo|the\s+second|the\s+new)/i,
+  /\bedit\s+(the\s+)?previous\s+(image|picture|photo)?\s*(with|using)/i,
+  /\buse\s+(this|the\s+new)\s+(image|picture|photo)?\s*(to|for|on)/i,
+  /\b(image|picture|photo)\s*[12]\b/i,
+  /\b(first|second|third)\s+(image|picture|photo)/i,
+  /\bapply\s+(this|the|that)\s+\w+\s+to/i,
+  /\btransfer\s+(the|this|that)?\s*\w+/i,
+  /\bswap\s+(the|this|that)?\s*\w+/i,
+];
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -133,7 +172,8 @@ interface ChatRequestBody {
     lastGeneratedImageUrl?: string;
     lastGeneratedPrompt?: string;
   };
-  referenceImage?: string;
+  referenceImage?: string;        // Single reference image (backwards compat)
+  referenceImages?: string[];     // Multiple reference images for multi-image editing
 }
 
 /**
@@ -154,6 +194,38 @@ function isEditRequest(message: string, hasLastGeneratedImage: boolean): boolean
   // Additional simple keyword checks
   const editKeywords = ['add', 'change', 'remove', 'edit', 'modify', 'adjust', 'make it', 'make the', 'put', 'give it', 'give him', 'give her'];
   for (const keyword of editKeywords) {
+    if (lowerMessage.includes(keyword)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Check if a message appears to be a multi-image edit request
+ * This is when user wants to combine elements from multiple images
+ */
+function isMultiImageEditRequest(message: string, numImages: number): boolean {
+  if (numImages < 2) return false;
+  
+  // Check against multi-image edit patterns
+  for (const pattern of MULTI_IMAGE_EDIT_PATTERNS) {
+    if (pattern.test(message)) {
+      return true;
+    }
+  }
+  
+  // Additional keyword checks for multi-image scenarios
+  const lowerMessage = message.toLowerCase();
+  const multiImageKeywords = [
+    'from this image', 'from the new image', 'from image 2', 
+    'to the first', 'to the previous', 'on the base',
+    'combine', 'merge', 'blend', 'swap', 'transfer',
+    'use this to', 'apply this', 'copy the'
+  ];
+  
+  for (const keyword of multiImageKeywords) {
     if (lowerMessage.includes(keyword)) {
       return true;
     }
@@ -237,7 +309,7 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
     const startTime = Date.now();
     
     try {
-      const { message, history = [], context, referenceImage } = req.body as ChatRequestBody;
+      const { message, history = [], context, referenceImage, referenceImages } = req.body as ChatRequestBody;
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return res.status(400).json({
@@ -263,16 +335,62 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         });
       }
       
+      // Normalize reference images - support both single and array format
+      let allReferenceImages: string[] = [];
+      if (referenceImages && Array.isArray(referenceImages) && referenceImages.length > 0) {
+        allReferenceImages = referenceImages;
+      } else if (referenceImage) {
+        allReferenceImages = [referenceImage];
+      }
+      
       // Check if this looks like an edit request and we have a previous image
       const hasLastGeneratedImage = !!context?.lastGeneratedImageUrl;
-      const detectedAsEdit = isEditRequest(message, hasLastGeneratedImage);
+      const hasExplicitReferences = allReferenceImages.length > 0;
+      const detectedAsEdit = isEditRequest(message, hasLastGeneratedImage || hasExplicitReferences);
       
-      // Auto-attach the last generated image if this is an edit request and no explicit reference
-      let effectiveReferenceImage = referenceImage;
+      // Check for multi-image edit (combining elements from multiple images)
+      // This can happen in two ways:
+      // 1. User attaches multiple images
+      // 2. User attaches new image(s) and wants to edit a previously generated image
+      let isMultiImageEdit = false;
+      let effectiveReferenceImages: string[] = [...allReferenceImages];
       let isAutoEdit = false;
       
-      if (detectedAsEdit && !referenceImage && context?.lastGeneratedImageUrl) {
-        effectiveReferenceImage = context.lastGeneratedImageUrl;
+      // If user has explicit reference images
+      if (hasExplicitReferences) {
+        // Check if they want to combine with previous image
+        if (hasLastGeneratedImage && context?.lastGeneratedImageUrl) {
+          const wantsToEditPrevious = isMultiImageEditRequest(message, allReferenceImages.length + 1) ||
+            /\b(previous|last|earlier|before|that|the)\s+(image|picture|photo|one)\b/i.test(message) ||
+            /\bedit\s+(the\s+)?previous\b/i.test(message) ||
+            /\bto\s+(the\s+)?(previous|last|first|base)\b/i.test(message);
+          
+          if (wantsToEditPrevious) {
+            // Previous image becomes the base, attached images become references
+            effectiveReferenceImages = [context.lastGeneratedImageUrl, ...allReferenceImages];
+            isMultiImageEdit = true;
+            isAutoEdit = true;
+            logger.info('Multi-image edit: using previous image as base, attached as references', {
+              previousImageUrl: context.lastGeneratedImageUrl.substring(0, 50),
+              numAttachedImages: allReferenceImages.length
+            });
+          } else if (allReferenceImages.length > 1) {
+            // Multiple attached images - first is base, rest are references
+            isMultiImageEdit = true;
+            logger.info('Multi-image edit: first attached image as base, others as references', {
+              numImages: allReferenceImages.length
+            });
+          }
+        } else if (allReferenceImages.length > 1) {
+          // Multiple attached images - first is base, rest are references
+          isMultiImageEdit = true;
+          logger.info('Multi-image edit: first attached image as base, others as references', {
+            numImages: allReferenceImages.length
+          });
+        }
+      } else if (detectedAsEdit && hasLastGeneratedImage && context?.lastGeneratedImageUrl) {
+        // No explicit references but edit detected - use last generated image
+        effectiveReferenceImages = [context.lastGeneratedImageUrl];
         isAutoEdit = true;
         logger.info('Auto-detected edit request, using last generated image', {
           lastImageUrl: context.lastGeneratedImageUrl.substring(0, 50),
@@ -280,15 +398,20 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         });
       }
       
+      // Note: effectiveReferenceImages[0] is the primary/base image for backwards compatibility
+      
       logger.info('Chat assistant processing message', { 
         messageLength: message.length, 
         historyLength: history.length,
         hasContext: !!context,
         hasCredits: context?.credits !== undefined,
         hasReferenceImage: !!referenceImage,
+        numReferenceImages: allReferenceImages.length,
         hasLastGeneratedImage,
         detectedAsEdit,
-        isAutoEdit
+        isMultiImageEdit,
+        isAutoEdit,
+        effectiveNumImages: effectiveReferenceImages.length
       });
 
       // Build context info
@@ -297,19 +420,40 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         contextInfo += `\nUser has ${context.credits} credits available.`;
       }
       
-      // Add edit context if auto-detected
-      if (isAutoEdit && context?.lastGeneratedImageUrl) {
+      // Add multi-image edit context
+      if (isMultiImageEdit && effectiveReferenceImages.length > 1) {
+        contextInfo += `\n\nMULTI-IMAGE EDIT MODE: The user wants to combine elements from multiple images.
+Number of images available: ${effectiveReferenceImages.length}
+- Image 1 (BASE): ${isAutoEdit ? 'Previously generated image' : 'First attached image'}
+- Images 2-${effectiveReferenceImages.length} (REFERENCES): ${isAutoEdit ? 'Newly attached images' : 'Additional attached images'}
+${context?.lastGeneratedPrompt && isAutoEdit ? `\nOriginal base image prompt was: "${context.lastGeneratedPrompt}"` : ''}
+
+IMPORTANT: 
+- Set "isEdit": true AND "useMultipleImages": true in your JSON params
+- Write the prompt describing what elements to take FROM the reference images and add TO the base image
+- Example: "Add the hat from the reference image to the person in the base image"`;
+      } else if (isAutoEdit && context?.lastGeneratedImageUrl) {
+        // Single image edit (editing previous image)
         contextInfo += `\n\nEDIT MODE DETECTED: The user is asking to modify a previously generated image.
 Previous image URL available: YES (will be auto-attached)
 ${context.lastGeneratedPrompt ? `Original image prompt was: "${context.lastGeneratedPrompt}"` : ''}
 
 IMPORTANT: Set "isEdit": true in your JSON params. The referenceImage will be automatically attached.
 Write the prompt as an EDIT INSTRUCTION describing what to change or add.`;
-      } else if (referenceImage) {
+      } else if (effectiveReferenceImages.length === 1) {
+        // Single explicit reference image
         contextInfo += `\n\nIMPORTANT: User has attached a REFERENCE IMAGE to this message. When generating, you should:
 - For images: Use this as an image-to-image reference (set referenceImage in params)
 - For videos: Use this as the first frame (set firstFrameUrl in params, use image-to-video mode)
 Include the reference in your JSON response params.`;
+      } else if (effectiveReferenceImages.length > 1) {
+        // Multiple explicit reference images without previous image context
+        contextInfo += `\n\nIMPORTANT: User has attached ${effectiveReferenceImages.length} REFERENCE IMAGES.
+- Image 1: The BASE image to edit
+- Images 2-${effectiveReferenceImages.length}: REFERENCE images with elements to extract
+
+Set "isEdit": true AND "useMultipleImages": true in your JSON params.
+Write the prompt describing what to take from reference images and add to the base.`;
       }
 
       // Format conversation for Claude 3 Haiku - use native message format
@@ -405,15 +549,19 @@ Include the reference in your JSON response params.`;
       // Parse for action JSON
       let action = parseActionFromResponse(assistantResponse);
       
-      // If there's a reference image (explicit or auto-detected) and an action, inject it into the params
-      if (action && effectiveReferenceImage) {
+      // If there are reference images (explicit or auto-detected) and an action, inject them into the params
+      if (action && effectiveReferenceImages.length > 0) {
         if (action.action === 'generate_image') {
           action = {
             ...action,
             params: {
               ...action.params,
-              referenceImage: effectiveReferenceImage,
-              isEdit: isAutoEdit || !!action.params.isEdit,
+              // Primary reference image (base for editing)
+              referenceImage: effectiveReferenceImages[0],
+              // All reference images for multi-image editing
+              referenceImages: effectiveReferenceImages.length > 1 ? effectiveReferenceImages : undefined,
+              isEdit: isAutoEdit || isMultiImageEdit || !!action.params.isEdit,
+              useMultipleImages: isMultiImageEdit || effectiveReferenceImages.length > 1,
               // Pass original prompt for context-aware optimization
               originalImagePrompt: isAutoEdit ? context?.lastGeneratedPrompt : undefined
             }
@@ -423,7 +571,7 @@ Include the reference in your JSON response params.`;
             ...action,
             params: {
               ...action.params,
-              firstFrameUrl: effectiveReferenceImage,
+              firstFrameUrl: effectiveReferenceImages[0],
               generationMode: 'image-to-video'
             }
           };
@@ -433,8 +581,9 @@ Include the reference in your JSON response params.`;
       logger.info('Chat assistant response parsed', {
         hasAction: !!action,
         actionType: action?.action,
-        hasReferenceImage: !!effectiveReferenceImage,
+        numReferenceImages: effectiveReferenceImages.length,
         isAutoEdit,
+        isMultiImageEdit,
         responsePreview: assistantResponse.substring(0, 200)
       });
       

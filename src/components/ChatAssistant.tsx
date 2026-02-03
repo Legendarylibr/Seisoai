@@ -1028,7 +1028,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1069,44 +1069,82 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     credits: walletContext.credits
   }), [walletContext]);
 
-  // Handle image upload for reference
+  // Handle image upload for reference - supports multiple images
   const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
     
-    if (!file.type.startsWith('image/')) {
-      logger.warn('Invalid file type for image upload');
+    // Limit to 4 images total
+    const remainingSlots = 4 - attachedImages.length;
+    if (remainingSlots <= 0) {
+      logger.warn('Maximum 4 images allowed');
       return;
     }
     
-    if (file.size > 10 * 1024 * 1024) {
-      logger.warn('Image file too large');
-      return;
+    const filesToProcess = files.slice(0, remainingSlots);
+    
+    for (const file of filesToProcess) {
+      if (!file.type.startsWith('image/')) {
+        logger.warn('Invalid file type for image upload');
+        continue;
+      }
+      
+      if (file.size > 10 * 1024 * 1024) {
+        logger.warn('Image file too large');
+        continue;
+      }
     }
     
     setIsUploadingImage(true);
     
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result;
-      if (typeof result === 'string') {
-        setAttachedImage(result);
+    let loadedCount = 0;
+    const newImages: string[] = [];
+    
+    for (const file of filesToProcess) {
+      if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
+        loadedCount++;
+        if (loadedCount === filesToProcess.length) {
+          setAttachedImages(prev => [...prev, ...newImages]);
+          setIsUploadingImage(false);
+        }
+        continue;
       }
-      setIsUploadingImage(false);
-    };
-    reader.onerror = () => {
-      logger.error('Failed to read image file');
-      setIsUploadingImage(false);
-    };
-    reader.readAsDataURL(file);
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result;
+        if (typeof result === 'string') {
+          newImages.push(result);
+        }
+        loadedCount++;
+        if (loadedCount === filesToProcess.length) {
+          setAttachedImages(prev => [...prev, ...newImages]);
+          setIsUploadingImage(false);
+        }
+      };
+      reader.onerror = () => {
+        loadedCount++;
+        if (loadedCount === filesToProcess.length) {
+          setAttachedImages(prev => [...prev, ...newImages]);
+          setIsUploadingImage(false);
+        }
+        logger.error('Failed to read image file');
+      };
+      reader.readAsDataURL(file);
+    }
     
     // Reset the input so the same file can be selected again
     e.target.value = '';
+  }, [attachedImages.length]);
+
+  // Remove a specific attached image
+  const handleRemoveImage = useCallback((index: number) => {
+    setAttachedImages(prev => prev.filter((_, i) => i !== index));
   }, []);
 
-  // Remove attached image
-  const handleRemoveImage = useCallback(() => {
-    setAttachedImage(null);
+  // Remove all attached images
+  const handleClearImages = useCallback(() => {
+    setAttachedImages([]);
   }, []);
 
   // Send message handler
@@ -1114,9 +1152,13 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     if (!inputValue.trim() || isLoading || !isConnected) return;
 
     // Build message content - include image reference indicator if attached
-    const messageContent = attachedImage 
-      ? `[Image attached] ${inputValue.trim()}`
-      : inputValue.trim();
+    const imageCount = attachedImages.length;
+    let messageContent = inputValue.trim();
+    if (imageCount === 1) {
+      messageContent = `[Image attached] ${messageContent}`;
+    } else if (imageCount > 1) {
+      messageContent = `[${imageCount} images attached] ${messageContent}`;
+    }
 
     const userMessage: ChatMessage = {
       id: generateMessageId(),
@@ -1133,12 +1175,12 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
       isLoading: true
     };
 
-    // Store the attached image before clearing
-    const imageToSend = attachedImage;
+    // Store the attached images before clearing
+    const imagesToSend = [...attachedImages];
 
     setMessages(prev => [...prev, userMessage, loadingMessage]);
     setInputValue('');
-    setAttachedImage(null);
+    setAttachedImages([]);
     setIsLoading(true);
     setSuggestions([]);
 
@@ -1152,7 +1194,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
         userMessage.content,
         messages,
         getContext(),
-        imageToSend || undefined
+        imagesToSend.length > 0 ? imagesToSend : undefined
       );
 
       setMessages(prev => prev.map(msg => 
@@ -1175,7 +1217,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     }
 
     setIsLoading(false);
-  }, [inputValue, isLoading, isConnected, messages, getContext, attachedImage]);
+  }, [inputValue, isLoading, isConnected, messages, getContext, attachedImages]);
 
   // Confirm generation action
   const handleConfirmAction = useCallback(async (action: PendingAction) => {
@@ -1408,41 +1450,75 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                 <QuickActions onSelect={handleQuickAction} />
               </div>
               
-              {/* Attached image preview - compact on mobile */}
-              {attachedImage && (
+              {/* Attached images preview - compact on mobile */}
+              {attachedImages.length > 0 && (
                 <div 
-                  className="mb-2 p-1.5 sm:p-2 rounded-lg flex items-center gap-2 sm:gap-3"
+                  className="mb-2 p-1.5 sm:p-2 rounded-lg"
                   style={{
                     background: 'linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%)',
                     border: '1px solid rgba(102,126,234,0.3)'
                   }}
                 >
-                  <div className="relative flex-shrink-0">
-                    <img 
-                      src={attachedImage} 
-                      alt="Attached reference"
-                      className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-lg"
-                      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
-                    />
-                    <button
-                      onClick={handleRemoveImage}
-                      className="absolute -top-1 -right-1 sm:-top-1.5 sm:-right-1.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center"
-                      style={{ 
-                        background: '#ef4444',
-                        color: '#fff',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                      }}
-                    >
-                      <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                    </button>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[10px] sm:text-[11px] font-medium truncate" style={{ color: WIN95.text }}>
-                      📷 Image attached
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="flex gap-1.5 flex-wrap flex-shrink-0">
+                      {attachedImages.map((img, index) => (
+                        <div key={index} className="relative flex-shrink-0">
+                          <img 
+                            src={img} 
+                            alt={`Attached ${index + 1}`}
+                            className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded-lg"
+                            style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
+                          />
+                          <button
+                            onClick={() => handleRemoveImage(index)}
+                            className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center"
+                            style={{ 
+                              background: '#ef4444',
+                              color: '#fff',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                            }}
+                          >
+                            <X className="w-2 h-2" />
+                          </button>
+                          {/* Image label for multi-image editing */}
+                          {attachedImages.length > 1 && (
+                            <div 
+                              className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 px-1 rounded text-[8px] font-bold"
+                              style={{ 
+                                background: index === 0 ? '#22c55e' : '#3b82f6',
+                                color: '#fff'
+                              }}
+                            >
+                              {index === 0 ? 'Base' : `+${index}`}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    <div className="text-[8px] sm:text-[9px] hidden sm:block" style={{ color: WIN95.textDisabled }}>
-                      The AI will use this for image-to-image or video generation
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] sm:text-[11px] font-medium truncate" style={{ color: WIN95.text }}>
+                        📷 {attachedImages.length === 1 ? 'Image attached' : `${attachedImages.length} images attached`}
+                      </div>
+                      <div className="text-[8px] sm:text-[9px] hidden sm:block" style={{ color: WIN95.textDisabled }}>
+                        {attachedImages.length === 1 
+                          ? 'The AI will use this for image-to-image or video generation'
+                          : 'First image is the base, others are references for elements to add'
+                        }
+                      </div>
                     </div>
+                    {attachedImages.length > 1 && (
+                      <button
+                        onClick={handleClearImages}
+                        className="flex-shrink-0 px-2 py-1 text-[9px] rounded"
+                        style={{ 
+                          background: WIN95.buttonFace,
+                          border: `1px solid ${WIN95.border.dark}`,
+                          color: WIN95.text
+                        }}
+                      >
+                        Clear all
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -1451,23 +1527,31 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                 {/* Image upload button */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={isLoading || isGenerating || isUploadingImage}
-                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg transition-all flex-shrink-0"
+                  disabled={isLoading || isGenerating || isUploadingImage || attachedImages.length >= 4}
+                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg transition-all flex-shrink-0 relative"
                   style={{
-                    background: attachedImage 
+                    background: attachedImages.length > 0 
                       ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
                       : WIN95.bgLight,
-                    color: attachedImage ? '#fff' : WIN95.text,
+                    color: attachedImages.length > 0 ? '#fff' : WIN95.text,
                     border: `1px solid ${WIN95.border.dark}`,
-                    cursor: (isLoading || isGenerating || isUploadingImage) ? 'default' : 'pointer',
-                    opacity: (isLoading || isGenerating) ? 0.5 : 1
+                    cursor: (isLoading || isGenerating || isUploadingImage || attachedImages.length >= 4) ? 'default' : 'pointer',
+                    opacity: (isLoading || isGenerating || attachedImages.length >= 4) ? 0.5 : 1
                   }}
-                  title="Attach reference image"
+                  title={attachedImages.length >= 4 ? 'Maximum 4 images' : attachedImages.length > 0 ? 'Add more images' : 'Attach reference images'}
                 >
                   {isUploadingImage ? (
                     <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  ) : attachedImage ? (
-                    <Check className="w-4 h-4" />
+                  ) : attachedImages.length > 0 ? (
+                    <>
+                      <ImagePlus className="w-4 h-4" />
+                      <span 
+                        className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center"
+                        style={{ background: '#3b82f6', color: '#fff' }}
+                      >
+                        {attachedImages.length}
+                      </span>
+                    </>
                   ) : (
                     <ImagePlus className="w-4 h-4" />
                   )}
@@ -1476,6 +1560,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                   ref={fileInputRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
+                  multiple
                   onChange={handleImageUpload}
                   className="hidden"
                 />
@@ -1493,7 +1578,13 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={attachedImage ? "Describe what to do..." : "What do you want to create?"}
+                    placeholder={
+                      attachedImages.length > 1 
+                        ? "e.g. 'Add the hat from image 2 to image 1'" 
+                        : attachedImages.length === 1 
+                          ? "Describe what to do with this image..." 
+                          : "What do you want to create?"
+                    }
                     disabled={isLoading || isGenerating}
                     rows={1}
                     className="w-full px-3 py-2 text-base sm:text-[14px] resize-none focus:outline-none"
