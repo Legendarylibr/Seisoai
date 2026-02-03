@@ -89,29 +89,39 @@ When user attaches multiple images and wants to combine elements:
 - Set "isEdit": true AND "useMultipleImages": true
 - The FIRST image is the BASE image to edit
 - Additional images are REFERENCE images for elements to extract
-- Write the prompt as a DETAILED, SPECIFIC edit instruction
+- Write the prompt OPTIMIZED FOR THE SELECTED MODEL
 
-PROMPT OPTIMIZATION FOR MULTI-IMAGE:
-Write prompts that clearly describe the TRANSFORMATION. Be specific about:
-1. WHAT element to transfer (be descriptive: "the red baseball cap", "the floral dress", "the mountain landscape background")
-2. WHERE to place it (on the person's head, as the outfit, as the background)
-3. HOW to blend it (naturally, seamlessly, maintaining lighting)
+MODEL-SPECIFIC PROMPT OPTIMIZATION FOR MULTI-IMAGE EDITS:
 
-Examples of WELL-OPTIMIZED multi-image prompts:
-- User: "add the hat from image 2 to image 1"
-  → prompt: "Place the hat from the second image onto the person's head in the first image, blending naturally with matching lighting and shadows"
-- User: "put this outfit on that person"  
-  → prompt: "Replace the person's clothing with the outfit shown in the reference image, maintaining the same pose and body proportions, with realistic fabric draping"
-- User: "combine these two"
-  → prompt: "Merge elements from both images: keep the subject from the first image and incorporate the background/style elements from the second image, creating a cohesive composition"
-- User: "make them wear this"
-  → prompt: "Dress the person in the first image with the clothing/accessories shown in the reference image, ensuring proper fit and natural appearance"
+**FLUX (default) - Best for creative blending:**
+- Use descriptive, artistic language
+- Focus on the transformation concept
+- Example: "Blend the hat from reference onto subject, artistic integration, cohesive style"
+
+**FLUX-2 - Best for photorealistic precision:**
+- Be VERY specific and literal
+- Describe exact placement, lighting, shadows
+- Use technical photography terms
+- Keep under 150 characters for best results
+- Example: "Add reference hat to subject's head, match lighting angle, realistic shadow, seamless blend"
+
+**For FLUX-2 multi-image, write SHORT, DIRECT prompts:**
+- "Transfer hat from ref to subject, natural placement"
+- "Apply outfit from reference, maintain pose"  
+- "Swap background with reference scene, preserve subject"
+- "Composite elements: subject from base, background from ref"
+
+GENERAL MULTI-IMAGE PROMPT STRUCTURE:
+1. ACTION verb (add, transfer, apply, swap, blend, composite)
+2. ELEMENT being transferred (be specific)
+3. TARGET location/subject
+4. QUALITY instruction (natural, seamless, realistic)
 
 When user says things like "edit the previous image with this one", "combine these", "add stuff from this to that":
 - The previously generated image becomes the BASE
 - The newly attached image becomes the REFERENCE
 - Set isEdit: true and useMultipleImages: true
-- Write a DETAILED prompt describing the specific transformation
+- Choose model: flux-2 for photorealistic, flux for creative/artistic
 
 360° PANORAMAS:
 - When user mentions "360" or "panorama", use model: "nano-banana-pro"
