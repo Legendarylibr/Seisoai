@@ -17,6 +17,8 @@ import { calculateVideoCredits, calculateMusicCredits, calculateUpscaleCredits, 
 import { applyClawMarkup } from '../middleware/credits';
 import { encrypt, isEncryptionConfigured } from '../utils/encryption';
 import { withRetry } from '../utils/mongoRetry';
+import { recordProvenance, getProvenanceAgentRegistry, isProvenanceConfigured } from '../services/provenanceService';
+import config from '../config/env';
 
 // Types
 interface Dependencies {
@@ -351,19 +353,22 @@ const FLUX2_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompts for 
 CRITICAL: Keep prompts SHORT - under 150 characters. Long prompts slow down generation significantly.
 
 Optimal prompt structure:
-1. Use action verbs: "Change", "Make", "Replace", "Add", "Remove"
+1. Use action verbs: "Change", "Make", "Replace", "Add", "Remove", "Transfer", "Apply"
 2. Be specific but brief - ONE main edit per prompt
 3. Include hex colors only if the user mentioned a specific color
 
-Good examples (note the brevity):
+SINGLE IMAGE EDIT examples:
 - "Change the shirt to red flannel"
 - "Make hair blonde with highlights"
 - "Replace background with sunset beach"
-- "Add stylish sunglasses"
 
-Bad prompts:
-- "Make it look better" (vague)
-- Long descriptions with multiple changes
+MULTI-IMAGE EDIT examples (when combining elements from multiple images):
+- "Transfer the hat from reference to subject's head"
+- "Apply outfit from second image to person"
+- "Composite: keep subject, use reference background"
+- "Blend reference accessory onto subject naturally"
+
+For multi-image: focus on WHAT to transfer and WHERE to place it.
 
 JSON response:
 {"optimizedPrompt": "short action-oriented instruction under 150 chars", "reasoning": "brief explanation"}`;
@@ -379,7 +384,8 @@ interface ImageEditOptimizationResult {
  * Optimize a prompt for FLUX 2 image editing
  */
 export async function optimizePromptForFlux2Edit(
-  originalPrompt: string
+  originalPrompt: string,
+  options?: { hasMultipleImages?: boolean; numImages?: number }
 ): Promise<ImageEditOptimizationResult> {
   // Skip optimization for empty prompts
   if (!originalPrompt || originalPrompt.trim() === '') {
@@ -397,9 +403,13 @@ export async function optimizePromptForFlux2Edit(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const userPrompt = `Make this edit instruction SHORT (under 150 chars): "${originalPrompt}"
+    const multiImageContext = options?.hasMultipleImages 
+      ? `\n\nThis is a MULTI-IMAGE EDIT with ${options.numImages || 2} images. First image is BASE, others are REFERENCE for elements to transfer.`
+      : '';
 
-Use action verb, be specific. Brevity is critical.
+    const userPrompt = `Make this edit instruction SHORT (under 150 chars): "${originalPrompt}"${multiImageContext}
+
+Use action verb, be specific. ${options?.hasMultipleImages ? 'Focus on what to TRANSFER from reference to base.' : ''} Brevity is critical.
 Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
     const response = await fetch('https://fal.run/fal-ai/any-llm', {
@@ -484,16 +494,25 @@ const FLUX_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompts for F
 
 CRITICAL: Keep prompts SHORT - under 200 characters. Long prompts slow down generation.
 
-Key points:
+SINGLE IMAGE EDIT:
 1. Describe the desired result briefly
 2. Include 1-2 style modifiers max
 3. Be specific but concise
 
-Good examples (note brevity):
+Examples:
 - "Portrait with stylish black sunglasses, same pose, high quality"
 - "Same subject, blue background, studio lighting"
-- "Same scene with vibrant saturated colors"
-- "Same composition in anime style, cel shading"
+
+MULTI-IMAGE EDIT (combining elements from multiple images):
+1. Describe what element to transfer from reference image
+2. Specify where to place it on the base image
+3. Include blending/style instructions
+
+Multi-image examples:
+- "Subject wearing the outfit from reference image, natural fit, same pose"
+- "Base image with background replaced by reference scene, seamless blend"
+- "Transfer the hairstyle from reference to subject, matching lighting"
+- "Combine: subject from base, accessories from reference, cohesive style"
 
 JSON response:
 {"optimizedPrompt": "brief scene description under 200 chars", "reasoning": "brief explanation"}`;
@@ -503,7 +522,8 @@ JSON response:
  */
 export async function optimizePromptForFluxEdit(
   originalPrompt: string,
-  originalImagePrompt?: string
+  originalImagePrompt?: string,
+  options?: { hasMultipleImages?: boolean; numImages?: number }
 ): Promise<ImageEditOptimizationResult> {
   if (!originalPrompt || originalPrompt.trim() === '') {
     return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
@@ -524,9 +544,13 @@ export async function optimizePromptForFluxEdit(
       ? ` Original: "${originalImagePrompt.substring(0, 50)}"`
       : '';
 
-    const userPrompt = `Create SHORT FLUX edit prompt (under 200 chars): "${originalPrompt}"${contextInfo}
+    const multiImageContext = options?.hasMultipleImages 
+      ? `\n\nThis is a MULTI-IMAGE EDIT with ${options.numImages || 2} images. First image is BASE, others are REFERENCE for elements to transfer.`
+      : '';
 
-Describe result briefly. Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
+    const userPrompt = `Create SHORT FLUX edit prompt (under 200 chars): "${originalPrompt}"${contextInfo}${multiImageContext}
+
+${options?.hasMultipleImages ? 'Describe what to transfer from reference to base, with blending instructions.' : 'Describe result briefly.'} Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
     const response = await fetch('https://fal.run/fal-ai/any-llm', {
       method: 'POST',
@@ -3356,6 +3380,23 @@ export function createGenerationRoutes(deps: Dependencies) {
         hasImage: !!imageUrl,
         hasVideo: !!videoUrl
       });
+
+      // Minimal provenance: on-chain only, no prompt/user/DB. Fire-and-forget.
+      const resultUrl = imageUrl || videoUrl;
+      if (resultUrl && isProvenanceConfigured()) {
+        const agentRegistry = getProvenanceAgentRegistry();
+        const chainId = config.ERC8004_CHAIN_ID;
+        const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
+        if (agentRegistry && chainId) {
+          recordProvenance({
+            agentId,
+            agentRegistry,
+            chainId,
+            type: imageUrl ? 'image' : 'video',
+            resultUrl,
+          }).catch(() => {});
+        }
+      }
 
       res.json({
         success: true,

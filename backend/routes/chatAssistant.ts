@@ -764,17 +764,20 @@ Write the prompt describing what to take from reference images and add to the ba
           const originalImagePrompt = params.originalImagePrompt as string | undefined;
           
           // Model-specific prompt optimization
+          const multiImageOptions = hasMultipleImages ? { hasMultipleImages: true, numImages: imageUrls.length } : undefined;
+          
           if (imagePrompt && imagePrompt.trim()) {
             try {
               if (isEdit) {
-                // Image editing - use model-specific optimizer
+                // Image editing - use model-specific optimizer with multi-image context
                 if (imageModel === 'flux-2') {
-                  const result = await optimizePromptForFlux2Edit(imagePrompt);
+                  const result = await optimizePromptForFlux2Edit(imagePrompt, multiImageOptions);
                   if (!result.skipped && result.optimizedPrompt) {
                     optimizedPrompt = result.optimizedPrompt;
                     logger.debug('FLUX 2 edit prompt optimized', {
                       original: imagePrompt.substring(0, 50),
-                      optimized: optimizedPrompt.substring(0, 50)
+                      optimized: optimizedPrompt.substring(0, 50),
+                      hasMultipleImages
                     });
                   }
                 } else if (imageModel === 'nano-banana-pro') {
@@ -787,13 +790,14 @@ Write the prompt describing what to take from reference images and add to the ba
                     });
                   }
                 } else {
-                  // FLUX standard
-                  const result = await optimizePromptForFluxEdit(imagePrompt, originalImagePrompt);
+                  // FLUX standard with multi-image context
+                  const result = await optimizePromptForFluxEdit(imagePrompt, originalImagePrompt, multiImageOptions);
                   if (!result.skipped && result.optimizedPrompt) {
                     optimizedPrompt = result.optimizedPrompt;
                     logger.debug('FLUX edit prompt optimized', {
                       original: imagePrompt.substring(0, 50),
-                      optimized: optimizedPrompt.substring(0, 50)
+                      optimized: optimizedPrompt.substring(0, 50),
+                      hasMultipleImages
                     });
                   }
                 }
