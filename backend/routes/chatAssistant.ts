@@ -89,22 +89,29 @@ When user attaches multiple images and wants to combine elements:
 - Set "isEdit": true AND "useMultipleImages": true
 - The FIRST image is the BASE image to edit
 - Additional images are REFERENCE images for elements to extract
-- Write the prompt to describe what to take from reference images and add to base
+- Write the prompt as a DETAILED, SPECIFIC edit instruction
 
-Examples:
-- User: "[2 images] Add the hat from the second image to the first"
-  → prompt: "Add the hat from the reference image to the person in the base image"
-- User: "[2 images] Put this outfit on that person"
-  → prompt: "Apply the outfit from the reference image to the person in the base image"
-- User: "[3 images] Combine elements: use image 1 as base, add the car from image 2 and the sky from image 3"
-  → prompt: "Add the car from reference image 1 and the sky background from reference image 2 to the base image"
-- User: "Edit my previous image with elements from this new one"
-  → Set isEdit: true, useMultipleImages: true, prompt describes what to transfer
+PROMPT OPTIMIZATION FOR MULTI-IMAGE:
+Write prompts that clearly describe the TRANSFORMATION. Be specific about:
+1. WHAT element to transfer (be descriptive: "the red baseball cap", "the floral dress", "the mountain landscape background")
+2. WHERE to place it (on the person's head, as the outfit, as the background)
+3. HOW to blend it (naturally, seamlessly, maintaining lighting)
+
+Examples of WELL-OPTIMIZED multi-image prompts:
+- User: "add the hat from image 2 to image 1"
+  → prompt: "Place the hat from the second image onto the person's head in the first image, blending naturally with matching lighting and shadows"
+- User: "put this outfit on that person"  
+  → prompt: "Replace the person's clothing with the outfit shown in the reference image, maintaining the same pose and body proportions, with realistic fabric draping"
+- User: "combine these two"
+  → prompt: "Merge elements from both images: keep the subject from the first image and incorporate the background/style elements from the second image, creating a cohesive composition"
+- User: "make them wear this"
+  → prompt: "Dress the person in the first image with the clothing/accessories shown in the reference image, ensuring proper fit and natural appearance"
 
 When user says things like "edit the previous image with this one", "combine these", "add stuff from this to that":
 - The previously generated image becomes the BASE
 - The newly attached image becomes the REFERENCE
 - Set isEdit: true and useMultipleImages: true
+- Write a DETAILED prompt describing the specific transformation
 
 360° PANORAMAS:
 - When user mentions "360" or "panorama", use model: "nano-banana-pro"
