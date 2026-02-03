@@ -8,14 +8,79 @@
  * Uses Coinbase CDP facilitator for payment verification and settlement.
  * Requires CDP_API_KEY_ID and CDP_API_KEY_SECRET environment variables.
  */
-import { paymentMiddlewareFromConfig } from '@x402/express';
-import { HTTPFacilitatorClient } from '@x402/core/server';
+import { generateJwt } from '@coinbase/cdp-sdk/auth';
 import type { Request, Response, NextFunction } from 'express';
 import config from '../config/env.js';
 import logger from '../utils/logger.js';
 
-// Coinbase CDP facilitator URL
-const CDP_FACILITATOR_URL = 'https://api.cdp.coinbase.com/v2/x402';
+// Coinbase CDP facilitator URL (correct path format)
+const CDP_FACILITATOR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402';
+
+// Base mainnet network identifier (CAIP-2 format)
+const BASE_NETWORK = 'eip155:8453';
+
+/**
+ * Generate CDP JWT for a specific request
+ */
+async function generateCdpJwt(method: string, path: string): Promise<string> {
+  if (!config.CDP_API_KEY_ID || !config.CDP_API_KEY_SECRET) {
+    throw new Error('CDP credentials not configured');
+  }
+  
+  return generateJwt({
+    apiKeyId: config.CDP_API_KEY_ID,
+    apiKeySecret: config.CDP_API_KEY_SECRET,
+    requestMethod: method,
+    requestHost: 'api.cdp.coinbase.com',
+    requestPath: path,
+    expiresIn: 120,
+  });
+}
+
+/**
+ * Custom CDP Facilitator Client with dynamic JWT auth
+ * HTTPFacilitatorClient doesn't support per-request auth, so we implement our own
+ */
+class CdpFacilitatorClient {
+  private baseUrl = CDP_FACILITATOR_URL;
+  
+  async getSupported(): Promise<{ kinds: Array<{ x402Version: number; scheme: string; network: string }> }> {
+    const jwt = await generateCdpJwt('GET', '/platform/v2/x402/supported');
+    const response = await fetch(`${this.baseUrl}/supported`, {
+      headers: { 'Authorization': `Bearer ${jwt}` }
+    });
+    if (!response.ok) throw new Error(`CDP getSupportedKinds failed: ${response.status}`);
+    return response.json() as Promise<{ kinds: Array<{ x402Version: number; scheme: string; network: string }> }>;
+  }
+  
+  async verify(payload: unknown, requirements: unknown): Promise<{ valid: boolean; invalidReason?: string }> {
+    const jwt = await generateCdpJwt('POST', '/platform/v2/x402/verify');
+    const response = await fetch(`${this.baseUrl}/verify`, {
+      method: 'POST',
+      headers: { 
+        'Authorization': `Bearer ${jwt}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ payload, paymentRequirements: requirements })
+    });
+    if (!response.ok) throw new Error(`CDP verify failed: ${response.status}`);
+    return response.json() as Promise<{ valid: boolean; invalidReason?: string }>;
+  }
+  
+  async settle(payload: unknown, requirements: unknown): Promise<{ success: boolean; transaction?: string }> {
+    const jwt = await generateCdpJwt('POST', '/platform/v2/x402/settle');
+    const response = await fetch(`${this.baseUrl}/settle`, {
+      method: 'POST',
+      headers: { 
+        'Authorization': `Bearer ${jwt}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ payload, paymentRequirements: requirements })
+    });
+    if (!response.ok) throw new Error(`CDP settle failed: ${response.status}`);
+    return response.json() as Promise<{ success: boolean; transaction?: string }>;
+  }
+}
 
 // 30% markup over Fal.ai API costs
 const MARKUP = 1.30;
@@ -204,7 +269,8 @@ export interface X402Request extends Request {
 }
 
 /**
- * Create x402 payment middleware for specified routes
+ * Create simple x402 payment middleware
+ * Returns 402 with payment info for Claw clients without accounts
  */
 export function createX402Middleware() {
   if (!PAYMENT_WALLET) {
@@ -212,50 +278,126 @@ export function createX402Middleware() {
     return (_req: Request, _res: Response, next: NextFunction) => next();
   }
 
-  const routes = buildRoutesConfig();
-  
-  if (Object.keys(routes).length === 0) {
-    logger.warn('x402: No routes configured');
-    return (_req: Request, _res: Response, next: NextFunction) => next();
-  }
-
-  // Check if CDP credentials are configured
   const hasCdpCredentials = !!(config.CDP_API_KEY_ID && config.CDP_API_KEY_SECRET);
   
   logger.info('x402: Payment middleware enabled', { 
     wallet: PAYMENT_WALLET.slice(0, 10) + '...',
     network: 'base (eip155:8453)',
-    endpoints: Object.keys(routes).length,
-    facilitator: hasCdpCredentials ? 'coinbase-cdp' : 'none (402 only)'
+    facilitator: hasCdpCredentials ? 'coinbase-cdp' : 'none'
   });
 
-  // Create CDP facilitator client if credentials are available
-  let facilitator: HTTPFacilitatorClient | undefined;
+  // Test CDP connection on startup if credentials are configured
   if (hasCdpCredentials) {
-    // CDP API uses JWT bearer token authentication
-    // Create a custom fetch that adds the authorization header
-    facilitator = new HTTPFacilitatorClient({
-      url: CDP_FACILITATOR_URL,
-      // CDP auth is handled via API key headers
-      headers: {
-        'X-CDP-API-KEY-ID': config.CDP_API_KEY_ID!,
-        'X-CDP-API-KEY-SECRET': config.CDP_API_KEY_SECRET!,
-      }
+    testCdpConnection().catch(err => {
+      logger.error('x402: CDP connection test failed', { error: err.message });
     });
-    logger.info('x402: Using Coinbase CDP facilitator for payment processing');
-  } else {
-    logger.warn('x402: No CDP credentials configured. Set CDP_API_KEY_ID and CDP_API_KEY_SECRET for full x402 support.');
-    logger.warn('x402: Without facilitator, 402 responses will be returned but payments cannot be verified/settled.');
   }
 
-  return paymentMiddlewareFromConfig(
-    routes,
-    facilitator,  // Use CDP facilitator if configured
-    undefined,    // schemes (CDP facilitator handles this)
-    undefined,    // paywallConfig
-    undefined,    // paywall
-    hasCdpCredentials  // Only sync if we have a facilitator
-  );
+  // Simple x402 middleware that returns proper payment info
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const routeKey = `${req.method} ${req.path.replace('/api/', '/')}`;
+    const routes = buildRoutesConfig();
+    const routeConfig = routes[routeKey];
+    
+    if (!routeConfig) {
+      // Route not configured for x402, pass through
+      return next();
+    }
+
+    // Check if payment signature is present
+    const paymentHeader = req.headers['x-payment'] || req.headers['payment'];
+    if (paymentHeader) {
+      // Payment present - verify with CDP if configured
+      if (hasCdpCredentials) {
+        try {
+          const cdp = new CdpFacilitatorClient();
+          const price = typeof routeConfig.accepts[0].price === 'function'
+            ? routeConfig.accepts[0].price({ body: req.body })
+            : routeConfig.accepts[0].price;
+            
+          const requirements = {
+            scheme: 'exact',
+            network: BASE_NETWORK,
+            maxAmountRequired: price,
+            resource: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+            payTo: PAYMENT_WALLET,
+          };
+          
+          const result = await cdp.verify(paymentHeader, requirements);
+          if (result.valid) {
+            // Payment verified, continue to handler
+            (req as X402Request).isX402Paid = true;
+            return next();
+          } else {
+            return res.status(402).json({ 
+              error: 'Payment verification failed',
+              reason: result.invalidReason 
+            });
+          }
+        } catch (error) {
+          logger.error('x402: Payment verification error', { error });
+          return res.status(500).json({ error: 'Payment verification failed' });
+        }
+      }
+      // No CDP - can't verify payments
+      return res.status(402).json({ error: 'Payment verification not available' });
+    }
+
+    // No payment - return 402 with payment requirements
+    const price = typeof routeConfig.accepts[0].price === 'function'
+      ? routeConfig.accepts[0].price({ body: req.body })
+      : routeConfig.accepts[0].price;
+
+    const paymentRequired = {
+      x402Version: 2,
+      error: 'Payment required',
+      resource: {
+        url: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+        description: routeConfig.description,
+        mimeType: 'application/json',
+      },
+      accepts: [{
+        scheme: 'exact',
+        network: BASE_NETWORK,
+        maxAmountRequired: price,
+        asset: 'USDC',
+        payTo: PAYMENT_WALLET,
+      }],
+    };
+
+    const encoded = Buffer.from(JSON.stringify(paymentRequired)).toString('base64');
+    res.setHeader('PAYMENT-REQUIRED', encoded);
+    return res.status(402).json(paymentRequired);
+  };
+}
+
+/**
+ * Test CDP connection and log supported networks
+ */
+async function testCdpConnection(): Promise<void> {
+  try {
+    const jwt = await generateCdpJwt('GET', '/platform/v2/x402/supported');
+    const response = await fetch(`${CDP_FACILITATOR_URL}/supported`, {
+      headers: {
+        'Authorization': `Bearer ${jwt}`,
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json() as { kinds?: Array<{ network: string }> };
+      logger.info('x402: CDP facilitator connected', { 
+        networks: data.kinds?.map((k) => k.network) 
+      });
+    } else {
+      logger.error('x402: CDP facilitator returned error', { 
+        status: response.status,
+        statusText: response.statusText 
+      });
+    }
+  } catch (error) {
+    logger.error('x402: Failed to connect to CDP facilitator', { error });
+  }
 }
 
 /**

@@ -58,6 +58,11 @@ declare module '@x402/express' {
     // Paywall provider interface
   }
 
+  export interface SchemeRegistration {
+    network: string;
+    server: unknown;
+  }
+
   // Main middleware functions
   export function paymentMiddleware(
     routes: RoutesConfig,
@@ -138,4 +143,14 @@ declare module '@x402/evm' {
     payload: import('@x402/core').PaymentPayload,
     requirements: import('@x402/core').PaymentRequirements
   ): Promise<import('@x402/core').VerificationResponse>;
+}
+
+declare module '@x402/evm/exact/server' {
+  import type { Network } from '@x402/core';
+  
+  export class ExactEvmScheme {
+    readonly scheme: 'exact';
+    registerMoneyParser(parser: unknown): ExactEvmScheme;
+    parsePrice(price: string | number, network: Network): Promise<{ amount: string; asset: string }>;
+  }
 }
