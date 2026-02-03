@@ -713,7 +713,7 @@ const MessageBubble = memo(function MessageBubble({
                   </div>
 
                   {/* Images */}
-                  {message.generatedContent.type === 'image' && (
+                  {message.generatedContent.type === 'image' && message.generatedContent.urls?.length > 0 && (
                     <div className={`grid gap-3 ${message.generatedContent.urls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                       {message.generatedContent.urls.map((url, i) => (
                         <div key={i} className="relative group rounded-xl overflow-hidden transition-transform hover:scale-[1.02]">
@@ -795,12 +795,12 @@ const MessageBubble = memo(function MessageBubble({
                   )}
 
                   {/* Videos */}
-                  {message.generatedContent.type === 'video' && message.generatedContent.urls[0] && (
+                  {message.generatedContent.type === 'video' && message.generatedContent.urls?.[0] && (
                     <div className="space-y-2">
                       <div className="relative rounded-lg overflow-hidden" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
                         <video
                           ref={videoRef}
-                          src={message.generatedContent.urls[0]}
+                          src={message.generatedContent.urls?.[0] || ''}
                           controls
                           loop
                           playsInline
@@ -824,7 +824,7 @@ const MessageBubble = memo(function MessageBubble({
                           {isPlaying ? 'Pause' : 'Play'}
                         </button>
                         <button
-                          onClick={() => handleDownload(message.generatedContent!.urls[0], 'video')}
+                          onClick={() => handleDownload(message.generatedContent?.urls?.[0] || '', 'video')}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] rounded-lg"
                           style={BTN.base}
                         >
