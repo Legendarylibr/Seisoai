@@ -709,9 +709,7 @@ Write the prompt describing what to take from reference images and add to the ba
           const imagePrompt = params.prompt as string;
           const hasReferenceImage = !!params.referenceImage;
           const hasMultipleImages = Array.isArray(params.referenceImages) && params.referenceImages.length > 1;
-          
-          // For multi-image editing, force FLUX 2 as it handles multiple image inputs better
-          const imageModel = hasMultipleImages ? 'flux-2' : (params.model || params.imageModel || 'flux');
+          const imageModel = params.model || params.imageModel || 'flux';
           const isFlux2 = imageModel === 'flux-2';
           const is360Request = /\b360\b/i.test(imagePrompt);
           
