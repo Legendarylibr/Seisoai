@@ -67,6 +67,22 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
+  // Skip CSRF check for x402 payment requests (machine-to-machine API calls)
+  // These use cryptographic payment verification instead of CSRF tokens
+  if (req.headers['payment-signature'] || req.headers['x-payment']) {
+    return next();
+  }
+
+  // Skip CSRF check for Claw/OpenClaw clients (API-only access)
+  // These are AI agents without browser context
+  const xClient = req.headers['x-client']?.toString().toLowerCase();
+  const xOrigin = req.headers['x-origin']?.toString().toLowerCase();
+  const userAgent = req.headers['user-agent']?.toLowerCase() || '';
+  if (xClient?.includes('claw') || xOrigin?.includes('claw') || 
+      userAgent.includes('clawhub') || userAgent.includes('openclaw')) {
+    return next();
+  }
+
   // Get token from cookie
   const cookieToken = req.cookies?.[CSRF_TOKEN_COOKIE] || req.headers.cookie
     ?.split(';')

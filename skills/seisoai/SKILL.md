@@ -28,16 +28,18 @@ All endpoints use x402 payment. Make request → get 402 → sign USDC payment �
 
 | Endpoint | Description | Price (USDC) |
 |----------|-------------|--------------|
-| `POST /api/generate/image` | Generate image from prompt | $0.06 |
-| `POST /api/generate/video` | Generate video from prompt | $0.60 |
-| `POST /api/generate/music` | Generate music (1 min) | $0.024 |
-| `POST /api/generate/upscale` | Upscale an image | $0.036 |
-| `POST /api/audio/sfx` | Generate sound effects | $0.036 |
-| `POST /api/wan-animate/submit` | Animate image to video | $0.60 |
-| `POST /api/image-tools/describe` | Describe an image | $0.012 |
-| `POST /api/prompt-lab/chat` | Prompt brainstorming | $0.0012 |
+| `POST /api/generate/image` | Generate image (Flux Pro) | $0.065 |
+| `POST /api/generate/image` | Generate image (Flux 2) | $0.033 |
+| `POST /api/generate/image` | Generate image (Nano Banana) | $0.325 |
+| `POST /api/generate/video` | Generate video (~5 sec) | $0.65 |
+| `POST /api/generate/music` | Generate music (1 min) | $0.026 |
+| `POST /api/generate/upscale` | Upscale an image | $0.039 |
+| `POST /api/audio/sfx` | Generate sound effects | $0.039 |
+| `POST /api/wan-animate/submit` | Animate image to video | $0.65 |
+| `POST /api/image-tools/describe` | Describe an image | $0.013 |
+| `POST /api/prompt-lab/chat` | Prompt brainstorming | $0.0013 |
 
-Prices are 20% above Fal.ai API costs. Payments settle on Base mainnet.
+Prices are 30% above Fal.ai API costs. Image price varies by model (pass `model` in body). Payments settle on Base mainnet.
 
 ## How to invoke
 
@@ -49,6 +51,8 @@ Content-Type: application/json
 
 {"prompt": "a sunset over mountains", "model": "flux-pro"}
 ```
+
+Models: `flux-pro` (default, $0.065), `flux-2` ($0.033), `nano-banana-pro` ($0.325)
 
 Response: `{"requestId": "abc123"}` — then poll status.
 

@@ -130,6 +130,9 @@ export interface Config {
   ERC8004_CHAIN_ID?: number;
   // Agent deployment signer (optional)
   DEPLOYER_PRIVATE_KEY?: string;
+  // Coinbase CDP API (for x402 payment facilitation)
+  CDP_API_KEY_ID?: string;
+  CDP_API_KEY_SECRET?: string;
   isProduction: boolean;
   isDevelopment: boolean;
 }
@@ -196,6 +199,10 @@ export const config: Config = {
   ERC8004_CHAIN_ID: process.env.ERC8004_CHAIN_ID ? parseInt(process.env.ERC8004_CHAIN_ID, 10) : undefined,
   // Agent deployment signer (optional)
   DEPLOYER_PRIVATE_KEY: process.env.DEPLOYER_PRIVATE_KEY,
+  
+  // Coinbase CDP API (for x402 payment facilitation)
+  CDP_API_KEY_ID: process.env.CDP_API_KEY_ID,
+  CDP_API_KEY_SECRET: process.env.CDP_API_KEY_SECRET,
   
   // Flags
   isProduction: process.env.NODE_ENV === 'production',
