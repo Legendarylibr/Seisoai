@@ -627,16 +627,26 @@ const NANO_BANANA_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompt
 
 CRITICAL: Keep prompts SHORT - under 200 characters. Long prompts slow down generation.
 
-For edits, prompts should:
+SINGLE IMAGE EDIT:
 1. Describe desired result briefly
 2. Include 1-2 quality modifiers max
 3. Be specific but concise
 
-Good examples (note brevity):
+Single image examples:
 - "Portrait with pearl necklace, same lighting, high detail"
 - "Same scene as oil painting, impressionist style"
 - "Subject in magical forest, dappled sunlight"
-- "Same image with golden hour tones, cinematic"
+
+MULTI-IMAGE EDIT (combining elements from multiple images):
+1. Describe what element to transfer from reference
+2. Specify placement and integration
+3. Include style/blending instructions
+
+Multi-image examples:
+- "Subject wearing reference outfit, natural fit, cohesive lighting"
+- "Base scene with reference object added, seamless integration"
+- "Transfer hairstyle from reference to subject, same style"
+- "Combine: subject from base with background from reference"
 
 JSON response:
 {"optimizedPrompt": "brief result description under 200 chars", "reasoning": "brief explanation"}`;
@@ -646,7 +656,8 @@ JSON response:
  */
 export async function optimizePromptForNanoBananaEdit(
   originalPrompt: string,
-  originalImagePrompt?: string
+  originalImagePrompt?: string,
+  options?: { hasMultipleImages?: boolean; numImages?: number }
 ): Promise<ImageEditOptimizationResult> {
   if (!originalPrompt || originalPrompt.trim() === '') {
     return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
@@ -667,9 +678,13 @@ export async function optimizePromptForNanoBananaEdit(
       ? ` Original: "${originalImagePrompt.substring(0, 50)}"`
       : '';
 
-    const userPrompt = `Create SHORT Nano Banana edit prompt (under 200 chars): "${originalPrompt}"${contextInfo}
+    const multiImageContext = options?.hasMultipleImages 
+      ? `\n\nThis is a MULTI-IMAGE EDIT with ${options.numImages || 2} images. First image is BASE, others are REFERENCE for elements to transfer.`
+      : '';
 
-Describe result briefly. Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
+    const userPrompt = `Create SHORT Nano Banana edit prompt (under 200 chars): "${originalPrompt}"${contextInfo}${multiImageContext}
+
+${options?.hasMultipleImages ? 'Describe what to transfer from reference to base, with integration instructions.' : 'Describe result briefly.'} Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
     const response = await fetch('https://fal.run/fal-ai/any-llm', {
       method: 'POST',

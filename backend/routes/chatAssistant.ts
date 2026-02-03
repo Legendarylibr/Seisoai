@@ -781,12 +781,13 @@ Write the prompt describing what to take from reference images and add to the ba
                     });
                   }
                 } else if (imageModel === 'nano-banana-pro') {
-                  const result = await optimizePromptForNanoBananaEdit(imagePrompt, originalImagePrompt);
+                  const result = await optimizePromptForNanoBananaEdit(imagePrompt, originalImagePrompt, multiImageOptions);
                   if (!result.skipped && result.optimizedPrompt) {
                     optimizedPrompt = result.optimizedPrompt;
                     logger.debug('Nano Banana edit prompt optimized', {
                       original: imagePrompt.substring(0, 50),
-                      optimized: optimizedPrompt.substring(0, 50)
+                      optimized: optimizedPrompt.substring(0, 50),
+                      hasMultipleImages
                     });
                   }
                 } else {
