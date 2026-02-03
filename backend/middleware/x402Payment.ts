@@ -179,14 +179,6 @@ function buildRoutesConfig(): X402RoutesConfig {
       }],
       description: 'Generate an AI video',
     },
-    'POST /wan-animate/submit': {
-      accepts: [{
-        price: priceUsd(FAL_API_COSTS.VIDEO_PER_SECOND * 5),
-        network: 'eip155:8453' as const,
-        payTo: PAYMENT_WALLET,
-      }],
-      description: 'Animate an image to video',
-    },
     'POST /generate/music': {
       accepts: [{
         price: getMusicPrice,
@@ -210,14 +202,6 @@ function buildRoutesConfig(): X402RoutesConfig {
         payTo: PAYMENT_WALLET,
       }],
       description: 'Upscale an image',
-    },
-    'POST /image-tools/describe': {
-      accepts: [{
-        price: priceUsd(FAL_API_COSTS.DESCRIBE),
-        network: 'eip155:8453' as const,
-        payTo: PAYMENT_WALLET,
-      }],
-      description: 'Describe an image',
     },
     'POST /prompt-lab/chat': {
       accepts: [{
@@ -327,6 +311,18 @@ export function createX402Middleware() {
           if (result.valid) {
             // Payment verified, continue to handler
             (req as X402Request).isX402Paid = true;
+            // Set a mock user for x402 requests so route handlers don't fail
+            // This user has minimal data but satisfies type checks
+            (req as any).user = {
+              isX402Guest: true,
+              credits: 999999, // Large number to pass credit checks
+              walletAddress: 'x402-guest-' + Date.now(),
+              userId: 'x402-guest',
+            };
+            // Set flags to skip credit deduction (hasFreeAccess bypasses deduction)
+            (req as any).hasFreeAccess = true;
+            // Also set creditsRequired to 0 to prevent deduction attempts
+            (req as any).creditsRequired = 0;
             return next();
           } else {
             return res.status(402).json({ 

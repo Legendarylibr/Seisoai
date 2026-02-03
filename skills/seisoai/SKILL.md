@@ -35,8 +35,6 @@ All endpoints use x402 payment. Make request → get 402 → sign USDC payment �
 | `POST /api/generate/music` | Generate music (1 min) | $0.026 |
 | `POST /api/generate/upscale` | Upscale an image | $0.039 |
 | `POST /api/audio/sfx` | Generate sound effects | $0.039 |
-| `POST /api/wan-animate/submit` | Animate image to video | $0.65 |
-| `POST /api/image-tools/describe` | Describe an image | $0.013 |
 | `POST /api/prompt-lab/chat` | Prompt brainstorming | $0.0013 |
 
 Prices are 30% above Fal.ai API costs. Image price varies by model (pass `model` in body). Payments settle on Base mainnet.

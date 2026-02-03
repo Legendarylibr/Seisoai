@@ -1281,8 +1281,10 @@ export function createGenerationRoutes(deps: Dependencies) {
       if (!response.ok) {
         const errorText = await response.text();
         logger.error('FAL API error', { status: response.status, error: errorText });
-        // Refund credits on API failure
-        await refundCredits(user, creditsRequired, `FAL API error: ${response.status}`);
+        // Refund credits on API failure (only if credits were deducted)
+        if (!hasFreeAccess) {
+          await refundCredits(user, creditsRequired, `FAL API error: ${response.status}`);
+        }
         res.status(500).json({
           success: false,
           error: `Image generation failed: ${response.status}`,
@@ -1796,8 +1798,9 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Calculate credits based on duration, audio, quality, and model using shared utility (20% markup for Claw clients)
       const creditsToDeduct = applyClawMarkup(req, calculateVideoCredits(duration, generate_audio, quality, model));
+      const hasFreeAccess = req.hasFreeAccess || false;
 
-      // Deduct credits atomically
+      // Deduct credits atomically (skip for free access users / x402)
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
       
@@ -1809,25 +1812,35 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      const updateResult = await User.findOneAndUpdate(
-        {
-          ...updateQuery,
-          credits: { $gte: creditsToDeduct }
-        },
-        {
-          $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct }
-        },
-        { new: true }
-      );
+      let remainingCredits = user.credits || 0;
+      
+      if (!hasFreeAccess) {
+        const updateResult = await User.findOneAndUpdate(
+          {
+            ...updateQuery,
+            credits: { $gte: creditsToDeduct }
+          },
+          {
+            $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct }
+          },
+          { new: true }
+        );
 
-      if (!updateResult) {
-        const currentUser = await User.findOne(updateQuery);
-        const currentCredits = currentUser?.credits || 0;
-        res.status(402).json({
-          success: false,
-          error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsToDeduct}.`
+        if (!updateResult) {
+          const currentUser = await User.findOne(updateQuery);
+          const currentCredits = currentUser?.credits || 0;
+          res.status(402).json({
+            success: false,
+            error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsToDeduct}.`
+          });
+          return;
+        }
+        remainingCredits = updateResult.credits;
+      } else {
+        logger.info('Free video generation - no credits deducted', {
+          userId: user.userId || user.walletAddress,
+          creditsWouldHaveCost: creditsToDeduct
         });
-        return;
       }
 
       // Validate required inputs
@@ -2004,8 +2017,10 @@ export function createGenerationRoutes(deps: Dependencies) {
         } catch {
           logger.error('Failed to parse Veo 3.1 error response');
         }
-        // Refund credits on video submit failure
-        await refundCredits(user, creditsToDeduct, `Veo 3.1 submit error: ${submitResponse.status}`);
+        // Refund credits on video submit failure (only if credits were deducted)
+        if (!hasFreeAccess) {
+          await refundCredits(user, creditsToDeduct, `Veo 3.1 submit error: ${submitResponse.status}`);
+        }
         res.status(submitResponse.status).json({ success: false, error: errorMessage, creditsRefunded: creditsToDeduct });
         return;
       }
@@ -2082,7 +2097,7 @@ export function createGenerationRoutes(deps: Dependencies) {
             file_name: syncVideoMeta?.file_name || `video-${requestId}.mp4`,
             file_size: syncVideoMeta?.file_size
           },
-          remainingCredits: updateResult.credits,
+          remainingCredits,
           creditsDeducted: creditsToDeduct
         });
         return;
@@ -2174,7 +2189,7 @@ export function createGenerationRoutes(deps: Dependencies) {
               file_name: statusVideoMeta?.file_name || `video-${requestId}.mp4`,
               file_size: statusVideoMeta?.file_size
             },
-            remainingCredits: updateResult.credits,
+            remainingCredits,
             creditsDeducted: creditsToDeduct
           });
           return;
@@ -2202,8 +2217,10 @@ export function createGenerationRoutes(deps: Dependencies) {
               fetchUrl,
               errorDetails
             });
-            // Refund credits on fetch result failure
-            await refundCredits(user, creditsToDeduct, `Failed to fetch video result: ${resultResponse.status}`);
+            // Refund credits on fetch result failure (only if credits were deducted)
+            if (!hasFreeAccess) {
+              await refundCredits(user, creditsToDeduct, `Failed to fetch video result: ${resultResponse.status}`);
+            }
             res.status(500).json({ success: false, error: `Failed to fetch video result (${resultResponse.status})`, creditsRefunded: creditsToDeduct });
             return;
           }
@@ -2269,7 +2286,7 @@ export function createGenerationRoutes(deps: Dependencies) {
                 file_name: videoMeta?.file_name || `video-${requestId}.mp4`,
                 file_size: videoMeta?.file_size
               },
-              remainingCredits: updateResult.credits,
+              remainingCredits,
               creditsDeducted: creditsToDeduct
             });
             return;
@@ -2280,8 +2297,10 @@ export function createGenerationRoutes(deps: Dependencies) {
             resultData: JSON.stringify(resultData).substring(0, 1000),
             checkedPaths: ['video.url', 'data.video.url', 'output.video.url', 'response.video.url', 'result.video.url', 'payload.video.url', 'url', 'video_url', 'output.url']
           });
-          // Refund credits when video URL not found
-          await refundCredits(user, creditsToDeduct, 'Video completed but no URL found');
+          // Refund credits when video URL not found (only if credits were deducted)
+          if (!hasFreeAccess) {
+            await refundCredits(user, creditsToDeduct, 'Video completed but no URL found');
+          }
           res.status(500).json({ success: false, error: 'Video generation completed but no video URL found', creditsRefunded: creditsToDeduct });
           return;
         }
@@ -2289,8 +2308,10 @@ export function createGenerationRoutes(deps: Dependencies) {
         // Check for failed status
         if (isStatusFailed(normalizedStatus)) {
           logger.error('Video generation failed', { requestId, status: normalizedStatus });
-          // Refund credits on generation failure
-          await refundCredits(user, creditsToDeduct, `Video generation failed: ${normalizedStatus}`);
+          // Refund credits on generation failure (only if credits were deducted)
+          if (!hasFreeAccess) {
+            await refundCredits(user, creditsToDeduct, `Video generation failed: ${normalizedStatus}`);
+          }
           res.status(500).json({ success: false, error: 'Video generation failed', creditsRefunded: creditsToDeduct });
           return;
         }
@@ -2298,8 +2319,10 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Timeout
       logger.error('Video generation timeout', { requestId, elapsed: maxWaitTime / 1000 + 's' });
-      // Refund credits on timeout
-      await refundCredits(user, creditsToDeduct, 'Video generation timed out');
+      // Refund credits on timeout (only if credits were deducted)
+      if (!hasFreeAccess) {
+        await refundCredits(user, creditsToDeduct, 'Video generation timed out');
+      }
       res.status(504).json({ success: false, error: 'Video generation timed out. Please try again.', creditsRefunded: creditsToDeduct });
     } catch (error) {
       const err = error as Error;
