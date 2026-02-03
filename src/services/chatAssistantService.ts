@@ -276,13 +276,13 @@ export async function executeGeneration(
     }
 
     // Add is360 flag if this was a 360 panorama generation
-    const is360 = action.params.model === 'nano-banana-pro' || 
-                  (action.params.prompt && /\b360\b/i.test(action.params.prompt));
+    const is360 = action.params?.model === 'nano-banana-pro' || 
+                  (action.params?.prompt && typeof action.params.prompt === 'string' && /\b360\b/i.test(action.params.prompt));
     
     const generatedContent = data.generatedContent ? {
       ...data.generatedContent,
-      model: action.params.model,
-      prompt: action.params.prompt,
+      model: action.params?.model,
+      prompt: action.params?.prompt,
       is360
     } : undefined;
 

@@ -224,19 +224,19 @@ const MessageBubble = memo(function MessageBubble({
 
   // Check if this is a 360 panorama request (for pending action)
   const is360Request = message.pendingAction?.params?.prompt 
-    ? /\b360\b/i.test(message.pendingAction.params.prompt)
+    ? /\b360\b/i.test(String(message.pendingAction.params.prompt))
     : false;
     
   // Check if generated content was from a 360 request
   // Check multiple sources: message content, original prompt, or model used
   const is360Generated = (() => {
     // Check message content
-    if (message.content && /\b360\b/i.test(message.content)) return true;
+    if (message.content && /\b360\b/i.test(String(message.content))) return true;
     // Check if generatedContent has metadata
     if (message.generatedContent?.model === 'nano-banana-pro') return true;
     if (message.generatedContent?.is360) return true;
     // Check original prompt in generated content
-    if (message.generatedContent?.prompt && /\b360\b/i.test(message.generatedContent.prompt)) return true;
+    if (message.generatedContent?.prompt && /\b360\b/i.test(String(message.generatedContent.prompt))) return true;
     return false;
   })();
 
@@ -254,9 +254,10 @@ const MessageBubble = memo(function MessageBubble({
   const handleConfirmWithModel = () => {
     if (!message.pendingAction || !onConfirmAction) return;
     
-    // Preserve referenceImage from original params if it exists
+    // Preserve referenceImage and referenceImages from original params if they exist
     const originalParams = message.pendingAction.params || {};
     const preservedReferenceImage = originalParams.referenceImage;
+    const preservedReferenceImages = originalParams.referenceImages;
     
     // For 360 requests, always use nano-banana-pro with 16:9 landscape
     if (is360Request) {
@@ -266,7 +267,8 @@ const MessageBubble = memo(function MessageBubble({
           ...originalParams,
           model: 'nano-banana-pro',
           imageSize: 'landscape_16_9',
-          ...(preservedReferenceImage && { referenceImage: preservedReferenceImage })
+          ...(preservedReferenceImage && { referenceImage: preservedReferenceImage }),
+          ...(preservedReferenceImages && { referenceImages: preservedReferenceImages })
         }
       };
       onConfirmAction(actionWith360Model);
@@ -313,8 +315,9 @@ const MessageBubble = memo(function MessageBubble({
         model: modelToUse,
         // Add aspect ratio for image generation
         ...(message.pendingAction.type === 'generate_image' && { imageSize: selectedAspectRatio }),
-        // Preserve referenceImage if it exists
-        ...(preservedReferenceImage && { referenceImage: preservedReferenceImage })
+        // Preserve referenceImage and referenceImages if they exist
+        ...(preservedReferenceImage && { referenceImage: preservedReferenceImage }),
+        ...(preservedReferenceImages && { referenceImages: preservedReferenceImages })
       }
     };
     
@@ -386,10 +389,10 @@ const MessageBubble = memo(function MessageBubble({
             {/* Message content - compact on mobile */}
             <div className="px-3 py-2 sm:px-4 sm:py-3">
               {message.isLoading ? (
-                message.content.includes('Generating') ? (
+                (message.content || '').includes('Generating') ? (
                   <GenerationProgress type={
-                    message.content.includes('video') ? 'video' :
-                    message.content.includes('music') ? 'music' : 'image'
+                    (message.content || '').includes('video') ? 'video' :
+                    (message.content || '').includes('music') ? 'music' : 'image'
                   } />
                 ) : (
                   <TypingIndicator />
@@ -423,7 +426,7 @@ const MessageBubble = memo(function MessageBubble({
                     lineHeight: '1.6'
                   }}
                   dangerouslySetInnerHTML={{ 
-                    __html: message.content
+                    __html: (message.content || '')
                       .replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: 600;">$1</strong>')
                       .replace(/•/g, '<span style="color: ' + (isUser ? '#fff' : '#667eea') + '; font-weight: 600;">•</span>')
                       .replace(/\n/g, '<br>')
@@ -702,7 +705,7 @@ const MessageBubble = memo(function MessageBubble({
               )}
 
               {/* Generated content display */}
-              {message.generatedContent && (
+              {message.generatedContent && message.generatedContent.type && (
                 <div className="mt-5">
                   {/* Success header */}
                   <div className="flex items-center gap-2.5 mb-4">
@@ -1083,16 +1086,22 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     
     const filesToProcess = files.slice(0, remainingSlots);
     
-    for (const file of filesToProcess) {
+    // Filter to only valid files first
+    const validFiles = filesToProcess.filter(file => {
       if (!file.type.startsWith('image/')) {
         logger.warn('Invalid file type for image upload');
-        continue;
+        return false;
       }
-      
       if (file.size > 10 * 1024 * 1024) {
         logger.warn('Image file too large');
-        continue;
+        return false;
       }
+      return true;
+    });
+    
+    // If no valid files, exit early
+    if (validFiles.length === 0) {
+      return;
     }
     
     setIsUploadingImage(true);
@@ -1100,16 +1109,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     let loadedCount = 0;
     const newImages: string[] = [];
     
-    for (const file of filesToProcess) {
-      if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
-        loadedCount++;
-        if (loadedCount === filesToProcess.length) {
-          setAttachedImages(prev => [...prev, ...newImages]);
-          setIsUploadingImage(false);
-        }
-        continue;
-      }
-      
+    for (const file of validFiles) {
       const reader = new FileReader();
       reader.onload = (event) => {
         const result = event.target?.result;
@@ -1117,14 +1117,14 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
           newImages.push(result);
         }
         loadedCount++;
-        if (loadedCount === filesToProcess.length) {
+        if (loadedCount === validFiles.length) {
           setAttachedImages(prev => [...prev, ...newImages]);
           setIsUploadingImage(false);
         }
       };
       reader.onerror = () => {
         loadedCount++;
-        if (loadedCount === filesToProcess.length) {
+        if (loadedCount === validFiles.length) {
           setAttachedImages(prev => [...prev, ...newImages]);
           setIsUploadingImage(false);
         }
@@ -1225,10 +1225,11 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     
     setIsGenerating(true);
 
+    const actionType = action.type || 'content';
     const generatingMessage: ChatMessage = {
       id: generateMessageId(),
       role: 'assistant',
-      content: `Generating your ${action.type.replace('generate_', '')}...`,
+      content: `Generating your ${actionType.replace('generate_', '')}...`,
       timestamp: new Date().toISOString(),
       isLoading: true
     };
