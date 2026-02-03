@@ -11,6 +11,7 @@
 import { Router, type Request, type Response } from 'express';
 import { config } from '../config/env';
 import logger from '../utils/logger';
+import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
 
 const FAL_API_KEY = config.FAL_API_KEY;
 
@@ -325,11 +326,29 @@ export default function createPromptLabRoutes(_deps: Record<string, unknown>) {
         historyLength: history.length
       });
 
-      return res.json({
+      // x402: Settle payment after successful prompt lab chat
+      const x402Req = req as X402Request;
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        const settlement = await settleX402Payment(x402Req);
+        if (!settlement.success) {
+          logger.error('x402 settlement failed after prompt lab chat', { error: settlement.error });
+        }
+      }
+
+      const responseData: Record<string, unknown> = {
         success: true,
         response: assistantResponse,
         timestamp: new Date().toISOString()
-      });
+      };
+      
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        responseData.x402 = {
+          settled: x402Req.x402Payment.settled,
+          transactionHash: x402Req.x402Payment.transactionHash,
+        };
+      }
+
+      return res.json(responseData);
 
     } catch (error) {
       const err = error as Error;

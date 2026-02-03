@@ -10,6 +10,7 @@ import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, uploadTo
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 import { applyClawMarkup } from '../middleware/credits';
+import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
 
 // Types
 interface Dependencies {
@@ -546,8 +547,9 @@ export function createAudioRoutes(deps: Dependencies) {
 
       const clampedDuration = Math.max(1, Math.min(30, duration));
       const creditsRequired = applyClawMarkup(req, Math.max(0.5, Math.ceil(clampedDuration / 10) * 0.5));
+      const hasFreeAccess = (req as any).hasFreeAccess || false;
 
-      // Deduct credits
+      // Deduct credits (skip for x402/free access users)
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
       
@@ -556,15 +558,22 @@ export function createAudioRoutes(deps: Dependencies) {
         return;
       }
 
-      const updateResult = await User.findOneAndUpdate(
-        { ...updateQuery, credits: { $gte: creditsRequired } },
-        { $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired } },
-        { new: true }
-      );
+      let remainingCredits = user.credits || 0;
+      let actualCreditsDeducted = 0;
 
-      if (!updateResult) {
-        res.status(402).json({ success: false, error: 'Insufficient credits' });
-        return;
+      if (!hasFreeAccess) {
+        const updateResult = await User.findOneAndUpdate(
+          { ...updateQuery, credits: { $gte: creditsRequired } },
+          { $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired } },
+          { new: true }
+        );
+
+        if (!updateResult) {
+          res.status(402).json({ success: false, error: 'Insufficient credits' });
+          return;
+        }
+        remainingCredits = updateResult.credits;
+        actualCreditsDeducted = creditsRequired;
       }
 
       logger.info('SFX generation request', { 
@@ -611,21 +620,44 @@ export function createAudioRoutes(deps: Dependencies) {
 
             if (audioUrl) {
               logger.info('SFX generation completed', { requestId, userId: user.userId });
-              res.json({
+              
+              // x402: Settle payment after successful SFX generation
+              const x402Req = req as X402Request;
+              if (x402Req.isX402Paid && x402Req.x402Payment) {
+                const settlement = await settleX402Payment(x402Req);
+                if (!settlement.success) {
+                  logger.error('x402 settlement failed after SFX generation', { error: settlement.error });
+                }
+              }
+
+              const responseData: Record<string, unknown> = {
                 success: true,
                 audio_url: audioUrl,
                 duration: clampedDuration,
-                remainingCredits: updateResult.credits,
-                creditsDeducted: creditsRequired
-              });
+                remainingCredits,
+                creditsDeducted: actualCreditsDeducted
+              };
+              
+              if (x402Req.isX402Paid && x402Req.x402Payment) {
+                responseData.x402 = {
+                  settled: x402Req.x402Payment.settled,
+                  transactionHash: x402Req.x402Payment.transactionHash,
+                };
+              }
+
+              res.json(responseData);
               return;
             } else {
-              await refundCredits(user, creditsRequired, 'No audio URL in response');
+              if (actualCreditsDeducted > 0) {
+                await refundCredits(user, actualCreditsDeducted, 'No audio URL in response');
+              }
               res.status(500).json({ success: false, error: 'No audio generated' });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
-            await refundCredits(user, creditsRequired, 'SFX generation failed');
+            if (actualCreditsDeducted > 0) {
+              await refundCredits(user, actualCreditsDeducted, 'SFX generation failed');
+            }
             res.status(500).json({ success: false, error: 'SFX generation failed' });
             return;
           }
@@ -634,7 +666,9 @@ export function createAudioRoutes(deps: Dependencies) {
         }
       }
 
-      await refundCredits(user, creditsRequired, 'SFX generation timed out');
+      if (actualCreditsDeducted > 0) {
+        await refundCredits(user, actualCreditsDeducted, 'SFX generation timed out');
+      }
       res.status(504).json({ success: false, error: 'SFX generation timed out' });
     } catch (error) {
       const err = error as Error;

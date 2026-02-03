@@ -18,6 +18,7 @@ import { applyClawMarkup } from '../middleware/credits';
 import { encrypt, isEncryptionConfigured } from '../utils/encryption';
 import { withRetry } from '../utils/mongoRetry';
 import { recordProvenance, getProvenanceAgentRegistry, isProvenanceConfigured } from '../services/provenanceService';
+import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
 import config from '../config/env';
 
 // Types
@@ -1100,7 +1101,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
       const isSingleImage = image_url || (image_urls && image_urls.length === 1);
       const isFlux2Model = model === 'flux-2';
-      
+
       // Apply FLUX 2 prompt optimization if requested
       // For image-to-image with no prompt, use a generic edit prompt
       let finalPrompt = trimmedPrompt || (hasImages ? 'enhance and refine the image' : '');
@@ -1352,6 +1353,35 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
       }
 
+      // x402: Settle payment after successful generation
+      const x402Req = req as X402Request;
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        const settlement = await settleX402Payment(x402Req);
+        if (!settlement.success) {
+          logger.error('x402 settlement failed after image generation', { 
+            error: settlement.error,
+            images: images.length 
+          });
+          // Still return the images - we verified payment, settlement can be retried
+        }
+      }
+      
+      // Record provenance for x402 requests (minimal on-chain anchor)
+      if (x402Req.isX402Paid && images.length > 0 && isProvenanceConfigured()) {
+        const agentRegistry = getProvenanceAgentRegistry();
+        const chainId = config.ERC8004_CHAIN_ID;
+        const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
+        if (agentRegistry && chainId) {
+          recordProvenance({
+            agentId,
+            agentRegistry,
+            chainId,
+            type: 'image',
+            resultUrl: images[0],
+          }).catch(() => {}); // Fire-and-forget
+        }
+      }
+
       // Build response with optional prompt optimization info
       const responseData: Record<string, unknown> = {
         success: true,
@@ -1360,6 +1390,14 @@ export function createGenerationRoutes(deps: Dependencies) {
         creditsDeducted: actualCreditsDeducted,
         freeAccess: hasFreeAccess
       };
+      
+      // Include x402 payment info if applicable
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        responseData.x402 = {
+          settled: x402Req.x402Payment.settled,
+          transactionHash: x402Req.x402Payment.transactionHash,
+        };
+      }
       
       // Include prompt optimization details if optimization was performed for FLUX 2
       if (promptOptimizationResult && !promptOptimizationResult.skipped) {
@@ -1394,12 +1432,11 @@ export function createGenerationRoutes(deps: Dependencies) {
    * Uses Server-Sent Events for real-time progress updates
    */
   router.post('/image-stream', requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
-    // Set up SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
-    
+
     const sendEvent = (event: string, data: unknown) => {
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
@@ -1421,21 +1458,18 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       const creditsRequired = req.creditsRequired || 1;
       const hasFreeAccess = req.hasFreeAccess || false;
-      
-      // Deduct credits atomically (skip for free access users)
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
-      
+
       if (!updateQuery) {
         sendEvent('error', { error: 'User account required' });
         res.end();
         return;
       }
 
-      // Skip credit deduction for NFT/Token holders with free access
       let remainingCredits = user.credits || 0;
       let actualCreditsDeducted = 0;
-      
+
       if (!hasFreeAccess) {
         const updateResult = await User.findOneAndUpdate(
           {
@@ -1455,23 +1489,15 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
         remainingCredits = updateResult.credits;
         actualCreditsDeducted = creditsRequired;
-        sendEvent('credits', { 
-          creditsDeducted: creditsRequired, 
-          remainingCredits 
-        });
+        sendEvent('credits', { creditsDeducted: creditsRequired, remainingCredits });
       } else {
         logger.info('Free generation (streaming) - no credits deducted', {
           userId: user.userId || user.walletAddress,
           creditsWouldHaveCost: creditsRequired
         });
-        sendEvent('credits', { 
-          creditsDeducted: 0, 
-          remainingCredits,
-          freeAccess: true 
-        });
+        sendEvent('credits', { creditsDeducted: 0, remainingCredits, freeAccess: true });
       }
 
-      // Extract request parameters
       const {
         prompt,
         image_url,
@@ -1490,7 +1516,6 @@ export function createGenerationRoutes(deps: Dependencies) {
         optimizePrompt?: boolean;
       };
 
-      // Build image_urls array
       const imageUrlsArray: string[] = [];
       if (image_urls && Array.isArray(image_urls)) {
         imageUrlsArray.push(...image_urls);
@@ -1500,8 +1525,6 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       const hasImages = imageUrlsArray.length > 0;
       const isTextToImage = !hasImages;
-      
-      // Prompt is required for text-to-image, optional for image-to-image (variation mode)
       const trimmedPrompt = (prompt && typeof prompt === 'string') ? prompt.trim() : '';
       if (isTextToImage && !trimmedPrompt) {
         sendEvent('error', { error: 'prompt is required for text-to-image generation' });
@@ -1725,13 +1748,47 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
       }
 
-      sendEvent('complete', {
+      // x402: Settle payment after successful streaming generation
+      const x402Req = req as X402Request;
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        const settlement = await settleX402Payment(x402Req);
+        if (!settlement.success) {
+          logger.error('x402 settlement failed after streaming image generation', { error: settlement.error });
+        }
+      }
+      
+      // Record provenance for x402 requests
+      if (x402Req.isX402Paid && images.length > 0 && isProvenanceConfigured()) {
+        const agentRegistry = getProvenanceAgentRegistry();
+        const chainId = config.ERC8004_CHAIN_ID;
+        const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
+        if (agentRegistry && chainId) {
+          recordProvenance({
+            agentId,
+            agentRegistry,
+            chainId,
+            type: 'image',
+            resultUrl: images[0],
+          }).catch(() => {});
+        }
+      }
+
+      const completeData: Record<string, unknown> = {
         success: true,
         images,
         remainingCredits,
         creditsDeducted: hasFreeAccess ? 0 : creditsRequired,
         freeAccess: hasFreeAccess
-      });
+      };
+      
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        completeData.x402 = {
+          settled: x402Req.x402Payment.settled,
+          transactionHash: x402Req.x402Payment.transactionHash,
+        };
+      }
+
+      sendEvent('complete', completeData);
       
       res.end();
     } catch (error) {
@@ -2317,7 +2374,33 @@ export function createGenerationRoutes(deps: Dependencies) {
 
           if (videoUrl) {
             logger.info('Video generation completed - RETURNING', { requestId, videoUrl: videoUrl.substring(0, 100) });
-            res.json({
+            
+            // x402: Settle payment after successful generation
+            const x402Req = req as X402Request;
+            if (x402Req.isX402Paid && x402Req.x402Payment) {
+              const settlement = await settleX402Payment(x402Req);
+              if (!settlement.success) {
+                logger.error('x402 settlement failed after video generation', { error: settlement.error });
+              }
+            }
+            
+            // Record provenance for x402 requests
+            if (x402Req.isX402Paid && isProvenanceConfigured()) {
+              const agentRegistry = getProvenanceAgentRegistry();
+              const chainId = config.ERC8004_CHAIN_ID;
+              const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
+              if (agentRegistry && chainId) {
+                recordProvenance({
+                  agentId,
+                  agentRegistry,
+                  chainId,
+                  type: 'video',
+                  resultUrl: videoUrl,
+                }).catch(() => {});
+              }
+            }
+            
+            const responseData: Record<string, unknown> = {
               success: true,
               video: {
                 url: videoUrl,
@@ -2327,7 +2410,16 @@ export function createGenerationRoutes(deps: Dependencies) {
               },
               remainingCredits,
               creditsDeducted: creditsToDeduct
-            });
+            };
+            
+            if (x402Req.isX402Paid && x402Req.x402Payment) {
+              responseData.x402 = {
+                settled: x402Req.x402Payment.settled,
+                transactionHash: x402Req.x402Payment.transactionHash,
+              };
+            }
+            
+            res.json(responseData);
             return;
           }
 
@@ -2578,6 +2670,31 @@ export function createGenerationRoutes(deps: Dependencies) {
                 elapsedMs: Date.now() - startTime
               });
 
+              // x402: Settle payment after successful generation
+              const x402Req = req as X402Request;
+              if (x402Req.isX402Paid && x402Req.x402Payment) {
+                const settlement = await settleX402Payment(x402Req);
+                if (!settlement.success) {
+                  logger.error('x402 settlement failed after music generation', { error: settlement.error });
+                }
+              }
+              
+              // Record provenance for x402 requests
+              if (x402Req.isX402Paid && isProvenanceConfigured()) {
+                const agentRegistry = getProvenanceAgentRegistry();
+                const chainId = config.ERC8004_CHAIN_ID;
+                const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
+                if (agentRegistry && chainId) {
+                  recordProvenance({
+                    agentId,
+                    agentRegistry,
+                    chainId,
+                    type: 'music',
+                    resultUrl: resultData.audio_file.url,
+                  }).catch(() => {});
+                }
+              }
+
               // Build response
               const responseData: Record<string, unknown> = {
                 success: true,
@@ -2586,6 +2703,14 @@ export function createGenerationRoutes(deps: Dependencies) {
                 creditsDeducted: actualCreditsDeducted,
                 freeAccess: hasFreeAccess
               };
+
+              // Add x402 payment info if applicable
+              if (x402Req.isX402Paid && x402Req.x402Payment) {
+                responseData.x402 = {
+                  settled: x402Req.x402Payment.settled,
+                  transactionHash: x402Req.x402Payment.transactionHash,
+                };
+              }
 
               // Add prompt optimization details if optimization was performed
               if (promptOptimizationResult && !promptOptimizationResult.skipped) {
@@ -2909,14 +3034,32 @@ export function createGenerationRoutes(deps: Dependencies) {
         userId: user.userId 
       });
 
-      res.json({
+      // x402: Settle payment after successful upscale
+      const x402Req = req as X402Request;
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        const settlement = await settleX402Payment(x402Req);
+        if (!settlement.success) {
+          logger.error('x402 settlement failed after upscale', { error: settlement.error });
+        }
+      }
+
+      const responseData: Record<string, unknown> = {
         success: true,
         image_url: upscaledUrl,
         scale: validScale,
         remainingCredits,
         creditsDeducted: actualCreditsDeducted,
         freeAccess: hasFreeAccess
-      });
+      };
+      
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        responseData.x402 = {
+          settled: x402Req.x402Payment.settled,
+          transactionHash: x402Req.x402Payment.transactionHash,
+        };
+      }
+
+      res.json(responseData);
 
     } catch (error) {
       const err = error as Error;

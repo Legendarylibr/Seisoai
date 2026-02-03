@@ -85,6 +85,9 @@ class CdpFacilitatorClient {
 // 30% markup over Fal.ai API costs
 const MARKUP = 1.30;
 
+// USDC has 6 decimal places
+const USDC_DECIMALS = 6;
+
 // Fal.ai API costs (USD) - source of truth
 export const FAL_API_COSTS = {
   // Image generation by model
@@ -107,8 +110,28 @@ export const FAL_API_COSTS = {
   PROMPT_LAB: 0.001,           // Prompt lab chat
 };
 
-// Apply 20% markup to Fal API cost
-function priceUsd(falCost: number): string {
+/**
+ * Convert USD to USDC smallest units (6 decimals)
+ * x402 requires amounts in the asset's smallest unit
+ * $0.065 USD = 65000 USDC units (0.065 * 10^6)
+ */
+function usdToUsdcUnits(usdAmount: number): string {
+  const units = Math.round(usdAmount * Math.pow(10, USDC_DECIMALS));
+  return units.toString();
+}
+
+/**
+ * Get price in USDC smallest units with markup applied
+ */
+function priceInUsdcUnits(falCost: number): string {
+  const usdWithMarkup = falCost * MARKUP;
+  return usdToUsdcUnits(usdWithMarkup);
+}
+
+/**
+ * Get human-readable price string for logging
+ */
+function priceUsdReadable(falCost: number): string {
   const usd = falCost * MARKUP;
   return `$${usd.toFixed(4)}`;
 }
@@ -116,33 +139,40 @@ function priceUsd(falCost: number): string {
 // Payment wallet address (receives USDC payments)
 const PAYMENT_WALLET = config.EVM_PAYMENT_WALLET || '';
 
-// Dynamic price function for image generation based on model
+// Dynamic price function for image generation based on model (returns USDC units)
 function getImagePrice(context: { body?: { model?: string } }): string {
   const model = context.body?.model || 'flux-pro';
   
   switch (model) {
     case 'flux-2':
-      return priceUsd(FAL_API_COSTS.FLUX_2);  // $0.03
+      return priceInUsdcUnits(FAL_API_COSTS.FLUX_2);  // ~32500 units ($0.0325)
     case 'nano-banana-pro':
-      return priceUsd(FAL_API_COSTS.NANO_BANANA);  // $0.30
+      return priceInUsdcUnits(FAL_API_COSTS.NANO_BANANA);  // ~325000 units ($0.325)
     case 'flux-pro':
     default:
-      return priceUsd(FAL_API_COSTS.FLUX_PRO_KONTEXT);  // $0.06
+      return priceInUsdcUnits(FAL_API_COSTS.FLUX_PRO_KONTEXT);  // ~65000 units ($0.065)
   }
 }
 
-// Dynamic price for video based on duration
-function getVideoPrice(context: { body?: { duration?: number } }): string {
-  const duration = context.body?.duration || 5;  // Default 5 seconds
+// Dynamic price for video based on duration (returns USDC units)
+function getVideoPrice(context: { body?: { duration?: number | string } }): string {
+  // Handle both number (5) and string ("5s") formats
+  let duration = 5;
+  const rawDuration = context.body?.duration;
+  if (typeof rawDuration === 'number') {
+    duration = rawDuration;
+  } else if (typeof rawDuration === 'string') {
+    duration = parseInt(rawDuration.replace('s', ''), 10) || 5;
+  }
   const cost = FAL_API_COSTS.VIDEO_PER_SECOND * Math.min(Math.max(duration, 1), 30);
-  return priceUsd(cost);
+  return priceInUsdcUnits(cost);
 }
 
-// Dynamic price for music based on duration
+// Dynamic price for music based on duration (returns USDC units)
 function getMusicPrice(context: { body?: { duration?: number } }): string {
   const durationMinutes = (context.body?.duration || 60) / 60;  // Default 1 minute
   const cost = FAL_API_COSTS.MUSIC_PER_MINUTE * Math.min(Math.max(durationMinutes, 0.5), 5);
-  return priceUsd(cost);
+  return priceInUsdcUnits(cost);
 }
 
 // Route config type matching x402 API
@@ -171,6 +201,14 @@ function buildRoutesConfig(): X402RoutesConfig {
       }],
       description: 'Generate an AI image',
     },
+    'POST /generate/image-stream': {
+      accepts: [{
+        price: getImagePrice,
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Generate an AI image (streaming)',
+    },
     'POST /generate/video': {
       accepts: [{
         price: getVideoPrice,
@@ -189,7 +227,7 @@ function buildRoutesConfig(): X402RoutesConfig {
     },
     'POST /audio/sfx': {
       accepts: [{
-        price: priceUsd(FAL_API_COSTS.SFX),
+        price: priceInUsdcUnits(FAL_API_COSTS.SFX),
         network: 'eip155:8453' as const,
         payTo: PAYMENT_WALLET,
       }],
@@ -197,7 +235,7 @@ function buildRoutesConfig(): X402RoutesConfig {
     },
     'POST /generate/upscale': {
       accepts: [{
-        price: priceUsd(FAL_API_COSTS.UPSCALE),
+        price: priceInUsdcUnits(FAL_API_COSTS.UPSCALE),
         network: 'eip155:8453' as const,
         payTo: PAYMENT_WALLET,
       }],
@@ -205,7 +243,7 @@ function buildRoutesConfig(): X402RoutesConfig {
     },
     'POST /prompt-lab/chat': {
       accepts: [{
-        price: priceUsd(FAL_API_COSTS.PROMPT_LAB),
+        price: priceInUsdcUnits(FAL_API_COSTS.PROMPT_LAB),
         network: 'eip155:8453' as const,
         payTo: PAYMENT_WALLET,
       }],
@@ -242,6 +280,16 @@ export function shouldUseX402(req: Request): boolean {
   return false;
 }
 
+/** Payment requirements for settlement */
+export interface X402PaymentRequirements {
+  scheme: string;
+  network: string;
+  maxAmountRequired: string;
+  resource: string;
+  payTo: string;
+  asset: string;
+}
+
 /** Extended request type with x402 payment info */
 export interface X402Request extends Request {
   isX402Paid?: boolean;
@@ -249,7 +297,60 @@ export interface X402Request extends Request {
     amount: string;
     transactionHash?: string;
     payer?: string;
+    /** Payment payload for settlement */
+    payload?: string;
+    /** Payment requirements for settlement */
+    requirements?: X402PaymentRequirements;
+    /** Whether settlement has been completed */
+    settled?: boolean;
   };
+}
+
+// Singleton CDP client for settlement
+let cdpClient: CdpFacilitatorClient | null = null;
+
+function getCdpClient(): CdpFacilitatorClient {
+  if (!cdpClient) {
+    cdpClient = new CdpFacilitatorClient();
+  }
+  return cdpClient;
+}
+
+/**
+ * Settle an x402 payment after successful generation
+ * Should be called after the generation completes successfully
+ */
+export async function settleX402Payment(req: X402Request): Promise<{ success: boolean; transaction?: string; error?: string }> {
+  if (!req.isX402Paid || !req.x402Payment?.payload || !req.x402Payment?.requirements) {
+    return { success: false, error: 'No x402 payment to settle' };
+  }
+  
+  if (req.x402Payment.settled) {
+    return { success: true, transaction: req.x402Payment.transactionHash };
+  }
+  
+  try {
+    const cdp = getCdpClient();
+    const result = await cdp.settle(req.x402Payment.payload, req.x402Payment.requirements);
+    
+    if (result.success) {
+      req.x402Payment.settled = true;
+      req.x402Payment.transactionHash = result.transaction;
+      logger.info('x402 payment settled', {
+        path: req.path,
+        transaction: result.transaction,
+        amount: req.x402Payment.amount
+      });
+      return { success: true, transaction: result.transaction };
+    } else {
+      logger.error('x402 settlement failed', { path: req.path });
+      return { success: false, error: 'Settlement failed' };
+    }
+  } catch (error) {
+    const err = error as Error;
+    logger.error('x402 settlement error', { error: err.message, path: req.path });
+    return { success: false, error: err.message };
+  }
 }
 
 /**
@@ -288,50 +389,79 @@ export function createX402Middleware() {
       return next();
     }
 
-    // Check if payment signature is present
-    const paymentHeader = req.headers['x-payment'] || req.headers['payment'];
-    if (paymentHeader) {
+    // Calculate price for this request
+    const price = typeof routeConfig.accepts[0].price === 'function'
+      ? routeConfig.accepts[0].price({ body: req.body })
+      : routeConfig.accepts[0].price;
+    
+    const resourceUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    
+    // Build payment requirements (used for both verify and settle)
+    const requirements: X402PaymentRequirements = {
+      scheme: 'exact',
+      network: BASE_NETWORK,
+      maxAmountRequired: price,
+      resource: resourceUrl,
+      payTo: PAYMENT_WALLET,
+      asset: 'USDC',
+    };
+
+    // Check if payment signature is present (accept common x402 header names)
+    const paymentHeader =
+      req.headers['payment-signature'] ||
+      req.headers['x-payment'] ||
+      req.headers['payment'];
+    const paymentValue = typeof paymentHeader === 'string' ? paymentHeader : Array.isArray(paymentHeader) ? paymentHeader[0] : undefined;
+    
+    if (paymentValue) {
       // Payment present - verify with CDP if configured
       if (hasCdpCredentials) {
         try {
-          const cdp = new CdpFacilitatorClient();
-          const price = typeof routeConfig.accepts[0].price === 'function'
-            ? routeConfig.accepts[0].price({ body: req.body })
-            : routeConfig.accepts[0].price;
-            
-          const requirements = {
-            scheme: 'exact',
-            network: BASE_NETWORK,
-            maxAmountRequired: price,
-            resource: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
-            payTo: PAYMENT_WALLET,
-          };
+          const cdp = getCdpClient();
+          const result = await cdp.verify(paymentValue, requirements);
           
-          const result = await cdp.verify(paymentHeader, requirements);
           if (result.valid) {
-            // Payment verified, continue to handler
-            (req as X402Request).isX402Paid = true;
+            // Payment verified - store info for later settlement
+            const x402Req = req as X402Request;
+            x402Req.isX402Paid = true;
+            x402Req.x402Payment = {
+              amount: price,
+              payload: paymentValue,
+              requirements,
+              settled: false,
+            };
+            
             // Set a mock user for x402 requests so route handlers don't fail
-            // This user has minimal data but satisfies type checks
             (req as any).user = {
               isX402Guest: true,
-              credits: 999999, // Large number to pass credit checks
+              credits: 999999,
               walletAddress: 'x402-guest-' + Date.now(),
               userId: 'x402-guest',
             };
-            // Set flags to skip credit deduction (hasFreeAccess bypasses deduction)
+            // Set flags to skip credit deduction
             (req as any).hasFreeAccess = true;
-            // Also set creditsRequired to 0 to prevent deduction attempts
             (req as any).creditsRequired = 0;
+            
+            logger.info('x402 payment verified', {
+              path: req.path,
+              amount: price,
+              amountUsd: `$${(parseInt(price) / Math.pow(10, USDC_DECIMALS)).toFixed(4)}`
+            });
+            
             return next();
           } else {
+            logger.warn('x402 payment verification failed', {
+              path: req.path,
+              reason: result.invalidReason
+            });
             return res.status(402).json({ 
               error: 'Payment verification failed',
               reason: result.invalidReason 
             });
           }
         } catch (error) {
-          logger.error('x402: Payment verification error', { error });
+          const err = error as Error;
+          logger.error('x402: Payment verification error', { error: err.message });
           return res.status(500).json({ error: 'Payment verification failed' });
         }
       }
@@ -340,15 +470,14 @@ export function createX402Middleware() {
     }
 
     // No payment - return 402 with payment requirements
-    const price = typeof routeConfig.accepts[0].price === 'function'
-      ? routeConfig.accepts[0].price({ body: req.body })
-      : routeConfig.accepts[0].price;
-
+    // Convert USDC units to human-readable for display
+    const amountUsd = parseInt(price) / Math.pow(10, USDC_DECIMALS);
+    
     const paymentRequired = {
       x402Version: 2,
       error: 'Payment required',
       resource: {
-        url: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+        url: resourceUrl,
         description: routeConfig.description,
         mimeType: 'application/json',
       },
@@ -358,11 +487,16 @@ export function createX402Middleware() {
         maxAmountRequired: price,
         asset: 'USDC',
         payTo: PAYMENT_WALLET,
+        // Include human-readable price for debugging/display
+        extra: {
+          priceUsd: `$${amountUsd.toFixed(4)}`,
+        },
       }],
     };
 
     const encoded = Buffer.from(JSON.stringify(paymentRequired)).toString('base64');
     res.setHeader('PAYMENT-REQUIRED', encoded);
+    res.setHeader('X-Price-USD', `$${amountUsd.toFixed(4)}`);
     return res.status(402).json(paymentRequired);
   };
 }
@@ -441,6 +575,7 @@ export default {
   createX402Middleware,
   conditionalX402Middleware,
   shouldUseX402,
+  settleX402Payment,
   X402_PRICING,
   FAL_API_COSTS,
 };
