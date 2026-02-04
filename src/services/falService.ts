@@ -56,8 +56,9 @@ interface RequestBody {
 
 /**
  * Get the correct FLUX Kontext endpoint based on image count
+ * Reserved for future direct Fal.ai API usage
  */
-const _getFluxEndpoint = (hasReferenceImage: boolean = false, isMultipleImages: boolean = false): string => {
+function getFluxEndpoint(hasReferenceImage: boolean = false, isMultipleImages: boolean = false): string {
   if (!hasReferenceImage) {
     // 0 images - text-to-image
     return 'https://fal.run/fal-ai/flux-pro/kontext/text-to-image';
@@ -68,7 +69,10 @@ const _getFluxEndpoint = (hasReferenceImage: boolean = false, isMultipleImages: 
     // 1 image - max model
     return 'https://fal.run/fal-ai/flux-pro/kontext/max';
   }
-};
+}
+
+// Export for potential future use
+export { getFluxEndpoint };
 
 // Get style prompt from the comprehensive styles configuration
 const getStylePrompt = (styleId: string | undefined): string => {

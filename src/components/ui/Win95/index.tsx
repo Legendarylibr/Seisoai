@@ -52,6 +52,7 @@ export interface Win95ButtonProps {
   className?: string;
   style?: CSSProperties;
   type?: 'button' | 'submit' | 'reset';
+  title?: string;
 }
 
 export const Win95Button = memo<Win95ButtonProps>(function Win95Button({ 
@@ -61,7 +62,8 @@ export const Win95Button = memo<Win95ButtonProps>(function Win95Button({
   active, 
   className = '',
   style,
-  type = 'button'
+  type = 'button',
+  title
 }) {
   const buttonStyle: CSSProperties = {
     background: active ? WIN95_COLORS.bgDark : WIN95_COLORS.buttonFace,
@@ -82,6 +84,7 @@ export const Win95Button = memo<Win95ButtonProps>(function Win95Button({
       type={type}
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`px-3 py-1 text-[11px] font-bold transition-none select-none ${className}`}
       style={buttonStyle}
     >

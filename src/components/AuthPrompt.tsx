@@ -1,22 +1,9 @@
 import React from 'react';
 import { Wallet, Sparkles, MessageCircle, Image, Film, Music, Coins } from 'lucide-react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { WIN95_COLORS as WIN95 } from './ui/Win95';
 
 const AuthPrompt: React.FC = () => {
-  const WIN95 = {
-    bg: '#c0c0c0',
-    bgLight: '#dfdfdf',
-    bgDark: '#808080',
-    border: {
-      light: '#ffffff',
-      dark: '#808080',
-      darker: '#404040'
-    },
-    text: '#000000',
-    textDisabled: '#808080',
-    highlight: '#000080'
-  };
-
   return (
     <div 
       style={{ 

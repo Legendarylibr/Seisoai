@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, ExternalLink, Copy, Check, Bot, Star, Users, Shield, RefreshCw } from 'lucide-react';
-import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
+import { BTN, PANEL, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import {
   getContractStatus,
@@ -92,7 +92,7 @@ const AgentRegistry: React.FC<AgentRegistryProps> = ({ isOpen, onClose }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div 
         className="w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
-        style={WIN95.window}
+        style={PANEL.window}
       >
         {/* Title Bar */}
         <div 
@@ -106,7 +106,7 @@ const AgentRegistry: React.FC<AgentRegistryProps> = ({ isOpen, onClose }) => {
           <button
             onClick={onClose}
             style={BTN.base}
-            {...hoverHandlers(BTN.base, BTN.hover)}
+            {...hoverHandlers}
             className="p-0.5"
           >
             <X className="w-4 h-4" />
@@ -122,7 +122,7 @@ const AgentRegistry: React.FC<AgentRegistryProps> = ({ isOpen, onClose }) => {
           ) : (
             <>
               {/* Status Panel */}
-              <div className="mb-4 p-3" style={{ ...WIN95.window, background: '#c0c0c0' }}>
+              <div className="mb-4 p-3" style={{ ...PANEL.window, background: '#c0c0c0' }}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-bold text-sm">Contract Status</span>
                   <span 
@@ -167,10 +167,7 @@ const AgentRegistry: React.FC<AgentRegistryProps> = ({ isOpen, onClose }) => {
                 <button
                   onClick={() => setActiveTab('overview')}
                   style={activeTab === 'overview' ? BTN.active : BTN.base}
-                  {...hoverHandlers(
-                    activeTab === 'overview' ? BTN.active : BTN.base,
-                    BTN.hover
-                  )}
+                  {...hoverHandlers}
                   className="px-4 py-1 text-sm"
                 >
                   Agent Definitions
@@ -178,10 +175,7 @@ const AgentRegistry: React.FC<AgentRegistryProps> = ({ isOpen, onClose }) => {
                 <button
                   onClick={() => setActiveTab('registered')}
                   style={activeTab === 'registered' ? BTN.active : BTN.base}
-                  {...hoverHandlers(
-                    activeTab === 'registered' ? BTN.active : BTN.base,
-                    BTN.hover
-                  )}
+                  {...hoverHandlers}
                   className="px-4 py-1 text-sm"
                 >
                   Registered ({registeredAgents.length})
@@ -199,7 +193,7 @@ const AgentRegistry: React.FC<AgentRegistryProps> = ({ isOpen, onClose }) => {
                     <div 
                       key={agent.id}
                       className="p-3"
-                      style={{ ...WIN95.window, background: '#ffffff' }}
+                      style={{ ...PANEL.window, background: '#ffffff' }}
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -231,7 +225,7 @@ const AgentRegistry: React.FC<AgentRegistryProps> = ({ isOpen, onClose }) => {
                         <button
                           onClick={() => handleCopy(agent.agentURI, `uri-${agent.id}`)}
                           style={BTN.base}
-                          {...hoverHandlers(BTN.base, BTN.hover)}
+                          {...hoverHandlers}
                           className="px-2 py-1 text-xs flex items-center gap-1"
                         >
                           {copied === `uri-${agent.id}` ? (
@@ -279,7 +273,7 @@ const AgentRegistry: React.FC<AgentRegistryProps> = ({ isOpen, onClose }) => {
                         <div 
                           key={agent.agentId}
                           className="p-3"
-                          style={{ ...WIN95.window, background: '#ffffff' }}
+                          style={{ ...PANEL.window, background: '#ffffff' }}
                         >
                           <div className="flex items-start justify-between mb-2">
                             <div>
@@ -332,7 +326,7 @@ const AgentRegistry: React.FC<AgentRegistryProps> = ({ isOpen, onClose }) => {
                             <button
                               onClick={() => handleCopy(agent.agentRegistry, `reg-${agent.agentId}`)}
                               style={BTN.base}
-                              {...hoverHandlers(BTN.base, BTN.hover)}
+                              {...hoverHandlers}
                               className="px-2 py-1 text-xs flex items-center gap-1"
                             >
                               {copied === `reg-${agent.agentId}` ? (
@@ -366,7 +360,7 @@ const AgentRegistry: React.FC<AgentRegistryProps> = ({ isOpen, onClose }) => {
           <button
             onClick={fetchData}
             style={BTN.base}
-            {...hoverHandlers(BTN.base, BTN.hover)}
+            {...hoverHandlers}
             className="px-3 py-1 text-sm flex items-center gap-1"
           >
             <RefreshCw className="w-3 h-3" />

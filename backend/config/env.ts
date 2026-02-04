@@ -128,6 +128,12 @@ export interface Config {
   ERC8004_REPUTATION_REGISTRY?: string;
   ERC8004_VALIDATION_REGISTRY?: string;
   ERC8004_CHAIN_ID?: number;
+  /** Default agent ID for provenance (e.g. 1 = first registered agent) */
+  ERC8004_DEFAULT_AGENT_ID?: number;
+  /** Validator address (must match signer when same wallet is validator) */
+  ERC8004_VALIDATOR_ADDRESS?: string;
+  /** Private key for agent-approved + validator (provenance: submit request + response) */
+  ERC8004_PROVENANCE_SIGNER_PRIVATE_KEY?: string;
   // Agent deployment signer (optional)
   DEPLOYER_PRIVATE_KEY?: string;
   // Coinbase CDP API (for x402 payment facilitation)
@@ -197,6 +203,9 @@ export const config: Config = {
   ERC8004_REPUTATION_REGISTRY: process.env.ERC8004_REPUTATION_REGISTRY,
   ERC8004_VALIDATION_REGISTRY: process.env.ERC8004_VALIDATION_REGISTRY,
   ERC8004_CHAIN_ID: process.env.ERC8004_CHAIN_ID ? parseInt(process.env.ERC8004_CHAIN_ID, 10) : undefined,
+  ERC8004_DEFAULT_AGENT_ID: process.env.ERC8004_DEFAULT_AGENT_ID ? parseInt(process.env.ERC8004_DEFAULT_AGENT_ID, 10) : 1,
+  ERC8004_VALIDATOR_ADDRESS: process.env.ERC8004_VALIDATOR_ADDRESS,
+  ERC8004_PROVENANCE_SIGNER_PRIVATE_KEY: process.env.ERC8004_PROVENANCE_SIGNER_PRIVATE_KEY,
   // Agent deployment signer (optional)
   DEPLOYER_PRIVATE_KEY: process.env.DEPLOYER_PRIVATE_KEY,
   

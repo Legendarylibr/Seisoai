@@ -195,7 +195,7 @@ function getRandomItem<T>(array: T[]): T {
 /**
  * Shuffle an array using Fisher-Yates algorithm
  */
-function shuffleArray<T>(array: T[]): T[] {
+export function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

@@ -3,7 +3,7 @@
  * Displays referral code, share links, stats, and leaderboard
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Copy, Check, Users, Gift, Trophy, Share2, ExternalLink } from 'lucide-react';
+import { X, Copy, Check, Users, Gift, Trophy, ExternalLink } from 'lucide-react';
 import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import {
@@ -21,7 +21,7 @@ interface ReferralDashboardProps {
 }
 
 const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }) => {
-  const { isAuthenticated, userId } = useEmailAuth();
+  const { isAuthenticated } = useEmailAuth();
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);

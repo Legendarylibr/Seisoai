@@ -248,12 +248,7 @@ const StepIndicator = memo<StepIndicatorProps>(function StepIndicator({ currentS
   );
 });
 
-interface CharacterGeneratorProps {
-  onShowTokenPayment?: () => void;
-  onShowStripePayment?: () => void;
-}
-
-const CharacterGenerator = memo<CharacterGeneratorProps>(function CharacterGenerator({ onShowTokenPayment: _onShowTokenPayment, onShowStripePayment: _onShowStripePayment }) {
+const CharacterGenerator = memo(function CharacterGenerator() {
   const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   

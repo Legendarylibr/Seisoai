@@ -1,6 +1,10 @@
 // Barrel export for all utilities
 export { default as logger } from './logger';
 export { API_URL, getApiUrl } from './apiConfig';
+
+/** Format wallet address for display: 0x1234...5678 */
+export const formatAddress = (addr: string | null | undefined): string => 
+  addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : '';
 export { default as appMonitor } from './appMonitor';
 export { default as blockchainCache } from './blockchainCache';
 export { VISUAL_STYLES } from './styles';

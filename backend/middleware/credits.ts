@@ -275,19 +275,6 @@ export async function grantDailyCredits(
  * Get user's available credits
  * Daily credits are now added directly to main balance
  */
-export function getTotalAvailableCredits(user: IUser): number {
-  return user.credits || 0;
-}
-
-/**
- * Legacy function - now returns false as we use daily credits instead
- * @deprecated Use qualifiesForDailyCredits and grantDailyCredits instead
- */
-export function hasFreeGenerationAccess(_user: IUser): boolean {
-  // No longer bypass credits - use daily credits system instead
-  return false;
-}
-
 /**
  * Create middleware that checks if user has enough credits
  * Uses daily credits first (for NFT/Token holders), then regular credits
@@ -635,7 +622,6 @@ export default {
   requireCreditsForVideo,
   applyClawMarkup,
   calculateCredits,
-  hasFreeGenerationAccess,
   isNFTHolder,
   isTokenHolder,
   isTokenGateHolder,
@@ -643,7 +629,6 @@ export default {
   qualifiesForDailyCreditsAsync,
   grantDailyCredits,
   calculateDailyCredits,
-  calculateDailyCreditsAsync,
-  getTotalAvailableCredits
+  calculateDailyCreditsAsync
 };
 

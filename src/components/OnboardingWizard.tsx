@@ -3,7 +3,7 @@
  * Multi-step tutorial for new users with progressive rewards
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, ArrowRight, ArrowLeft, Gift, Sparkles, Image, Film, Music, Share2, Check, ChevronRight } from 'lucide-react';
+import { X, ArrowRight, ArrowLeft, Gift, Sparkles, Image, Film, Music, Share2, Check } from 'lucide-react';
 import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';

@@ -183,8 +183,8 @@ const getInitialState = (): ImageGeneratorState => ({
   promptOptimizationResult: null
 });
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _initialState: ImageGeneratorState = getInitialState();
+// Initial state stored for reference/debugging if needed
+// const _initialState: ImageGeneratorState = getInitialState();
 
 const imageGeneratorReducer = (state: ImageGeneratorState, action: ImageGeneratorAction): ImageGeneratorState => {
   switch (action.type) {

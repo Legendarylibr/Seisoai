@@ -113,15 +113,9 @@ const PrimaryButton: React.FC<{
 
 interface WorkflowWizardProps {
   onClose?: () => void;
-  onShowTokenPayment?: () => void;
-  onShowStripePayment?: () => void;
 }
 
-const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ 
-  onClose, 
-  onShowTokenPayment: _onShowTokenPayment, 
-  onShowStripePayment: _onShowStripePayment 
-}) => {
+const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
   const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   

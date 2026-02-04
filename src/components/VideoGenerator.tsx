@@ -14,7 +14,7 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateVideo } from '../services/videoService';
 import { addGeneration } from '../services/galleryService';
-import { Film, Upload, Play, X, Clock, Monitor, Volume2, VolumeX, Sparkles, AlertCircle, ChevronDown, Zap, Image, Layers, Share2 } from 'lucide-react';
+import { Film, Upload, Play, X, Clock, Monitor, Volume2, VolumeX, Sparkles, AlertCircle, ChevronDown, Zap, Image, Layers } from 'lucide-react';
 import logger from '../utils/logger';
 import { Win95Button, Win95Panel, Win95GroupBox, WIN95_COLORS as WIN95 } from './ui/Win95';
 import SocialShareButtons from './SocialShareButtons';
@@ -351,15 +351,11 @@ const CollapsibleVideoHowToUse = memo(function CollapsibleVideoHowToUse(): React
 });
 
 interface VideoGeneratorProps {
-  onShowTokenPayment?: () => void;
-  onShowStripePayment?: () => void;
   onModelChange?: (model: string) => void;
   onGenerationModeChange?: (mode: string) => void;
 }
 
 const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({ 
-  onShowTokenPayment: _onShowTokenPayment, 
-  onShowStripePayment: _onShowStripePayment,
   onModelChange,
   onGenerationModeChange 
 }) {

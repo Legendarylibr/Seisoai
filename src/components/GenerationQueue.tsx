@@ -19,7 +19,6 @@ interface QueueItem {
 }
 
 interface GenerationQueueProps {
-  onShowTokenPayment?: () => void;
   onShowStripePayment?: () => void;
 }
 
@@ -28,7 +27,7 @@ const MAX_VARIATIONS = 100;
 // Max source images in queue
 const MAX_BATCH_SIZE = 100;
 
-const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowTokenPayment: _onShowTokenPayment, onShowStripePayment }) => {
+const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowStripePayment }) => {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);

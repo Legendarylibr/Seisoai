@@ -31,10 +31,9 @@ import {
 } from '../services/chatAssistantService';
 import logger from '../utils/logger';
 
-interface ChatAssistantProps {
-  onShowTokenPayment?: () => void;
-  onShowStripePayment?: () => void;
-}
+// Props interface - currently empty but kept for future extensibility
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+interface ChatAssistantProps {}
 
 // Animated typing indicator
 const TypingIndicator = memo(function TypingIndicator() {
@@ -182,15 +181,13 @@ const MessageBubble = memo(function MessageBubble({
   onConfirmAction,
   onCancelAction,
   onRetry,
-  isActionLoading,
-  isFirst: _isFirst
+  isActionLoading
 }: { 
   message: ChatMessage;
   onConfirmAction?: (action: PendingAction) => void;
   onCancelAction?: () => void;
   onRetry?: () => void;
   isActionLoading?: boolean;
-  isFirst?: boolean;
 }) {
   const isUser = message.role === 'user';
   const [isPlaying, setIsPlaying] = useState(false);
@@ -201,13 +198,13 @@ const MessageBubble = memo(function MessageBubble({
   const [selectedVideoDuration, setSelectedVideoDuration] = useState<string>('6s');
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Get available models based on action type
-  const getModels = () => {
-    if (!message.pendingAction) return [];
-    if (message.pendingAction.type === 'generate_image') return IMAGE_MODELS;
-    if (message.pendingAction.type === 'generate_video') return VIDEO_MODELS;
-    return [];
-  };
+  // Get available models based on action type - memoized
+  const models = !message.pendingAction ? [] :
+    message.pendingAction.type === 'generate_image' ? IMAGE_MODELS :
+    message.pendingAction.type === 'generate_video' ? VIDEO_MODELS : [];
+  
+  const defaultModel = models.length > 0 ? models[0].id : undefined;
+  const activeModel = selectedModel || defaultModel;
 
   // Handle confirm with selected model, aspect ratio, or music duration
   const handleConfirmWithModel = () => {
@@ -248,14 +245,11 @@ const MessageBubble = memo(function MessageBubble({
       return;
     }
     
-    const models = getModels();
-    const modelToUse = selectedModel || (models.length > 0 ? models[0].id : undefined);
-    
     const actionWithModel: PendingAction = {
       ...message.pendingAction,
       params: {
         ...originalParams,
-        model: modelToUse,
+        model: activeModel,
         // Add aspect ratio for image generation
         ...(message.pendingAction.type === 'generate_image' && { imageSize: selectedAspectRatio }),
         // Preserve referenceImage and referenceImages if they exist
@@ -426,50 +420,49 @@ const MessageBubble = memo(function MessageBubble({
                   </div>
 
                   {/* Model Selector - for images and videos - compact */}
-                  {getModels().length > 0 && (
+                  {models.length > 0 && (
                     <div className="mb-2">
                       <div className="text-[10px] sm:text-[11px] font-bold mb-1.5" style={{ color: WIN95.text }}>
                         Model:
                       </div>
                       <div className="grid gap-1">
-                        {getModels().map((model) => (
-                          <button
-                            key={model.id}
-                            onClick={() => setSelectedModel(model.id)}
-                            className="flex items-center gap-2 p-2 rounded text-left transition-all"
-                            style={{
-                              background: (selectedModel || getModels()[0].id) === model.id 
-                                ? 'linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.2) 100%)'
-                                : WIN95.bgLight,
-                              border: (selectedModel || getModels()[0].id) === model.id 
-                                ? '1.5px solid #667eea'
-                                : `1px solid ${WIN95.border.dark}`,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <div 
-                              className="w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0"
+                        {models.map((model) => {
+                          const isSelected = activeModel === model.id;
+                          return (
+                            <button
+                              key={model.id}
+                              onClick={() => setSelectedModel(model.id)}
+                              className="flex items-center gap-2 p-2 rounded text-left transition-all"
                               style={{
-                                border: `1.5px solid ${(selectedModel || getModels()[0].id) === model.id ? '#667eea' : WIN95.border.dark}`,
-                                background: (selectedModel || getModels()[0].id) === model.id ? '#667eea' : 'transparent'
+                                background: isSelected 
+                                  ? 'linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.2) 100%)'
+                                  : WIN95.bgLight,
+                                border: isSelected ? '1.5px solid #667eea' : `1px solid ${WIN95.border.dark}`,
+                                cursor: 'pointer'
                               }}
                             >
-                              {(selectedModel || getModels()[0].id) === model.id && (
-                                <Check className="w-2 h-2 text-white" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-[10px] sm:text-[11px] font-bold truncate" style={{ color: WIN95.text }}>
-                                {model.name}
+                              <div 
+                                className="w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0"
+                                style={{
+                                  border: `1.5px solid ${isSelected ? '#667eea' : WIN95.border.dark}`,
+                                  background: isSelected ? '#667eea' : 'transparent'
+                                }}
+                              >
+                                {isSelected && <Check className="w-2 h-2 text-white" />}
                               </div>
-                              <div className="text-[9px] sm:text-[10px] truncate" style={{ color: WIN95.textDisabled }}>
-                                {model.description}
-                                {' • '}
-                                {'credits' in model ? `${model.credits} cr` : `${(model as { creditsPerSec: number }).creditsPerSec}/s`}
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[10px] sm:text-[11px] font-bold truncate" style={{ color: WIN95.text }}>
+                                  {model.name}
+                                </div>
+                                <div className="text-[9px] sm:text-[10px] truncate" style={{ color: WIN95.textDisabled }}>
+                                  {model.description}
+                                  {' • '}
+                                  {'credits' in model ? `${model.credits} cr` : `${(model as { creditsPerSec: number }).creditsPerSec}/s`}
+                                </div>
                               </div>
-                            </div>
-                          </button>
-                        ))}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -653,43 +646,32 @@ const MessageBubble = memo(function MessageBubble({
                             }}
                             onClick={() => setLightboxImage(url)}
                           />
+                          {/* Hover overlay with action buttons */}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-                          <div className="absolute bottom-3 right-3 flex gap-2">
+                          <div className="absolute top-3 right-3 flex gap-2">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setLightboxImage(url);
                               }}
-                              className="p-2.5 rounded-xl backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 hover:scale-110 active:scale-95"
-                              style={{ background: 'rgba(255,255,255,0.95)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
+                              className="p-2 rounded-xl backdrop-blur-md transition-all hover:scale-110 active:scale-95"
+                              style={{ background: 'rgba(0,0,0,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}
                               title="View fullscreen"
                             >
-                              <Maximize2 className="w-4.5 h-4.5 text-gray-700" />
+                              <Maximize2 className="w-4 h-4 text-white" />
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDownload(url, 'image');
                               }}
-                              className="p-2.5 rounded-xl backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 hover:scale-110 active:scale-95"
-                              style={{ background: 'rgba(255,255,255,0.95)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
+                              className="p-2 rounded-xl backdrop-blur-md transition-all hover:scale-110 active:scale-95"
+                              style={{ background: 'rgba(0,0,0,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}
                               title="Download image"
                             >
-                              <Download className="w-4.5 h-4.5 text-gray-700" />
+                              <Download className="w-4 h-4 text-white" />
                             </button>
                           </div>
-                          {/* Always visible download button in corner */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownload(url, 'image');
-                            }}
-                            className="absolute top-3 right-3 p-2 rounded-xl backdrop-blur-md transition-all hover:scale-110 active:scale-95"
-                            style={{ background: 'rgba(0,0,0,0.7)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}
-                            title="Download image"
-                          >
-                            <Download className="w-4 h-4 text-white" />
-                          </button>
                         </div>
                       ))}
                     </div>
@@ -873,10 +855,6 @@ const MessageBubble = memo(function MessageBubble({
             transform: translateY(0) scale(1);
           }
         }
-        @keyframes messagePulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.02); }
-        }
       `}</style>
     </>
   );
@@ -912,10 +890,7 @@ const QuickActions = memo(function QuickActions({ onSelect }: { onSelect: (text:
 });
 
 // Main component
-const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
-  onShowTokenPayment: _onShowTokenPayment,
-  onShowStripePayment: _onShowStripePayment
-}) {
+const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant() {
   const walletContext = useSimpleWallet();
   
   const isConnected = walletContext.isConnected;
@@ -1034,11 +1009,6 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
   // Remove a specific attached image
   const handleRemoveImage = useCallback((index: number) => {
     setAttachedImages(prev => prev.filter((_, i) => i !== index));
-  }, []);
-
-  // Remove all attached images
-  const handleClearImages = useCallback(() => {
-    setAttachedImages([]);
   }, []);
 
   // Send message handler
@@ -1170,15 +1140,9 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
     }]);
   }, []);
 
-  // Handle suggestion click
-  const handleSuggestionClick = useCallback((suggestion: string) => {
-    setInputValue(suggestion);
-    inputRef.current?.focus();
-  }, []);
-
-  // Handle quick action
-  const handleQuickAction = useCallback((prompt: string) => {
-    setInputValue(prompt);
+  // Handle suggestion or quick action click - sets input and focuses
+  const handlePromptSelect = useCallback((text: string) => {
+    setInputValue(text);
     inputRef.current?.focus();
   }, []);
 
@@ -1292,14 +1256,13 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
             backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.03) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(118, 75, 162, 0.03) 0%, transparent 50%)'
           }}
         >
-          {messages.map((msg, i) => (
+          {messages.map((msg) => (
             <MessageBubble
               key={msg.id}
               message={msg}
               onConfirmAction={handleConfirmAction}
               onCancelAction={handleCancelAction}
               isActionLoading={isGenerating}
-              isFirst={i === 0}
             />
           ))}
           <div ref={messagesEndRef} />
@@ -1314,7 +1277,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                 {suggestions.map((suggestion, i) => (
                   <button
                     key={i}
-                    onClick={() => handleSuggestionClick(suggestion)}
+                    onClick={() => handlePromptSelect(suggestion)}
                     className="px-3 py-1.5 text-[10px] sm:text-[11px] max-w-[200px] text-left rounded-lg truncate"
                     style={{
                       background: WIN95.bg,
@@ -1342,7 +1305,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
             <>
               {/* Quick actions - hidden on mobile */}
               <div className="hidden sm:block">
-                <QuickActions onSelect={handleQuickAction} />
+                <QuickActions onSelect={handlePromptSelect} />
               </div>
               
               {/* Attached images preview - compact on mobile */}
@@ -1403,7 +1366,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant({
                     </div>
                     {attachedImages.length > 1 && (
                       <button
-                        onClick={handleClearImages}
+                        onClick={() => setAttachedImages([])}
                         className="flex-shrink-0 px-2 py-1 text-[9px] rounded"
                         style={{ 
                           background: WIN95.buttonFace,

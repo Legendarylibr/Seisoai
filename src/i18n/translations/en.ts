@@ -1,5 +1,94 @@
+// Type that allows any string values for translations
+export interface Translations {
+  nav: {
+    chat: string;
+    image: string;
+    batch: string;
+    video: string;
+    music: string;
+    gallery: string;
+    referralProgram: string;
+    achievements: string;
+    refreshCredits: string;
+    buyCredits: string;
+    buy: string;
+    disconnect: string;
+    credits: string;
+    currentBalance: string;
+    totalEarned: string;
+    moreOptions: string;
+    options: string;
+    minimize: string;
+    maximize: string;
+    subtitle: string;
+  };
+  common: {
+    loading: string;
+    pleaseWait: string;
+    error: string;
+    success: string;
+    cancel: string;
+    confirm: string;
+    save: string;
+    close: string;
+    generate: string;
+    download: string;
+    share: string;
+    copy: string;
+    delete: string;
+    edit: string;
+    view: string;
+  };
+  loadingMessages: {
+    chatAssistant: string;
+    videoGenerator: string;
+    musicGenerator: string;
+    gallery: string;
+    characterCreator: string;
+  };
+  auth: {
+    connectWallet: string;
+    walletConnected: string;
+    signIn: string;
+    signOut: string;
+  };
+  imageGen: {
+    prompt: string;
+    promptPlaceholder: string;
+    style: string;
+    aspectRatio: string;
+    model: string;
+    referenceImage: string;
+    generateImage: string;
+    generating: string;
+  };
+  videoGen: {
+    prompt: string;
+    promptPlaceholder: string;
+    generateVideo: string;
+    generating: string;
+  };
+  musicGen: {
+    prompt: string;
+    promptPlaceholder: string;
+    generateMusic: string;
+    generating: string;
+  };
+  settings: {
+    language: string;
+    english: string;
+    japanese: string;
+    chinese: string;
+  };
+  footer: {
+    terms: string;
+    privacy: string;
+    contact: string;
+  };
+}
+
 // English translations
-export const en = {
+export const en: Translations = {
   // Navigation
   nav: {
     chat: 'Chat',
@@ -102,6 +191,4 @@ export const en = {
     privacy: 'Privacy Policy',
     contact: 'Contact',
   },
-} as const;
-
-export type Translations = typeof en;
+};

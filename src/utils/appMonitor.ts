@@ -74,19 +74,19 @@ class AppMonitor {
   }
 
   // Track wallet connection
-  trackWalletConnection(walletType: string, success: boolean = true): void {
+  trackWalletConnection(_walletType: string, success: boolean = true): void {
     if (success) this.metrics.walletConnections++;
     if (!success) this.metrics.errors++;
   }
 
   // Track payment
-  trackPayment(amount: number, chain: string, success: boolean = true): void {
+  trackPayment(_amount: number, _chain: string, success: boolean = true): void {
     if (success) this.metrics.payments++;
     if (!success) this.metrics.errors++;
   }
 
   // Track generation
-  trackGeneration(type: string, success: boolean = true): void {
+  trackGeneration(_type: string, success: boolean = true): void {
     if (success) this.metrics.generations++;
     if (!success) this.metrics.errors++;
   }

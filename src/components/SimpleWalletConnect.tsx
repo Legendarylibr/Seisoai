@@ -2,12 +2,11 @@ import React, { memo } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { Wallet, LogOut, Coins, RefreshCw } from 'lucide-react';
-import { WIN95 } from '../utils/buttonStyles';
+import { WIN95, formatAddress } from '../utils';
 
 const SimpleWalletConnect: React.FC = () => {
   const { address, credits, isLoading, isNFTHolder, fetchCredits, disconnectWallet } = useSimpleWallet();
 
-  const formatAddr = (addr: string | null): string => addr ? `${addr.slice(0,6)}...${addr.slice(-4)}` : '';
   const displayCredits = isLoading ? '...' : Math.max(0, Math.floor(credits ?? 0) || 0);
 
   return (
@@ -140,7 +139,7 @@ const SimpleWalletConnect: React.FC = () => {
                             {chain.name}
                           </button>
                           <p className="text-[10px] font-mono" style={{ color: WIN95.textDisabled }}>
-                            {formatAddr(address)}
+                            {formatAddress(address)}
                           </p>
                         </div>
                       </div>

@@ -18,7 +18,7 @@ import GenerationQueue from './components/GenerationQueue';
 import PromptLab from './components/PromptLab';
 import { useImageGenerator } from './contexts/ImageGeneratorContext';
 import { Grid, Sparkles, Film, Music, Layers, MessageCircle, type LucideIcon } from 'lucide-react';
-import { API_URL, ensureCSRFToken } from './utils/apiConfig';
+import { ensureCSRFToken } from './utils/apiConfig';
 
 // Build version - check console to verify deployment
 logger.info('[SEISOAI BUILD] v2026.01.06.1');
@@ -30,7 +30,8 @@ const ImageGallery = lazy(() => import('./components/ImageGallery'));
 const VideoGenerator = lazy(() => import('./components/VideoGenerator'));
 const MusicGenerator = lazy(() => import('./components/MusicGenerator'));
 const ChatAssistant = lazy(() => import('./components/ChatAssistant'));
-const _CharacterGenerator = lazy(() => import('./components/CharacterGenerator'));
+// CharacterGenerator is temporarily disabled - uncomment when 3D generation is fixed
+// const CharacterGenerator = lazy(() => import('./components/CharacterGenerator'));
 const TermsModal = lazy(() => import('./components/TermsModal'));
 import Footer from './components/Footer';
 import type { LegalPage } from './components/TermsModal';
@@ -174,7 +175,6 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         setActiveTab={setActiveTab}
         tabs={tabs}
         onShowTokenPayment={handleShowTokenPayment}
-        onShowStripePayment={handleShowStripePayment}
       />
       
       {/* Main content area - pb-6 accounts for fixed footer (24px) */}
@@ -183,10 +183,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
             <AuthGuard>
               <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
-                <ChatAssistant 
-                  onShowTokenPayment={handleShowTokenPayment}
-                  onShowStripePayment={handleShowStripePayment}
-                />
+                <ChatAssistant />
               </Suspense>
             </AuthGuard>
           </div>
@@ -239,7 +236,6 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                     <GenerateButton 
                       customPrompt={userPrompt}
                       onShowTokenPayment={handleShowTokenPayment}
-                      onShowStripePayment={handleShowStripePayment}
                     />
                   </div>
                 </div>
@@ -289,7 +285,6 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                       <MultiImageModelSelector />
                     </div>
                     <GenerationQueue
-                      onShowTokenPayment={handleShowTokenPayment}
                       onShowStripePayment={handleShowStripePayment}
                     />
                   </div>
@@ -309,8 +304,6 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
             <AuthGuard>
               <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
                 <VideoGenerator 
-                  onShowTokenPayment={handleShowTokenPayment}
-                  onShowStripePayment={handleShowStripePayment}
                   onModelChange={setVideoModel}
                   onGenerationModeChange={setVideoGenerationMode}
                 />
@@ -323,10 +316,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
           <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
             <AuthGuard>
               <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
-                <MusicGenerator 
-                  onShowTokenPayment={handleShowTokenPayment}
-                  onShowStripePayment={handleShowStripePayment}
-                />
+                <MusicGenerator />
               </Suspense>
             </AuthGuard>
           </div>
@@ -335,10 +325,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         {/* TEMPORARILY DISABLED - 3D not working, re-enable when fixed
         {activeTab === '3d' && (
           <Suspense fallback={<Win95LoadingFallback text="Loading 3D Character Creator..." />}>
-            <CharacterGenerator 
-              onShowTokenPayment={handleShowTokenPayment}
-              onShowStripePayment={handleShowStripePayment}
-            />
+            <CharacterGenerator />
           </Suspense>
         )}
         */}

@@ -5,7 +5,7 @@ import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
 import { extractLayers } from '../services/layerExtractionService';
 import { addGeneration } from '../services/galleryService';
-import { X, Sparkles, Layers, Image as ImageIcon, AlertTriangle, Brain, ZoomIn, Share2 } from 'lucide-react';
+import { X, Sparkles, Layers, Image as ImageIcon, AlertTriangle, Brain, ZoomIn } from 'lucide-react';
 import SocialShareButtons from './SocialShareButtons';
 import { BTN, WIN95, hoverHandlers } from '../utils/buttonStyles';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
@@ -660,7 +660,7 @@ const ImageOutput: React.FC = () => {
               prompt: currentGeneration?.prompt,
               id: currentGeneration?.image?.split('/').pop()?.split('?')[0]
             }}
-            onCreditsEarned={(credits) => {
+            onCreditsEarned={() => {
               // Refresh credits after earning
               if (isEmailAuth && emailContext.refreshCredits) {
                 emailContext.refreshCredits();

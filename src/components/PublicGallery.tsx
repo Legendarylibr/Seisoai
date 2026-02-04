@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Image, Film, Box, ExternalLink, Copy, Check, ChevronLeft, ChevronRight, X, Code } from 'lucide-react';
 import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
 import { API_URL } from '../utils/apiConfig';
-import { copyToClipboard, generateShareUrls } from '../services/referralService';
+import { copyToClipboard } from '../services/referralService';
 import { useEmailAuth } from '../contexts/EmailAuthContext';
 import logger from '../utils/logger';
 
@@ -31,7 +31,7 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({
   limit = 12,
   showHeader = true 
 }) => {
-  const { isAuthenticated } = useEmailAuth();
+  const { isAuthenticated: _isAuthenticated } = useEmailAuth();
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);

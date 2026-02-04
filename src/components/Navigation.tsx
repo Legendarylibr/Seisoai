@@ -4,7 +4,7 @@ import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useLanguage, type Language } from '../i18n';
 import ReferralDashboard from './ReferralDashboard';
 import AchievementBadge from './AchievementBadge';
-import { WIN95, BTN, PANEL, TITLEBAR } from '../utils/buttonStyles';
+import { WIN95, BTN, PANEL, TITLEBAR, formatAddress } from '../utils';
 import logger from '../utils/logger';
 
 // System tray clock component
@@ -89,10 +89,9 @@ interface NavigationProps {
   setActiveTab: (tab: string) => void;
   tabs: Tab[];
   onShowTokenPayment?: () => void;
-  onShowStripePayment?: () => void;
 }
 
-const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, onShowStripePayment: _onShowStripePayment }: NavigationProps) => {
+const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment }: NavigationProps) => {
   const walletContext = useSimpleWallet();
   const { language, setLanguage, t } = useLanguage();
   
@@ -150,8 +149,6 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
       </header>
     );
   }
-
-  const formatAddr = (addr: string | null): string => addr ? `${addr.slice(0,6)}...${addr.slice(-4)}` : '';
 
   // PERFORMANCE: useCallback for handlers to prevent child re-renders
   const handleRefreshCredits = useCallback(() => {
@@ -274,7 +271,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment, on
                     }}
                   >
                     <Wallet className="w-3 h-3" style={{ color: WIN95.text }} />
-                    <span className="font-mono" style={{ color: WIN95.text }}>{formatAddr(address)}</span>
+                    <span className="font-mono" style={{ color: WIN95.text }}>{formatAddress(address)}</span>
                   </div>
                 )}
                 

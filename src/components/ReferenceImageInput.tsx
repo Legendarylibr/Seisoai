@@ -169,7 +169,6 @@ const ReferenceImageInput: React.FC<ReferenceImageInputProps> = ({
   
   const handleClick = () => fileInputRef.current?.click();
 
-  const imageUrl = currentImages[0] || null;
   const isMultiple = currentImages.length > 1;
 
   return (

@@ -13,7 +13,6 @@ const MAX_PROGRESS = 75;
 interface GenerateButtonProps {
   customPrompt?: string;
   onShowTokenPayment?: () => void;
-  onShowStripePayment?: () => void;
 }
 
 const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTokenPayment }) => {
@@ -25,7 +24,6 @@ const GenerateButton = memo<GenerateButtonProps>(({ customPrompt = '', onShowTok
   } = useImageGenerator();
   
   const { isConnected, address, credits, isLoading: walletLoading, isNFTHolder, refreshCredits, setCreditsManually } = useSimpleWallet();
-  const _availableCredits = credits ?? 0;
 
   const [progress, setProgress] = useState<number>(0);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);

@@ -292,12 +292,7 @@ const CollapsibleMusicHowToUse = memo(function CollapsibleMusicHowToUse(): React
   );
 });
 
-interface MusicGeneratorProps {
-  onShowTokenPayment?: () => void;
-  onShowStripePayment?: () => void;
-}
-
-const MusicGenerator = memo<MusicGeneratorProps>(function MusicGenerator() {
+const MusicGenerator = memo(function MusicGenerator() {
   const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   

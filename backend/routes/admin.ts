@@ -5,32 +5,14 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
-import crypto from 'crypto';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
-import { createEmailHash } from '../utils/emailHash';
+import { buildEmailLookupConditions } from '../utils/emailHash';
 import { alertAdminAction } from '../services/securityAlerts';
 import rateLimit from 'express-rate-limit';
 
 // SECURITY: Admin secret must be configured - no default allowed
 const ADMIN_SECRET = process.env.ADMIN_SECRET;
-
-/**
- * Build robust email lookup query with multiple fallback methods
- * This ensures users can be found regardless of ENCRYPTION_KEY configuration
- */
-function buildEmailLookupConditions(email: string): Array<Record<string, string>> {
-  const normalized = email.toLowerCase().trim();
-  const emailHash = createEmailHash(normalized);
-  const emailHashPlain = crypto.createHash('sha256').update(normalized).digest('hex');
-  
-  return [
-    { emailHash },                    // Primary: HMAC hash (with encryption key)
-    { emailHashPlain },               // Fallback: plain SHA-256 hash
-    { emailLookup: normalized },      // Fallback: plain email lookup field
-    { email: normalized }             // Legacy: direct email match
-  ];
-}
 
 // Types
 interface Dependencies {
