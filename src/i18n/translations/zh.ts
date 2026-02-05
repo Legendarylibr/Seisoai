@@ -9,6 +9,7 @@ export const zh: Translations = {
     batch: '批量',
     video: '视频',
     music: '音乐',
+    training: '训练',
     gallery: '图库',
     referralProgram: '推荐计划',
     achievements: '成就',

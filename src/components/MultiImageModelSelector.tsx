@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
-import { Sparkles, Zap, Layers, Wand2, Cpu, type LucideIcon } from 'lucide-react';
+import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { Sparkles, Zap, Layers, Wand2, Cpu, GraduationCap, type LucideIcon } from 'lucide-react';
 import { WIN95 } from '../utils/buttonStyles';
 import logger from '../utils/logger';
+import { getTrainedModels, LORA_INFERENCE_CREDITS, type TrainedModel } from '../services/trainingService';
 
 // Model configuration for cleaner code
 interface ModelConfig {
@@ -63,6 +65,18 @@ interface MultiImageModelSelectorProps {
 
 const MultiImageModelSelector: React.FC<MultiImageModelSelectorProps> = () => {
   const { controlNetImage, multiImageModel, setMultiImageModel } = useImageGenerator();
+  const { isConnected, address } = useSimpleWallet();
+  const [trainedModels, setTrainedModels] = useState<TrainedModel[]>([]);
+  const [showLoraModels, setShowLoraModels] = useState(false);
+
+  // Load trained models
+  useEffect(() => {
+    if (isConnected && address) {
+      getTrainedModels({ walletAddress: address })
+        .then(models => setTrainedModels(models.filter(m => m.status === 'ready')))
+        .catch(() => { /* ignore */ });
+    }
+  }, [isConnected, address]);
 
   const getImageCount = (): number => {
     if (!controlNetImage) return 0;
@@ -197,11 +211,71 @@ const MultiImageModelSelector: React.FC<MultiImageModelSelectorProps> = () => {
       </div>
       
       {/* Model buttons */}
-      <div className="flex gap-1 p-2">
+      <div className="flex gap-1 p-2 flex-wrap">
         {availableModels.map(modelId => (
           <ModelButton key={modelId} modelId={modelId} />
         ))}
       </div>
+      
+      {/* Trained LoRA models */}
+      {trainedModels.length > 0 && (
+        <div className="px-2 pb-2">
+          <button
+            onClick={() => setShowLoraModels(!showLoraModels)}
+            className="flex items-center gap-1 w-full px-2 py-1 text-[9px] font-bold"
+            style={{
+              background: WIN95.buttonFace,
+              color: WIN95.text,
+              border: 'none',
+              boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
+              fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+              cursor: 'pointer'
+            }}
+          >
+            <GraduationCap className="w-3 h-3" />
+            <span>{showLoraModels ? '▾' : '▸'} My Trained Models ({trainedModels.length})</span>
+          </button>
+          
+          {showLoraModels && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {trainedModels.map(model => {
+                const isSelected = currentModel === `lora:${model.id}`;
+                return (
+                  <button
+                    key={model.id}
+                    type="button"
+                    onClick={() => {
+                      logger.debug('Selected LoRA model', { modelId: model.id, name: model.name });
+                      setMultiImageModel(`lora:${model.id}`);
+                    }}
+                    className="flex-1 flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 min-w-[70px]"
+                    style={isSelected ? {
+                      background: WIN95.highlight,
+                      color: WIN95.highlightText,
+                      border: 'none',
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`,
+                      fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                    } : {
+                      background: WIN95.buttonFace,
+                      color: WIN95.text,
+                      border: 'none',
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
+                      fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                    }}
+                  >
+                    <div className="flex items-center gap-1">
+                      <GraduationCap className="w-3 h-3" />
+                      <span className="text-[10px] font-bold truncate max-w-[80px]">{model.name}</span>
+                    </div>
+                    <span className="text-[9px]" style={{ opacity: 0.8 }}>LoRA</span>
+                    <span className="text-[8px]" style={{ opacity: 0.7 }}>{LORA_INFERENCE_CREDITS} cr</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

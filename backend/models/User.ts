@@ -145,6 +145,17 @@ export interface IUser extends Document {
   // Onboarding tracking
   onboardingCompleted: boolean;
   onboardingStep: number;
+  // Trained LoRA models
+  trainedModels: Array<{
+    id: string;
+    name: string;
+    trainer: string;
+    loraUrl: string;
+    triggerWord: string;
+    createdAt: string;
+    status: 'training' | 'ready' | 'failed';
+    requestId: string;
+  }>;
 }
 
 interface UserModel extends Model<IUser> {
@@ -431,6 +442,21 @@ const userSchema = new mongoose.Schema<IUser>({
     type: Number,
     default: 0,
     min: 0
+  },
+  // Trained LoRA models (fine-tuned via fal.ai)
+  trainedModels: {
+    type: [{
+      id: String,
+      name: String,
+      trainer: { type: String, enum: ['flux-lora-fast', 'flux-2-trainer'] },
+      loraUrl: String,
+      triggerWord: String,
+      createdAt: String,
+      status: { type: String, enum: ['training', 'ready', 'failed'], default: 'training' },
+      requestId: String
+    }],
+    validate: [arrayLimit10, 'Trained models exceed limit of 10'],
+    default: []
   }
 }, {
   timestamps: true

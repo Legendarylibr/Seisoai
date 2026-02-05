@@ -126,6 +126,56 @@ export const generateImage = async (
     });
   }
   
+  // Handle LoRA model generation (trained custom models)
+  if (advancedSettings.multiImageModel && advancedSettings.multiImageModel.startsWith('lora:')) {
+    const loraModelId = advancedSettings.multiImageModel.replace('lora:', '');
+    
+    // Fetch user's trained models to get the LoRA URL and trigger word
+    const { getTrainedModels } = await import('./trainingService');
+    const models = await getTrainedModels({
+      walletAddress: advancedSettings.walletAddress || undefined,
+      userId: advancedSettings.userId || undefined,
+      email: advancedSettings.email || undefined
+    });
+    
+    const loraModel = models.find(m => m.id === loraModelId);
+    if (!loraModel || !loraModel.loraUrl) {
+      throw new Error('Trained model not found or not ready');
+    }
+
+    const csrfToken = await ensureCSRFToken();
+    const response = await fetch(`${API_URL}/api/training/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        prompt: customPrompt || 'high quality image',
+        lora_url: loraModel.loraUrl,
+        trigger_word: loraModel.triggerWord,
+        num_images: advancedSettings.numImages || 1,
+        image_size: advancedSettings.imageSize || 'landscape_4_3',
+        walletAddress: advancedSettings.walletAddress,
+        userId: advancedSettings.userId,
+        email: advancedSettings.email
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'LoRA generation failed');
+    }
+
+    return {
+      images: data.images || [],
+      imageUrl: data.images?.[0] || '',
+      remainingCredits: data.remainingCredits,
+      creditsDeducted: data.creditsDeducted
+    };
+  }
+  
   // Handle Face Swap (requires 2 images)
   if (advancedSettings.multiImageModel === 'face-swap' && referenceImage) {
     if (!Array.isArray(referenceImage) || referenceImage.length < 2) {

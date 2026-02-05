@@ -9,6 +9,7 @@ export const ja: Translations = {
     batch: 'バッチ',
     video: '動画',
     music: '音楽',
+    training: 'トレーニング',
     gallery: 'ギャラリー',
     referralProgram: '紹介プログラム',
     achievements: '実績',

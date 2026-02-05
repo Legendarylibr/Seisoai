@@ -19,6 +19,10 @@ export interface CreditsConfig {
   MODEL_3D_NORMAL: number;
   MODEL_3D_LOWPOLY: number;
   MODEL_3D_GEOMETRY: number;
+  // Training (LoRA fine-tuning) - 30% above fal API cost
+  TRAINING_FLUX_LORA_FAST_PER_STEP: number;  // per step
+  TRAINING_FLUX_2_PER_STEP: number;           // per step
+  LORA_INFERENCE_PER_IMAGE: number;           // per image generation with LoRA
 }
 
 export interface FreeImageLimits {
@@ -107,7 +111,11 @@ export const CREDITS: CreditsConfig = {
   LAYER_EXTRACTION: 0.3,         // Same as Flux 2
   MODEL_3D_NORMAL: 3,            // Hunyuan3D V3 with full textures + PBR
   MODEL_3D_LOWPOLY: 3,           // Hunyuan3D V3 with optimized mesh + textures
-  MODEL_3D_GEOMETRY: 2           // Hunyuan3D V3 geometry only (no textures)
+  MODEL_3D_GEOMETRY: 2,          // Hunyuan3D V3 geometry only (no textures)
+  // Training - 30% above fal.ai API cost (1 credit = $0.10)
+  TRAINING_FLUX_LORA_FAST_PER_STEP: 0.026,  // fal: $0.002/step × 1.3 = $0.0026 → 0.026 cr/step (26 cr per 1000 steps)
+  TRAINING_FLUX_2_PER_STEP: 0.104,          // fal: $0.008/step × 1.3 = $0.0104 → 0.104 cr/step (104 cr per 1000 steps)
+  LORA_INFERENCE_PER_IMAGE: 0.35            // fal: ~$0.025/img × 1.3 = $0.0325 → 0.325 cr → rounded to 0.35 cr
 };
 
 // Free image limits

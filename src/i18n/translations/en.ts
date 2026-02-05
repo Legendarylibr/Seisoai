@@ -6,6 +6,7 @@ export interface Translations {
     batch: string;
     video: string;
     music: string;
+    training: string;
     gallery: string;
     referralProgram: string;
     achievements: string;
@@ -96,6 +97,7 @@ export const en: Translations = {
     batch: 'Batch',
     video: 'Video',
     music: 'Music',
+    training: 'Training',
     gallery: 'Gallery',
     referralProgram: 'Referral Program',
     achievements: 'Achievements',
