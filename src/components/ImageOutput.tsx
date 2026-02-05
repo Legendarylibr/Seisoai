@@ -359,9 +359,14 @@ const ImageOutput: React.FC = () => {
   };
 
   // Get images to display - MUST be before any hooks that depend on it
+  // Filter to only valid string URLs to prevent render crashes
   let imagesToDisplay: string[] = [];
-  if (generatedImages?.length > 0) imagesToDisplay = generatedImages;
-  else if (generatedImage) imagesToDisplay = Array.isArray(generatedImage) ? generatedImage : [generatedImage];
+  if (generatedImages?.length > 0) {
+    imagesToDisplay = generatedImages.filter((url): url is string => typeof url === 'string' && url.length > 0);
+  } else if (generatedImage) {
+    const imgs = Array.isArray(generatedImage) ? generatedImage : [generatedImage];
+    imagesToDisplay = imgs.filter((url): url is string => typeof url === 'string' && url.length > 0);
+  }
   const hasMultipleImages = imagesToDisplay.length > 1;
   const hasImages = imagesToDisplay.length > 0;
 
@@ -369,11 +374,15 @@ const ImageOutput: React.FC = () => {
   useEffect(() => {
     if (imagesToDisplay.length > 0) {
       imagesToDisplay.forEach((url, i) => {
-        if (url && typeof url === 'string') {
-          const img = new Image();
-          img.decoding = 'async';
-          img.fetchPriority = i === 0 ? 'high' : 'low';
-          img.src = url;
+        try {
+          if (url && typeof url === 'string') {
+            const img = new Image();
+            img.decoding = 'async';
+            img.fetchPriority = i === 0 ? 'high' : 'low';
+            img.src = url;
+          }
+        } catch {
+          // Silently ignore preload errors - they don't affect rendering
         }
       });
     }
@@ -792,7 +801,9 @@ const ImageOutput: React.FC = () => {
                       decoding="async"
                       loading={i < 20 ? "eager" : "lazy"}
                       fetchPriority={i === 0 ? "high" : "low"}
-                      onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { (e.target as HTMLImageElement).style.display = 'none'; }} 
+                      onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+                        try { (e.target as HTMLImageElement).style.display = 'none'; } catch { /* safe */ }
+                      }} 
                     />
                     {/* Hover overlay with image number */}
                     <div 
@@ -827,7 +838,14 @@ const ImageOutput: React.FC = () => {
               style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' }}
               decoding="async"
               fetchPriority="high"
-              onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { setError('Failed to load image'); (e.target as HTMLImageElement).style.display = 'none'; }} 
+              onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+                try {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                  setError('Failed to load image');
+                } catch {
+                  // Prevent error handler from crashing
+                }
+              }} 
             />
           )}
         </div>

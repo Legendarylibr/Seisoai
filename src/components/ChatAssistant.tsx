@@ -167,6 +167,7 @@ const ImageLightbox = memo(function ImageLightbox({
         className="max-w-[95vw] max-h-[95vh] object-contain"
         style={{ boxShadow: '0 0 40px rgba(0,0,0,0.5)' }}
         onClick={(e) => e.stopPropagation()}
+        onError={() => onClose()}
       />
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] text-white/50">
         Press ESC or click outside to close
@@ -630,9 +631,9 @@ const MessageBubble = memo(function MessageBubble({
                   </div>
 
                   {/* Images */}
-                  {message.generatedContent.type === 'image' && message.generatedContent.urls?.length > 0 && (
-                    <div className={`grid gap-3 ${message.generatedContent.urls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                      {message.generatedContent.urls.map((url, i) => (
+                  {message.generatedContent.type === 'image' && message.generatedContent.urls?.filter(u => typeof u === 'string' && u.length > 0).length > 0 && (
+                    <div className={`grid gap-3 ${message.generatedContent.urls.filter(u => typeof u === 'string' && u.length > 0).length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                      {message.generatedContent.urls.filter(u => typeof u === 'string' && u.length > 0).map((url, i) => (
                         <div key={i} className="relative group rounded-xl overflow-hidden transition-transform hover:scale-[1.02]">
                           <img 
                             src={url} 
@@ -645,6 +646,9 @@ const MessageBubble = memo(function MessageBubble({
                               borderRadius: '12px'
                             }}
                             onClick={() => setLightboxImage(url)}
+                            onError={(e) => {
+                              try { (e.target as HTMLImageElement).style.display = 'none'; } catch { /* safe */ }
+                            }}
                           />
                           {/* Hover overlay with action buttons */}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -678,7 +682,7 @@ const MessageBubble = memo(function MessageBubble({
                   )}
 
                   {/* Videos */}
-                  {message.generatedContent.type === 'video' && message.generatedContent.urls?.[0] && (
+                  {message.generatedContent.type === 'video' && message.generatedContent.urls?.[0] && typeof message.generatedContent.urls[0] === 'string' && (
                     <div className="space-y-2">
                       <div className="relative rounded-lg overflow-hidden" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
                         <video
@@ -691,6 +695,7 @@ const MessageBubble = memo(function MessageBubble({
                           style={{ maxHeight: '280px' }}
                           onPlay={() => setIsPlaying(true)}
                           onPause={() => setIsPlaying(false)}
+                          onError={() => { /* Prevent crash on video load failure */ }}
                         />
                       </div>
                       <div className="flex gap-2">
@@ -1326,6 +1331,9 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant() {
                             alt={`Attached ${index + 1}`}
                             className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded-lg"
                             style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
+                            onError={(e) => {
+                              try { (e.target as HTMLImageElement).style.display = 'none'; } catch { /* safe */ }
+                            }}
                           />
                           <button
                             onClick={() => handleRemoveImage(index)}

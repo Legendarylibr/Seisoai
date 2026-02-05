@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense, Component } from 'react';
+import type { ReactNode, ErrorInfo } from 'react';
 import logger from './utils/logger';
 import { ImageGeneratorProvider } from './contexts/ImageGeneratorContext';
 import { SimpleWalletProvider, useSimpleWallet } from './contexts/SimpleWalletContext';
@@ -35,6 +36,77 @@ const ChatAssistant = lazy(() => import('./components/ChatAssistant'));
 const TermsModal = lazy(() => import('./components/TermsModal'));
 import Footer from './components/Footer';
 import type { LegalPage } from './components/TermsModal';
+
+// Error Boundary - prevents image/content rendering errors from crashing the entire app
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallbackText?: string;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    logger.error('ErrorBoundary caught error', {
+      error: error.message,
+      componentStack: errorInfo.componentStack?.substring(0, 500)
+    });
+  }
+
+  render(): ReactNode {
+    if (this.state.hasError) {
+      return (
+        <div
+          className="h-full flex flex-col items-center justify-center p-4 lg:p-8"
+          style={{
+            background: 'var(--win95-bg)',
+            fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+          }}
+        >
+          <div
+            className="p-4 lg:p-6 text-center max-w-sm"
+            style={{
+              background: 'var(--win95-bg)',
+              boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), inset 2px 2px 0 var(--win95-bg-light), inset -2px -2px 0 var(--win95-bg-dark)'
+            }}
+          >
+            <p className="text-[12px] font-bold mb-2" style={{ color: 'var(--win95-text)' }}>
+              {this.props.fallbackText || 'Something went wrong'}
+            </p>
+            <p className="text-[10px] mb-3" style={{ color: 'var(--win95-text-disabled)' }}>
+              {this.state.error?.message || 'An unexpected error occurred'}
+            </p>
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
+              className="px-4 py-1.5 text-[11px] font-bold"
+              style={{
+                background: 'var(--win95-button-face)',
+                boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+              }}
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface Tab {
   id: string;
@@ -180,16 +252,19 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
       {/* Main content area - pb-6 accounts for fixed footer (24px) */}
       <div className="flex-1 min-h-0 flex flex-col pb-6 overflow-auto">
         {activeTab === 'chat' && (
-          <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-            <AuthGuard>
-              <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
-                <ChatAssistant />
-              </Suspense>
-            </AuthGuard>
-          </div>
+          <ErrorBoundary fallbackText="Chat encountered an error">
+            <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
+              <AuthGuard>
+                <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
+                  <ChatAssistant />
+                </Suspense>
+              </AuthGuard>
+            </div>
+          </ErrorBoundary>
         )}
         
         {activeTab === 'generate' && (
+          <ErrorBoundary fallbackText="Image generator encountered an error">
           <div className="container mx-auto max-w-7xl" style={{ height: '100%', width: '100%', overflow: 'auto' }}>
             <AuthGuard>
               <div className="h-full flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2">
@@ -247,9 +322,11 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
               </div>
             </AuthGuard>
           </div>
+          </ErrorBoundary>
         )}
         
         {activeTab === 'batch' && (
+          <ErrorBoundary fallbackText="Batch generator encountered an error">
           <div className="container mx-auto max-w-7xl" style={{ height: '100%', width: '100%', overflow: 'auto' }}>
             <AuthGuard>
               <div className="h-full flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2">
@@ -297,29 +374,34 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
               </div>
             </AuthGuard>
           </div>
+          </ErrorBoundary>
         )}
         
         {activeTab === 'video' && (
-          <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-            <AuthGuard>
-              <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
-                <VideoGenerator 
-                  onModelChange={setVideoModel}
-                  onGenerationModeChange={setVideoGenerationMode}
-                />
-              </Suspense>
-            </AuthGuard>
-          </div>
+          <ErrorBoundary fallbackText="Video generator encountered an error">
+            <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
+              <AuthGuard>
+                <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
+                  <VideoGenerator 
+                    onModelChange={setVideoModel}
+                    onGenerationModeChange={setVideoGenerationMode}
+                  />
+                </Suspense>
+              </AuthGuard>
+            </div>
+          </ErrorBoundary>
         )}
         
         {activeTab === 'music' && (
-          <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-            <AuthGuard>
-              <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
-                <MusicGenerator />
-              </Suspense>
-            </AuthGuard>
-          </div>
+          <ErrorBoundary fallbackText="Music generator encountered an error">
+            <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
+              <AuthGuard>
+                <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
+                  <MusicGenerator />
+                </Suspense>
+              </AuthGuard>
+            </div>
+          </ErrorBoundary>
         )}
         
         {/* TEMPORARILY DISABLED - 3D not working, re-enable when fixed
@@ -332,13 +414,15 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         
         
         {activeTab === 'gallery' && (
-          <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-            <AuthGuard>
-              <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
-                <ImageGallery />
-              </Suspense>
-            </AuthGuard>
-          </div>
+          <ErrorBoundary fallbackText="Gallery encountered an error">
+            <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
+              <AuthGuard>
+                <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
+                  <ImageGallery />
+                </Suspense>
+              </AuthGuard>
+            </div>
+          </ErrorBoundary>
         )}
       </div>
 

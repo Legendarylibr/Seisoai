@@ -665,10 +665,10 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
       {/* How to Use Guide */}
       <CollapsibleVideoHowToUse />
       
-      {/* Main content */}
-      <div className="flex-1 min-h-0 p-0.5 sm:p-1.5 flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2 overflow-hidden" style={{ flex: '1 1 0%' }}>
-        {/* Left panel - Controls */}
-        <div className="lg:w-[45%] flex flex-col min-h-0">
+      {/* Main content - overflow-y-auto on mobile for scrolling, overflow-hidden on desktop for fixed layout */}
+      <div className="flex-1 min-h-0 p-0.5 sm:p-1.5 flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2 overflow-y-auto lg:overflow-hidden" style={{ flex: '1 1 0%' }}>
+        {/* Left panel - Controls - flex-shrink-0 prevents collapsing on mobile */}
+        <div className="lg:w-[45%] flex flex-col min-h-0 flex-shrink-0 lg:flex-shrink">
           {/* Scrollable controls area */}
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-0.5 sm:gap-1">
           {/* Model & Mode Selection */}
@@ -985,9 +985,9 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
           </Win95GroupBox>
         </div>
         
-        {/* Right panel - Output */}
+        {/* Right panel - Output - min-height on mobile ensures output is always visible */}
         <div 
-          className="flex-1 flex flex-col min-h-0"
+          className="flex-1 flex flex-col min-h-[50vh] sm:min-h-[55vh] lg:min-h-0"
           style={{ 
             background: WIN95.bg,
             boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}, 2px 2px 0 rgba(0,0,0,0.15)`
@@ -1076,8 +1076,8 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
             </div>
           )}
 
-          {/* Video Display - matches ImageOutput styling */}
-          <div className="flex-1 min-h-0 p-0.5 sm:p-1 overflow-hidden" style={{ background: '#c0c0c0' }}>
+          {/* Video Display - matches ImageOutput styling, flex-1 fills remaining space */}
+          <div className="flex-1 min-h-0 p-0.5 sm:p-1 overflow-hidden" style={{ background: '#c0c0c0', minHeight: '200px' }}>
             <div 
               className="w-full h-full overflow-hidden flex items-center justify-center relative"
               style={{ 
@@ -1194,8 +1194,8 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
                     playsInline
                     preload="auto"
                     crossOrigin="anonymous"
-                    className="object-contain"
-                    style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', opacity: videoReady ? 1 : 0 }}
+                    className="w-full h-full object-contain"
+                    style={{ maxWidth: '100%', maxHeight: '100%', opacity: videoReady ? 1 : 0 }}
                     onLoadedData={() => setVideoReady(true)}
                     onCanPlay={() => setVideoReady(true)}
                     onLoadedMetadata={() => {
@@ -1205,10 +1205,15 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
                       }
                     }}
                     onError={(e) => {
-                      const videoEl = e.target as HTMLVideoElement;
-                      logger.error('Video playback error', { error: videoEl?.error?.message });
-                      setError('Failed to load video. Please try downloading instead.');
-                      setVideoReady(true);
+                      try {
+                        const videoEl = e.target as HTMLVideoElement;
+                        logger.error('Video playback error', { error: videoEl?.error?.message });
+                        setError('Failed to load video. Please try downloading instead.');
+                        setVideoReady(true);
+                      } catch {
+                        // Prevent error handler from crashing
+                        setVideoReady(true);
+                      }
                     }}
                   />
                 </>
