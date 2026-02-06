@@ -26,10 +26,10 @@ interface ToolParam {
 
 // Master tool catalog — maps tool IDs to Seiso API endpoint details
 const TOOL_CATALOG: Record<string, AgentToolDef> = {
-  'image.generate.flux-pro': {
-    id: 'image.generate.flux-pro',
-    name: 'Image Generation (Flux Pro)',
-    description: 'Generate images using Flux Pro model — fast, general-purpose',
+  'image.generate.flux-pro-kontext': {
+    id: 'image.generate.flux-pro-kontext',
+    name: 'Image Generation (Flux Pro Kontext)',
+    description: 'Generate images using Flux Pro Kontext model — fast, general-purpose',
     category: 'image-generation',
     endpoint: 'POST /api/generate/image',
     method: 'POST',
@@ -91,10 +91,10 @@ const TOOL_CATALOG: Record<string, AgentToolDef> = {
     ],
     responseExample: '{\n  "success": true,\n  "image_url": "https://fal.media/files/...",\n  "x402": { "settled": true, "transactionHash": "0x..." }\n}',
   },
-  'video.generate': {
-    id: 'video.generate',
-    name: 'Video Generation',
-    description: 'Generate short videos from text prompts or images',
+  'video.generate.veo3': {
+    id: 'video.generate.veo3',
+    name: 'Video Generation (Veo 3.1)',
+    description: 'Generate short cinematic videos from text prompts',
     category: 'video-generation',
     endpoint: 'POST /api/generate/video',
     method: 'POST',
@@ -158,18 +158,18 @@ const TOOL_CATALOG: Record<string, AgentToolDef> = {
 // Predefined tool sets by agent type
 export const AGENT_TYPE_TOOLS: Record<string, string[]> = {
   'Image Generation': [
-    'image.generate.flux-pro',
+    'image.generate.flux-pro-kontext',
     'image.generate.flux-2',
     'image.generate.nano-banana-pro',
     'image.upscale',
   ],
-  'Video Generation': ['video.generate'],
+  'Video Generation': ['video.generate.veo3'],
   'Music Generation': ['music.generate', 'audio.sfx'],
   'Chat/Assistant': ['text.llm'],
   'Multi-Modal': [
-    'image.generate.flux-pro',
+    'image.generate.flux-pro-kontext',
     'image.generate.flux-2',
-    'video.generate',
+    'video.generate.veo3',
     'music.generate',
     'audio.sfx',
     'text.llm',

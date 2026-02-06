@@ -409,7 +409,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
     );
   }
 
-  const curlExample = `curl -X POST ${window.location.origin}/api/gateway/invoke/image.generate.flux-pro \\
+  const curlExample = `curl -X POST ${window.location.origin}/api/gateway/invoke/image.generate.flux-pro-kontext \\
   -H "X-API-Key: sk_live_YOUR_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"prompt":"a neon city at dusk"}'`;
@@ -640,7 +640,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
                   if (tid.startsWith('image.generate.flux-2')) return 'Flux 2';
                   if (tid.startsWith('image.generate.nano')) return 'Nano Pro';
                   if (tid === 'image.upscale') return 'Upscale';
-                  if (tid === 'video.generate') return 'Video';
+                  if (tid.startsWith('video.generate')) return 'Video';
                   if (tid === 'music.generate') return 'Music';
                   if (tid === 'audio.sfx') return 'SFX';
                   if (tid === 'text.llm') return 'Chat';
