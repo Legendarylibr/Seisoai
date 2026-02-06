@@ -449,6 +449,21 @@ export function createX402Middleware() {
         req.body = { ...req.body, toolId };
       }
     }
+
+    // Support agent-scoped invoke: /gateway/agent/:agentId/invoke[/:toolId] → same pricing as /gateway/invoke
+    if (!routeConfig && normalizedPath.match(/^\/gateway\/agent\/[^/]+\/invoke/)) {
+      routeConfig = routes['POST /gateway/invoke'];
+      // Extract toolId from path if present (e.g. /gateway/agent/custom-xxx/invoke/image.generate.flux-pro)
+      const invokeMatch = normalizedPath.match(/^\/gateway\/agent\/[^/]+\/invoke\/(.+)$/);
+      if (routeConfig && invokeMatch && !req.body?.toolId) {
+        req.body = { ...req.body, toolId: invokeMatch[1] };
+      }
+    }
+
+    // Support agent-scoped orchestrate: /gateway/agent/:agentId/orchestrate → same pricing as /gateway/orchestrate
+    if (!routeConfig && normalizedPath.match(/^\/gateway\/agent\/[^/]+\/orchestrate$/)) {
+      routeConfig = routes['POST /gateway/orchestrate'];
+    }
     
     if (!routeConfig) {
       // Route not configured for x402, pass through
@@ -538,8 +553,15 @@ export function createX402Middleware() {
     // No payment - return 402 with payment requirements
     // Convert USDC units to human-readable for display
     const amountUsd = parseInt(price) / Math.pow(10, USDC_DECIMALS);
+
+    // Extract agentId from agent-scoped paths for context in 402 response
+    const agentMatch = normalizedPath.match(/^\/gateway\/agent\/([^/]+)\//);
+    const agentContext = agentMatch ? {
+      agentId: agentMatch[1],
+      agentInfoUrl: `${req.protocol}://${req.get('host')}/api/gateway/agent/${agentMatch[1]}`,
+    } : undefined;
     
-    const paymentRequired = {
+    const paymentRequired: Record<string, unknown> = {
       x402Version: 2,
       error: 'Payment required',
       resource: {
@@ -560,9 +582,17 @@ export function createX402Middleware() {
       }],
     };
 
+    // Include agent context so x402 clients can show "Pay to use <Agent>"
+    if (agentContext) {
+      paymentRequired.agent = agentContext;
+    }
+
     const encoded = Buffer.from(JSON.stringify(paymentRequired)).toString('base64');
     res.setHeader('PAYMENT-REQUIRED', encoded);
     res.setHeader('X-Price-USD', `$${amountUsd.toFixed(4)}`);
+    if (agentContext) {
+      res.setHeader('Link', `<${agentContext.agentInfoUrl}>; rel="described-by"`);
+    }
     return res.status(402).json(paymentRequired);
   };
 }

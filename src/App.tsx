@@ -148,7 +148,7 @@ function AppContentInner(): JSX.Element {
   const { t } = useLanguage();
 
   const allTabs: Tab[] = [
-    { id: 'workbench', name: 'Agents', icon: Bot },
+    { id: 'workbench', name: 'Agent Builder', icon: Bot },
     { id: 'chat', name: t.nav.chat, icon: MessageCircle },
     { id: 'generate', name: t.nav.image, icon: Sparkles },
     { id: 'batch', name: t.nav.batch, icon: Layers },

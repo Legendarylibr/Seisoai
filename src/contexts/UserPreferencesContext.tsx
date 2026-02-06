@@ -10,7 +10,7 @@ import { API_URL } from '../utils/apiConfig';
 
 // All available features/tabs the user can enable
 export const ALL_FEATURES = [
-  { id: 'workbench', label: 'Agents', description: 'Build agents, wire capabilities, manage API keys', icon: 'Bot' },
+  { id: 'workbench', label: 'Agent Builder', description: 'Build agents, wire capabilities, manage API keys', icon: 'Bot' },
   { id: 'chat', label: 'Chat AI', description: 'Conversational AI assistant', icon: 'MessageCircle' },
   { id: 'generate', label: 'Image Gen', description: 'Generate images with AI', icon: 'Sparkles' },
   { id: 'batch', label: 'Batch', description: 'Generate multiple images at once', icon: 'Layers' },

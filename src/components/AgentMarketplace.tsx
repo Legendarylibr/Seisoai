@@ -1,6 +1,6 @@
 /**
- * AgentMarketplace → Agent Workbench
- * The app's home — build agents, wire capabilities, ship with an API key.
+ * AgentMarketplace → Agent Builder
+ * The app's home — build agents, select capabilities, discover agents, ship with an API key.
  * Follows the same Win95 window/panel/status-bar patterns as VideoGenerator & ChatAssistant.
  */
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
@@ -9,11 +9,13 @@ import {
   Trash2, Download, Shield,
   Image, Film, Music, Mic, Box, Eye, Cpu, Wrench, Code,
   ExternalLink, Terminal, Layers, Activity,
-  Play, Globe, Hash
+  Play, Globe, Hash,
+  MessageCircle, Sparkles, Grid
 } from 'lucide-react';
 import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import { getCustomAgents, deleteCustomAgent } from '../services/agentRegistryService';
+import { useUserPreferences, ALL_FEATURES } from '../contexts/UserPreferencesContext';
+import { getCustomAgents, deleteCustomAgent, getAgentList, type AgentListItem } from '../services/agentRegistryService';
 import { API_URL, getAuthToken, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
@@ -119,8 +121,20 @@ interface AgentMarketplaceProps {
   onNavigate?: (tab: string) => void;
 }
 
+// Icon mapping for capability cards
+const CAPABILITY_ICONS: Record<string, React.ReactNode> = {
+  chat: <MessageCircle size={16} />,
+  generate: <Sparkles size={16} />,
+  batch: <Layers size={16} />,
+  video: <Film size={16} />,
+  music: <Music size={16} />,
+  training: <Cpu size={16} />,
+  gallery: <Grid size={16} />,
+};
+
 const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
   const { isConnected, address } = useSimpleWallet();
+  const { preferences, updatePreference } = useUserPreferences();
   const [tools, setTools] = useState<ToolSummary[]>([]);
   const [apiKeys, setApiKeys] = useState<ApiKeyInfo[]>([]);
   const [customAgents, setCustomAgents] = useState<CustomAgent[]>([]);
@@ -134,6 +148,38 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
   const [isCreatingKey, setIsCreatingKey] = useState(false);
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [capFilter, setCapFilter] = useState('');
+
+  // Capability selector state — init from preferences (exclude workbench, it's always on)
+  const selectableFeatures = useMemo(() => ALL_FEATURES.filter(f => f.id !== 'workbench'), []);
+  const [selectedCaps, setSelectedCaps] = useState<Set<string>>(() => {
+    const enabled = new Set(preferences.enabledTabs);
+    enabled.delete('workbench');
+    return enabled;
+  });
+
+  const toggleCap = useCallback((id: string) => {
+    setSelectedCaps(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const applyCaps = useCallback(() => {
+    const newTabs = ['workbench', ...Array.from(selectedCaps)];
+    updatePreference('enabledTabs', newTabs);
+  }, [selectedCaps, updatePreference]);
+
+  const capsChanged = useMemo(() => {
+    const currentEnabled = new Set(preferences.enabledTabs);
+    currentEnabled.delete('workbench');
+    if (currentEnabled.size !== selectedCaps.size) return true;
+    for (const id of selectedCaps) {
+      if (!currentEnabled.has(id)) return true;
+    }
+    return false;
+  }, [preferences.enabledTabs, selectedCaps]);
 
   // ── Data fetching ──
   const fetchTools = useCallback(async () => {
@@ -162,11 +208,20 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
     } catch (e) { logger.error('Fetch agents failed', { error: e }); }
   }, [address]);
 
+  // All agents directory
+  const [allAgents, setAllAgents] = useState<AgentListItem[]>([]);
+  const fetchAllAgents = useCallback(async () => {
+    try {
+      const agents = await getAgentList();
+      setAllAgents(agents);
+    } catch (e) { logger.error('Fetch all agents failed', { error: e }); }
+  }, []);
+
   useEffect(() => {
     setIsLoading(true);
-    Promise.all([fetchTools(), isConnected ? fetchApiKeys() : Promise.resolve(), isConnected ? fetchCustomAgents() : Promise.resolve()])
+    Promise.all([fetchTools(), fetchAllAgents(), isConnected ? fetchApiKeys() : Promise.resolve(), isConnected ? fetchCustomAgents() : Promise.resolve()])
       .finally(() => setIsLoading(false));
-  }, [fetchTools, fetchApiKeys, fetchCustomAgents, isConnected]);
+  }, [fetchTools, fetchAllAgents, fetchApiKeys, fetchCustomAgents, isConnected]);
 
   // ── Derived ──
   const toolsByCategory = useMemo(() => {
@@ -262,7 +317,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
       {/* ═══ TITLE BAR ═══ */}
       <div className="flex items-center gap-2 px-2 py-1 flex-shrink-0" style={WINDOW_TITLE_STYLE}>
         <Bot size={12} />
-        <span className="text-[11px] flex-1">Agent Workbench</span>
+        <span className="text-[11px] flex-1">Agent Builder</span>
         <button
           onClick={() => setShowCreator(true)}
           className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold"
@@ -296,6 +351,64 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
 
       {/* ═══ MAIN CONTENT ═══ */}
       <div className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-3 py-2 space-y-1" style={{ background: WIN95.bg }}>
+
+        {/* ── BUILD YOUR UI ── */}
+        <GroupBox
+          title="Build Your UI"
+          icon={<Zap size={10} style={{ color: WIN95.highlight }} />}
+        >
+          <p className="text-[9px] mb-2" style={{ color: WIN95.textDisabled }}>
+            Select capabilities to include in your workspace. Your nav is built from this selection.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            {selectableFeatures.map(feature => {
+              const active = selectedCaps.has(feature.id);
+              return (
+                <button
+                  key={feature.id}
+                  onClick={() => toggleCap(feature.id)}
+                  className="flex items-center gap-1.5 px-2 py-2 text-left"
+                  style={{
+                    background: active ? WIN95.highlight : WIN95.inputBg,
+                    color: active ? WIN95.highlightText : WIN95.text,
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontFamily: font,
+                    boxShadow: active
+                      ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
+                      : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
+                  }}
+                >
+                  <span style={{ opacity: active ? 1 : 0.5 }}>{CAPABILITY_ICONS[feature.id] || <Zap size={16} />}</span>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-bold truncate">{feature.label}</div>
+                    <div className="text-[8px] truncate" style={{ color: active ? 'rgba(255,255,255,0.7)' : WIN95.textDisabled }}>
+                      {feature.description}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={applyCaps}
+              disabled={!capsChanged || selectedCaps.size === 0}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold generate-btn"
+              style={{
+                border: 'none',
+                cursor: capsChanged && selectedCaps.size > 0 ? 'pointer' : 'default',
+                fontFamily: font,
+                opacity: capsChanged && selectedCaps.size > 0 ? 1 : 0.5,
+              }}
+            >
+              <Zap size={10} /> Apply
+            </button>
+            <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>
+              {selectedCaps.size} of {selectableFeatures.length} capabilities selected
+            </span>
+          </div>
+        </GroupBox>
 
         {/* ── YOUR AGENTS ── */}
         <GroupBox
@@ -464,6 +577,69 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </GroupBox>
+
+        {/* ── DISCOVER AGENTS ── */}
+        <GroupBox
+          title={`Discover Agents — ${allAgents.length} listed`}
+          icon={<Globe size={10} style={{ color: WIN95.highlight }} />}
+        >
+          {allAgents.length === 0 ? (
+            <p className="text-[9px] py-2 text-center" style={{ color: WIN95.textDisabled }}>
+              No agents published yet. Create one above to see it listed here.
+            </p>
+          ) : (
+            <div className="space-y-1 mt-1">
+              {allAgents.map(agent => (
+                <div key={agent.agentId} className="flex items-center gap-2 px-2 py-1.5" style={PANEL.sunken}>
+                  <div className="w-6 h-6 flex items-center justify-center flex-shrink-0" style={{
+                    background: WIN95.highlight,
+                    color: WIN95.highlightText,
+                  }}>
+                    <Bot size={12} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold truncate" style={{ color: WIN95.text }}>{agent.name}</span>
+                      <span className="text-[8px] px-1 flex-shrink-0" style={{ background: WIN95.bgDark, color: WIN95.textDisabled }}>{agent.type}</span>
+                    </div>
+                    <p className="text-[8px] truncate" style={{ color: WIN95.textDisabled }}>{agent.description}</p>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-[7px]" style={{ color: WIN95.textDisabled }}>
+                        <Hash size={7} className="inline" /> {agent.tools?.length || 0} tools
+                      </span>
+                      <span className="text-[7px]" style={{ color: WIN95.textDisabled }}>
+                        &middot; {relTime(agent.createdAt)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-0.5 flex-shrink-0">
+                    <button
+                      onClick={() => copy(agent.invokeUrl, `invoke-${agent.agentId}`)}
+                      className="p-1 flex items-center gap-0.5"
+                      style={{ ...BTN.small, cursor: 'pointer' }}
+                      title={`Copy invoke URL: ${agent.invokeUrl}`}
+                      {...hoverHandlers}
+                    >
+                      {copied === `invoke-${agent.agentId}` ? <Check size={8} style={{ color: WIN95.successText }} /> : <Copy size={8} />}
+                      <span className="text-[7px]">402</span>
+                    </button>
+                    <a
+                      href={agent.invokeUrl.replace('/invoke', '')}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 flex items-center justify-center"
+                      style={{ ...BTN.small, cursor: 'pointer', textDecoration: 'none' }}
+                      title="Agent info"
+                      {...hoverHandlers}
+                    >
+                      <ExternalLink size={8} />
+                    </a>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </GroupBox>

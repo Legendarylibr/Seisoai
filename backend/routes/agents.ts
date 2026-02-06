@@ -17,6 +17,80 @@ import {
 
 const router = Router();
 
+// ── Custom agent type (in-memory store) ──
+export interface CustomAgentRecord {
+  agentId: string;
+  name: string;
+  description: string;
+  type: string;
+  tools: string[];
+  owner: string;
+  agentURI: string;
+  registration: Record<string, unknown>;
+  skillMd: string;
+  createdAt: string;
+  isCustom: boolean;
+}
+
+/**
+ * Resolve a custom agent by agentId across all owners.
+ * Returns the agent record or null.
+ */
+export function getCustomAgentById(agentId: string): CustomAgentRecord | null {
+  const agentsMap = (globalThis as Record<string, unknown>)._customAgents as Map<string, CustomAgentRecord[]> | undefined;
+  if (!agentsMap) return null;
+  for (const agents of agentsMap.values()) {
+    const found = agents.find(a => a.agentId === agentId);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * Return all custom agents across all owners.
+ */
+export function getAllCustomAgents(): CustomAgentRecord[] {
+  const agentsMap = (globalThis as Record<string, unknown>)._customAgents as Map<string, CustomAgentRecord[]> | undefined;
+  if (!agentsMap) return [];
+  const all: CustomAgentRecord[] = [];
+  for (const agents of agentsMap.values()) {
+    all.push(...agents);
+  }
+  return all;
+}
+
+/**
+ * List all custom agents
+ * GET /api/agents/list
+ */
+router.get('/list', async (_req: Request, res: Response) => {
+  try {
+    const agents = getAllCustomAgents();
+    const baseUrl = `${_req.protocol}://${_req.get('host')}`;
+
+    res.json({
+      success: true,
+      agents: agents.map(a => ({
+        agentId: a.agentId,
+        name: a.name,
+        description: a.description,
+        type: a.type,
+        tools: a.tools,
+        owner: a.owner,
+        createdAt: a.createdAt,
+        agentURI: a.agentURI,
+        invokeUrl: `${baseUrl}/api/gateway/agent/${a.agentId}/invoke`,
+        x402Supported: true,
+      })),
+      count: agents.length,
+    });
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to list agents', { error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to list agents' });
+  }
+});
+
 /**
  * Get ERC-8004 contract configuration status
  * GET /api/agents/status
@@ -199,6 +273,9 @@ router.post('/create', async (req: Request, res: Response) => {
     }
 
     // Generate agent URI
+    const agentId = `custom-${walletAddress.slice(2, 8)}-${Date.now()}`;
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const invokeUrl = `${baseUrl}/api/gateway/agent/${agentId}/invoke`;
     const registration = {
       type: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1',
       name,
@@ -208,6 +285,9 @@ router.post('/create', async (req: Request, res: Response) => {
         { name: 'web', endpoint: 'https://seisoai.com/' },
         { name: 'gateway', endpoint: 'https://seisoai.com/api/gateway' },
         { name: 'mcp', endpoint: 'https://seisoai.com/api/mcp' },
+        { name: 'invoke', endpoint: invokeUrl },
+        { name: 'mcp-manifest', endpoint: `${baseUrl}/api/gateway/agent/${agentId}/mcp-manifest` },
+        { name: 'orchestrate', endpoint: `${baseUrl}/api/gateway/agent/${agentId}/orchestrate` },
       ],
       x402Support: true,
       x402Config: { network: 'eip155:8453', asset: 'USDC' },
@@ -217,7 +297,6 @@ router.post('/create', async (req: Request, res: Response) => {
     };
 
     const agentURI = createAgentURI(registration);
-    const agentId = `custom-${walletAddress.slice(2, 8)}-${Date.now()}`;
 
     // Store in a simple in-memory map for now (upgrade to MongoDB when needed)
     // In production, save to a UserAgent collection

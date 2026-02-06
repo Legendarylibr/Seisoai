@@ -19,6 +19,7 @@ import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
 import { generatePlan, executePlan, orchestrate, WORKFLOW_TEMPLATES } from '../services/orchestrator';
 import { authenticateApiKey, requireApiKeyCredits } from '../middleware/apiKeyAuth';
 import { sendGenerationWebhook } from '../services/webhook';
+import { getCustomAgentById, getAllCustomAgents } from './agents';
 import logger from '../utils/logger';
 
 // Dependencies injected from parent
@@ -771,6 +772,326 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
   }
 
   // ============================================
+  // AGENT-SCOPED ENDPOINTS
+  // ============================================
+
+  /**
+   * GET /api/gateway/agents
+   * Machine-readable agent discovery — list all custom agents with invoke URLs
+   */
+  router.get('/agents', (req: Request, res: Response) => {
+    try {
+      const agents = getAllCustomAgents();
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+      res.json({
+        success: true,
+        gateway: 'seisoai',
+        agentCount: agents.length,
+        agents: agents.map(a => ({
+          agentId: a.agentId,
+          name: a.name,
+          description: a.description,
+          type: a.type,
+          tools: a.tools,
+          owner: a.owner,
+          createdAt: a.createdAt,
+          invokeUrl: `${baseUrl}/api/gateway/agent/${a.agentId}/invoke`,
+          orchestrateUrl: `${baseUrl}/api/gateway/agent/${a.agentId}/orchestrate`,
+          mcpManifestUrl: `${baseUrl}/api/gateway/agent/${a.agentId}/mcp-manifest`,
+          infoUrl: `${baseUrl}/api/gateway/agent/${a.agentId}`,
+          x402Supported: true,
+        })),
+        protocols: {
+          x402: { supported: true, network: 'eip155:8453', asset: 'USDC' },
+          mcp: { supported: true, endpoint: '/api/mcp' },
+        },
+      });
+    } catch (error) {
+      logger.error('Gateway agents listing failed', { error });
+      res.status(500).json({ success: false, error: 'Failed to list agents' });
+    }
+  });
+
+  /**
+   * GET /api/gateway/agent/:agentId
+   * Canonical agent info — single machine-readable contract for callers
+   */
+  router.get('/agent/:agentId', (req: Request, res: Response) => {
+    const agent = getCustomAgentById(req.params.agentId);
+    if (!agent) {
+      return res.status(404).json({ success: false, error: `Agent not found: ${req.params.agentId}` });
+    }
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const agentTools = agent.tools
+      .map(tid => toolRegistry.get(tid))
+      .filter(Boolean)
+      .map(t => ({
+        id: t!.id,
+        name: t!.name,
+        description: t!.description,
+        category: t!.category,
+        inputSchema: t!.inputSchema,
+        pricing: {
+          baseUsd: t!.pricing.baseUsdCost * t!.pricing.markup,
+          credits: t!.pricing.credits,
+        },
+      }));
+
+    res.json({
+      success: true,
+      agent: {
+        agentId: agent.agentId,
+        name: agent.name,
+        description: agent.description,
+        type: agent.type,
+        owner: agent.owner,
+        createdAt: agent.createdAt,
+        toolCount: agent.tools.length,
+        tools: agentTools,
+        endpoints: {
+          invokeUrl: `${baseUrl}/api/gateway/agent/${agent.agentId}/invoke`,
+          orchestrateUrl: `${baseUrl}/api/gateway/agent/${agent.agentId}/orchestrate`,
+          mcpManifestUrl: `${baseUrl}/api/gateway/agent/${agent.agentId}/mcp-manifest`,
+        },
+        x402: {
+          supported: true,
+          network: 'eip155:8453',
+          asset: 'USDC',
+          description: 'Pay per request with USDC on Base. Include payment-signature header.',
+        },
+        agentURI: agent.agentURI,
+      },
+    });
+  });
+
+  /**
+   * GET /api/gateway/agent/:agentId/mcp-manifest
+   * Per-agent MCP manifest — only this agent's tools
+   */
+  router.get('/agent/:agentId/mcp-manifest', (req: Request, res: Response) => {
+    const agent = getCustomAgentById(req.params.agentId);
+    if (!agent) {
+      return res.status(404).json({ success: false, error: `Agent not found: ${req.params.agentId}` });
+    }
+
+    const toolSet = new Set(agent.tools);
+    const allMcpTools = toolRegistry.toMCPTools();
+    const agentMcpTools = allMcpTools.filter(t => toolSet.has(t.name));
+
+    res.json({
+      name: `seisoai-agent-${agent.agentId}`,
+      version: '1.0.0',
+      description: `${agent.name} — ${agent.description}`,
+      agentId: agent.agentId,
+      tools: agentMcpTools,
+    });
+  });
+
+  /**
+   * POST /api/gateway/agent/:agentId/invoke
+   * Agent-scoped tool invocation — 402 or API key required
+   * Body: { toolId, ...input } or use /invoke/:toolId
+   */
+  router.post('/agent/:agentId/invoke/:toolId?', async (req: Request, res: Response) => {
+    const agent = getCustomAgentById(req.params.agentId);
+    if (!agent) {
+      return res.status(404).json({ success: false, error: `Agent not found: ${req.params.agentId}` });
+    }
+
+    const toolId = req.params.toolId || req.body.toolId;
+    if (!toolId) {
+      return res.status(400).json({ success: false, error: 'Missing toolId in URL or request body' });
+    }
+
+    // Ensure tool belongs to this agent
+    if (!agent.tools.includes(toolId)) {
+      return res.status(400).json({
+        success: false,
+        error: `Tool ${toolId} is not part of agent ${agent.name}`,
+        availableTools: agent.tools,
+      });
+    }
+
+    const tool = toolRegistry.get(toolId);
+    if (!tool) {
+      return res.status(404).json({ success: false, error: `Tool not found: ${toolId}` });
+    }
+    if (!tool.enabled) {
+      return res.status(503).json({ success: false, error: `Tool is currently disabled: ${toolId}` });
+    }
+
+    // Extract webhook URL from body or API key config
+    const { webhookUrl: bodyWebhookUrl, toolId: _bodyToolId, ...input } = req.body;
+    const webhookUrl = bodyWebhookUrl || (req as any).apiKey?.webhookUrl;
+    const webhookSecret = (req as any).apiKey?.webhookSecret;
+    const requestId = (req as any).requestId || `ag-${agent.agentId}-${Date.now()}`;
+
+    // Validate required fields
+    const missingFields = tool.inputSchema.required.filter((field: string) => !(field in input));
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Missing required fields: ${missingFields.join(', ')}`,
+        schema: tool.inputSchema,
+      });
+    }
+
+    // Deduct API key credits if authenticated via API key
+    if ((req as any).isApiKeyAuth && (req as any).apiKey) {
+      const price = toolRegistry.calculatePrice(toolId, input);
+      const creditsNeeded = price?.credits || tool.pricing.credits;
+      if ((req as any).apiKey.credits < creditsNeeded) {
+        return res.status(402).json({
+          success: false,
+          error: 'Insufficient API key credits',
+          required: creditsNeeded,
+          available: (req as any).apiKey.credits,
+        });
+      }
+    }
+
+    const price = toolRegistry.calculatePrice(toolId, input);
+
+    logger.info('Agent-scoped invoke', {
+      agentId: agent.agentId,
+      agentName: agent.name,
+      toolId,
+      executionMode: tool.executionMode,
+      requestId,
+      price,
+    });
+
+    try {
+      if (tool.executionMode === 'sync') {
+        const endpoint = `https://fal.run/${tool.falModel}`;
+        const result = await falRequest(endpoint, {
+          method: 'POST',
+          body: JSON.stringify(input),
+        });
+
+        // Settle x402 payment if applicable
+        const x402Req = req as X402Request;
+        if (x402Req.isX402Paid) {
+          await settleX402Payment(x402Req);
+        }
+
+        if (webhookUrl) {
+          sendGenerationWebhook(webhookUrl, webhookSecret, 'generation.completed', requestId, {
+            agentId: agent.agentId, agentName: agent.name, toolId, toolName: tool.name, result, pricing: price,
+          }, toolId);
+        }
+
+        return res.json({
+          success: true,
+          agentId: agent.agentId,
+          agentName: agent.name,
+          toolId,
+          toolName: tool.name,
+          executionMode: 'sync',
+          requestId,
+          result,
+          pricing: price,
+        });
+      } else {
+        const queueResult = await submitToQueue(tool.falModel, input) as { request_id?: string };
+        if (!queueResult?.request_id) {
+          throw new Error('No request_id returned from queue submission');
+        }
+
+        if (webhookUrl) {
+          pollAndDeliverWebhook(queueResult.request_id, tool.falModel, toolId, tool.name, requestId, webhookUrl, webhookSecret, price);
+        }
+
+        return res.json({
+          success: true,
+          agentId: agent.agentId,
+          agentName: agent.name,
+          toolId,
+          toolName: tool.name,
+          executionMode: 'queue',
+          requestId,
+          job: {
+            id: queueResult.request_id,
+            model: tool.falModel,
+            status: 'IN_QUEUE',
+            statusUrl: `/api/gateway/jobs/${queueResult.request_id}?model=${encodeURIComponent(tool.falModel)}`,
+            resultUrl: `/api/gateway/jobs/${queueResult.request_id}/result?model=${encodeURIComponent(tool.falModel)}`,
+          },
+          pricing: price,
+        });
+      }
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Agent-scoped invoke failed', { agentId: agent.agentId, toolId, error: err.message, requestId });
+
+      if (webhookUrl) {
+        sendGenerationWebhook(webhookUrl, webhookSecret, 'generation.failed', requestId, {
+          agentId: agent.agentId, toolId, error: err.message,
+        }, toolId);
+      }
+
+      return res.status(500).json({
+        success: false,
+        error: `Tool invocation failed: ${err.message}`,
+        agentId: agent.agentId,
+        toolId,
+      });
+    }
+  });
+
+  /**
+   * POST /api/gateway/agent/:agentId/orchestrate
+   * Agent-scoped orchestration — restricts to agent's tools only
+   * Body: { goal: string, context?: object, planOnly?: boolean }
+   */
+  router.post('/agent/:agentId/orchestrate', async (req: Request, res: Response) => {
+    const agent = getCustomAgentById(req.params.agentId);
+    if (!agent) {
+      return res.status(404).json({ success: false, error: `Agent not found: ${req.params.agentId}` });
+    }
+
+    const { goal, context, planOnly } = req.body;
+    if (!goal || typeof goal !== 'string') {
+      return res.status(400).json({ success: false, error: 'Missing "goal" string in request body' });
+    }
+
+    // Build context that restricts to this agent's tools
+    const agentContext = {
+      ...context,
+      allowedTools: agent.tools,
+      agentId: agent.agentId,
+      agentName: agent.name,
+    };
+
+    try {
+      if (planOnly) {
+        const plan = await generatePlan(goal, agentContext);
+        return res.json({ success: true, agentId: agent.agentId, agentName: agent.name, plan });
+      }
+
+      const result = await orchestrate(goal, agentContext);
+
+      // Settle x402 payment if applicable
+      const x402Req = req as X402Request;
+      if (x402Req.isX402Paid) {
+        await settleX402Payment(x402Req);
+      }
+
+      return res.json({ success: true, agentId: agent.agentId, agentName: agent.name, ...result });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Agent-scoped orchestration failed', { agentId: agent.agentId, goal, error: err.message });
+      return res.status(500).json({
+        success: false,
+        error: `Orchestration failed: ${err.message}`,
+        agentId: agent.agentId,
+      });
+    }
+  });
+
+  // ============================================
   // GATEWAY INFO
   // ============================================
 
@@ -795,11 +1116,19 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
           pricing: 'GET /api/gateway/price/:toolId',
           schema: 'GET /api/gateway/schema',
           mcpManifest: 'GET /api/gateway/mcp-manifest',
+          agents: 'GET /api/gateway/agents',
         },
         invocation: {
           invoke: 'POST /api/gateway/invoke/:toolId',
           invokeWithBody: 'POST /api/gateway/invoke',
           batch: 'POST /api/gateway/batch',
+        },
+        agents: {
+          list: 'GET /api/gateway/agents',
+          info: 'GET /api/gateway/agent/:agentId',
+          invoke: 'POST /api/gateway/agent/:agentId/invoke/:toolId',
+          orchestrate: 'POST /api/gateway/agent/:agentId/orchestrate',
+          mcpManifest: 'GET /api/gateway/agent/:agentId/mcp-manifest',
         },
         jobs: {
           status: 'GET /api/gateway/jobs/:jobId?model=...',

@@ -367,6 +367,44 @@ export async function deleteCustomAgent(agentId: string): Promise<boolean> {
   }
 }
 
+/**
+ * List all custom agents across all owners (public directory)
+ */
+export interface AgentListItem {
+  agentId: string;
+  name: string;
+  description: string;
+  type: string;
+  tools: string[];
+  owner: string;
+  createdAt: string;
+  agentURI: string;
+  invokeUrl: string;
+  x402Supported: boolean;
+}
+
+export async function getAgentList(): Promise<AgentListItem[]> {
+  try {
+    const response = await fetch(`${API_URL}/api/agents/list`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      return [];
+    }
+
+    return data.agents;
+  } catch (error) {
+    logger.error('Failed to list agents', { error });
+    return [];
+  }
+}
+
 export default {
   getContractStatus,
   getAgentDefinitions,
@@ -377,6 +415,7 @@ export default {
   createAgent,
   getCustomAgents,
   deleteCustomAgent,
+  getAgentList,
   getChainName,
   getExplorerUrl,
 };
