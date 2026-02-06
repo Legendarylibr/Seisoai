@@ -20,6 +20,7 @@ import { withRetry } from '../utils/mongoRetry';
 import { ethers } from 'ethers';
 import { recordProvenance, getProvenanceAgentRegistry, isProvenanceConfigured } from '../services/provenanceService';
 import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
+import { requireTokenGate } from '../middleware/tokenGate';
 import config from '../config/env';
 
 // Types
@@ -966,11 +967,22 @@ export function createGenerationRoutes(deps: Dependencies) {
 
   const flexibleAuth = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
 
+  // Token gate for generation routes — bypasses x402-paid requests
+  const generationTokenGate = (): RequestHandler => {
+    const tokenGate = requireTokenGate();
+    return (req: Request, res: Response, next: () => void) => {
+      if ((req as X402Request).isX402Paid) {
+        return next();
+      }
+      return tokenGate(req, res, next);
+    };
+  };
+
   /**
    * Generate image
    * POST /api/generate/image
    */
-  router.post('/image', requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/image', flexibleAuth, generationTokenGate(), requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -1432,7 +1444,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/image-stream
    * Uses Server-Sent Events for real-time progress updates
    */
-  router.post('/image-stream', requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/image-stream', flexibleAuth, generationTokenGate(), requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -1814,7 +1826,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/video
    * Modes: text-to-video, image-to-video, first-last-frame
    */
-  router.post('/video', requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/video', flexibleAuth, generationTokenGate(), requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -2484,7 +2496,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * Generate music
    * POST /api/generate/music
    */
-  router.post('/music', requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/music', flexibleAuth, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -2880,7 +2892,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/upscale
    * Uses fal.ai creative-upscaler for 2x/4x upscaling
    */
-  router.post('/upscale', requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/upscale', flexibleAuth, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -3087,7 +3099,7 @@ export function createGenerationRoutes(deps: Dependencies) {
    * POST /api/generate/video-to-audio
    * Uses fal.ai MMAudio V2 for synchronized audio generation
    */
-  router.post('/video-to-audio', requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/video-to-audio', flexibleAuth, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
