@@ -161,17 +161,34 @@ function getAnthropicClient(): Anthropic | null {
   return _anthropicClient;
 }
 
+/**
+ * Check if a key looks like a real API key vs. a placeholder value
+ */
+function isRealApiKey(key: string | undefined): boolean {
+  if (!key) return false;
+  const lower = key.toLowerCase().trim();
+  // Reject common placeholder patterns
+  if (lower.includes('your_') || lower.includes('_here') || lower.includes('changeme') ||
+      lower === 'placeholder' || lower === 'change_me' || lower === 'xxx' ||
+      lower.startsWith('sk_test_xxx') || lower === 'none' || lower === 'todo') {
+    return false;
+  }
+  // Real API keys are usually at least 20 characters
+  if (key.trim().length < 10) return false;
+  return true;
+}
+
 function detectProvider(): LLMProvider {
-  if (config.ANTHROPIC_API_KEY) return 'anthropic';
-  if (config.FAL_API_KEY) return 'fal-proxy';
-  throw new Error('No LLM provider configured. Set ANTHROPIC_API_KEY or FAL_API_KEY.');
+  if (isRealApiKey(config.ANTHROPIC_API_KEY)) return 'anthropic';
+  if (isRealApiKey(config.FAL_API_KEY)) return 'fal-proxy';
+  throw new Error('No LLM provider configured. Set ANTHROPIC_API_KEY or FAL_API_KEY with a valid key (not a placeholder).');
 }
 
 /**
- * Check if the LLM provider is configured
+ * Check if the LLM provider is configured with a real (non-placeholder) API key
  */
 export function isLLMConfigured(): boolean {
-  return !!(config.ANTHROPIC_API_KEY || config.FAL_API_KEY);
+  return isRealApiKey(config.ANTHROPIC_API_KEY) || isRealApiKey(config.FAL_API_KEY);
 }
 
 /**

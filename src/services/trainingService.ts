@@ -1,7 +1,7 @@
 // Training service for fal.ai model fine-tuning (LoRA training)
 // Supports FLUX LoRA Fast Training and FLUX 2 Trainer
 import logger from '../utils/logger';
-import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, apiFetch } from '../utils/apiConfig';
 
 // ============================================================================
 // Types
@@ -72,15 +72,8 @@ export async function submitTraining(
   config: TrainingConfig,
   userIdentity: { walletAddress?: string; userId?: string; email?: string }
 ): Promise<TrainingSubmitResult> {
-  const csrfToken = await ensureCSRFToken();
-
-  const response = await fetch(`${API_URL}/api/training/submit`, {
+  const response = await apiFetch(`${API_URL}/api/training/submit`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(csrfToken && { 'X-CSRF-Token': csrfToken })
-    },
-    credentials: 'include',
     body: JSON.stringify({
       trainer: config.trainer,
       images_data_url: config.imagesDataUrl,
@@ -108,9 +101,7 @@ export async function checkTrainingStatus(
   requestId: string,
   trainer: TrainerType
 ): Promise<TrainingStatusResult> {
-  const response = await fetch(`${API_URL}/api/training/status/${requestId}?trainer=${trainer}`, {
-    credentials: 'include'
-  });
+  const response = await apiFetch(`${API_URL}/api/training/status/${requestId}?trainer=${trainer}`);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: `HTTP error: ${response.status}` }));
@@ -127,9 +118,7 @@ export async function getTrainingResult(
   requestId: string,
   trainer: TrainerType
 ): Promise<TrainingResult> {
-  const response = await fetch(`${API_URL}/api/training/result/${requestId}?trainer=${trainer}`, {
-    credentials: 'include'
-  });
+  const response = await apiFetch(`${API_URL}/api/training/result/${requestId}?trainer=${trainer}`);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: `HTTP error: ${response.status}` }));
@@ -150,9 +139,7 @@ export async function getTrainedModels(
   if (userIdentity.userId) params.set('userId', userIdentity.userId);
   if (userIdentity.email) params.set('email', userIdentity.email);
 
-  const response = await fetch(`${API_URL}/api/training/models?${params}`, {
-    credentials: 'include'
-  });
+  const response = await apiFetch(`${API_URL}/api/training/models?${params}`);
 
   if (!response.ok) {
     // Return empty array on error rather than crashing
@@ -171,15 +158,8 @@ export async function deleteTrainedModel(
   modelId: string,
   userIdentity: { walletAddress?: string; userId?: string; email?: string }
 ): Promise<void> {
-  const csrfToken = await ensureCSRFToken();
-
-  const response = await fetch(`${API_URL}/api/training/models/${modelId}`, {
+  const response = await apiFetch(`${API_URL}/api/training/models/${modelId}`, {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(csrfToken && { 'X-CSRF-Token': csrfToken })
-    },
-    credentials: 'include',
     body: JSON.stringify(userIdentity)
   });
 

@@ -317,8 +317,8 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
   };
 
   const handleDeleteAgent = useCallback(async (agentId: string) => {
-    if (await deleteCustomAgent(agentId)) setCustomAgents(prev => prev.filter(a => a.agentId !== agentId));
-  }, []);
+    if (await deleteCustomAgent(agentId, address || undefined)) setCustomAgents(prev => prev.filter(a => a.agentId !== agentId));
+  }, [address]);
 
   // Derive which tab(s) an agent's tools map to, then enable them and navigate
   const handleUseAgent = useCallback((agent: CustomAgent) => {

@@ -4,7 +4,7 @@
  * Uses Claude to understand user intent and trigger appropriate generation actions
  */
 
-import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, apiFetch } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
 export interface ChatMessage {
@@ -167,8 +167,6 @@ export async function sendChatMessage(
   model?: string
 ): Promise<ChatResponse> {
   try {
-    const csrfToken = await ensureCSRFToken();
-    
     // Find the last generated image from history for edit context
     // Look backwards through history for the most recent image generation
     let lastGeneratedImageUrl: string | undefined;
@@ -188,13 +186,8 @@ export async function sendChatMessage(
       ? (Array.isArray(referenceImages) ? referenceImages : [referenceImages])
       : [];
     
-    const response = await fetch(`${API_URL}/api/chat-assistant/message`, {
+    const response = await apiFetch(`${API_URL}/api/chat-assistant/message`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
-      },
-      credentials: 'include',
       body: JSON.stringify({
         message,
         history: history.slice(-20).map(m => ({ 
@@ -264,8 +257,6 @@ export async function executeGeneration(
   context: ChatContext
 ): Promise<ChatResponse> {
   try {
-    const csrfToken = await ensureCSRFToken();
-    
     // Map frontend 'type' field back to backend 'action' field
     const backendAction = {
       action: action.type,  // Backend expects 'action', frontend uses 'type'
@@ -274,13 +265,8 @@ export async function executeGeneration(
       description: action.description
     };
     
-    const response = await fetch(`${API_URL}/api/chat-assistant/generate`, {
+    const response = await apiFetch(`${API_URL}/api/chat-assistant/generate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
-      },
-      credentials: 'include',
       body: JSON.stringify({
         action: backendAction,
         context
@@ -398,16 +384,11 @@ export async function sendAgenticMessage(
   onEvent?: (event: AgenticEvent) => void
 ): Promise<AgenticResponse> {
   try {
-    const csrfToken = await ensureCSRFToken();
-
-    const response = await fetch(`${API_URL}/api/chat-assistant/agent-message`, {
+    const response = await apiFetch(`${API_URL}/api/chat-assistant/agent-message`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         Accept: onEvent ? 'text/event-stream' : 'application/json',
-        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
-      },
-      credentials: 'include',
+      } as Record<string, string>,
       body: JSON.stringify({
         message,
         history: history.slice(-20).map(m => ({

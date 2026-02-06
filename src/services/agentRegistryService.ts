@@ -3,7 +3,7 @@
  * Frontend service for interacting with ERC-8004 agent registry
  */
 import logger from '../utils/logger';
-import { API_URL, ensureCSRFToken, getCSRFToken } from '../utils/apiConfig';
+import { API_URL, apiFetch } from '../utils/apiConfig';
 
 // Types
 export interface AgentService {
@@ -63,15 +63,7 @@ export interface ContractStatus {
  */
 export async function getContractStatus(): Promise<ContractStatus> {
   try {
-    await ensureCSRFToken();
-    
-    const response = await fetch(`${API_URL}/api/agents/status`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(`${API_URL}/api/agents/status`);
 
     const data = await response.json();
     
@@ -91,15 +83,7 @@ export async function getContractStatus(): Promise<ContractStatus> {
  */
 export async function getAgentDefinitions(): Promise<AgentDefinition[]> {
   try {
-    await ensureCSRFToken();
-    
-    const response = await fetch(`${API_URL}/api/agents/definitions`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(`${API_URL}/api/agents/definitions`);
 
     const data = await response.json();
     
@@ -119,15 +103,7 @@ export async function getAgentDefinitions(): Promise<AgentDefinition[]> {
  */
 export async function getAgentInfo(agentId: number): Promise<RegisteredAgent | null> {
   try {
-    await ensureCSRFToken();
-    
-    const response = await fetch(`${API_URL}/api/agents/${agentId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(`${API_URL}/api/agents/${agentId}`);
 
     const data = await response.json();
     
@@ -147,15 +123,7 @@ export async function getAgentInfo(agentId: number): Promise<RegisteredAgent | n
  */
 export async function getAgentsByOwner(ownerAddress: string): Promise<RegisteredAgent[]> {
   try {
-    await ensureCSRFToken();
-    
-    const response = await fetch(`${API_URL}/api/agents/owner/${ownerAddress}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(`${API_URL}/api/agents/owner/${ownerAddress}`);
 
     const data = await response.json();
     
@@ -175,15 +143,7 @@ export async function getAgentsByOwner(ownerAddress: string): Promise<Registered
  */
 export async function getAgentReputation(agentId: number): Promise<AgentReputationSummary | null> {
   try {
-    await ensureCSRFToken();
-    
-    const response = await fetch(`${API_URL}/api/agents/${agentId}/reputation`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(`${API_URL}/api/agents/${agentId}/reputation`);
 
     const data = await response.json();
     
@@ -212,16 +172,8 @@ export async function generateAgentURI(
   }
 ): Promise<{ registration: AgentRegistration; agentURI: string } | null> {
   try {
-    await ensureCSRFToken();
-    
-    const csrfToken = getCSRFToken();
-    const response = await fetch(`${API_URL}/api/agents/generate-uri`, {
+    const response = await apiFetch(`${API_URL}/api/agents/generate-uri`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-      },
-      credentials: 'include',
       body: JSON.stringify({
         name,
         description,
@@ -289,17 +241,10 @@ export async function createAgent(agentData: {
   services?: AgentService[];
   skillMd?: string;
   systemPrompt?: string;
+  walletAddress?: string;
 }): Promise<{ agent: RegisteredAgent; agentURI: string; skillMd: string }> {
-  await ensureCSRFToken();
-  
-  const csrfToken = getCSRFToken();
-  const response = await fetch(`${API_URL}/api/agents/create`, {
+  const response = await apiFetch(`${API_URL}/api/agents/create`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-    },
-    credentials: 'include',
     body: JSON.stringify(agentData),
   });
 
@@ -321,15 +266,7 @@ export async function createAgent(agentData: {
  */
 export async function getCustomAgents(ownerAddress: string): Promise<RegisteredAgent[]> {
   try {
-    await ensureCSRFToken();
-    
-    const response = await fetch(`${API_URL}/api/agents/custom/${ownerAddress}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
+    const response = await apiFetch(`${API_URL}/api/agents/custom/${ownerAddress}`);
 
     const data = await response.json();
     
@@ -347,18 +284,16 @@ export async function getCustomAgents(ownerAddress: string): Promise<RegisteredA
 /**
  * Delete a custom agent
  */
-export async function deleteCustomAgent(agentId: string): Promise<boolean> {
+export async function deleteCustomAgent(agentId: string, walletAddress?: string): Promise<boolean> {
   try {
-    await ensureCSRFToken();
-    
-    const csrfToken = getCSRFToken();
-    const response = await fetch(`${API_URL}/api/agents/custom/${agentId}`, {
+    const headers: Record<string, string> = {};
+    if (walletAddress) {
+      headers['x-wallet-address'] = walletAddress;
+    }
+
+    const response = await apiFetch(`${API_URL}/api/agents/custom/${agentId}`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-      },
-      credentials: 'include',
+      headers,
     });
 
     const data = await response.json();

@@ -2,9 +2,55 @@
  * Agent routes
  * API endpoints for managing Seisoai's ERC-8004 registered agents
  */
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import jwt, { type JwtPayload } from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import logger from '../utils/logger';
+import { isTokenBlacklisted } from '../middleware/auth';
 import CustomAgent, { type ICustomAgent } from '../models/CustomAgent';
+import type { IUser } from '../models/User';
+import config from '../config/env';
+
+interface JWTDecoded extends JwtPayload {
+  userId?: string;
+  email?: string;
+  type?: string;
+}
+
+/**
+ * Optional auth middleware: tries JWT auth to set req.user,
+ * but always calls next() so wallet-only users can still proceed.
+ * The route handler is responsible for requiring wallet address.
+ */
+const optionalAuth = async (req: Request & { user?: IUser }, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token && config.JWT_SECRET) {
+      const blacklisted = await isTokenBlacklisted(token);
+      if (!blacklisted) {
+        const decoded = jwt.verify(token, config.JWT_SECRET) as JWTDecoded;
+        if (decoded.type !== 'refresh') {
+          const User = mongoose.model<IUser>('User');
+          let user = null;
+          if (decoded.userId) {
+            user = await User.findOne({ userId: decoded.userId }).select('-password');
+          }
+          if (!user && decoded.email) {
+            user = await User.findOne({ email: decoded.email.toLowerCase().trim() }).select('-password');
+          }
+          if (user) {
+            req.user = user;
+          }
+        }
+      }
+    }
+  } catch {
+    // JWT auth failed — that's fine, route will check for wallet address
+  }
+  next();
+};
 import { toolRegistry } from '../services/toolRegistry';
 import { getTrace, getTracesForUser } from '../services/agentTracer';
 import {
@@ -226,19 +272,21 @@ router.get('/:agentId/reputation', async (req: Request, res: Response) => {
 /**
  * Create a custom user agent
  * POST /api/agents/create
- * Body: { name, description, type, tools, image?, services?, skillMd? }
- * Requires wallet address in session
+ * Body: { name, description, type, tools, image?, services?, skillMd?, walletAddress? }
+ * Requires authentication (JWT) or wallet address in body/header
  */
-router.post('/create', async (req: Request, res: Response) => {
+router.post('/create', optionalAuth, async (req: Request, res: Response) => {
   try {
-    const { name, description, type, tools, image, services, skillMd, systemPrompt } = req.body;
+    const { name, description, type, tools, image, services, skillMd, systemPrompt, walletAddress: bodyWallet } = req.body;
 
-    // Get wallet address from session
-    const walletAddress = (req as unknown as Record<string, unknown>).walletAddress as string
+    // Get wallet address: JWT user first, then body, then header
+    const user = (req as Request & { user?: IUser }).user;
+    const walletAddress = user?.walletAddress
+      || bodyWallet as string
       || req.headers['x-wallet-address'] as string;
 
     if (!walletAddress) {
-      res.status(401).json({ success: false, error: 'Authentication required' });
+      res.status(401).json({ success: false, error: 'Wallet address required. Please connect your wallet.' });
       return;
     }
 
@@ -356,14 +404,15 @@ router.get('/custom/:address', async (req: Request, res: Response) => {
  * Delete a custom agent
  * DELETE /api/agents/custom/:agentId
  */
-router.delete('/custom/:agentId', async (req: Request, res: Response) => {
+router.delete('/custom/:agentId', optionalAuth, async (req: Request, res: Response) => {
   try {
     const { agentId } = req.params;
-    const walletAddress = (req as unknown as Record<string, unknown>).walletAddress as string
+    const user = (req as Request & { user?: IUser }).user;
+    const walletAddress = user?.walletAddress
       || req.headers['x-wallet-address'] as string;
 
     if (!walletAddress) {
-      res.status(401).json({ success: false, error: 'Authentication required' });
+      res.status(401).json({ success: false, error: 'Wallet address required. Please connect your wallet.' });
       return;
     }
 

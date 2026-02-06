@@ -287,6 +287,7 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ isOpen, onClose, onCreated,
         tools: selectedTools,
         skillMd: editedSkillMd || generatedSkillMd,
         systemPrompt: systemPrompt || undefined,
+        walletAddress: address || undefined,
       });
 
       setCreateSuccess(true);
