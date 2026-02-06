@@ -3,16 +3,19 @@
  * Public-facing marketplace page for discovering SeisoAI's AI capabilities
  * Shows all available tools, pricing, API docs, and API key management
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import {
   Bot, Key, Zap, DollarSign, Code, Copy, Check, Plus,
   Trash2, RefreshCw, ExternalLink, Search, Tag,
-  Image, Film, Music, Mic, Box, Eye, Cpu, Wrench
+  Image, Film, Music, Mic, Box, Eye, Cpu, Wrench, Download
 } from 'lucide-react';
-import { BTN, PANEL, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
+import { BTN, PANEL, hoverHandlers, WINDOW_TITLE_STYLE, WIN95 } from '../utils/buttonStyles';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { getCustomAgents, deleteCustomAgent } from '../services/agentRegistryService';
 import { API_URL, getAuthToken, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
+
+const AgentCreator = lazy(() => import('./AgentCreator'));
 
 // Types
 interface ToolPricing {
@@ -75,8 +78,19 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'text-generation': <Code size={14} />,
 };
 
+// Custom agent type
+interface CustomAgent {
+  agentId: string;
+  name: string;
+  description: string;
+  type: string;
+  tools: string[];
+  skillMd?: string;
+  createdAt: string;
+}
+
 const AgentMarketplace: React.FC = () => {
-  const { isConnected } = useSimpleWallet();
+  const { isConnected, address } = useSimpleWallet();
   const [activeTab, setActiveTab] = useState<'tools' | 'api-keys' | 'docs'>('tools');
   const [tools, setTools] = useState<ToolSummary[]>([]);
   const [apiKeys, setApiKeys] = useState<ApiKeyInfo[]>([]);
@@ -89,6 +103,39 @@ const AgentMarketplace: React.FC = () => {
   const [newKeyWebhook, setNewKeyWebhook] = useState('');
   const [createdKey, setCreatedKey] = useState<NewKeyResponse | null>(null);
   const [isCreatingKey, setIsCreatingKey] = useState(false);
+
+  // Agent Creator state
+  const [showAgentCreator, setShowAgentCreator] = useState(false);
+  const [customAgents, setCustomAgents] = useState<CustomAgent[]>([]);
+
+  // Fetch custom agents
+  const fetchCustomAgents = useCallback(async () => {
+    if (!address) return;
+    try {
+      const agents = await getCustomAgents(address);
+      setCustomAgents(agents as unknown as CustomAgent[]);
+    } catch (error) {
+      logger.error('Failed to fetch custom agents', { error });
+    }
+  }, [address]);
+
+  const handleDeleteAgent = useCallback(async (agentId: string) => {
+    const success = await deleteCustomAgent(agentId);
+    if (success) {
+      setCustomAgents((prev) => prev.filter((a) => a.agentId !== agentId));
+    }
+  }, []);
+
+  const handleDownloadSkillMd = useCallback((agent: CustomAgent) => {
+    if (!agent.skillMd) return;
+    const blob = new Blob([agent.skillMd], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'SKILL.md';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
 
   // Fetch tools from gateway
   const fetchTools = useCallback(async () => {
@@ -125,9 +172,12 @@ const AgentMarketplace: React.FC = () => {
 
   useEffect(() => {
     setIsLoading(true);
-    Promise.all([fetchTools(), isConnected ? fetchApiKeys() : Promise.resolve()])
-      .finally(() => setIsLoading(false));
-  }, [fetchTools, fetchApiKeys, isConnected]);
+    Promise.all([
+      fetchTools(),
+      isConnected ? fetchApiKeys() : Promise.resolve(),
+      isConnected ? fetchCustomAgents() : Promise.resolve(),
+    ]).finally(() => setIsLoading(false));
+  }, [fetchTools, fetchApiKeys, fetchCustomAgents, isConnected]);
 
   // Create API key
   const handleCreateKey = async () => {
@@ -226,7 +276,7 @@ const AgentMarketplace: React.FC = () => {
         </div>
 
         {/* Tab Bar */}
-        <div className="flex gap-0 px-2 pt-1" style={{ background: 'var(--win95-bg)' }}>
+        <div className="flex gap-0 px-2 pt-1 items-end" style={{ background: 'var(--win95-bg)' }}>
           {tabs.map(tab => (
             <button
               key={tab.id}
@@ -248,6 +298,21 @@ const AgentMarketplace: React.FC = () => {
               {tab.label}
             </button>
           ))}
+          <div className="flex-1" />
+          {isConnected && (
+            <button
+              onClick={() => setShowAgentCreator(true)}
+              className="flex items-center gap-1 px-3 py-1 text-[11px] font-bold mb-0.5 generate-btn"
+              style={{
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+              }}
+            >
+              <Plus size={12} />
+              Create Agent
+            </button>
+          )}
         </div>
 
         {/* Content Area */}
@@ -721,8 +786,80 @@ const AgentMarketplace: React.FC = () => {
               </div>
             </div>
           )}
+          {/* MY AGENTS SECTION */}
+          {isConnected && customAgents.length > 0 && (
+            <div className="mt-3 pt-3" style={{ borderTop: `1px solid var(--win95-bg-dark)` }}>
+              <div className="flex items-center gap-2 mb-2">
+                <Bot size={14} style={{ color: WIN95.highlight }} />
+                <span className="text-[12px] font-bold" style={{ color: WIN95.text }}>
+                  My Agents ({customAgents.length})
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {customAgents.map((agent) => (
+                  <div
+                    key={agent.agentId}
+                    className="p-3"
+                    style={{
+                      background: WIN95.inputBg,
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                    }}
+                  >
+                    <div className="flex items-start justify-between mb-1">
+                      <div>
+                        <div className="text-[11px] font-bold" style={{ color: WIN95.text }}>
+                          {agent.name}
+                        </div>
+                        <div className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                          {agent.type} — {agent.tools?.length || 0} tools
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        {agent.skillMd && (
+                          <button
+                            onClick={() => handleDownloadSkillMd(agent)}
+                            className="p-1"
+                            style={{ ...BTN.base }}
+                            title="Download SKILL.md"
+                            {...hoverHandlers}
+                          >
+                            <Download size={10} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteAgent(agent.agentId)}
+                          className="p-1"
+                          style={{ ...BTN.base }}
+                          title="Delete agent"
+                          {...hoverHandlers}
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                      {agent.description?.slice(0, 80)}{agent.description?.length > 80 ? '...' : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Agent Creator Modal */}
+      {showAgentCreator && (
+        <Suspense fallback={null}>
+          <AgentCreator
+            isOpen={showAgentCreator}
+            onClose={() => setShowAgentCreator(false)}
+            onCreated={() => {
+              fetchCustomAgents();
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

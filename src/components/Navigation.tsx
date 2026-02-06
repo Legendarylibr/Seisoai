@@ -1,11 +1,14 @@
-import { useState, useEffect, useRef, memo, useCallback, ReactNode } from 'react';
-import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, Clock, Gift, Trophy, Globe, type LucideIcon } from 'lucide-react';
+import { useState, useEffect, useRef, memo, useCallback, ReactNode, lazy, Suspense } from 'react';
+import { Zap, Coins, ChevronDown, Wallet, RefreshCw, LogOut, Clock, Gift, Trophy, Globe, Settings, type LucideIcon } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useLanguage, type Language } from '../i18n';
+import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import ReferralDashboard from './ReferralDashboard';
 import AchievementBadge from './AchievementBadge';
 import { WIN95, BTN, PANEL, TITLEBAR, formatAddress } from '../utils';
 import logger from '../utils/logger';
+
+const SettingsPanel = lazy(() => import('./SettingsPanel'));
 
 // System tray clock component
 const SystemClock = memo(function SystemClock() {
@@ -94,6 +97,7 @@ interface NavigationProps {
 const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment }: NavigationProps) => {
   const walletContext = useSimpleWallet();
   const { language, setLanguage, t } = useLanguage();
+  const { openSettings, isSettingsOpen } = useUserPreferences();
   
   const isConnected = walletContext.isConnected;
   const address = walletContext.address;
@@ -482,6 +486,23 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment }: 
                   )}
                 </div>
                 
+                {/* Settings Button */}
+                {isConnected && (
+                  <button
+                    onClick={openSettings}
+                    className="flex items-center justify-center p-1.5"
+                    style={{
+                      background: WIN95.bg,
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                    title="Settings"
+                  >
+                    <Settings className="w-3.5 h-3.5" style={{ color: WIN95.text }} />
+                  </button>
+                )}
+
                 {/* System Tray Clock */}
                 <SystemClock />
               </div>
@@ -679,6 +700,11 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment }: 
 
       {isConnected && <ReferralDashboard isOpen={showReferralDashboard} onClose={() => setShowReferralDashboard(false)} />}
       {isConnected && <AchievementBadge isOpen={showAchievements} onClose={() => setShowAchievements(false)} />}
+      {isSettingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsPanel />
+        </Suspense>
+      )}
     </header>
   );
 });

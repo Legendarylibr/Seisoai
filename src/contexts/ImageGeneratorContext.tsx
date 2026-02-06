@@ -320,10 +320,17 @@ const imageGeneratorReducer = (state: ImageGeneratorState, action: ImageGenerato
 
 interface ImageGeneratorProviderProps {
   children: ReactNode;
+  defaultModel?: string | null;
+  defaultOptimizePrompt?: boolean;
 }
 
-export const ImageGeneratorProvider: React.FC<ImageGeneratorProviderProps> = ({ children }) => {
-  const [state, dispatch] = useReducer(imageGeneratorReducer, undefined, getInitialState);
+export const ImageGeneratorProvider: React.FC<ImageGeneratorProviderProps> = ({ children, defaultModel, defaultOptimizePrompt }) => {
+  const [state, dispatch] = useReducer(imageGeneratorReducer, undefined, () => {
+    const initial = getInitialState();
+    if (defaultModel) initial.generationMode = defaultModel;
+    if (defaultOptimizePrompt !== undefined) initial.optimizePrompt = defaultOptimizePrompt;
+    return initial;
+  });
 
   // Listen for user auth events to manage gallery
   useEffect(() => {

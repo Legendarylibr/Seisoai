@@ -161,6 +161,158 @@ router.get('/:agentId/reputation', async (req: Request, res: Response) => {
 });
 
 /**
+ * Create a custom user agent
+ * POST /api/agents/create
+ * Body: { name, description, type, tools, image?, services?, skillMd? }
+ * Requires wallet address in session
+ */
+router.post('/create', async (req: Request, res: Response) => {
+  try {
+    const { name, description, type, tools, image, services, skillMd } = req.body;
+
+    // Get wallet address from session
+    const walletAddress = (req as Record<string, unknown>).walletAddress as string
+      || req.headers['x-wallet-address'] as string;
+
+    if (!walletAddress) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
+    }
+
+    // Validate required fields
+    if (!name || typeof name !== 'string' || name.length < 1 || name.length > 64) {
+      res.status(400).json({ success: false, error: 'Name is required (1-64 characters)' });
+      return;
+    }
+    if (!description || typeof description !== 'string' || description.length < 1 || description.length > 256) {
+      res.status(400).json({ success: false, error: 'Description is required (1-256 characters)' });
+      return;
+    }
+    const validTypes = ['Image Generation', 'Video Generation', 'Music Generation', 'Chat/Assistant', 'Multi-Modal', 'Custom'];
+    if (!type || !validTypes.includes(type)) {
+      res.status(400).json({ success: false, error: `Type must be one of: ${validTypes.join(', ')}` });
+      return;
+    }
+    if (!tools || !Array.isArray(tools) || tools.length === 0) {
+      res.status(400).json({ success: false, error: 'At least one tool must be selected' });
+      return;
+    }
+
+    // Generate agent URI
+    const registration = {
+      type: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1',
+      name,
+      description,
+      image: image || 'https://seisoai.com/seiso-logo.png',
+      services: services || [
+        { name: 'web', endpoint: 'https://seisoai.com/' },
+        { name: 'gateway', endpoint: 'https://seisoai.com/api/gateway' },
+        { name: 'mcp', endpoint: 'https://seisoai.com/api/mcp' },
+      ],
+      x402Support: true,
+      x402Config: { network: 'eip155:8453', asset: 'USDC' },
+      active: true,
+      supportedTrust: ['reputation'],
+      tools,
+    };
+
+    const agentURI = createAgentURI(registration);
+    const agentId = `custom-${walletAddress.slice(2, 8)}-${Date.now()}`;
+
+    // Store in a simple in-memory map for now (upgrade to MongoDB when needed)
+    // In production, save to a UserAgent collection
+    const agent = {
+      agentId,
+      name,
+      description,
+      type,
+      tools,
+      owner: walletAddress,
+      agentURI,
+      registration,
+      skillMd: skillMd || '',
+      createdAt: new Date().toISOString(),
+      isCustom: true,
+    };
+
+    // Store in global map (persists per server instance)
+    if (!globalThis._customAgents) {
+      (globalThis as Record<string, unknown>)._customAgents = new Map();
+    }
+    const agentsMap = (globalThis as Record<string, unknown>)._customAgents as Map<string, unknown[]>;
+    const ownerAgents = agentsMap.get(walletAddress) || [];
+    ownerAgents.push(agent);
+    agentsMap.set(walletAddress, ownerAgents);
+
+    logger.info('Custom agent created', { agentId, name, owner: walletAddress, toolCount: tools.length });
+
+    res.json({
+      success: true,
+      agent,
+      agentURI,
+      skillMd: skillMd || '',
+    });
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to create custom agent', { error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to create agent' });
+  }
+});
+
+/**
+ * Get custom agents for an owner
+ * GET /api/agents/custom/:address
+ */
+router.get('/custom/:address', async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+    if (!address || !address.startsWith('0x')) {
+      res.status(400).json({ success: false, error: 'Invalid address' });
+      return;
+    }
+
+    const agentsMap = (globalThis as Record<string, unknown>)._customAgents as Map<string, unknown[]> | undefined;
+    const agents = agentsMap?.get(address) || [];
+
+    res.json({ success: true, agents, count: agents.length });
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to get custom agents', { error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to get custom agents' });
+  }
+});
+
+/**
+ * Delete a custom agent
+ * DELETE /api/agents/custom/:agentId
+ */
+router.delete('/custom/:agentId', async (req: Request, res: Response) => {
+  try {
+    const { agentId } = req.params;
+    const walletAddress = (req as Record<string, unknown>).walletAddress as string
+      || req.headers['x-wallet-address'] as string;
+
+    if (!walletAddress) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
+    }
+
+    const agentsMap = (globalThis as Record<string, unknown>)._customAgents as Map<string, Array<{ agentId: string }>>;
+    if (agentsMap) {
+      const ownerAgents = agentsMap.get(walletAddress) || [];
+      const filtered = ownerAgents.filter((a) => a.agentId !== agentId);
+      agentsMap.set(walletAddress, filtered);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to delete custom agent', { error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to delete agent' });
+  }
+});
+
+/**
  * Generate agent URI for registration
  * POST /api/agents/generate-uri
  * Body: { name, description, image?, services?, active?, supportedTrust? }

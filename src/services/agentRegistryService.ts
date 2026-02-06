@@ -275,6 +275,98 @@ export function getExplorerUrl(chainId: number, address: string): string {
   return `${explorers[chainId] || 'https://etherscan.io/address/'}${address}`;
 }
 
+/**
+ * Create a custom AI agent
+ */
+export async function createAgent(agentData: {
+  name: string;
+  description: string;
+  type: string;
+  image?: string;
+  tools: string[];
+  services?: AgentService[];
+  skillMd?: string;
+}): Promise<{ agent: RegisteredAgent; agentURI: string; skillMd: string } | null> {
+  try {
+    await ensureCSRFToken();
+    
+    const response = await fetch(`${API_URL}/api/agents/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify(agentData),
+    });
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to create agent');
+    }
+
+    return {
+      agent: data.agent,
+      agentURI: data.agentURI,
+      skillMd: data.skillMd,
+    };
+  } catch (error) {
+    logger.error('Failed to create agent', { error });
+    return null;
+  }
+}
+
+/**
+ * Get custom agents for the connected wallet
+ */
+export async function getCustomAgents(ownerAddress: string): Promise<RegisteredAgent[]> {
+  try {
+    await ensureCSRFToken();
+    
+    const response = await fetch(`${API_URL}/api/agents/custom/${ownerAddress}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      return [];
+    }
+
+    return data.agents;
+  } catch (error) {
+    logger.error('Failed to get custom agents', { error });
+    return [];
+  }
+}
+
+/**
+ * Delete a custom agent
+ */
+export async function deleteCustomAgent(agentId: string): Promise<boolean> {
+  try {
+    await ensureCSRFToken();
+    
+    const response = await fetch(`${API_URL}/api/agents/custom/${agentId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
+
+    const data = await response.json();
+    return data.success === true;
+  } catch (error) {
+    logger.error('Failed to delete custom agent', { error });
+    return false;
+  }
+}
+
 export default {
   getContractStatus,
   getAgentDefinitions,
@@ -282,6 +374,9 @@ export default {
   getAgentsByOwner,
   getAgentReputation,
   generateAgentURI,
+  createAgent,
+  getCustomAgents,
+  deleteCustomAgent,
   getChainName,
   getExplorerUrl,
 };

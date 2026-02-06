@@ -3,6 +3,7 @@ import type { ReactNode, ErrorInfo } from 'react';
 import logger from './utils/logger';
 import { ImageGeneratorProvider } from './contexts/ImageGeneratorContext';
 import { SimpleWalletProvider, useSimpleWallet } from './contexts/SimpleWalletContext';
+import { UserPreferencesProvider, useUserPreferences } from './contexts/UserPreferencesContext';
 import { WalletProvider } from './providers/WalletProvider';
 import { LanguageProvider, useLanguage } from './i18n';
 import SimpleWalletConnect from './components/SimpleWalletConnect';
@@ -141,8 +142,9 @@ function Win95LoadingFallback({ text }: { text: string }): JSX.Element {
   );
 }
 
-function AppContent(): JSX.Element {
-  const [activeTab, setActiveTab] = useState('chat');
+function AppContentInner(): JSX.Element {
+  const { preferences } = useUserPreferences();
+  const [activeTab, setActiveTab] = useState(preferences.defaultTab || 'chat');
   const { t } = useLanguage();
 
   const tabs: Tab[] = [
@@ -159,15 +161,26 @@ function AppContent(): JSX.Element {
   ];
 
   return (
+    <ImageGeneratorProvider
+      defaultModel={preferences.defaultModel}
+      defaultOptimizePrompt={preferences.defaultOptimizePrompt}
+    >
+      <AppWithCreditsCheck 
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        tabs={tabs}
+      />
+    </ImageGeneratorProvider>
+  );
+}
+
+function AppContent(): JSX.Element {
+  return (
     <WalletProvider>
       <SimpleWalletProvider>
-        <ImageGeneratorProvider>
-          <AppWithCreditsCheck 
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            tabs={tabs}
-          />
-        </ImageGeneratorProvider>
+        <UserPreferencesProvider>
+          <AppContentInner />
+        </UserPreferencesProvider>
       </SimpleWalletProvider>
     </WalletProvider>
   );
@@ -258,7 +271,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         {activeTab === 'chat' && (
           <ErrorBoundary fallbackText="Chat encountered an error">
             <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-              <AuthGuard>
+              <AuthGuard onNavigate={setActiveTab}>
                 <Suspense fallback={<Win95LoadingFallback text="Loading Chat Assistant..." />}>
                   <ChatAssistant />
                 </Suspense>
@@ -270,7 +283,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         {activeTab === 'generate' && (
           <ErrorBoundary fallbackText="Image generator encountered an error">
           <div className="container mx-auto max-w-7xl" style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-            <AuthGuard>
+            <AuthGuard onNavigate={setActiveTab}>
               <div className="h-full flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2">
                 {/* Left Column - Controls */}
                 <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
@@ -332,7 +345,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         {activeTab === 'batch' && (
           <ErrorBoundary fallbackText="Batch generator encountered an error">
           <div className="container mx-auto max-w-7xl" style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-            <AuthGuard>
+            <AuthGuard onNavigate={setActiveTab}>
               <div className="h-full flex flex-col lg:flex-row gap-0.5 sm:gap-1.5 lg:gap-2">
                 {/* Left Column - Batch Controls */}
                 <div className="lg:w-[42%] flex flex-col min-h-0 flex-shrink-0">
@@ -384,7 +397,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         {activeTab === 'video' && (
           <ErrorBoundary fallbackText="Video generator encountered an error">
             <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-              <AuthGuard>
+              <AuthGuard onNavigate={setActiveTab}>
                 <Suspense fallback={<Win95LoadingFallback text="Loading Video Generator..." />}>
                   <VideoGenerator 
                     onModelChange={setVideoModel}
@@ -399,7 +412,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         {activeTab === 'music' && (
           <ErrorBoundary fallbackText="Music generator encountered an error">
             <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-              <AuthGuard>
+              <AuthGuard onNavigate={setActiveTab}>
                 <Suspense fallback={<Win95LoadingFallback text="Loading Music Generator..." />}>
                   <MusicGenerator />
                 </Suspense>
@@ -411,7 +424,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         {activeTab === 'training' && (
           <ErrorBoundary fallbackText="Model training encountered an error">
             <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-              <AuthGuard>
+              <AuthGuard onNavigate={setActiveTab}>
                 <Suspense fallback={<Win95LoadingFallback text="Loading Model Training..." />}>
                   <ModelTraining />
                 </Suspense>
@@ -441,7 +454,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         {activeTab === 'gallery' && (
           <ErrorBoundary fallbackText="Gallery encountered an error">
             <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-              <AuthGuard>
+              <AuthGuard onNavigate={setActiveTab}>
                 <Suspense fallback={<Win95LoadingFallback text="Loading Gallery..." />}>
                   <ImageGallery />
                 </Suspense>

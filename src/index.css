@@ -106,6 +106,81 @@ html, body {
   --win95-error-text: #800000;
   --win95-success-text: #008000;
   --win95-warning-text: #808000;
+  
+  /* Info panel colors (auth page) */
+  --win95-info-yellow: #ffffc8;
+  --win95-info-green: #c8ffc8;
+}
+
+/* Dark mode info panel overrides */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --win95-info-yellow: #3a3520;
+    --win95-info-green: #203520;
+  }
+}
+
+/* Theme class overrides (user preference) */
+.theme-light {
+  --win95-bg: #c0c0c0;
+  --win95-bg-light: #dfdfdf;
+  --win95-bg-dark: #808080;
+  --win95-border-light: #ffffff;
+  --win95-border-dark: #404040;
+  --win95-border-darker: #000000;
+  --win95-text: #000000;
+  --win95-text-disabled: #808080;
+  --win95-highlight: #000080;
+  --win95-highlight-text: #ffffff;
+  --win95-input-bg: #ffffff;
+  --win95-button-face: #c0c0c0;
+  --win95-info-yellow: #ffffc8;
+  --win95-info-green: #c8ffc8;
+  --win95-active-title: linear-gradient(90deg, #000080 0%, #1084d0 100%);
+  --win95-panel-bg: var(--win95-bg);
+  --win95-window-content-bg: #ffffff;
+}
+
+.theme-dark {
+  --win95-bg: #3a3a3a;
+  --win95-bg-light: #505050;
+  --win95-bg-dark: #252525;
+  --win95-border-light: #606060;
+  --win95-border-dark: #252525;
+  --win95-border-darker: #000000;
+  --win95-text: #f0f0f0;
+  --win95-text-disabled: #909090;
+  --win95-highlight: #5090d0;
+  --win95-highlight-text: #ffffff;
+  --win95-input-bg: #2a2a2a;
+  --win95-button-face: #3a3a3a;
+  --win95-info-yellow: #3a3520;
+  --win95-info-green: #203520;
+  --win95-active-title: linear-gradient(90deg, #2a5a7e 0%, #3090d0 100%);
+  --win95-panel-bg: #404040;
+  --win95-window-content-bg: #333333;
+  --win95-teal: #0d3a4e;
+}
+
+.theme-high-contrast {
+  --win95-bg: #000000;
+  --win95-bg-light: #1a1a1a;
+  --win95-bg-dark: #000000;
+  --win95-border-light: #ffffff;
+  --win95-border-dark: #ffffff;
+  --win95-border-darker: #ffffff;
+  --win95-text: #ffffff;
+  --win95-text-disabled: #808080;
+  --win95-highlight: #ffff00;
+  --win95-highlight-text: #000000;
+  --win95-input-bg: #000000;
+  --win95-button-face: #000000;
+  --win95-info-yellow: #333300;
+  --win95-info-green: #003300;
+  --win95-active-title: linear-gradient(90deg, #000080 0%, #0060a0 100%);
+  --win95-panel-bg: #000000;
+  --win95-window-content-bg: #000000;
+  --win95-teal: #000000;
 }
 
 @layer base {
@@ -916,6 +991,73 @@ html, body {
   @keyframes win95Marquee {
     0% { transform: translateX(100%); }
     100% { transform: translateX(-100%); }
+  }
+
+  /* ===== AI AGENT AUTH PAGE ANIMATIONS ===== */
+  
+  /* Agent status dot - pulsing green indicator */
+  @keyframes agent-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .agent-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--win95-success-text, #008000);
+    animation: agent-pulse 2s ease-in-out infinite;
+  }
+  
+  /* Typewriter cursor */
+  @keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+  .typewriter-cursor {
+    display: inline-block;
+    width: 7px;
+    height: 13px;
+    background: var(--win95-text);
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    animation: cursor-blink 0.8s step-end infinite;
+  }
+  
+  /* Staggered content reveals */
+  @keyframes agent-reveal {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .agent-reveal-1 { animation: agent-reveal 0.3s ease-out 0.2s both; }
+  .agent-reveal-2 { animation: agent-reveal 0.3s ease-out 0.5s both; }
+  .agent-reveal-3 { animation: agent-reveal 0.3s ease-out 0.8s both; }
+  .agent-reveal-4 { animation: agent-reveal 0.3s ease-out 1.2s both; }
+  .agent-reveal-5 { animation: agent-reveal 0.3s ease-out 1.6s both; }
+  
+  /* CTA pulse glow */
+  @keyframes cta-glow {
+    0%, 100% {
+      box-shadow:
+        inset 1px 1px 0 #5dba5d,
+        inset -1px -1px 0 #0d4a0d,
+        inset 2px 2px 0 #4daa4d,
+        inset -2px -2px 0 #1d6a1d,
+        2px 2px 0 rgba(0, 0, 0, 0.3),
+        0 0 0 0 rgba(0, 128, 0, 0);
+    }
+    50% {
+      box-shadow:
+        inset 1px 1px 0 #5dba5d,
+        inset -1px -1px 0 #0d4a0d,
+        inset 2px 2px 0 #4daa4d,
+        inset -2px -2px 0 #1d6a1d,
+        2px 2px 0 rgba(0, 0, 0, 0.3),
+        0 0 16px 3px rgba(0, 128, 0, 0.3);
+    }
+  }
+  .cta-glow {
+    animation: cta-glow 2.5s ease-in-out infinite;
   }
 }
 

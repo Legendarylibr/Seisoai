@@ -1,0 +1,178 @@
+/**
+ * UserPreferencesContext
+ * Manages user preferences — theme, generation defaults, agent settings.
+ * Persists to localStorage and syncs to backend.
+ */
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useSimpleWallet } from './SimpleWalletContext';
+import logger from '../utils/logger';
+import { API_URL } from '../utils/apiConfig';
+
+export interface UserPreferences {
+  // Theme
+  theme: 'system' | 'light' | 'dark' | 'high-contrast';
+  accentColor: string;
+
+  // Generation defaults
+  defaultModel: string | null;
+  defaultStyle: string | null;
+  defaultAspectRatio: string;
+  defaultOptimizePrompt: boolean;
+
+  // Agent preferences
+  defaultTab: string;
+
+  // Language
+  language: 'en' | 'ja' | 'zh';
+}
+
+const DEFAULT_PREFERENCES: UserPreferences = {
+  theme: 'system',
+  accentColor: '#000080', // Win95 blue
+  defaultModel: null,
+  defaultStyle: null,
+  defaultAspectRatio: '1:1',
+  defaultOptimizePrompt: false,
+  defaultTab: 'chat',
+  language: 'en',
+};
+
+const STORAGE_KEY = 'seiso_preferences';
+
+// Accent color presets
+export const ACCENT_COLORS = [
+  { name: 'Classic Blue', value: '#000080' },
+  { name: 'Teal', value: '#008080' },
+  { name: 'Green', value: '#008000' },
+  { name: 'Purple', value: '#800080' },
+  { name: 'Red', value: '#800000' },
+  { name: 'Ocean', value: '#2060a0' },
+];
+
+interface UserPreferencesContextValue {
+  preferences: UserPreferences;
+  updatePreference: <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => void;
+  resetDefaults: () => void;
+  isSettingsOpen: boolean;
+  openSettings: () => void;
+  closeSettings: () => void;
+}
+
+const UserPreferencesContext = createContext<UserPreferencesContextValue>({
+  preferences: DEFAULT_PREFERENCES,
+  updatePreference: () => {},
+  resetDefaults: () => {},
+  isSettingsOpen: false,
+  openSettings: () => {},
+  closeSettings: () => {},
+});
+
+export function useUserPreferences(): UserPreferencesContextValue {
+  return useContext(UserPreferencesContext);
+}
+
+function loadPreferences(): UserPreferences {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return { ...DEFAULT_PREFERENCES, ...parsed };
+    }
+  } catch (error) {
+    logger.warn('Failed to load preferences from localStorage', { error });
+  }
+  return { ...DEFAULT_PREFERENCES };
+}
+
+function savePreferences(prefs: UserPreferences): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  } catch (error) {
+    logger.warn('Failed to save preferences to localStorage', { error });
+  }
+}
+
+function applyTheme(theme: UserPreferences['theme']): void {
+  const root = document.documentElement;
+  // Remove all theme classes
+  root.classList.remove('theme-light', 'theme-dark', 'theme-high-contrast');
+
+  if (theme === 'light') {
+    root.classList.add('theme-light');
+  } else if (theme === 'dark') {
+    root.classList.add('theme-dark');
+  } else if (theme === 'high-contrast') {
+    root.classList.add('theme-high-contrast');
+  }
+  // 'system' = no class override, uses prefers-color-scheme
+}
+
+function applyAccentColor(color: string): void {
+  document.documentElement.style.setProperty('--win95-highlight', color);
+}
+
+export function UserPreferencesProvider({ children }: { children: ReactNode }): JSX.Element {
+  const [preferences, setPreferences] = useState<UserPreferences>(loadPreferences);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const { address, isConnected } = useSimpleWallet();
+
+  // Apply theme and accent on mount and change
+  useEffect(() => {
+    applyTheme(preferences.theme);
+  }, [preferences.theme]);
+
+  useEffect(() => {
+    applyAccentColor(preferences.accentColor);
+  }, [preferences.accentColor]);
+
+  // Sync to backend when connected
+  useEffect(() => {
+    if (isConnected && address) {
+      // Async sync to backend — fire and forget
+      fetch(`${API_URL}/api/users/${address}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ preferences }),
+      }).catch(() => {
+        // Silent fail — localStorage is the primary store
+      });
+    }
+  }, [preferences, isConnected, address]);
+
+  const updatePreference = useCallback(<K extends keyof UserPreferences>(
+    key: K,
+    value: UserPreferences[K]
+  ) => {
+    setPreferences((prev) => {
+      const next = { ...prev, [key]: value };
+      savePreferences(next);
+      return next;
+    });
+  }, []);
+
+  const resetDefaults = useCallback(() => {
+    setPreferences({ ...DEFAULT_PREFERENCES });
+    savePreferences(DEFAULT_PREFERENCES);
+  }, []);
+
+  const openSettings = useCallback(() => setIsSettingsOpen(true), []);
+  const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
+
+  return (
+    <UserPreferencesContext.Provider
+      value={{
+        preferences,
+        updatePreference,
+        resetDefaults,
+        isSettingsOpen,
+        openSettings,
+        closeSettings,
+      }}
+    >
+      {children}
+    </UserPreferencesContext.Provider>
+  );
+}
+
+export default UserPreferencesContext;

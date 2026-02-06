@@ -6,6 +6,7 @@ import AuthPrompt from './AuthPrompt';
 interface AuthGuardProps {
   children: ReactNode;
   fallback?: ReactNode | null;
+  onNavigate?: (tab: string) => void;
 }
 
 // Token Gate Prompt Component
@@ -220,7 +221,7 @@ const TokenGatePrompt: React.FC = () => {
   );
 };
 
-const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null }) => {
+const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null, onNavigate }) => {
   const walletContext = useSimpleWallet();
   
   // Wallet-only authentication
@@ -267,7 +268,7 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null }) => {
   // Check if wallet is connected
   if (!isConnected || !address) {
     // Show wallet connection prompt when not authenticated
-    return <div style={{ height: '100%', width: '100%' }}>{fallback || <AuthPrompt />}</div>;
+    return <div style={{ height: '100%', width: '100%' }}>{fallback || <AuthPrompt onNavigate={onNavigate} />}</div>;
   }
 
   // Check token gate - only if enabled
