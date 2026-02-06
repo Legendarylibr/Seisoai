@@ -1,7 +1,7 @@
 {
   "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
   "name": "Seisoai Image Generator",
-  "description": "AI-powered image generation using state-of-the-art diffusion models. Supports multiple models, styles, aspect ratios, and reference image input.",
+  "description": "AI-powered image generation using state-of-the-art diffusion models. Supports FLUX Pro Kontext, FLUX 2, Nano Banana Pro, ControlNet, inpainting, outpainting, face swap, upscaling, and background removal.",
   "image": "https://seisoai.com/seiso-logo.png",
   "services": [
     {
@@ -9,12 +9,35 @@
       "endpoint": "https://seisoai.com/"
     },
     {
-      "name": "api",
-      "endpoint": "https://seisoai.com/api/generate"
+      "name": "gateway",
+      "endpoint": "https://seisoai.com/api/gateway"
+    },
+    {
+      "name": "mcp",
+      "endpoint": "https://seisoai.com/api/mcp"
     }
   ],
-  "x402Support": false,
+  "x402Support": true,
+  "x402Config": {
+    "network": "eip155:8453",
+    "asset": "USDC"
+  },
   "active": true,
   "registrations": [],
-  "supportedTrust": ["reputation"]
+  "supportedTrust": ["reputation"],
+  "tools": [
+    "image.generate.flux-pro-kontext",
+    "image.generate.flux-pro-kontext-edit",
+    "image.generate.flux-pro-kontext-multi",
+    "image.generate.flux-2",
+    "image.generate.flux-2-edit",
+    "image.generate.nano-banana-pro",
+    "image.generate.nano-banana-pro-edit",
+    "image.generate.flux-controlnet-canny",
+    "image.upscale",
+    "image.face-swap",
+    "image.inpaint",
+    "image.outpaint",
+    "image.extract-layer"
+  ]
 }

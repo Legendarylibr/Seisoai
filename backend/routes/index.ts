@@ -32,9 +32,14 @@ import createReferralRoutes from './referral';
 import createPublicGalleryRoutes from './gallery-public';
 import createAchievementRoutes from './achievements';
 import createTrainingRoutes from './training';
-// DISABLED: ERC-8004 Agent Registry - not used initially
-// import agentRoutes from './agents';
+// ERC-8004 Agent Registry
+import agentRoutes from './agents';
 import createProvenanceRoutes from './provenance';
+// Agentic Gateway
+import createGatewayRoutes from './gateway';
+// API Key Management
+import createApiKeyRoutes from './apiKeys';
+import { createMCPRoutes } from '../services/mcpServer';
 import { adminIPAllowlist } from '../middleware/ipAllowlist';
 import { getCSRFToken } from '../middleware/csrf';
 
@@ -118,11 +123,28 @@ export function createApiRoutes(deps: Dependencies) {
   router.use('/training', createTrainingRoutes(deps as never));
 
   // ============================================
-  // ERC-8004 Agents (DISABLED - not used initially)
+  // ERC-8004 Agents
   // Agent registry, reputation, and management
-  // Uncomment when ready to enable agent functionality
   // ============================================
-  // router.use('/agents', agentRoutes);
+  router.use('/agents', agentRoutes);
+
+  // ============================================
+  // API Key Management
+  // Create, list, update, revoke API keys for agents
+  // ============================================
+  router.use('/api-keys', createApiKeyRoutes(deps as never));
+
+  // ============================================
+  // Agentic Gateway
+  // Unified AI tool discovery, invocation, and orchestration
+  // ============================================
+  router.use('/gateway', createGatewayRoutes(deps as never));
+
+  // ============================================
+  // MCP Server (Model Context Protocol)
+  // For AI assistants to use SeisoAI as a tool server
+  // ============================================
+  router.use('/mcp', createMCPRoutes());
 
   // ============================================
   // Provenance Verification (ERC-8004 + ERC-721)

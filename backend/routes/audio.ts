@@ -954,6 +954,170 @@ export function createAudioRoutes(deps: Dependencies) {
     }
   });
 
+  // ============================================================================
+  // SPEECH-TO-TEXT (Transcription)
+  // Uses Whisper for audio/video transcription
+  // ============================================================================
+
+  /**
+   * Transcribe audio or video to text
+   * POST /api/audio/transcribe
+   * 
+   * Inputs:
+   * - audio_url: URL of audio/video file to transcribe
+   * - language: Language code hint (optional, auto-detected if omitted)
+   * - task: 'transcribe' (default) or 'translate' (translate to English)
+   * - chunk_level: 'segment' (default) or 'word' for word-level timestamps
+   */
+  router.post('/transcribe', limiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({ success: false, error: 'User authentication required' });
+        return;
+      }
+
+      const FAL_API_KEY = getFalApiKey();
+      if (!FAL_API_KEY) {
+        res.status(500).json({ success: false, error: 'AI service not configured' });
+        return;
+      }
+
+      const {
+        audio_url,
+        language,
+        task = 'transcribe',
+        chunk_level = 'segment',
+      } = req.body as {
+        audio_url?: string;
+        language?: string;
+        task?: 'transcribe' | 'translate';
+        chunk_level?: 'segment' | 'word';
+      };
+
+      if (!audio_url || typeof audio_url !== 'string') {
+        res.status(400).json({ success: false, error: 'audio_url is required' });
+        return;
+      }
+
+      // Validate URL
+      try {
+        new URL(audio_url);
+      } catch {
+        res.status(400).json({ success: false, error: 'Invalid audio_url format' });
+        return;
+      }
+
+      const creditsRequired = applyClawMarkup(req, 1);
+
+      // Deduct credits
+      const User = mongoose.model<IUser>('User');
+      const updateQuery = buildUserUpdateQuery(user);
+
+      if (!updateQuery) {
+        res.status(400).json({ success: false, error: 'User account required' });
+        return;
+      }
+
+      const updateResult = await User.findOneAndUpdate(
+        { ...updateQuery, credits: { $gte: creditsRequired } },
+        { $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired } },
+        { new: true }
+      );
+
+      if (!updateResult) {
+        res.status(402).json({ success: false, error: 'Insufficient credits' });
+        return;
+      }
+
+      logger.info('Transcription request', {
+        audioUrl: audio_url.substring(0, 60),
+        language,
+        task,
+        chunk_level,
+        userId: user.userId,
+      });
+
+      // Build request for Whisper
+      const requestBody: Record<string, unknown> = {
+        audio_url,
+        task,
+        chunk_level,
+      };
+
+      if (language) {
+        requestBody.language = language;
+      }
+
+      // Submit to FAL queue (Whisper large-v3)
+      const result = await submitToQueue<{ request_id?: string }>('fal-ai/whisper', requestBody);
+      const requestId = result.request_id;
+
+      if (!requestId) {
+        await refundCredits(user, creditsRequired, 'No request ID returned for transcription');
+        res.status(500).json({ success: false, error: 'Failed to submit transcription request' });
+        return;
+      }
+
+      // Poll for completion
+      const maxWaitTime = 120 * 1000; // 2 minutes for long audio
+      const pollInterval = 1000;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        try {
+          const statusData = await checkQueueStatus<{ status?: string }>(requestId, 'fal-ai/whisper');
+          const normalizedStatus = (statusData.status || '').toUpperCase();
+
+          if (isStatusCompleted(normalizedStatus)) {
+            const resultData = await getQueueResult<{
+              text?: string;
+              chunks?: Array<{
+                text: string;
+                timestamp: [number, number];
+              }>;
+              language?: string;
+            }>(requestId, 'fal-ai/whisper');
+
+            logger.info('Transcription completed', { requestId, userId: user.userId });
+
+            // Settle x402 payment if applicable
+            const x402Req = req as X402Request;
+            if (x402Req.isX402Paid) {
+              await settleX402Payment(x402Req);
+            }
+
+            res.json({
+              success: true,
+              text: resultData.text || '',
+              chunks: resultData.chunks || [],
+              detectedLanguage: resultData.language,
+              task,
+              remainingCredits: updateResult.credits,
+              creditsDeducted: creditsRequired,
+            });
+            return;
+          } else if (isStatusFailed(normalizedStatus)) {
+            await refundCredits(user, creditsRequired, 'Transcription generation failed');
+            res.status(500).json({ success: false, error: 'Transcription failed' });
+            return;
+          }
+        } catch (pollError) {
+          logger.warn('Transcription polling error', { error: (pollError as Error).message });
+        }
+      }
+
+      await refundCredits(user, creditsRequired, 'Transcription timed out');
+      res.status(504).json({ success: false, error: 'Transcription timed out' });
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Transcription error:', { error: err.message });
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   return router;
 }
 

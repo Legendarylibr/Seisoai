@@ -101,6 +101,7 @@ export const FAL_API_COSTS = {
   // Music/Audio
   MUSIC_PER_MINUTE: 0.02,      // Music generation per minute
   SFX: 0.03,                   // Sound effects
+  TRANSCRIBE: 0.01,            // Speech-to-text transcription
   
   // Image tools
   UPSCALE: 0.03,               // Image upscaling
@@ -187,12 +188,31 @@ interface X402RouteConfig {
 
 type X402RoutesConfig = Record<string, X402RouteConfig>;
 
+// Dynamic pricing for gateway tool invocations
+function getGatewayToolPrice(context: { body?: { toolId?: string; [key: string]: unknown } }): string {
+  // Try to get price from tool registry
+  try {
+    const { toolRegistry } = require('../services/toolRegistry');
+    const toolId = context.body?.toolId;
+    if (toolId && typeof toolId === 'string') {
+      const price = toolRegistry.calculatePrice(toolId, context.body || {});
+      if (price) return price.usdcUnits;
+    }
+  } catch { /* tool registry not loaded yet */ }
+  
+  // Default gateway price
+  return priceInUsdcUnits(FAL_API_COSTS.FLUX_PRO_KONTEXT);
+}
+
 // x402 route configuration with dynamic pricing
 // Uses the new x402 API format with 'accepts' array
 function buildRoutesConfig(): X402RoutesConfig {
   if (!PAYMENT_WALLET) return {} as X402RoutesConfig;
   
   return {
+    // ============================================
+    // Original generation routes
+    // ============================================
     'POST /generate/image': {
       accepts: [{
         price: getImagePrice,
@@ -233,6 +253,14 @@ function buildRoutesConfig(): X402RoutesConfig {
       }],
       description: 'Generate sound effects',
     },
+    'POST /audio/transcribe': {
+      accepts: [{
+        price: priceInUsdcUnits(FAL_API_COSTS.TRANSCRIBE),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Transcribe audio/video to text',
+    },
     'POST /generate/upscale': {
       accepts: [{
         price: priceInUsdcUnits(FAL_API_COSTS.UPSCALE),
@@ -248,6 +276,33 @@ function buildRoutesConfig(): X402RoutesConfig {
         payTo: PAYMENT_WALLET,
       }],
       description: 'Chat with prompt assistant',
+    },
+    // ============================================
+    // Agentic Gateway routes - x402 for all tools
+    // ============================================
+    'POST /gateway/invoke': {
+      accepts: [{
+        price: getGatewayToolPrice,
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Invoke any AI tool via the gateway',
+    },
+    'POST /gateway/batch': {
+      accepts: [{
+        price: priceInUsdcUnits(FAL_API_COSTS.FLUX_PRO_KONTEXT * 3), // Estimate for batch
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Batch invoke multiple AI tools',
+    },
+    'POST /gateway/orchestrate': {
+      accepts: [{
+        price: priceInUsdcUnits(FAL_API_COSTS.FLUX_PRO_KONTEXT * 5), // Estimate for orchestration
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Orchestrate a multi-tool AI workflow',
     },
   };
 }
@@ -380,9 +435,20 @@ export function createX402Middleware() {
 
   // Simple x402 middleware that returns proper payment info
   return async (req: Request, res: Response, next: NextFunction) => {
-    const routeKey = `${req.method} ${req.path.replace('/api/', '/')}`;
+    const normalizedPath = req.path.replace('/api/', '/').replace(/^\/v1\//, '/');
+    const routeKey = `${req.method} ${normalizedPath}`;
     const routes = buildRoutesConfig();
-    const routeConfig = routes[routeKey];
+    let routeConfig = routes[routeKey];
+    
+    // Support dynamic gateway routes: /gateway/invoke/:toolId → /gateway/invoke
+    if (!routeConfig && normalizedPath.startsWith('/gateway/invoke/')) {
+      routeConfig = routes['POST /gateway/invoke'];
+      // Inject toolId into body for price calculation
+      if (routeConfig && !req.body?.toolId) {
+        const toolId = normalizedPath.replace('/gateway/invoke/', '');
+        req.body = { ...req.body, toolId };
+      }
+    }
     
     if (!routeConfig) {
       // Route not configured for x402, pass through

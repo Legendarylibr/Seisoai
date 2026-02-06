@@ -1,7 +1,15 @@
 {
-  "version": "1.0.0",
+  "version": "2.0.0",
   "standard": "ERC-8004",
   "organization": "Seisoai",
+  "gateway": {
+    "name": "SeisoAI Agentic Gateway",
+    "description": "The home of agentic inference. Unified AI gateway for image, video, music, audio, 3D, and text generation.",
+    "endpoint": "https://seisoai.com/api/gateway",
+    "protocols": ["mcp", "x402", "erc-8004"],
+    "mcpEndpoint": "https://seisoai.com/api/mcp",
+    "toolCount": 31
+  },
   "agents": [
     {
       "id": "chat-assistant",
@@ -22,6 +30,11 @@
       "id": "music-generator",
       "file": "music-generator.json",
       "name": "Seisoai Music Generator"
+    },
+    {
+      "id": "orchestrator",
+      "file": "orchestrator.json",
+      "name": "Seisoai Orchestrator"
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
   "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
   "name": "Seisoai Music Generator",
-  "description": "AI music and audio generation service with stem mixing capabilities. Create original music from text prompts or extract and remix audio stems.",
+  "description": "AI music and audio generation service with stem mixing, voice cloning, sound effects, and audio processing capabilities.",
   "image": "https://seisoai.com/seiso-logo.png",
   "services": [
     {
@@ -9,12 +9,26 @@
       "endpoint": "https://seisoai.com/"
     },
     {
-      "name": "api",
-      "endpoint": "https://seisoai.com/api/audio"
+      "name": "gateway",
+      "endpoint": "https://seisoai.com/api/gateway"
+    },
+    {
+      "name": "mcp",
+      "endpoint": "https://seisoai.com/api/mcp"
     }
   ],
-  "x402Support": false,
+  "x402Support": true,
+  "x402Config": {
+    "network": "eip155:8453",
+    "asset": "USDC"
+  },
   "active": true,
   "registrations": [],
-  "supportedTrust": ["reputation"]
+  "supportedTrust": ["reputation"],
+  "tools": [
+    "music.generate",
+    "audio.tts",
+    "audio.sfx",
+    "audio.stem-separation"
+  ]
 }

@@ -9,8 +9,9 @@ import Generation from './Generation';
 import GalleryItem from './GalleryItem';
 import Payment from './Payment';
 import Referral from './Referral';
+import ApiKey from './ApiKey';
 
-export { User, IPFreeImage, GlobalFreeImage, Generation, GalleryItem, Payment, Referral };
+export { User, IPFreeImage, GlobalFreeImage, Generation, GalleryItem, Payment, Referral, ApiKey };
 // buildUserUpdateQuery is now in services/user.ts to avoid circular dependencies
 export { buildUserUpdateQuery } from '../services/user';
 // Removed default export to avoid issues with private names.

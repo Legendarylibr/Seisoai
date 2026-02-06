@@ -18,7 +18,7 @@ import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
 import PromptLab from './components/PromptLab';
 import { useImageGenerator } from './contexts/ImageGeneratorContext';
-import { Grid, Sparkles, Film, Music, Layers, MessageCircle, Cpu, type LucideIcon } from 'lucide-react';
+import { Grid, Sparkles, Film, Music, Layers, MessageCircle, Cpu, Bot, type LucideIcon } from 'lucide-react';
 import { ensureCSRFToken } from './utils/apiConfig';
 
 // Build version - check console to verify deployment
@@ -34,6 +34,7 @@ const ChatAssistant = lazy(() => import('./components/ChatAssistant'));
 // CharacterGenerator is temporarily disabled - uncomment when 3D generation is fixed
 // const CharacterGenerator = lazy(() => import('./components/CharacterGenerator'));
 const ModelTraining = lazy(() => import('./components/ModelTraining'));
+const AgentMarketplace = lazy(() => import('./components/AgentMarketplace'));
 const TermsModal = lazy(() => import('./components/TermsModal'));
 import Footer from './components/Footer';
 import type { LegalPage } from './components/TermsModal';
@@ -153,6 +154,7 @@ function AppContent(): JSX.Element {
     { id: 'training', name: t.nav.training || 'Training', icon: Cpu },
     // TEMPORARILY DISABLED - 3D not working, re-enable when fixed
     // { id: '3d', name: '3D', icon: Box },
+    { id: 'marketplace', name: 'Agents', icon: Bot },
     { id: 'gallery', name: t.nav.gallery, icon: Grid }
   ];
 
@@ -426,6 +428,15 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         */}
         
+        {activeTab === 'marketplace' && (
+          <ErrorBoundary fallbackText="Agent marketplace encountered an error">
+            <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
+              <Suspense fallback={<Win95LoadingFallback text="Loading Agent Marketplace..." />}>
+                <AgentMarketplace />
+              </Suspense>
+            </div>
+          </ErrorBoundary>
+        )}
         
         {activeTab === 'gallery' && (
           <ErrorBoundary fallbackText="Gallery encountered an error">

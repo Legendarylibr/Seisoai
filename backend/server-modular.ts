@@ -25,8 +25,10 @@ import { getAllCircuitStats } from './services/circuitBreaker.js';
 import { metricsMiddleware, metricsHandler } from './services/metrics.js';
 import { initializeAuditLog } from './services/auditLog.js';
 import { getKeyRotationStatus } from './services/keyRotation.js';
-// DISABLED: ERC-8004 Agent Registry - not used initially
-// import { initializeContracts as initializeAgentRegistry } from './services/agentRegistry.js';
+// ERC-8004 Agent Registry
+import { initializeContracts as initializeAgentRegistry } from './services/agentRegistry.js';
+// Tool Registry (initializes on import)
+import './services/toolRegistry.js';
 import { createOpenApiRoutes } from './services/openapi.js';
 import { deepHealthCheck, livenessCheck, readinessCheck } from './services/healthCheck.js';
 import { setupGracefulShutdown, requestTrackingMiddleware, getInFlightCount } from './services/gracefulShutdown.js';
@@ -72,6 +74,7 @@ import './models/GalleryItem.js';
 import './models/Payment.js';
 import './models/IPFreeImage.js';
 import './models/GlobalFreeImage.js';
+import './models/ApiKey.js';
 
 // ES module setup
 const __filename = fileURLToPath(import.meta.url);
@@ -584,17 +587,18 @@ async function startServer(): Promise<void> {
     // Initialize job queues (requires Redis)
     initializeQueues();
 
-    // DISABLED: ERC-8004 Agent Registry - not used initially
-    // Uncomment when ready to enable agent functionality
-    // if (config.ERC8004_IDENTITY_REGISTRY && config.ERC8004_CHAIN_ID) {
-    //   initializeAgentRegistry({
-    //     identityRegistry: config.ERC8004_IDENTITY_REGISTRY,
-    //     reputationRegistry: config.ERC8004_REPUTATION_REGISTRY || '',
-    //     validationRegistry: config.ERC8004_VALIDATION_REGISTRY,
-    //     chainId: config.ERC8004_CHAIN_ID,
-    //   });
-    //   logger.info('ERC-8004 Agent Registry initialized');
-    // }
+    // ERC-8004 Agent Registry
+    if (config.ERC8004_IDENTITY_REGISTRY && config.ERC8004_CHAIN_ID) {
+      initializeAgentRegistry({
+        identityRegistry: config.ERC8004_IDENTITY_REGISTRY,
+        reputationRegistry: config.ERC8004_REPUTATION_REGISTRY || '',
+        validationRegistry: config.ERC8004_VALIDATION_REGISTRY,
+        chainId: config.ERC8004_CHAIN_ID,
+      });
+      logger.info('ERC-8004 Agent Registry initialized');
+    } else {
+      logger.info('ERC-8004 Agent Registry: No contract addresses configured, running in local mode');
+    }
 
     // ENTERPRISE: Initialize audit logging
     await initializeAuditLog();

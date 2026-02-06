@@ -1,7 +1,7 @@
 {
   "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
   "name": "Seisoai Video Generator",
-  "description": "AI video creation and editing service. Generate videos from text prompts or animate existing images using advanced video diffusion models.",
+  "description": "AI video creation and editing service. Supports Veo 3.1 (text-to-video, image-to-video, keyframe interpolation), LTX-2 (fast/budget), WAN Animate, lip sync, and video-to-audio generation.",
   "image": "https://seisoai.com/seiso-logo.png",
   "services": [
     {
@@ -9,12 +9,30 @@
       "endpoint": "https://seisoai.com/"
     },
     {
-      "name": "api",
-      "endpoint": "https://seisoai.com/api/wan-animate"
+      "name": "gateway",
+      "endpoint": "https://seisoai.com/api/gateway"
+    },
+    {
+      "name": "mcp",
+      "endpoint": "https://seisoai.com/api/mcp"
     }
   ],
-  "x402Support": false,
+  "x402Support": true,
+  "x402Config": {
+    "network": "eip155:8453",
+    "asset": "USDC"
+  },
   "active": true,
   "registrations": [],
-  "supportedTrust": ["reputation"]
+  "supportedTrust": ["reputation"],
+  "tools": [
+    "video.generate.veo3",
+    "video.generate.veo3-image-to-video",
+    "video.generate.veo3-first-last-frame",
+    "video.generate.ltx-text",
+    "video.generate.ltx-image",
+    "video.animate.wan",
+    "video.video-to-audio",
+    "audio.lip-sync"
+  ]
 }

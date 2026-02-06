@@ -1,0 +1,61 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "Seisoai Orchestrator",
+  "description": "Agentic orchestrator that plans and executes multi-step AI workflows. Accepts natural language goals and chains image, video, music, audio, and 3D tools to produce complex creative outputs.",
+  "image": "https://seisoai.com/seiso-logo.png",
+  "services": [
+    {
+      "name": "gateway",
+      "endpoint": "https://seisoai.com/api/gateway",
+      "version": "1.0.0"
+    },
+    {
+      "name": "mcp",
+      "endpoint": "https://seisoai.com/api/mcp",
+      "version": "2024-11-05"
+    },
+    {
+      "name": "orchestrate",
+      "endpoint": "https://seisoai.com/api/gateway/orchestrate"
+    },
+    {
+      "name": "tools",
+      "endpoint": "https://seisoai.com/api/gateway/tools"
+    }
+  ],
+  "x402Support": true,
+  "x402Config": {
+    "network": "eip155:8453",
+    "asset": "USDC",
+    "routes": [
+      "POST /api/gateway/invoke",
+      "POST /api/gateway/invoke/:toolId",
+      "POST /api/gateway/batch",
+      "POST /api/gateway/orchestrate"
+    ]
+  },
+  "active": true,
+  "registrations": [],
+  "supportedTrust": ["reputation"],
+  "capabilities": {
+    "protocols": ["mcp", "x402", "erc-8004", "json-rpc"],
+    "categories": [
+      "image-generation",
+      "image-editing",
+      "image-processing",
+      "video-generation",
+      "video-editing",
+      "audio-generation",
+      "audio-processing",
+      "music-generation",
+      "3d-generation",
+      "text-generation",
+      "vision",
+      "training"
+    ],
+    "toolCount": 31,
+    "orchestration": true,
+    "batchInvocation": true,
+    "workflowTemplates": ["ai-influencer", "music-video", "product-visualization", "audio-remix"]
+  }
+}
