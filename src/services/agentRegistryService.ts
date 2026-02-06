@@ -3,7 +3,7 @@
  * Frontend service for interacting with ERC-8004 agent registry
  */
 import logger from '../utils/logger';
-import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken, getCSRFToken } from '../utils/apiConfig';
 
 // Types
 export interface AgentService {
@@ -214,10 +214,12 @@ export async function generateAgentURI(
   try {
     await ensureCSRFToken();
     
+    const csrfToken = getCSRFToken();
     const response = await fetch(`${API_URL}/api/agents/generate-uri`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
       },
       credentials: 'include',
       body: JSON.stringify({
@@ -290,10 +292,12 @@ export async function createAgent(agentData: {
 }): Promise<{ agent: RegisteredAgent; agentURI: string; skillMd: string }> {
   await ensureCSRFToken();
   
+  const csrfToken = getCSRFToken();
   const response = await fetch(`${API_URL}/api/agents/create`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
     },
     credentials: 'include',
     body: JSON.stringify(agentData),
@@ -347,10 +351,12 @@ export async function deleteCustomAgent(agentId: string): Promise<boolean> {
   try {
     await ensureCSRFToken();
     
+    const csrfToken = getCSRFToken();
     const response = await fetch(`${API_URL}/api/agents/custom/${agentId}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
       },
       credentials: 'include',
     });

@@ -16,7 +16,7 @@ import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/b
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useUserPreferences, ALL_FEATURES } from '../contexts/UserPreferencesContext';
 import { getCustomAgents, deleteCustomAgent, getAgentList, type AgentListItem } from '../services/agentRegistryService';
-import { API_URL, getAuthToken, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, getAuthToken, ensureCSRFToken, getCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
 const AgentCreator = lazy(() => import('./AgentCreator'));
@@ -287,9 +287,10 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
     try {
       await ensureCSRFToken();
       const token = getAuthToken();
+      const csrfToken = getCSRFToken();
       const r = await fetch(`${API_URL}/api-keys`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
         credentials: 'include',
         body: JSON.stringify({ name: newKeyName.trim(), credits: newKeyCredits }),
       });
@@ -309,7 +310,8 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
     try {
       await ensureCSRFToken();
       const token = getAuthToken();
-      await fetch(`${API_URL}/api-keys/${keyId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` }, credentials: 'include' });
+      const csrfToken = getCSRFToken();
+      await fetch(`${API_URL}/api-keys/${keyId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) }, credentials: 'include' });
       fetchApiKeys();
     } catch (e) { logger.error('Revoke key failed', { error: e }); }
   };
