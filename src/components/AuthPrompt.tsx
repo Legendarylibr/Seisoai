@@ -6,6 +6,7 @@ import {
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { WIN95 } from '../utils/buttonStyles';
 import { useUserPreferences, ACCENT_COLORS, ALL_FEATURES } from '../contexts/UserPreferencesContext';
+import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import type { LucideIcon } from 'lucide-react';
 
 interface AuthPromptProps {
@@ -52,9 +53,12 @@ const THEMES = [
 ];
 
 const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
-  const [isConnected, setIsConnected] = useState(false);
-  const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
-  const [showProfile, setShowProfile] = useState(false);
+  const wallet = useSimpleWallet();
+  // If user is already connected (AuthGuard showing us for profile setup), start in profile mode
+  const alreadyConnected = wallet.isConnected && !!wallet.address;
+  const [isConnected, setIsConnected] = useState(alreadyConnected);
+  const [connectedAddress, setConnectedAddress] = useState<string | null>(alreadyConnected ? wallet.address : null);
+  const [showProfile, setShowProfile] = useState(alreadyConnected);
   const { preferences, updatePreference } = useUserPreferences();
 
   const preConnectMessage = '> Authenticate to activate your agents. Connect a wallet to begin.';

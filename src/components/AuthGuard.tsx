@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { AlertCircle, Shield, ExternalLink, RefreshCw } from 'lucide-react';
 import AuthPrompt from './AuthPrompt';
 
@@ -223,6 +224,7 @@ const TokenGatePrompt: React.FC = () => {
 
 const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null, onNavigate }) => {
   const walletContext = useSimpleWallet();
+  const { preferences } = useUserPreferences();
   
   // Wallet-only authentication
   const isConnected = walletContext.isConnected;
@@ -293,7 +295,12 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback = null, onNavi
     }
   }
 
-  // User is authenticated and has token gate access
+  // User is connected but hasn't completed profile setup — show the profile builder
+  if (!preferences.profileCompleted) {
+    return <div style={{ height: '100%', width: '100%' }}><AuthPrompt onNavigate={onNavigate} /></div>;
+  }
+
+  // User is authenticated, profile complete, and has token gate access
   return <div style={{ height: '100%', width: '100%', minHeight: '100%' }}>{children}</div>;
 };
 
