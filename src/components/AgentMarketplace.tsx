@@ -16,7 +16,7 @@ import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/b
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { useUserPreferences, ALL_FEATURES } from '../contexts/UserPreferencesContext';
 import { getCustomAgents, deleteCustomAgent, getAgentList, type AgentListItem } from '../services/agentRegistryService';
-import { API_URL, getAuthToken, ensureCSRFToken, getCSRFToken } from '../utils/apiConfig';
+import { API_URL, apiFetch, getAuthToken, ensureCSRFToken, getCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
 const AgentCreator = lazy(() => import('./AgentCreator'));
@@ -220,7 +220,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
   // ── Data fetching ──
   const fetchTools = useCallback(async () => {
     try {
-      const r = await fetch(`${API_URL}/gateway/tools`);
+      const r = await apiFetch(`${API_URL}/api/gateway/tools`);
       const d = await r.json();
       if (d.success) setTools(d.tools || []);
     } catch (e) { logger.error('Fetch tools failed', { error: e }); }

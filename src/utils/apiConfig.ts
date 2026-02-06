@@ -144,8 +144,10 @@ export const getApiHeaders = (
   }
   
   // Add CSRF token for state-changing methods
+  // Use cached token first (most reliable — set immediately after fetch),
+  // then fall back to cookie (may lag behind due to Set-Cookie processing)
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())) {
-    const csrfToken = getCSRFToken();
+    const csrfToken = cachedCSRFToken || getCSRFToken();
     if (csrfToken) {
       headers[CSRF_TOKEN_HEADER] = csrfToken;
     }

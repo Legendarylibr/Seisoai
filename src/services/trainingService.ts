@@ -134,6 +134,11 @@ export async function getTrainingResult(
 export async function getTrainedModels(
   userIdentity: { walletAddress?: string; userId?: string; email?: string }
 ): Promise<TrainedModel[]> {
+  // Skip network call entirely if no user identity is available
+  if (!userIdentity.walletAddress && !userIdentity.userId && !userIdentity.email) {
+    return [];
+  }
+
   const params = new URLSearchParams();
   if (userIdentity.walletAddress) params.set('walletAddress', userIdentity.walletAddress);
   if (userIdentity.userId) params.set('userId', userIdentity.userId);
@@ -142,7 +147,8 @@ export async function getTrainedModels(
   const response = await apiFetch(`${API_URL}/api/training/models?${params}`);
 
   if (!response.ok) {
-    // Return empty array on error rather than crashing
+    // 401 is expected when session expired — return empty silently
+    if (response.status === 401) return [];
     logger.warn('Failed to fetch trained models', { status: response.status });
     return [];
   }

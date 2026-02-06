@@ -1,11 +1,8 @@
 /**
  * Unified LLM Provider Service
  * 
- * Supports the full Claude model lineup via two paths:
- *   1. Direct Anthropic API (primary, when ANTHROPIC_API_KEY is set)
- *   2. fal.ai any-llm proxy (fallback, when only FAL_API_KEY is set)
- * 
- * Auto-detects which path to use based on available env vars.
+ * Calls Claude models directly via the Anthropic API.
+ * Requires ANTHROPIC_API_KEY to be set.
  * 
  * Supported models:
  *   - claude-opus-4-6     : Most intelligent, best for agentic tasks. $5/$25 per MTok.
@@ -15,7 +12,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import config from '../config/env';
 import logger from '../utils/logger';
-import { getFalApiKey } from './fal';
 
 // ============================================================================
 // Types
@@ -23,7 +19,7 @@ import { getFalApiKey } from './fal';
 
 export type ClaudeModel = 'claude-opus-4-6' | 'claude-sonnet-4-5' | 'claude-haiku-4-5';
 
-export type LLMProvider = 'anthropic' | 'fal-proxy';
+export type LLMProvider = 'anthropic';
 
 export interface LLMMessage {
   role: 'user' | 'assistant';
@@ -92,8 +88,6 @@ export const MODEL_INFO: Record<ClaudeModel, {
   contextWindow: number;
   supportsExtendedThinking: boolean;
   supportsAdaptiveThinking: boolean;
-  /** Model ID for fal.ai any-llm proxy */
-  falProxyId: string;
 }> = {
   'claude-opus-4-6': {
     displayName: 'Claude Opus 4.6',
@@ -105,7 +99,6 @@ export const MODEL_INFO: Record<ClaudeModel, {
     contextWindow: 200_000,
     supportsExtendedThinking: true,
     supportsAdaptiveThinking: true,
-    falProxyId: 'anthropic/claude-opus-4-6',
   },
   'claude-sonnet-4-5': {
     displayName: 'Claude Sonnet 4.5',
@@ -117,7 +110,6 @@ export const MODEL_INFO: Record<ClaudeModel, {
     contextWindow: 200_000,
     supportsExtendedThinking: true,
     supportsAdaptiveThinking: false,
-    falProxyId: 'anthropic/claude-sonnet-4-5',
   },
   'claude-haiku-4-5': {
     displayName: 'Claude Haiku 4.5',
@@ -129,7 +121,6 @@ export const MODEL_INFO: Record<ClaudeModel, {
     contextWindow: 200_000,
     supportsExtendedThinking: true,
     supportsAdaptiveThinking: false,
-    falProxyId: 'anthropic/claude-haiku-4-5',
   },
 };
 
@@ -146,7 +137,7 @@ export const DEFAULT_MODELS: Record<string, ClaudeModel> = {
 };
 
 // ============================================================================
-// Provider detection
+// Anthropic client
 // ============================================================================
 
 let _anthropicClient: Anthropic | null = null;
@@ -155,7 +146,7 @@ function getAnthropicClient(): Anthropic | null {
   if (_anthropicClient) return _anthropicClient;
   
   const apiKey = config.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey || !isRealApiKey(apiKey)) return null;
   
   _anthropicClient = new Anthropic({ apiKey });
   return _anthropicClient;
@@ -178,24 +169,21 @@ function isRealApiKey(key: string | undefined): boolean {
   return true;
 }
 
-function detectProvider(): LLMProvider {
-  if (isRealApiKey(config.ANTHROPIC_API_KEY)) return 'anthropic';
-  if (isRealApiKey(config.FAL_API_KEY)) return 'fal-proxy';
-  throw new Error('No LLM provider configured. Set ANTHROPIC_API_KEY or FAL_API_KEY with a valid key (not a placeholder).');
-}
-
 /**
  * Check if the LLM provider is configured with a real (non-placeholder) API key
  */
 export function isLLMConfigured(): boolean {
-  return isRealApiKey(config.ANTHROPIC_API_KEY) || isRealApiKey(config.FAL_API_KEY);
+  return isRealApiKey(config.ANTHROPIC_API_KEY);
 }
 
 /**
  * Get the active provider name
  */
 export function getActiveProvider(): LLMProvider {
-  return detectProvider();
+  if (!isLLMConfigured()) {
+    throw new Error('ANTHROPIC_API_KEY is not configured. Set a valid Anthropic API key to enable Claude models.');
+  }
+  return 'anthropic';
 }
 
 /**
@@ -216,12 +204,17 @@ export function getAvailableModels(): Array<{
 }
 
 // ============================================================================
-// Direct Anthropic API path
+// Anthropic API
 // ============================================================================
 
 async function completeViaAnthropic(req: LLMCompletionRequest): Promise<LLMCompletionResponse> {
   const client = getAnthropicClient();
-  if (!client) throw new Error('Anthropic API key not configured');
+  if (!client) {
+    throw new Error(
+      'ANTHROPIC_API_KEY is not configured. ' +
+      'Set a valid Anthropic API key in your environment to use Claude models.'
+    );
+  }
 
   const model = req.model || DEFAULT_MODELS.chat;
   const modelInfo = MODEL_INFO[model];
@@ -336,99 +329,11 @@ async function completeViaAnthropic(req: LLMCompletionRequest): Promise<LLMCompl
 }
 
 // ============================================================================
-// fal.ai proxy path (fallback)
-// ============================================================================
-
-async function completeViaFalProxy(req: LLMCompletionRequest): Promise<LLMCompletionResponse> {
-  const FAL_API_KEY = getFalApiKey();
-  if (!FAL_API_KEY) throw new Error('FAL API key not configured');
-
-  const model = req.model || DEFAULT_MODELS.chat;
-  const modelInfo = MODEL_INFO[model];
-
-  // Build prompt for fal.ai any-llm (uses simpler prompt/system_prompt format)
-  let prompt: string;
-  if (req.messages && req.messages.length > 0) {
-    // Concatenate messages into a single prompt for the proxy
-    prompt = req.messages.map(m => 
-      m.role === 'user' ? `Human: ${m.content}` : `Assistant: ${m.content}`
-    ).join('\n\n');
-  } else if (req.prompt) {
-    prompt = req.prompt;
-  } else {
-    throw new Error('Either messages or prompt is required');
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), req.timeoutMs || 30000);
-
-  try {
-    const response = await fetch('https://fal.run/fal-ai/any-llm', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${FAL_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: modelInfo.falProxyId,
-        prompt,
-        system_prompt: req.systemPrompt || undefined,
-        max_tokens: req.maxTokens || 1024,
-        temperature: req.temperature,
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`fal.ai proxy error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json() as {
-      output?: string;
-      text?: string;
-      response?: string;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-
-    const content = (data.output || data.text || data.response || '').trim();
-
-    return {
-      content,
-      model,
-      provider: 'fal-proxy',
-      usage: {
-        inputTokens: data.usage?.prompt_tokens || 0,
-        outputTokens: data.usage?.completion_tokens || 0,
-      },
-      stopReason: 'end_turn',
-    };
-  } catch (error) {
-    clearTimeout(timeoutId);
-    const err = error as Error;
-
-    if (err.name === 'AbortError') {
-      throw new Error(`fal.ai proxy request timed out after ${(req.timeoutMs || 30000) / 1000}s`);
-    }
-
-    logger.error('fal.ai proxy call failed', {
-      model,
-      useCase: req.useCase,
-      error: err.message,
-    });
-    throw err;
-  }
-}
-
-// ============================================================================
 // Main API
 // ============================================================================
 
 /**
- * Send a completion request to the best available Claude model.
- * Auto-selects provider (direct Anthropic API or fal.ai proxy).
+ * Send a completion request to Claude via the Anthropic API.
  * 
  * @example
  * // Simple single-turn
@@ -451,7 +356,7 @@ async function completeViaFalProxy(req: LLMCompletionRequest): Promise<LLMComple
  * });
  * 
  * @example
- * // With native tool calling (Anthropic direct only)
+ * // With native tool calling
  * const res = await llm.complete({
  *   model: 'claude-sonnet-4-5',
  *   systemPrompt: 'You can generate images.',
@@ -464,31 +369,12 @@ async function completeViaFalProxy(req: LLMCompletionRequest): Promise<LLMComple
  * });
  */
 export async function complete(req: LLMCompletionRequest): Promise<LLMCompletionResponse> {
-  const provider = detectProvider();
   const model = req.model || DEFAULT_MODELS.chat;
   const useCase = req.useCase || 'unknown';
 
-  logger.debug('LLM request', { provider, model, useCase });
+  logger.debug('LLM request', { provider: 'anthropic', model, useCase });
 
-  // Tools and extended thinking require direct Anthropic API
-  const needsDirectApi = (req.tools && req.tools.length > 0) || req.extendedThinking;
-  
-  if (needsDirectApi && provider !== 'anthropic') {
-    logger.warn('Request requires direct Anthropic API but only fal.ai proxy is available. Tools and extended thinking will be unavailable.', {
-      useCase,
-      hasTools: !!(req.tools && req.tools.length > 0),
-      extendedThinking: !!req.extendedThinking,
-    });
-    // Fall through to proxy — it won't have tools/thinking but will still return text
-  }
-
-  let response: LLMCompletionResponse;
-
-  if (provider === 'anthropic') {
-    response = await completeViaAnthropic(req);
-  } else {
-    response = await completeViaFalProxy(req);
-  }
+  const response = await completeViaAnthropic(req);
 
   logger.debug('LLM response', {
     provider: response.provider,
