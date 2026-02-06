@@ -286,34 +286,30 @@ export async function createAgent(agentData: {
   tools: string[];
   services?: AgentService[];
   skillMd?: string;
-}): Promise<{ agent: RegisteredAgent; agentURI: string; skillMd: string } | null> {
-  try {
-    await ensureCSRFToken();
-    
-    const response = await fetch(`${API_URL}/api/agents/create`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify(agentData),
-    });
+  systemPrompt?: string;
+}): Promise<{ agent: RegisteredAgent; agentURI: string; skillMd: string }> {
+  await ensureCSRFToken();
+  
+  const response = await fetch(`${API_URL}/api/agents/create`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify(agentData),
+  });
 
-    const data = await response.json();
-    
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to create agent');
-    }
-
-    return {
-      agent: data.agent,
-      agentURI: data.agentURI,
-      skillMd: data.skillMd,
-    };
-  } catch (error) {
-    logger.error('Failed to create agent', { error });
-    return null;
+  const data = await response.json();
+  
+  if (!data.success) {
+    throw new Error(data.error || 'Failed to create agent');
   }
+
+  return {
+    agent: data.agent,
+    agentURI: data.agentURI,
+    skillMd: data.skillMd,
+  };
 }
 
 /**

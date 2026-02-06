@@ -28,6 +28,7 @@ export interface CustomAgentRecord {
   agentURI: string;
   registration: Record<string, unknown>;
   skillMd: string;
+  systemPrompt: string;
   createdAt: string;
   isCustom: boolean;
 }
@@ -242,7 +243,7 @@ router.get('/:agentId/reputation', async (req: Request, res: Response) => {
  */
 router.post('/create', async (req: Request, res: Response) => {
   try {
-    const { name, description, type, tools, image, services, skillMd } = req.body;
+    const { name, description, type, tools, image, services, skillMd, systemPrompt } = req.body;
 
     // Get wallet address from session
     const walletAddress = (req as Record<string, unknown>).walletAddress as string
@@ -310,6 +311,7 @@ router.post('/create', async (req: Request, res: Response) => {
       agentURI,
       registration,
       skillMd: skillMd || '',
+      systemPrompt: systemPrompt || '',
       createdAt: new Date().toISOString(),
       isCustom: true,
     };

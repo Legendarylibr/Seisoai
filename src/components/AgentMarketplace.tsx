@@ -318,6 +318,59 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
     if (await deleteCustomAgent(agentId)) setCustomAgents(prev => prev.filter(a => a.agentId !== agentId));
   }, []);
 
+  // Derive which tab(s) an agent's tools map to, then enable them and navigate
+  const handleUseAgent = useCallback((agent: CustomAgent) => {
+    // Map tool categories to UI tabs
+    const toolTabMap: Record<string, string> = {
+      'image-generation': 'generate',
+      'image-processing': 'generate',
+      'video-generation': 'video',
+      'music-generation': 'music',
+      'audio-generation': 'music',
+      'text-generation': 'chat',
+    };
+    // Also map agent types to primary tabs
+    const typeTabMap: Record<string, string> = {
+      'Image Generation': 'generate',
+      'Video Generation': 'video',
+      'Music Generation': 'music',
+      'Chat/Assistant': 'chat',
+      'Multi-Modal': 'chat',
+      'Custom': 'chat',
+    };
+
+    // Collect all tabs this agent needs
+    const tabsToEnable = new Set<string>();
+    for (const toolId of (agent.tools || [])) {
+      // Derive category from tool ID prefix
+      const cat = toolId.startsWith('image.') ? (toolId.includes('upscale') ? 'image-processing' : 'image-generation')
+        : toolId.startsWith('video.') ? 'video-generation'
+        : toolId.startsWith('music.') ? 'music-generation'
+        : toolId.startsWith('audio.') ? 'audio-generation'
+        : toolId.startsWith('text.') ? 'text-generation'
+        : '';
+      const tab = toolTabMap[cat];
+      if (tab) tabsToEnable.add(tab);
+    }
+
+    // Enable all relevant tabs
+    const currentTabs = new Set(preferences.enabledTabs);
+    let changed = false;
+    for (const tab of tabsToEnable) {
+      if (!currentTabs.has(tab)) {
+        currentTabs.add(tab);
+        changed = true;
+      }
+    }
+    if (changed) {
+      updatePreference('enabledTabs', Array.from(currentTabs));
+    }
+
+    // Navigate to the primary tab for this agent type
+    const primaryTab = typeTabMap[agent.type] || Array.from(tabsToEnable)[0] || 'chat';
+    setTimeout(() => onNavigate?.(primaryTab), 50);
+  }, [preferences.enabledTabs, updatePreference, onNavigate]);
+
   const handleDownloadSkill = useCallback((agent: CustomAgent) => {
     if (!agent.skillMd) return;
     const blob = new Blob([agent.skillMd], { type: 'text/markdown' });
@@ -579,43 +632,84 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
               {customAgents.map(agent => {
                 const agentColor = getAgentColor(agent.type);
+                // Get category label for each tool
+                const toolLabels = (agent.tools || []).map(tid => {
+                  if (tid.startsWith('image.generate.flux-pro')) return 'Flux Pro';
+                  if (tid.startsWith('image.generate.flux-2')) return 'Flux 2';
+                  if (tid.startsWith('image.generate.nano')) return 'Nano Pro';
+                  if (tid === 'image.upscale') return 'Upscale';
+                  if (tid === 'video.generate') return 'Video';
+                  if (tid === 'music.generate') return 'Music';
+                  if (tid === 'audio.sfx') return 'SFX';
+                  if (tid === 'text.llm') return 'Chat';
+                  return tid.split('.').pop();
+                });
+
                 return (
-                  <div key={agent.agentId} className="p-2.5 flex items-start gap-2.5" style={PANEL.sunken}>
-                    <div className="w-9 h-9 flex items-center justify-center flex-shrink-0" style={{
-                      background: agentColor,
-                      color: '#fff',
-                      borderRadius: 4,
-                    }}>
-                      <Bot size={16} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-bold truncate" style={{ color: WIN95.text }}>{agent.name}</span>
-                        <span className="text-[8px] px-1 flex-shrink-0" style={{
-                          background: agentColor,
-                          color: '#fff',
-                        }}>
-                          {agent.type}
-                        </span>
+                  <div key={agent.agentId} className="p-2.5 flex flex-col gap-2" style={PANEL.sunken}>
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-9 h-9 flex items-center justify-center flex-shrink-0" style={{
+                        background: agentColor,
+                        color: '#fff',
+                        borderRadius: 4,
+                      }}>
+                        <Bot size={16} />
                       </div>
-                      <p className="text-[9px] mt-0.5 line-clamp-1" style={{ color: WIN95.textDisabled }}>{agent.description}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>
-                          <Hash size={7} className="inline" /> {agent.tools?.length || 0} tools
-                        </span>
-                        <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>&middot; {relTime(agent.createdAt)}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold truncate" style={{ color: WIN95.text }}>{agent.name}</span>
+                          <span className="text-[8px] px-1 flex-shrink-0" style={{
+                            background: agentColor,
+                            color: '#fff',
+                          }}>
+                            {agent.type}
+                          </span>
+                        </div>
+                        <p className="text-[9px] mt-0.5 line-clamp-1" style={{ color: WIN95.textDisabled }}>{agent.description}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>
+                            <Hash size={7} className="inline" /> {agent.tools?.length || 0} tools
+                          </span>
+                          <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>&middot; {relTime(agent.createdAt)}</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex flex-col gap-0.5 flex-shrink-0">
-                      {agent.skillMd && (
-                        <button onClick={() => handleDownloadSkill(agent)} className="p-1" style={BTN.small} title="Export SKILL.md" {...hoverHandlers}>
-                          <Download size={9} />
+                      <div className="flex flex-col gap-0.5 flex-shrink-0">
+                        {agent.skillMd && (
+                          <button onClick={() => handleDownloadSkill(agent)} className="p-1" style={BTN.small} title="Export SKILL.md" {...hoverHandlers}>
+                            <Download size={9} />
+                          </button>
+                        )}
+                        <button onClick={() => handleDeleteAgent(agent.agentId)} className="p-1" style={BTN.small} title="Delete agent" {...hoverHandlers}>
+                          <Trash2 size={9} style={{ color: WIN95.errorText }} />
                         </button>
-                      )}
-                      <button onClick={() => handleDeleteAgent(agent.agentId)} className="p-1" style={BTN.small} title="Delete agent" {...hoverHandlers}>
-                        <Trash2 size={9} style={{ color: WIN95.errorText }} />
-                      </button>
+                      </div>
                     </div>
+
+                    {/* Tool chips */}
+                    {toolLabels.length > 0 && (
+                      <div className="flex flex-wrap gap-0.5">
+                        {toolLabels.map((label, i) => (
+                          <span key={i} className="px-1.5 py-0.5 text-[7px] font-bold" style={{
+                            background: WIN95.bgDark,
+                            color: WIN95.text,
+                            borderLeft: `2px solid ${agentColor}`,
+                          }}>
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Use Agent button */}
+                    {onNavigate && (
+                      <button
+                        onClick={() => handleUseAgent(agent)}
+                        className="flex items-center justify-center gap-1.5 w-full py-1.5 text-[10px] font-bold generate-btn"
+                        style={{ border: 'none', cursor: 'pointer', fontFamily: font }}
+                      >
+                        <Play size={10} /> Use Agent
+                      </button>
+                    )}
                   </div>
                 );
               })}

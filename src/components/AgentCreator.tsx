@@ -132,6 +132,7 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ isOpen, onClose, onCreated,
   const [createSuccess, setCreateSuccess] = useState(false);
   const [createdAgentURI, setCreatedAgentURI] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
+  const [createError, setCreateError] = useState('');
 
   // Step 0 — Template selection
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -267,6 +268,14 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ isOpen, onClose, onCreated,
 
   const handleCreate = useCallback(async () => {
     if (isCreating) return;
+    setCreateError('');
+
+    // Check wallet connection before attempting
+    if (!address) {
+      setCreateError('Please connect your wallet first to create an agent.');
+      return;
+    }
+
     setIsCreating(true);
 
     try {
@@ -277,21 +286,22 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ isOpen, onClose, onCreated,
         image: agentIcon || undefined,
         tools: selectedTools,
         skillMd: editedSkillMd || generatedSkillMd,
+        systemPrompt: systemPrompt || undefined,
       });
 
-      if (result) {
-        setCreateSuccess(true);
-        setCreatedAgentURI(result.agentURI);
-        // Auto-enable relevant tabs so the user can access them
-        enableAgentTabs();
-        onCreated?.();
-      }
+      setCreateSuccess(true);
+      setCreatedAgentURI(result.agentURI);
+      // Auto-enable relevant tabs so the user can access them
+      enableAgentTabs();
+      onCreated?.();
     } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to create agent. Please try again.';
+      setCreateError(msg);
       logger.error('Failed to create agent', { error });
     } finally {
       setIsCreating(false);
     }
-  }, [isCreating, agentName, agentDescription, agentType, agentIcon, selectedTools, editedSkillMd, generatedSkillMd, onCreated, enableAgentTabs]);
+  }, [isCreating, address, agentName, agentDescription, agentType, agentIcon, selectedTools, editedSkillMd, generatedSkillMd, systemPrompt, onCreated, enableAgentTabs]);
 
   const handleDownloadSkillMd = useCallback(() => {
     const content = editedSkillMd || generatedSkillMd;
@@ -337,19 +347,62 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ isOpen, onClose, onCreated,
     setCreateSuccess(false);
     setCreatedAgentURI('');
     setIsCreating(false);
+    setCreateError('');
     onClose();
   }, [onClose]);
 
   // Navigate to the agent's primary UI tab
   const handleGoToStudio = useCallback(() => {
-    const primaryTab = AGENT_TYPE_PRIMARY_TAB[agentType] || 'workbench';
+    let primaryTab = AGENT_TYPE_PRIMARY_TAB[agentType] || 'workbench';
+
+    // For Custom agents (or workbench), derive the best tab from selected tools
+    if (primaryTab === 'workbench' && selectedTools.length > 0) {
+      const toolTabMap: Record<string, string> = {
+        'image': 'generate',
+        'video': 'video',
+        'music': 'music',
+        'audio': 'music',
+        'text': 'chat',
+      };
+      for (const toolId of selectedTools) {
+        const prefix = toolId.split('.')[0];
+        if (toolTabMap[prefix]) {
+          primaryTab = toolTabMap[prefix];
+          break;
+        }
+      }
+    }
+
+    // Enable all tabs the agent's tools need
     enableAgentTabs();
+    // Also enable tabs derived from specific tools for Custom agents
+    const currentTabs = new Set(preferences.enabledTabs);
+    const toolPrefixToTab: Record<string, string> = {
+      'image': 'generate',
+      'video': 'video',
+      'music': 'music',
+      'audio': 'music',
+      'text': 'chat',
+    };
+    let changed = false;
+    for (const toolId of selectedTools) {
+      const prefix = toolId.split('.')[0];
+      const tab = toolPrefixToTab[prefix];
+      if (tab && !currentTabs.has(tab)) {
+        currentTabs.add(tab);
+        changed = true;
+      }
+    }
+    if (changed) {
+      updatePreference('enabledTabs', Array.from(currentTabs));
+    }
+
     // Small delay to let preferences propagate before navigating
     setTimeout(() => {
       onNavigate?.(primaryTab);
       handleClose();
     }, 50);
-  }, [agentType, enableAgentTabs, onNavigate, handleClose]);
+  }, [agentType, selectedTools, enableAgentTabs, preferences.enabledTabs, updatePreference, onNavigate, handleClose]);
 
   if (!isOpen) return null;
 
@@ -465,15 +518,39 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ isOpen, onClose, onCreated,
                 {createdAgentURI.slice(0, 120)}...
               </div>
 
-              {/* Primary CTA: Go to Studio */}
-              {onNavigate && AGENT_TYPE_PRIMARY_TAB[agentType] !== 'workbench' && (
+              {/* Selected tools summary */}
+              <div className="flex flex-wrap gap-1 justify-center">
+                {selectedTools.map((toolId) => {
+                  const tool = availableTools.find(t => t.id === toolId);
+                  const color = tool ? (TOOL_COLORS[tool.category] || '#6b7280') : '#6b7280';
+                  return (
+                    <span
+                      key={toolId}
+                      className="flex items-center gap-1 px-2 py-0.5 text-[9px]"
+                      style={{
+                        background: WIN95.bgDark,
+                        color: WIN95.text,
+                        fontFamily: font,
+                        borderLeft: `3px solid ${color}`,
+                      }}
+                    >
+                      {tool?.name || toolId}
+                    </span>
+                  );
+                })}
+              </div>
+
+              {/* Primary CTA: Use Agent */}
+              {onNavigate && (
                 <button
                   onClick={handleGoToStudio}
                   className="flex items-center justify-center gap-2 px-6 py-2.5 text-[12px] font-bold generate-btn w-full sm:w-auto mx-auto"
                   style={{ fontFamily: font, border: 'none', cursor: 'pointer' }}
                 >
                   <Sparkles className="w-4 h-4" />
-                  Open {agentType.replace('Generation', '').replace('Chat/', '')} Studio
+                  {AGENT_TYPE_PRIMARY_TAB[agentType] !== 'workbench'
+                    ? `Open ${agentType.replace('Generation', '').replace('Chat/', '')} Studio`
+                    : 'Use Agent Now'}
                   <ChevronRight className="w-4 h-4" />
                 </button>
               )}
@@ -1065,6 +1142,42 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ isOpen, onClose, onCreated,
                   SKILL.md file will be included with your agent
                 </span>
               </div>
+
+              {/* Wallet connection warning */}
+              {!address && (
+                <div className="p-2.5 flex items-center gap-2" style={{
+                  background: '#fff3cd',
+                  border: `2px solid #f59e0b`,
+                }}>
+                  <Zap className="w-4 h-4 flex-shrink-0" style={{ color: '#d97706' }} />
+                  <div>
+                    <div className="text-[10px] font-bold" style={{ color: '#92400e', fontFamily: font }}>
+                      Wallet Not Connected
+                    </div>
+                    <div className="text-[9px]" style={{ color: '#a16207', fontFamily: font }}>
+                      Connect your wallet before creating an agent. Your wallet address is used to identify and manage your agents.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Error message */}
+              {createError && (
+                <div className="p-2.5 flex items-center gap-2" style={{
+                  background: '#fef2f2',
+                  border: `2px solid ${WIN95.errorText || '#dc2626'}`,
+                }}>
+                  <X className="w-4 h-4 flex-shrink-0" style={{ color: WIN95.errorText || '#dc2626' }} />
+                  <div>
+                    <div className="text-[10px] font-bold" style={{ color: '#991b1b', fontFamily: font }}>
+                      Creation Failed
+                    </div>
+                    <div className="text-[9px]" style={{ color: '#b91c1c', fontFamily: font }}>
+                      {createError}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
