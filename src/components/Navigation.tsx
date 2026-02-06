@@ -232,8 +232,8 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment }: 
       <div className="px-1 lg:px-2 py-0.5 lg:py-1" style={{ borderBottom: `1px solid ${WIN95.bgDark}` }}>
         <div className="container mx-auto">
           <div className="flex items-center justify-between">
-            {/* Desktop Navigation - only show when authenticated */}
-            {isConnected && (
+            {/* Desktop Navigation - only show when authenticated and more than 1 tab */}
+            {isConnected && tabs.length > 1 && (
               <nav className="hidden md:flex items-center gap-1">
                 {tabs.map((tab) => {
                   const Icon = tab.icon;
@@ -508,8 +508,8 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment }: 
               </div>
             )}
 
-            {/* Mobile Menu Button - only show when authenticated */}
-            {isConnected && (
+            {/* Mobile Menu Button - only show when authenticated and more than 1 tab */}
+            {isConnected && tabs.length > 1 && (
               <button 
                 onClick={() => setShowMobileMenu(!showMobileMenu)} 
                 className="md:hidden p-2"
@@ -658,8 +658,8 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment }: 
         </div>
       </div>
 
-      {/* Mobile Tab Bar - Always visible on small screens */}
-      {isConnected && (
+      {/* Mobile Tab Bar - visible on small screens when more than 1 tab */}
+      {isConnected && tabs.length > 1 && (
         <div 
           className="md:hidden flex items-center overflow-x-auto scrollbar-hide px-1 py-1 gap-0.5"
           style={{ 

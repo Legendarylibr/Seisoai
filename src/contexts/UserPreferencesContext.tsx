@@ -49,7 +49,7 @@ export interface UserPreferences {
 const DEFAULT_PREFERENCES: UserPreferences = {
   theme: 'system',
   accentColor: '#000080', // Win95 blue
-  enabledTabs: [...ALL_TAB_IDS], // all enabled by default
+  enabledTabs: ['workbench'], // Agent Builder only — users add capabilities via Build Your UI
   defaultModel: null,
   defaultStyle: null,
   defaultAspectRatio: '1:1',
@@ -60,6 +60,9 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 };
 
 const STORAGE_KEY = 'seiso_preferences';
+const PREFS_VERSION_KEY = 'seiso_prefs_version';
+// Bump this when a migration needs to force-reset enabledTabs
+const CURRENT_PREFS_VERSION = 2;
 
 // Accent color presets
 export const ACCENT_COLORS = [
@@ -97,7 +100,6 @@ function migratePreferences(prefs: UserPreferences): UserPreferences {
   // Migrate "marketplace" → "workbench" (v2026.02 rename)
   if (prefs.enabledTabs?.includes('marketplace')) {
     prefs.enabledTabs = prefs.enabledTabs.map(t => t === 'marketplace' ? 'workbench' : t);
-    // Deduplicate in case workbench was already present
     prefs.enabledTabs = [...new Set(prefs.enabledTabs)];
   }
   // Ensure workbench is always in enabledTabs if missing
@@ -107,6 +109,15 @@ function migratePreferences(prefs: UserPreferences): UserPreferences {
   if ((prefs as unknown as Record<string, unknown>).defaultTab === 'marketplace') {
     prefs.defaultTab = 'workbench';
   }
+
+  // v2 migration: reset to workbench-only (UI builder is now the entry point)
+  const savedVersion = parseInt(localStorage.getItem(PREFS_VERSION_KEY) || '0', 10);
+  if (savedVersion < CURRENT_PREFS_VERSION) {
+    prefs.enabledTabs = ['workbench'];
+    prefs.defaultTab = 'workbench';
+    localStorage.setItem(PREFS_VERSION_KEY, String(CURRENT_PREFS_VERSION));
+  }
+
   return prefs;
 }
 
