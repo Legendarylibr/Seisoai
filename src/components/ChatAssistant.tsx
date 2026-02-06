@@ -976,6 +976,19 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant() {
   // Confirm generation
   const handleConfirmAction = useCallback(async (action: PendingAction) => {
     if (isGenerating) return;
+    
+    // Check wallet connection before attempting generation
+    if (!isConnected || !walletContext.address) {
+      setMessages(prev => [...prev, {
+        id: generateMessageId(),
+        role: 'assistant',
+        content: '[AUTH_REQUIRED] Please connect your wallet to generate content.',
+        timestamp: new Date().toISOString(),
+        error: 'Authentication required. Connect wallet to continue.'
+      }]);
+      return;
+    }
+    
     setIsGenerating(true);
 
     const actionType = action.type || 'content';
@@ -1016,7 +1029,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant() {
     }
 
     setIsGenerating(false);
-  }, [isGenerating, getContext, walletContext]);
+  }, [isGenerating, isConnected, getContext, walletContext]);
 
   // Cancel
   const handleCancelAction = useCallback(() => {
