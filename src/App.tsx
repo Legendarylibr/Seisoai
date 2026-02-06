@@ -19,7 +19,7 @@ import GenerationQueue from './components/GenerationQueue';
 import PromptLab from './components/PromptLab';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useImageGenerator } from './contexts/ImageGeneratorContext';
-import { Grid, Globe, Sparkles, Film, Music, Layers, MessageCircle, Cpu, Bot, type LucideIcon } from 'lucide-react';
+import { Grid, Globe, Sparkles, Film, Music, Layers, MessageCircle, Cpu, Bot, ListTree, type LucideIcon } from 'lucide-react';
 import { ensureCSRFToken } from './utils/apiConfig';
 
 // Build version - check console to verify deployment
@@ -36,6 +36,7 @@ const ChatAssistant = lazy(() => import('./components/ChatAssistant'));
 // const CharacterGenerator = lazy(() => import('./components/CharacterGenerator'));
 const ModelTraining = lazy(() => import('./components/ModelTraining'));
 const AgentMarketplace = lazy(() => import('./components/AgentMarketplace'));
+const TaskBuilder = lazy(() => import('./components/TaskBuilder'));
 const TermsModal = lazy(() => import('./components/TermsModal'));
 const OnboardingWizard = lazy(() => import('./components/OnboardingWizard'));
 const PublicGallery = lazy(() => import('./components/PublicGallery'));
@@ -86,6 +87,7 @@ function AppContentInner(): JSX.Element {
     { id: 'video', name: t.nav.video, icon: Film },
     { id: 'music', name: t.nav.music, icon: Music },
     { id: 'training', name: t.nav.training || 'Training', icon: Cpu },
+    { id: 'workflows', name: 'Workflows', icon: ListTree },
     // TEMPORARILY DISABLED - 3D not working, re-enable when fixed
     // { id: '3d', name: '3D', icon: Box },
     { id: 'gallery', name: t.nav.gallery, icon: Grid },
@@ -393,6 +395,18 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
               <Suspense fallback={<Win95LoadingFallback text="Loading Agent Workbench..." />}>
                 <AgentMarketplace onNavigate={setActiveTab} />
               </Suspense>
+            </div>
+          </ErrorBoundary>
+        )}
+        
+        {activeTab === 'workflows' && (
+          <ErrorBoundary fallbackText="Workflow builder encountered an error">
+            <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
+              <AuthGuard onNavigate={setActiveTab}>
+                <Suspense fallback={<Win95LoadingFallback text="Loading Workflow Builder..." />}>
+                  <TaskBuilder />
+                </Suspense>
+              </AuthGuard>
             </div>
           </ErrorBoundary>
         )}

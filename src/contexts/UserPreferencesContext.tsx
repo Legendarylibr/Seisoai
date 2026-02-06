@@ -17,6 +17,7 @@ export const ALL_FEATURES = [
   { id: 'video', label: 'Video', description: 'Create AI videos', icon: 'Film' },
   { id: 'music', label: 'Music', description: 'Generate music and audio', icon: 'Music' },
   { id: 'training', label: 'Training', description: 'Train custom LoRA models', icon: 'Cpu' },
+  { id: 'workflows', label: 'Workflows', description: 'Visual workflow builder with AI planning', icon: 'ListTree' },
   { id: 'gallery', label: 'Gallery', description: 'Browse and manage generations', icon: 'Grid' },
 ] as const;
 

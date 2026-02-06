@@ -73,6 +73,12 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
+  // Skip CSRF check for internal server-to-server calls (e.g., chat-assistant → generate)
+  // These are authenticated via JWT and originate from within the same process
+  if (req.headers['x-internal-request'] === 'true') {
+    return next();
+  }
+
   // Skip CSRF check for Claw/OpenClaw clients (API-only access)
   // These are AI agents without browser context
   const xClient = req.headers['x-client']?.toString().toLowerCase();

@@ -1498,7 +1498,9 @@ async function callInternalEndpoint(
   
   // Forward all relevant headers for authentication
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    // Mark as internal request to bypass CSRF (we're already authenticated via the original request)
+    'X-Internal-Request': 'true'
   };
   
   // Forward auth headers
