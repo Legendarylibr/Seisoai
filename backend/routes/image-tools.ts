@@ -7,6 +7,7 @@ import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed } from '../services/fal';
+import llmProvider, { DEFAULT_MODELS } from '../services/llmProvider';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 import { applyClawMarkup } from '../middleware/credits';
@@ -633,23 +634,20 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
       // Calculate max_tokens based on number of outputs (each prompt ~200 tokens + overhead)
       const tokensNeeded = Math.max(3000, validNumOutputs * 250 + 500);
       
-      const variationResponse = await fetch('https://fal.run/fal-ai/any-llm', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'anthropic/claude-3-haiku',
+      let variationOutput = '';
+      try {
+        const llmResponse = await llmProvider.complete({
+          model: DEFAULT_MODELS.internal,
+          systemPrompt: variationSystemPrompt,
           prompt: `Create EXACTLY ${validNumOutputs} variations of this character. KEEP THE SAME GENDER AND POSE. Only change outfit, hair color, and background:\n\n${description}`,
-          system_prompt: variationSystemPrompt,
-          max_tokens: tokensNeeded
-        })
-      });
-
-      if (!variationResponse.ok) {
+          maxTokens: tokensNeeded,
+          timeoutMs: 15000,
+          useCase: 'image-variation-prompts',
+        });
+        variationOutput = llmResponse.content;
+      } catch (llmError) {
         // Fallback: return the description as the prompt for all variations
-        logger.warn('Variation prompt generation failed, using description as fallback');
+        logger.warn('Variation prompt generation failed, using description as fallback', { error: (llmError as Error).message });
         res.json({
           success: true,
           description,
@@ -660,15 +658,12 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
         return;
       }
 
-      const variationData = await variationResponse.json() as { output?: string; text?: string; response?: string };
-      const variationOutput = variationData.output || variationData.text || variationData.response || '';
-
       // Parse JSON array from response
       let prompts: string[] = [];
       try {
-        const jsonMatch = variationOutput.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          prompts = JSON.parse(jsonMatch[0]) as string[];
+        const parsedArray = llmProvider.extractJSON<string[]>(variationOutput);
+        if (parsedArray && Array.isArray(parsedArray)) {
+          prompts = parsedArray;
           logger.info('Parsed variation prompts from LLM', { 
             requested: validNumOutputs, 
             received: prompts.length,

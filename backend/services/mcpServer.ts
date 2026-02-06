@@ -12,8 +12,12 @@
  */
 import type { Request, Response, Router } from 'express';
 import { Router as ExpressRouter } from 'express';
+import mongoose from 'mongoose';
 import { toolRegistry } from './toolRegistry';
-import { falRequest, submitToQueue, checkQueueStatus, getQueueResult, isStatusCompleted, isStatusFailed, isStatusProcessing } from './fal';
+import { falRequest, submitToQueue, checkQueueStatus, getQueueResult, isStatusCompleted, isStatusFailed } from './fal';
+import { executePlan, orchestrate, WORKFLOW_TEMPLATES } from './orchestrator';
+import { authenticateApiKey } from '../middleware/apiKeyAuth';
+import type { IApiKey } from '../models/ApiKey';
 import logger from '../utils/logger';
 
 // ============================================
@@ -38,20 +42,37 @@ interface MCPResponse {
   };
 }
 
-interface MCPNotification {
-  jsonrpc: '2.0';
-  method: string;
-  params?: Record<string, unknown>;
-}
-
 // ============================================
 // MCP Handler
 // ============================================
 
+/** Auth context passed through from Express middleware */
+interface MCPAuthContext {
+  apiKey?: IApiKey;
+  isApiKeyAuth?: boolean;
+}
+
+/**
+ * Deduct credits from an API key atomically.
+ * Returns updated key or null if insufficient credits.
+ */
+async function deductCredits(apiKey: IApiKey, credits: number): Promise<IApiKey | null> {
+  try {
+    const ApiKey = mongoose.model<IApiKey>('ApiKey');
+    return await ApiKey.findOneAndUpdate(
+      { _id: apiKey._id, credits: { $gte: credits } },
+      { $inc: { credits: -credits, totalCreditsSpent: credits } },
+      { new: true },
+    );
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Handle an MCP JSON-RPC request and return a response
  */
-async function handleMCPRequest(request: MCPRequest): Promise<MCPResponse> {
+async function handleMCPRequest(request: MCPRequest, auth?: MCPAuthContext): Promise<MCPResponse> {
   const { id, method, params } = request;
 
   try {
@@ -72,17 +93,32 @@ async function handleMCPRequest(request: MCPRequest): Promise<MCPResponse> {
           },
         };
 
-      case 'tools/list':
+      case 'tools/list': {
+        const mcpTools = toolRegistry.toMCPTools();
+        // Add orchestration meta-tool
+        const templateNames = Object.keys(WORKFLOW_TEMPLATES);
+        mcpTools.push({
+          name: 'orchestrate',
+          description: `Multi-step workflow orchestrator. Give it a natural language goal and it plans & executes a sequence of AI tools automatically. Available templates: ${templateNames.join(', ')}. Cost depends on tools used.`,
+          inputSchema: {
+            type: 'object',
+            properties: {
+              goal: { type: 'string', description: 'Natural language description of the creative goal' },
+              template: { type: 'string', description: `Optional workflow template: ${templateNames.join(', ')}` },
+              params: { type: 'object', description: 'Template parameters (if using a template)' },
+            },
+            required: ['goal'],
+          },
+        });
         return {
           jsonrpc: '2.0',
           id,
-          result: {
-            tools: toolRegistry.toMCPTools(),
-          },
+          result: { tools: mcpTools },
         };
+      }
 
       case 'tools/call':
-        return await handleToolCall(id, params as { name: string; arguments: Record<string, unknown> });
+        return await handleToolCall(id, params as { name: string; arguments: Record<string, unknown> }, auth);
 
       case 'ping':
         return { jsonrpc: '2.0', id, result: {} };
@@ -116,9 +152,62 @@ async function handleMCPRequest(request: MCPRequest): Promise<MCPResponse> {
  */
 async function handleToolCall(
   id: string | number,
-  params: { name: string; arguments: Record<string, unknown> }
+  params: { name: string; arguments: Record<string, unknown> },
+  auth?: MCPAuthContext,
 ): Promise<MCPResponse> {
   const { name: toolId, arguments: input } = params;
+
+  // Handle orchestration meta-tool
+  if (toolId === 'orchestrate') {
+    try {
+      const { goal, template, params: tplParams } = input as {
+        goal: string;
+        template?: string;
+        params?: Record<string, unknown>;
+      };
+
+      if (!goal) {
+        return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Missing required field: goal' } };
+      }
+
+      let result;
+      if (template && WORKFLOW_TEMPLATES[template]) {
+        const plan = WORKFLOW_TEMPLATES[template](tplParams || {});
+        plan.goal = goal;
+        result = await executePlan(plan);
+      } else {
+        result = await orchestrate(goal);
+      }
+
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: result.success,
+              goal: result.goal,
+              totalCredits: result.totalCredits,
+              totalDurationMs: result.totalDurationMs,
+              steps: result.stepResults.map(s => ({
+                stepId: s.stepId,
+                toolId: s.toolId,
+                status: s.status,
+                durationMs: s.durationMs,
+                error: s.error,
+              })),
+              finalOutput: result.finalOutput,
+            }, null, 2),
+          }],
+        },
+      };
+    } catch (error) {
+      const err = error as Error;
+      logger.error('MCP orchestration failed', { error: err.message });
+      return { jsonrpc: '2.0', id, error: { code: -32603, message: `Orchestration failed: ${err.message}` } };
+    }
+  }
 
   const tool = toolRegistry.get(toolId);
   if (!tool) {
@@ -143,21 +232,52 @@ async function handleToolCall(
     };
   }
 
-  // Validate required fields
-  const missingFields = tool.inputSchema.required.filter(field => !(field in input));
-  if (missingFields.length > 0) {
+  // Validate input against tool's JSON Schema
+  const validation = toolRegistry.validateInput(toolId, input);
+  if (!validation.valid) {
     return {
       jsonrpc: '2.0',
       id,
       error: {
         code: -32602,
-        message: `Missing required fields: ${missingFields.join(', ')}`,
-        data: { schema: tool.inputSchema },
+        message: `Invalid input: ${validation.errors.join('; ')}`,
+        data: { validationErrors: validation.errors, schema: tool.inputSchema },
       },
     };
   }
 
-  logger.info('MCP tool call', { toolId, executionMode: tool.executionMode });
+  // Credit check and deduction for API key authenticated requests
+  const price = toolRegistry.calculatePrice(toolId, input);
+  const creditsNeeded = price?.credits || tool.pricing.credits;
+
+  if (auth?.isApiKeyAuth && auth.apiKey) {
+    if (auth.apiKey.credits < creditsNeeded) {
+      return {
+        jsonrpc: '2.0',
+        id,
+        error: {
+          code: -32000,
+          message: `Insufficient credits. Need ${creditsNeeded}, have ${auth.apiKey.credits}`,
+          data: { required: creditsNeeded, available: auth.apiKey.credits },
+        },
+      };
+    }
+
+    const updated = await deductCredits(auth.apiKey, creditsNeeded);
+    if (!updated) {
+      return {
+        jsonrpc: '2.0',
+        id,
+        error: {
+          code: -32000,
+          message: 'Credit deduction failed (race condition)',
+        },
+      };
+    }
+    auth.apiKey = updated;
+  }
+
+  logger.info('MCP tool call', { toolId, executionMode: tool.executionMode, credits: creditsNeeded, hasAuth: !!auth?.isApiKeyAuth });
 
   try {
     if (tool.executionMode === 'sync') {
@@ -275,6 +395,9 @@ export function createMCPRoutes(): Router {
   // Active SSE connections for message-based transport
   const connections = new Map<string, Response>();
 
+  // Apply API key authentication to all MCP routes (optional — falls through if no key)
+  router.use(authenticateApiKey);
+
   /**
    * GET /api/mcp/sse
    * SSE endpoint for MCP communication
@@ -338,8 +461,14 @@ export function createMCPRoutes(): Router {
       return res.status(202).json({ accepted: true });
     }
 
-    // Handle request
-    const response = await handleMCPRequest(mcpRequest);
+    // Build auth context from Express middleware
+    const auth: MCPAuthContext = {
+      apiKey: req.apiKey,
+      isApiKeyAuth: req.isApiKeyAuth,
+    };
+
+    // Handle request with auth context
+    const response = await handleMCPRequest(mcpRequest, auth);
 
     // Send response via SSE
     sseConnection.write(`event: message\ndata: ${JSON.stringify(response)}\n\n`);
@@ -369,7 +498,12 @@ export function createMCPRoutes(): Router {
       return res.status(202).json({ accepted: true });
     }
 
-    const response = await handleMCPRequest(mcpRequest);
+    const auth: MCPAuthContext = {
+      apiKey: req.apiKey,
+      isApiKeyAuth: req.isApiKeyAuth,
+    };
+
+    const response = await handleMCPRequest(mcpRequest, auth);
     res.json(response);
   });
 

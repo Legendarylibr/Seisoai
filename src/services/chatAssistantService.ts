@@ -122,11 +122,22 @@ export const ASPECT_RATIOS = [
   { id: 'ultra_wide', name: '21:9', icon: '🎬', description: 'Ultrawide' }
 ];
 
+// Available Claude models for chat
+export const CHAT_AI_MODELS = [
+  { id: 'claude-haiku-4-5', name: 'Haiku 4.5', tier: 'Fast', credits: 1 },
+  { id: 'claude-sonnet-4-5', name: 'Sonnet 4.5', tier: 'Balanced', credits: 3 },
+  { id: 'claude-opus-4-6', name: 'Opus 4.6', tier: 'Premium', credits: 5 },
+] as const;
+
 export interface ChatResponse {
   success: boolean;
   message?: string;
   action?: PendingAction;
   generatedContent?: GeneratedContent;
+  /** Which Claude model was used */
+  model?: string;
+  modelDisplayName?: string;
+  provider?: string;
   error?: string;
 }
 
@@ -146,12 +157,14 @@ export interface ChatContext {
  * @param history - Chat history
  * @param context - User context (wallet, credits, etc.)
  * @param referenceImages - Optional array of reference images (or single image for backwards compatibility)
+ * @param model - Optional Claude model override (claude-opus-4-6, claude-sonnet-4-5, claude-haiku-4-5)
  */
 export async function sendChatMessage(
   message: string,
   history: ChatMessage[] = [],
   context: ChatContext,
-  referenceImages?: string | string[]
+  referenceImages?: string | string[],
+  model?: string
 ): Promise<ChatResponse> {
   try {
     const csrfToken = await ensureCSRFToken();
@@ -199,7 +212,9 @@ export async function sendChatMessage(
         },
         // Support both single image (backwards compat) and multiple images
         referenceImage: imageArray.length === 1 ? imageArray[0] : undefined,
-        referenceImages: imageArray.length > 0 ? imageArray : undefined
+        referenceImages: imageArray.length > 0 ? imageArray : undefined,
+        // Claude model selection
+        model: model || undefined
       })
     });
 
@@ -226,7 +241,10 @@ export async function sendChatMessage(
       success: true,
       message: data.response,
       action: mappedAction,
-      generatedContent: data.generatedContent
+      generatedContent: data.generatedContent,
+      model: data.model,
+      modelDisplayName: data.modelDisplayName,
+      provider: data.provider,
     };
   } catch (error) {
     const err = error as Error;
@@ -323,8 +341,140 @@ export function generateMessageId(): string {
   return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+// ============================================================================
+// Agentic Chat — SSE-based multi-step tool execution
+// ============================================================================
+
+export interface AgenticStep {
+  iteration: number;
+  toolCalls?: Array<{ name: string; input: Record<string, unknown> }>;
+  toolResults?: Array<{ name: string; success: boolean; result: string }>;
+  response?: string;
+  thinking?: string;
+}
+
+export interface AgenticResponse {
+  success: boolean;
+  response: string;
+  steps: AgenticStep[];
+  toolResults?: Array<{ name: string; success: boolean; data?: unknown }>;
+  pendingToolCalls?: Array<{ name: string; input: Record<string, unknown> }>;
+  model?: string;
+  modelDisplayName?: string;
+  provider?: string;
+  iterations?: number;
+  durationMs?: number;
+  autonomous?: boolean;
+  error?: string;
+}
+
+export type AgenticEventType =
+  | 'step'
+  | 'thinking'
+  | 'tool_calls'
+  | 'tool_executing'
+  | 'tool_result'
+  | 'confirmation_needed'
+  | 'response'
+  | 'done'
+  | 'error';
+
+export interface AgenticEvent {
+  type: AgenticEventType;
+  data: Record<string, unknown>;
+}
+
+/**
+ * Send an agentic message with streaming SSE updates.
+ * @param onEvent - Callback for intermediate events (thinking, tool_calls, etc.)
+ * @returns Final AgenticResponse when done
+ */
+export async function sendAgenticMessage(
+  message: string,
+  history: ChatMessage[] = [],
+  _context: ChatContext,
+  model?: string,
+  autonomous = true,
+  onEvent?: (event: AgenticEvent) => void
+): Promise<AgenticResponse> {
+  try {
+    const csrfToken = await ensureCSRFToken();
+
+    const response = await fetch(`${API_URL}/api/chat-assistant/agent-message`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: onEvent ? 'text/event-stream' : 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        message,
+        history: history.slice(-20).map(m => ({
+          role: m.role,
+          content: m.content,
+        })),
+        model: model || undefined,
+        autonomous,
+        maxIterations: 5,
+      }),
+    });
+
+    // SSE mode
+    if (onEvent && response.headers.get('content-type')?.includes('text/event-stream')) {
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalResult: AgenticResponse | undefined;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        let currentEvent = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith('data: ') && currentEvent) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              onEvent({ type: currentEvent as AgenticEventType, data });
+              if (currentEvent === 'done') {
+                finalResult = data as AgenticResponse;
+              }
+            } catch {
+              // Skip malformed JSON
+            }
+            currentEvent = '';
+          }
+        }
+      }
+
+      return finalResult || { success: false, response: '', steps: [], error: 'No final event received' };
+    }
+
+    // JSON mode (no SSE)
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Agentic chat failed');
+    }
+    return data as AgenticResponse;
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Agentic chat message failed', { error: err.message });
+    return { success: false, response: '', steps: [], error: err.message };
+  }
+}
+
 export default {
   sendChatMessage,
+  sendAgenticMessage,
   executeGeneration,
   getWelcomeMessage,
   generateMessageId

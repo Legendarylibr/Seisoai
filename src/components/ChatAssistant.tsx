@@ -11,6 +11,7 @@ import {
   ImagePlus, LogOut, Terminal, ChevronRight
 } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
+import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import AuthPrompt from './AuthPrompt';
 import { 
   sendChatMessage, 
@@ -22,6 +23,7 @@ import {
   VIDEO_DURATIONS,
   ASPECT_RATIOS,
   MUSIC_DURATIONS,
+  CHAT_AI_MODELS,
   calculateMusicCredits,
   calculateVideoCredits,
   type ChatMessage, 
@@ -817,6 +819,7 @@ const TermQuickActions = memo(function TermQuickActions({ onSelect }: { onSelect
 const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant() {
   const walletContext = useSimpleWallet();
   const isConnected = walletContext.isConnected;
+  const { preferences } = useUserPreferences();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -825,6 +828,7 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [autonomousMode, setAutonomousMode] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -943,7 +947,8 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant() {
         userMessage.content,
         messages,
         getContext(),
-        imagesToSend.length > 0 ? imagesToSend : undefined
+        imagesToSend.length > 0 ? imagesToSend : undefined,
+        preferences.chatModel || 'claude-sonnet-4-5'
       );
 
       setMessages(prev => prev.map(msg =>
@@ -1097,6 +1102,31 @@ const ChatAssistant = memo<ChatAssistantProps>(function ChatAssistant() {
         <div className="flex-1 flex items-center justify-center gap-2" style={{ fontFamily: TERM.font }}>
           <Terminal className="w-3.5 h-3.5" style={{ color: TERM.green }} />
           <span style={{ color: TERM.whiteDim, fontSize: 11 }}>seiso@agent ~ /chat</span>
+          <span style={{ 
+            color: TERM.amber, 
+            fontSize: 9, 
+            padding: '1px 6px', 
+            background: 'rgba(255,176,0,0.1)', 
+            borderRadius: 3,
+            border: `1px solid rgba(255,176,0,0.2)`
+          }}>
+            {CHAT_AI_MODELS.find(m => m.id === (preferences.chatModel || 'claude-sonnet-4-5'))?.name || 'Sonnet 4.5'}
+          </span>
+          <button
+            onClick={() => setAutonomousMode(prev => !prev)}
+            title={autonomousMode ? 'Autonomous mode: ON (tools execute automatically)' : 'Autonomous mode: OFF (confirm before tools run)'}
+            style={{ 
+              color: autonomousMode ? TERM.green : TERM.whiteDim,
+              fontSize: 9, 
+              padding: '1px 6px', 
+              background: autonomousMode ? 'rgba(0,255,65,0.1)' : 'rgba(255,255,255,0.05)',
+              borderRadius: 3,
+              border: `1px solid ${autonomousMode ? 'rgba(0,255,65,0.3)' : 'rgba(255,255,255,0.1)'}`,
+              cursor: 'pointer',
+            }}
+          >
+            {autonomousMode ? 'AUTO' : 'MANUAL'}
+          </button>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">

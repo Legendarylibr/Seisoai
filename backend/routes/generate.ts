@@ -10,6 +10,7 @@ import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { requireAuth } from '../utils/responses';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed, normalizeStatus, FAL_STATUS } from '../services/fal';
+import llmProvider, { DEFAULT_MODELS } from '../services/llmProvider';
 import { buildUserUpdateQuery } from '../services/user';
 // createEmailHash import removed - SECURITY: Use authenticated user from JWT instead
 import type { IUser } from '../models/User';
@@ -89,17 +90,12 @@ async function translateAsianToEnglish(prompt: string): Promise<TranslationResul
     return { translatedPrompt: prompt, wasTranslated: false };
   }
 
-  const FAL_API_KEY = getFalApiKey();
-  
-  if (!FAL_API_KEY) {
-    logger.warn('Translation skipped: FAL_API_KEY not configured');
-    return { translatedPrompt: prompt, wasTranslated: false, error: 'API key not configured' };
+  if (!llmProvider.isLLMConfigured()) {
+    logger.warn('Translation skipped: No LLM provider configured');
+    return { translatedPrompt: prompt, wasTranslated: false, error: 'LLM not configured' };
   }
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
     const languageName = sourceLanguage === 'japanese' ? 'Japanese' : 'Chinese';
     const translationPrompt = `Translate the following ${languageName} text to English. This is a prompt for AI image/video/music generation, so preserve all descriptive details, style keywords, and artistic directions. Output ONLY the English translation, nothing else.
 
@@ -107,29 +103,15 @@ ${languageName} text: ${prompt}
 
 English translation:`;
 
-    const response = await fetch('https://fal.run/fal-ai/any-llm', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${FAL_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-3-5-haiku',
-        prompt: translationPrompt,
-        max_tokens: 500
-      }),
-      signal: controller.signal
+    const llmResponse = await llmProvider.complete({
+      model: DEFAULT_MODELS.internal,
+      prompt: translationPrompt,
+      maxTokens: 500,
+      timeoutMs: 8000,
+      useCase: 'translation',
     });
 
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      logger.warn('Translation request failed', { status: response.status, language: sourceLanguage });
-      return { translatedPrompt: prompt, wasTranslated: false, error: 'Translation request failed' };
-    }
-
-    const data = await response.json() as { output?: string; text?: string; response?: string };
-    const output = (data.output || data.text || data.response || '').trim();
+    const output = llmResponse.content.trim();
 
     if (output && output.length > 0) {
       logger.debug('Prompt translated', { 
@@ -261,12 +243,9 @@ export async function optimizePromptForMusic(
     return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
   }
 
-  const FAL_API_KEY = getFalApiKey();
-  
-  // Check if FAL_API_KEY is available
-  if (!FAL_API_KEY) {
-    logger.warn('Music prompt optimization skipped: FAL_API_KEY not configured');
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'API key not configured' };
+  if (!llmProvider.isLLMConfigured()) {
+    logger.warn('Music prompt optimization skipped: No LLM provider configured');
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM not configured' };
   }
 
   const genreContext = selectedGenre 
@@ -274,45 +253,25 @@ export async function optimizePromptForMusic(
     : '';
 
   try {
-    // Use AbortController for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
     const userPrompt = `Enhance this music prompt. Keep it SHORT (under 200 chars): "${originalPrompt}"
 ${genreContext ? genreContext + '\n' : ''}Add genre, 2-3 instruments, mood. Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
-    const response = await fetch('https://fal.run/fal-ai/any-llm', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${FAL_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-3-haiku',
-        prompt: userPrompt,
-        system_prompt: MUSIC_PROMPT_GUIDELINES,
-        temperature: 0.6,
-        max_tokens: 250
-      }),
-      signal: controller.signal
+    const llmResponse = await llmProvider.complete({
+      model: DEFAULT_MODELS.internal,
+      systemPrompt: MUSIC_PROMPT_GUIDELINES,
+      prompt: userPrompt,
+      temperature: 0.6,
+      maxTokens: 250,
+      timeoutMs: 8000,
+      useCase: 'music-prompt-optimization',
     });
 
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      logger.warn('Music prompt optimization LLM request failed', { status: response.status, error: errorText });
-      return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM request failed' };
-    }
-
-    const data = await response.json() as { output?: string; text?: string; response?: string };
-    const output = data.output || data.text || data.response || '';
+    const output = llmResponse.content;
 
     // Try to parse JSON response
     try {
-      const jsonMatch = output.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
+      const parsed = llmProvider.extractJSON<{ optimizedPrompt?: string; reasoning?: string }>(output);
+      if (parsed) {
         const optimized = parsed.optimizedPrompt || originalPrompt;
         return {
           optimizedPrompt: truncatePrompt(optimized.trim()),
@@ -395,17 +354,12 @@ export async function optimizePromptForFlux2Edit(
     return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
   }
 
-  const FAL_API_KEY = getFalApiKey();
-  
-  if (!FAL_API_KEY) {
-    logger.warn('FLUX 2 prompt optimization skipped: FAL_API_KEY not configured');
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'API key not configured' };
+  if (!llmProvider.isLLMConfigured()) {
+    logger.warn('FLUX 2 prompt optimization skipped: No LLM provider configured');
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM not configured' };
   }
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
     const multiImageContext = options?.hasMultipleImages 
       ? `\n\nThis is a MULTI-IMAGE EDIT with ${options.numImages || 2} images. First image is BASE, others are REFERENCE for elements to transfer.`
       : '';
@@ -415,51 +369,33 @@ export async function optimizePromptForFlux2Edit(
 Use action verb, be specific. ${options?.hasMultipleImages ? 'Focus on what to TRANSFER from reference to base.' : ''} Brevity is critical.
 Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
-    const response = await fetch('https://fal.run/fal-ai/any-llm', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${FAL_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-3-haiku',
-        prompt: userPrompt,
-        system_prompt: FLUX2_EDIT_PROMPT_GUIDELINES,
-        temperature: 0.5,
-        max_tokens: 200
-      }),
-      signal: controller.signal
+    const llmResponse = await llmProvider.complete({
+      model: DEFAULT_MODELS.internal,
+      systemPrompt: FLUX2_EDIT_PROMPT_GUIDELINES,
+      prompt: userPrompt,
+      temperature: 0.5,
+      maxTokens: 200,
+      timeoutMs: 8000,
+      useCase: 'flux2-edit-prompt-optimization',
     });
 
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      logger.warn('FLUX 2 prompt optimization LLM request failed', { status: response.status, error: errorText });
-      return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM request failed' };
-    }
-
-    const data = await response.json() as { output?: string; text?: string; response?: string };
-    const output = data.output || data.text || data.response || '';
+    const output = llmResponse.content;
 
     // Try to parse JSON response
     try {
-      const jsonMatch = output.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
-        if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
-          const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim(), 200);
-          logger.debug('FLUX 2 prompt optimized', { 
-            original: originalPrompt.substring(0, 50),
-            optimized: truncatedPrompt.substring(0, 50),
-            truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
-          });
-          return {
-            optimizedPrompt: truncatedPrompt,
-            reasoning: parsed.reasoning || null,
-            skipped: false
-          };
-        }
+      const parsed = llmProvider.extractJSON<{ optimizedPrompt?: string; reasoning?: string }>(output);
+      if (parsed?.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+        const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim(), 200);
+        logger.debug('FLUX 2 prompt optimized', { 
+          original: originalPrompt.substring(0, 50),
+          optimized: truncatedPrompt.substring(0, 50),
+          truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
+        });
+        return {
+          optimizedPrompt: truncatedPrompt,
+          reasoning: parsed.reasoning || null,
+          skipped: false
+        };
       }
     } catch {
       // If JSON parsing fails but we have reasonable output, use it
@@ -532,17 +468,12 @@ export async function optimizePromptForFluxEdit(
     return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
   }
 
-  const FAL_API_KEY = getFalApiKey();
-  
-  if (!FAL_API_KEY) {
-    logger.warn('FLUX edit prompt optimization skipped: FAL_API_KEY not configured');
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'API key not configured' };
+  if (!llmProvider.isLLMConfigured()) {
+    logger.warn('FLUX edit prompt optimization skipped: No LLM provider configured');
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM not configured' };
   }
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
     const contextInfo = originalImagePrompt 
       ? ` Original: "${originalImagePrompt.substring(0, 50)}"`
       : '';
@@ -555,49 +486,32 @@ export async function optimizePromptForFluxEdit(
 
 ${options?.hasMultipleImages ? 'Describe what to transfer from reference to base, with blending instructions.' : 'Describe result briefly.'} Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
-    const response = await fetch('https://fal.run/fal-ai/any-llm', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${FAL_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-3-haiku',
-        prompt: userPrompt,
-        system_prompt: FLUX_EDIT_PROMPT_GUIDELINES,
-        temperature: 0.5,
-        max_tokens: 200
-      }),
-      signal: controller.signal
+    const llmResponse = await llmProvider.complete({
+      model: DEFAULT_MODELS.internal,
+      systemPrompt: FLUX_EDIT_PROMPT_GUIDELINES,
+      prompt: userPrompt,
+      temperature: 0.5,
+      maxTokens: 200,
+      timeoutMs: 8000,
+      useCase: 'flux-edit-prompt-optimization',
     });
 
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      logger.warn('FLUX edit prompt optimization failed', { status: response.status });
-      return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM request failed' };
-    }
-
-    const data = await response.json() as { output?: string; text?: string; response?: string };
-    const output = data.output || data.text || data.response || '';
+    const output = llmResponse.content;
 
     try {
-      const jsonMatch = output.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
-        if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
-          const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
-          logger.debug('FLUX edit prompt optimized', { 
-            original: originalPrompt.substring(0, 50),
-            optimized: truncatedPrompt.substring(0, 50),
-            truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
-          });
-          return {
-            optimizedPrompt: truncatedPrompt,
-            reasoning: parsed.reasoning || null,
-            skipped: false
-          };
-        }
+      const parsed = llmProvider.extractJSON<{ optimizedPrompt?: string; reasoning?: string }>(output);
+      if (parsed?.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+        const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
+        logger.debug('FLUX edit prompt optimized', { 
+          original: originalPrompt.substring(0, 50),
+          optimized: truncatedPrompt.substring(0, 50),
+          truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
+        });
+        return {
+          optimizedPrompt: truncatedPrompt,
+          reasoning: parsed.reasoning || null,
+          skipped: false
+        };
       }
     } catch {
       if (output && output.length > 10 && output.length < 500) {
@@ -666,17 +580,12 @@ export async function optimizePromptForNanoBananaEdit(
     return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
   }
 
-  const FAL_API_KEY = getFalApiKey();
-  
-  if (!FAL_API_KEY) {
-    logger.warn('Nano Banana edit prompt optimization skipped: FAL_API_KEY not configured');
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'API key not configured' };
+  if (!llmProvider.isLLMConfigured()) {
+    logger.warn('Nano Banana edit prompt optimization skipped: No LLM provider configured');
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM not configured' };
   }
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
     const contextInfo = originalImagePrompt 
       ? ` Original: "${originalImagePrompt.substring(0, 50)}"`
       : '';
@@ -689,49 +598,32 @@ export async function optimizePromptForNanoBananaEdit(
 
 ${options?.hasMultipleImages ? 'Describe what to transfer from reference to base, with integration instructions.' : 'Describe result briefly.'} Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
-    const response = await fetch('https://fal.run/fal-ai/any-llm', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${FAL_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-3-haiku',
-        prompt: userPrompt,
-        system_prompt: NANO_BANANA_EDIT_PROMPT_GUIDELINES,
-        temperature: 0.6,
-        max_tokens: 250
-      }),
-      signal: controller.signal
+    const llmResponse = await llmProvider.complete({
+      model: DEFAULT_MODELS.internal,
+      systemPrompt: NANO_BANANA_EDIT_PROMPT_GUIDELINES,
+      prompt: userPrompt,
+      temperature: 0.6,
+      maxTokens: 250,
+      timeoutMs: 8000,
+      useCase: 'nano-banana-edit-prompt-optimization',
     });
 
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      logger.warn('Nano Banana edit prompt optimization failed', { status: response.status });
-      return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM request failed' };
-    }
-
-    const data = await response.json() as { output?: string; text?: string; response?: string };
-    const output = data.output || data.text || data.response || '';
+    const output = llmResponse.content;
 
     try {
-      const jsonMatch = output.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
-        if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
-          const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
-          logger.debug('Nano Banana edit prompt optimized', { 
-            original: originalPrompt.substring(0, 50),
-            optimized: truncatedPrompt.substring(0, 50),
-            truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
-          });
-          return {
-            optimizedPrompt: truncatedPrompt,
-            reasoning: parsed.reasoning || null,
-            skipped: false
-          };
-        }
+      const parsed = llmProvider.extractJSON<{ optimizedPrompt?: string; reasoning?: string }>(output);
+      if (parsed?.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+        const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
+        logger.debug('Nano Banana edit prompt optimized', { 
+          original: originalPrompt.substring(0, 50),
+          optimized: truncatedPrompt.substring(0, 50),
+          truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
+        });
+        return {
+          optimizedPrompt: truncatedPrompt,
+          reasoning: parsed.reasoning || null,
+          skipped: false
+        };
       }
     } catch {
       if (output && output.length > 10 && output.length < 500) {
@@ -828,67 +720,44 @@ export async function optimizePromptForFlux2T2I(
     return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
   }
 
-  const FAL_API_KEY = getFalApiKey();
-  
-  if (!FAL_API_KEY) {
-    logger.warn('FLUX 2 T2I prompt optimization skipped: FAL_API_KEY not configured');
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'API key not configured' };
+  if (!llmProvider.isLLMConfigured()) {
+    logger.warn('FLUX 2 T2I prompt optimization skipped: No LLM provider configured');
+    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM not configured' };
   }
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
     const userPrompt = `Enhance this FLUX.2 image prompt. Keep it SHORT (under 200 chars): "${originalPrompt}"
 
 Add 2-3 key elements max. Brevity is critical for fast generation.
 Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
 
-    const response = await fetch('https://fal.run/fal-ai/any-llm', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${FAL_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-3-haiku',
-        prompt: userPrompt,
-        system_prompt: FLUX2_T2I_PROMPT_GUIDELINES,
-        temperature: 0.6,
-        max_tokens: 300
-      }),
-      signal: controller.signal
+    const llmResponse = await llmProvider.complete({
+      model: DEFAULT_MODELS.internal,
+      systemPrompt: FLUX2_T2I_PROMPT_GUIDELINES,
+      prompt: userPrompt,
+      temperature: 0.6,
+      maxTokens: 300,
+      timeoutMs: 8000,
+      useCase: 'flux2-t2i-prompt-optimization',
     });
 
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      logger.warn('FLUX 2 T2I prompt optimization LLM request failed', { status: response.status, error: errorText });
-      return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM request failed' };
-    }
-
-    const data = await response.json() as { output?: string; text?: string; response?: string };
-    const output = data.output || data.text || data.response || '';
+    const output = llmResponse.content;
 
     // Try to parse JSON response
     try {
-      const jsonMatch = output.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as { optimizedPrompt?: string; reasoning?: string };
-        if (parsed.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
-          const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
-          logger.debug('FLUX 2 T2I prompt optimized', { 
-            original: originalPrompt.substring(0, 50),
-            optimized: truncatedPrompt.substring(0, 50),
-            truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
-          });
-          return {
-            optimizedPrompt: truncatedPrompt,
-            reasoning: parsed.reasoning || null,
-            skipped: false
-          };
-        }
+      const parsed = llmProvider.extractJSON<{ optimizedPrompt?: string; reasoning?: string }>(output);
+      if (parsed?.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
+        const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
+        logger.debug('FLUX 2 T2I prompt optimized', { 
+          original: originalPrompt.substring(0, 50),
+          optimized: truncatedPrompt.substring(0, 50),
+          truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
+        });
+        return {
+          optimizedPrompt: truncatedPrompt,
+          reasoning: parsed.reasoning || null,
+          skipped: false
+        };
       }
     } catch {
       // If JSON parsing fails but we have reasonable output, use it

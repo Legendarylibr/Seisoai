@@ -845,8 +845,8 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     id: 'text.llm',
-    name: 'LLM Chat (Any-LLM Router)',
-    description: 'Chat with various LLMs through a unified interface. Routes to the best model for the task. Useful for prompt optimization, text generation, and analysis.',
+    name: 'LLM Chat (Claude Models)',
+    description: 'Chat with Claude models (Opus 4.6, Sonnet 4.5, Haiku 4.5) through a unified interface. Useful for prompt optimization, text generation, and analysis.',
     category: 'text-generation',
     falModel: 'fal-ai/any-llm',
     executionMode: 'sync',
@@ -855,7 +855,7 @@ const TOOLS: ToolDefinition[] = [
       properties: {
         prompt: { type: 'string', description: 'The prompt/question to send to the LLM' },
         system_prompt: { type: 'string', description: 'Optional system prompt to set the behavior' },
-        model: { type: 'string', description: 'LLM model to use', default: 'anthropic/claude-3-haiku' },
+        model: { type: 'string', description: 'Claude model to use: claude-opus-4-6, claude-sonnet-4-5, claude-haiku-4-5', default: 'claude-sonnet-4-5' },
         max_tokens: { type: 'number', description: 'Maximum response tokens', default: 1024 },
       },
       required: ['prompt'],
@@ -958,13 +958,32 @@ const TOOLS: ToolDefinition[] = [
 // Registry Class
 // ============================================
 
+export type ToolHealthStatus = 'healthy' | 'degraded' | 'down' | 'unknown';
+
+interface ToolHealthInfo {
+  status: ToolHealthStatus;
+  lastCheckedAt: Date | null;
+  lastSuccessAt: Date | null;
+  consecutiveFailures: number;
+  latencyMs: number | null;
+}
+
 class ToolRegistry {
   private tools: Map<string, ToolDefinition> = new Map();
+  private healthStatus: Map<string, ToolHealthInfo> = new Map();
+  private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     // Register all built-in tools
     for (const tool of TOOLS) {
       this.tools.set(tool.id, tool);
+      this.healthStatus.set(tool.id, {
+        status: 'unknown',
+        lastCheckedAt: null,
+        lastSuccessAt: null,
+        consecutiveFailures: 0,
+        latencyMs: null,
+      });
     }
     logger.info(`Tool Registry initialized with ${this.tools.size} tools`);
   }
@@ -1061,9 +1080,192 @@ class ToolRegistry {
     return { usd: markedUpUsd, credits: totalCredits, usdcUnits };
   }
 
+  /**
+   * Validate input against a tool's JSON Schema.
+   * Returns { valid: true } or { valid: false, errors: string[] }.
+   */
+  validateInput(toolId: string, input: Record<string, unknown>): { valid: boolean; errors: string[] } {
+    const tool = this.get(toolId);
+    if (!tool) return { valid: false, errors: [`Unknown tool: ${toolId}`] };
+
+    const schema = tool.inputSchema;
+    const errors: string[] = [];
+
+    // Check required fields
+    for (const req of schema.required) {
+      if (input[req] === undefined || input[req] === null || input[req] === '') {
+        errors.push(`Missing required field: ${req}`);
+      }
+    }
+
+    // Validate each provided field against the schema
+    for (const [key, value] of Object.entries(input)) {
+      const paramDef = schema.properties[key];
+      if (!paramDef) continue; // allow extra fields (pass-through to fal.ai)
+
+      // Type check
+      if (paramDef.type === 'string' && typeof value !== 'string') {
+        errors.push(`Field '${key}' must be a string, got ${typeof value}`);
+        continue;
+      }
+      if (paramDef.type === 'number' && typeof value !== 'number') {
+        // Allow numeric strings
+        if (typeof value === 'string' && !isNaN(Number(value))) continue;
+        errors.push(`Field '${key}' must be a number, got ${typeof value}`);
+        continue;
+      }
+      if (paramDef.type === 'boolean' && typeof value !== 'boolean') {
+        errors.push(`Field '${key}' must be a boolean, got ${typeof value}`);
+        continue;
+      }
+      if (paramDef.type === 'array' && !Array.isArray(value)) {
+        errors.push(`Field '${key}' must be an array, got ${typeof value}`);
+        continue;
+      }
+
+      // Enum check
+      if (paramDef.enum && !paramDef.enum.includes(value as string)) {
+        errors.push(`Field '${key}' must be one of: ${paramDef.enum.join(', ')}. Got: ${String(value)}`);
+      }
+
+      // Range checks for numbers
+      if (typeof value === 'number') {
+        if (paramDef.minimum !== undefined && value < paramDef.minimum) {
+          errors.push(`Field '${key}' must be >= ${paramDef.minimum}, got ${value}`);
+        }
+        if (paramDef.maximum !== undefined && value > paramDef.maximum) {
+          errors.push(`Field '${key}' must be <= ${paramDef.maximum}, got ${value}`);
+        }
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  /** Get tools scoped to an agent's allowed tool list */
+  getToolsForAgent(toolIds: string[]): ToolDefinition[] {
+    return toolIds
+      .map(id => this.tools.get(id))
+      .filter((t): t is ToolDefinition => !!t && t.enabled);
+  }
+
+  /** Validate that all provided tool IDs exist in the registry */
+  validateToolIds(toolIds: string[]): { valid: boolean; unknownTools: string[] } {
+    const unknownTools = toolIds.filter(id => !this.tools.has(id));
+    return { valid: unknownTools.length === 0, unknownTools };
+  }
+
+  /** Get health status for a tool */
+  getHealth(toolId: string): ToolHealthInfo | undefined {
+    return this.healthStatus.get(toolId);
+  }
+
+  /** Get all health statuses */
+  getAllHealth(): Record<string, ToolHealthInfo> {
+    const result: Record<string, ToolHealthInfo> = {};
+    for (const [id, info] of this.healthStatus) {
+      result[id] = info;
+    }
+    return result;
+  }
+
+  /** Run a health check for a single tool by pinging fal.ai */
+  async checkToolHealth(toolId: string): Promise<ToolHealthInfo> {
+    const tool = this.tools.get(toolId);
+    const info = this.healthStatus.get(toolId) || {
+      status: 'unknown' as ToolHealthStatus,
+      lastCheckedAt: null,
+      lastSuccessAt: null,
+      consecutiveFailures: 0,
+      latencyMs: null,
+    };
+
+    if (!tool) {
+      info.status = 'down';
+      info.lastCheckedAt = new Date();
+      return info;
+    }
+
+    const start = Date.now();
+    try {
+      // Lightweight check: HEAD request to fal.ai model endpoint
+      const resp = await fetch(`https://fal.run/${tool.falModel}`, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(10000),
+      });
+
+      info.latencyMs = Date.now() - start;
+      info.lastCheckedAt = new Date();
+
+      // fal.ai returns 401/422 for HEAD (no body) but the endpoint exists
+      if (resp.status < 500) {
+        info.status = info.latencyMs > 5000 ? 'degraded' : 'healthy';
+        info.lastSuccessAt = new Date();
+        info.consecutiveFailures = 0;
+      } else {
+        info.consecutiveFailures++;
+        info.status = info.consecutiveFailures >= 3 ? 'down' : 'degraded';
+      }
+    } catch {
+      info.latencyMs = Date.now() - start;
+      info.lastCheckedAt = new Date();
+      info.consecutiveFailures++;
+      info.status = info.consecutiveFailures >= 3 ? 'down' : 'degraded';
+    }
+
+    this.healthStatus.set(toolId, info);
+    return info;
+  }
+
+  /** Run health checks for all enabled tools */
+  async runHealthChecks(): Promise<void> {
+    const enabled = this.getEnabled();
+    logger.info(`Running health checks for ${enabled.length} tools`);
+
+    // Check in batches of 5 to avoid overwhelming fal.ai
+    for (let i = 0; i < enabled.length; i += 5) {
+      const batch = enabled.slice(i, i + 5);
+      await Promise.allSettled(batch.map(t => this.checkToolHealth(t.id)));
+    }
+
+    const statuses = this.getAllHealth();
+    const healthy = Object.values(statuses).filter(h => h.status === 'healthy').length;
+    const degraded = Object.values(statuses).filter(h => h.status === 'degraded').length;
+    const down = Object.values(statuses).filter(h => h.status === 'down').length;
+    logger.info(`Health checks complete: ${healthy} healthy, ${degraded} degraded, ${down} down`);
+  }
+
+  /** Start periodic health checks (every N ms, default 5 min) */
+  startHealthChecks(intervalMs = 5 * 60 * 1000): void {
+    if (this.healthCheckInterval) return;
+    this.healthCheckInterval = setInterval(() => {
+      this.runHealthChecks().catch(err =>
+        logger.error('Health check run failed', { error: (err as Error).message })
+      );
+    }, intervalMs);
+    // Run initial check after 30 seconds (don't block startup)
+    setTimeout(() => this.runHealthChecks().catch(() => {}), 30000);
+    logger.info('Tool health checks scheduled', { intervalMs });
+  }
+
+  /** Stop periodic health checks */
+  stopHealthChecks(): void {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
+  }
+
   /** Register a custom tool (for plugins/extensions) */
   register(tool: ToolDefinition): void {
     this.tools.set(tool.id, tool);
+    this.healthStatus.set(tool.id, {
+      status: 'unknown',
+      lastCheckedAt: null,
+      lastSuccessAt: null,
+      consecutiveFailures: 0,
+      latencyMs: null,
+    });
     logger.info(`Tool registered: ${tool.id} (${tool.name})`);
   }
 
@@ -1074,11 +1276,17 @@ class ToolRegistry {
 
   /** Export for MCP tool listing */
   toMCPTools(): Array<{ name: string; description: string; inputSchema: ToolSchema }> {
-    return this.getEnabled().map(tool => ({
-      name: tool.id,
-      description: `${tool.name}: ${tool.description} [Category: ${tool.category}] [Cost: $${tool.pricing.baseUsdCost} / ${tool.pricing.credits} credits]`,
-      inputSchema: tool.inputSchema,
-    }));
+    return this.getEnabled()
+      .filter(tool => {
+        // Exclude tools that are confirmed down
+        const health = this.healthStatus.get(tool.id);
+        return !health || health.status !== 'down';
+      })
+      .map(tool => ({
+        name: tool.id,
+        description: `${tool.name}: ${tool.description} [Category: ${tool.category}] [Cost: $${tool.pricing.baseUsdCost} / ${tool.pricing.credits} credits]`,
+        inputSchema: tool.inputSchema,
+      }));
   }
 
   /** Export for OpenAPI spec */

@@ -9,11 +9,9 @@
  * - Music: Genre-specific with tempo/key guidance
  */
 import { Router, type Request, type Response } from 'express';
-import { config } from '../config/env';
 import logger from '../utils/logger';
 import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
-
-const FAL_API_KEY = config.FAL_API_KEY;
+import llmProvider, { DEFAULT_MODELS } from '../services/llmProvider';
 
 // Base system prompt - common rules
 const BASE_SYSTEM_PROMPT = `You are Prompt Lab, a concise AI assistant for SeisoAI. Help users create prompts for AI generation.
@@ -222,8 +220,8 @@ export default function createPromptLabRoutes(_deps: Record<string, unknown>) {
         });
       }
 
-      if (!FAL_API_KEY) {
-        logger.error('FAL_API_KEY not configured for prompt lab');
+      if (!llmProvider.isLLMConfigured()) {
+        logger.error('No LLM provider configured for prompt lab');
         return res.status(500).json({
           success: false,
           error: 'AI service not configured'
@@ -251,8 +249,8 @@ export default function createPromptLabRoutes(_deps: Record<string, unknown>) {
       // Get the optimized system prompt for this mode/model
       const systemPrompt = getOptimizedSystemPrompt(context?.mode, context?.selectedModel);
 
-      // Format conversation history for Claude 3 Haiku - use native message format
-      const conversationMessages: Array<{ role: string; content: string }> = [];
+      // Build messages array for multi-turn conversation
+      const conversationMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
       
       // Add history (limit to last 10 messages for context window)
       const recentHistory = history.slice(-10);
@@ -269,47 +267,27 @@ export default function createPromptLabRoutes(_deps: Record<string, unknown>) {
         content: message
       });
 
-      // Build prompt - Claude 3 Haiku works better with direct message format
-      const fullPrompt = conversationMessages
-        .map(m => m.content)
-        .join('\n\n');
-
-      // Use AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-      const response = await fetch('https://fal.run/fal-ai/any-llm', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'anthropic/claude-3-haiku',
-          prompt: fullPrompt,
-          system_prompt: systemPrompt + (contextInfo ? '\n' + contextInfo : ''),
+      let llmResponse;
+      try {
+        llmResponse = await llmProvider.complete({
+          model: DEFAULT_MODELS.chat,
+          systemPrompt: systemPrompt + (contextInfo ? '\n' + contextInfo : ''),
+          messages: conversationMessages,
           temperature: 0.7,
-          max_tokens: 350
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        logger.error('Prompt Lab LLM request failed', { 
-          status: response.status, 
-          error: errorText 
+          maxTokens: 350,
+          timeoutMs: 15000,
+          useCase: 'prompt-lab',
         });
+      } catch (llmError) {
+        const err = llmError as Error;
+        logger.error('Prompt Lab LLM request failed', { error: err.message });
         return res.status(500).json({
           success: false,
           error: 'Failed to get AI response'
         });
       }
 
-      const data = await response.json() as { output?: string; text?: string; response?: string };
-      const assistantResponse = (data.output || data.text || data.response || '').trim();
+      const assistantResponse = llmResponse.content;
 
       if (!assistantResponse) {
         return res.status(500).json({
@@ -321,6 +299,8 @@ export default function createPromptLabRoutes(_deps: Record<string, unknown>) {
       const duration = Date.now() - startTime;
       logger.info('Prompt Lab chat completed', { 
         duration,
+        model: llmResponse.model,
+        provider: llmResponse.provider,
         messageLength: message.length,
         responseLength: assistantResponse.length,
         historyLength: history.length

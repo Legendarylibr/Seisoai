@@ -36,6 +36,9 @@ export interface UserPreferences {
   defaultAspectRatio: string;
   defaultOptimizePrompt: boolean;
 
+  // Chat AI model (claude-opus-4-6, claude-sonnet-4-5, claude-haiku-4-5)
+  chatModel: string;
+
   // Agent preferences
   defaultTab: string;
 
@@ -46,6 +49,13 @@ export interface UserPreferences {
   profileCompleted: boolean;
 }
 
+// Available Claude models for the chat AI
+export const CHAT_MODELS = [
+  { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', tier: 'Fast', credits: 1, description: 'Fastest responses, great for simple tasks' },
+  { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', tier: 'Balanced', credits: 3, description: 'Best balance of speed and intelligence' },
+  { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', tier: 'Premium', credits: 5, description: 'Most capable, best for complex tasks' },
+] as const;
+
 const DEFAULT_PREFERENCES: UserPreferences = {
   theme: 'system',
   accentColor: '#000080', // Win95 blue
@@ -54,6 +64,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   defaultStyle: null,
   defaultAspectRatio: '1:1',
   defaultOptimizePrompt: false,
+  chatModel: 'claude-sonnet-4-5',
   defaultTab: 'workbench',
   language: 'en',
   profileCompleted: false,

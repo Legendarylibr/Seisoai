@@ -27,6 +27,7 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.73.0",
     "@coinbase/cdp-sdk": "^1.44.0",
     "@solana/web3.js": "^1.98.4",
     "@types/cookie-parser": "^1.4.10",

@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { WIN95, BTN, hoverHandlers } from '../utils/buttonStyles';
-import { useUserPreferences, ACCENT_COLORS, ALL_FEATURES } from '../contexts/UserPreferencesContext';
+import { useUserPreferences, ACCENT_COLORS, ALL_FEATURES, CHAT_MODELS } from '../contexts/UserPreferencesContext';
 import { useLanguage } from '../i18n';
 
 const font = 'Tahoma, "MS Sans Serif", sans-serif';
@@ -305,6 +305,31 @@ const SettingsPanel = memo(function SettingsPanel() {
                     <option key={m.id || 'none'} value={m.id || ''}>{m.label}</option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold mb-1" style={{ fontFamily: font, color: WIN95.text }}>
+                  Chat AI Model
+                </label>
+                <select
+                  value={preferences.chatModel || 'claude-sonnet-4-5'}
+                  onChange={(e) => updatePreference('chatModel', e.target.value)}
+                  className="w-full p-2 text-[11px]"
+                  style={{
+                    background: WIN95.inputBg,
+                    boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                    border: 'none', color: WIN95.text, fontFamily: font, outline: 'none',
+                  }}
+                >
+                  {CHAT_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.tier} - {m.credits} cr)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] mt-1" style={{ color: WIN95.textDisabled }}>
+                  Controls which Claude model powers the Chat AI assistant
+                </p>
               </div>
 
               <div>

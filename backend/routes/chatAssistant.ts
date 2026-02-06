@@ -5,7 +5,10 @@
  */
 import { Router, type Request, type Response } from 'express';
 import logger from '../utils/logger';
-import { getFalApiKey } from '../services/fal';
+import llmProvider, { type ClaudeModel, type LLMToolDefinition, type LLMToolCall, type LLMMessage, isValidModel, DEFAULT_MODELS, MODEL_INFO } from '../services/llmProvider';
+import { toolRegistry } from '../services/toolRegistry';
+import { falRequest, submitToQueue, checkQueueStatus, getQueueResult, isStatusCompleted, isStatusFailed } from '../services/fal';
+import { generatePlan, executePlan, WORKFLOW_TEMPLATES, type OrchestrationResult } from '../services/orchestrator';
 import { 
   optimizePromptForFlux2T2I, 
   optimizePromptForFlux2Edit,
@@ -194,6 +197,8 @@ interface ChatRequestBody {
   };
   referenceImage?: string;        // Single reference image (backwards compat)
   referenceImages?: string[];     // Multiple reference images for multi-image editing
+  /** User-selected Claude model (claude-opus-4-6, claude-sonnet-4-5, claude-haiku-4-5) */
+  model?: string;
 }
 
 /**
@@ -329,7 +334,7 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
     const startTime = Date.now();
     
     try {
-      const { message, history = [], context, referenceImage, referenceImages } = req.body as ChatRequestBody;
+      const { message, history = [], context, referenceImage, referenceImages, model: requestedModel } = req.body as ChatRequestBody;
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return res.status(400).json({
@@ -345,15 +350,19 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         });
       }
 
-      const FAL_API_KEY = getFalApiKey();
-      
-      if (!FAL_API_KEY) {
-        logger.error('FAL_API_KEY not configured for chat assistant');
+      // Validate LLM is configured (Anthropic API or fal.ai proxy)
+      if (!llmProvider.isLLMConfigured()) {
+        logger.error('No LLM provider configured for chat assistant');
         return res.status(503).json({
           success: false,
           error: 'AI service temporarily unavailable. Please try again later.'
         });
       }
+      
+      // Resolve model: user preference > default
+      const selectedModel: ClaudeModel = (requestedModel && isValidModel(requestedModel)) 
+        ? requestedModel 
+        : DEFAULT_MODELS.chat;
       
       // Normalize reference images - support both single and array format
       let allReferenceImages: string[] = [];
@@ -476,8 +485,8 @@ Set "isEdit": true AND "useMultipleImages": true in your JSON params.
 Write the prompt describing what to take from reference images and add to the base.`;
       }
 
-      // Format conversation for Claude 3 Haiku - use native message format
-      const conversationMessages: Array<{ role: string; content: string }> = [];
+      // Build messages array for multi-turn conversation
+      const conversationMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
       
       // Add recent history (last 15 messages)
       const recentHistory = history.slice(-15);
@@ -494,72 +503,50 @@ Write the prompt describing what to take from reference images and add to the ba
         content: message
       });
 
-      // Build prompt - Claude 3 Haiku works better with direct message format
-      const fullPrompt = conversationMessages
-        .map(m => m.content)
-        .join('\n\n');
-
-      // Use AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
-
-      logger.debug('Making FAL LLM request', {
-        promptLength: fullPrompt.length,
+      const modelDisplayName = MODEL_INFO[selectedModel]?.displayName || selectedModel;
+      
+      logger.debug('Making LLM request via llmProvider', {
+        model: selectedModel,
+        provider: llmProvider.getActiveProvider(),
+        messageCount: conversationMessages.length,
         systemPromptLength: (SYSTEM_PROMPT + contextInfo).length
       });
 
-      const response = await fetch('https://fal.run/fal-ai/any-llm', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'anthropic/claude-3-haiku',
-          prompt: fullPrompt,
-          system_prompt: SYSTEM_PROMPT + (contextInfo ? '\n' + contextInfo : ''),
-          temperature: 0.7,
-          max_tokens: 1000
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        logger.error('Chat assistant LLM request failed', { 
-          status: response.status, 
-          error: errorText.substring(0, 500)
-        });
-        return res.status(500).json({
-          success: false,
-          error: `AI service error (${response.status}). Please try again.`
-        });
-      }
-
-      let data: Record<string, unknown>;
+      let llmResponse;
       try {
-        data = await response.json() as Record<string, unknown>;
-      } catch (parseErr) {
-        logger.error('Failed to parse LLM response', { error: (parseErr as Error).message });
+        llmResponse = await llmProvider.complete({
+          model: selectedModel,
+          systemPrompt: SYSTEM_PROMPT + (contextInfo ? '\n' + contextInfo : ''),
+          messages: conversationMessages,
+          temperature: 0.7,
+          maxTokens: 1000,
+          timeoutMs: 20000,
+          useCase: 'chat-assistant',
+        });
+      } catch (llmError) {
+        const err = llmError as Error;
+        logger.error('Chat assistant LLM request failed', { 
+          model: selectedModel,
+          error: err.message
+        });
         return res.status(500).json({
           success: false,
-          error: 'Invalid response from AI service'
+          error: `AI service error. Please try again.`
         });
       }
       
       logger.info('LLM response received', { 
-        hasOutput: !!data.output, 
-        hasText: !!data.text,
-        hasResponse: !!data.response,
-        dataKeys: Object.keys(data)
+        model: llmResponse.model,
+        provider: llmResponse.provider,
+        inputTokens: llmResponse.usage.inputTokens,
+        outputTokens: llmResponse.usage.outputTokens,
+        hasThinking: !!llmResponse.thinking,
       });
       
-      const assistantResponse = ((data.output || data.text || data.response || '') as string).trim();
+      const assistantResponse = llmResponse.content;
 
       if (!assistantResponse) {
-        logger.warn('Empty LLM response', { data: JSON.stringify(data).substring(0, 500) });
+        logger.warn('Empty LLM response', { model: llmResponse.model, provider: llmResponse.provider });
         return res.status(500).json({
           success: false,
           error: 'Empty response from AI'
@@ -664,6 +651,9 @@ Write the prompt describing what to take from reference images and add to the ba
         success: true,
         response: cleanedResponse,
         action: action || undefined,
+        model: selectedModel,
+        modelDisplayName,
+        provider: llmResponse.provider,
         timestamp: new Date().toISOString()
       });
 
@@ -683,6 +673,409 @@ Write the prompt describing what to take from reference images and add to the ba
         success: false,
         error: 'Failed to process request'
       });
+    }
+  });
+
+  // ============================================================================
+  // Agentic Chat Loop — POST /agent-message
+  // ============================================================================
+
+  /**
+   * Build Anthropic-compatible tool schemas from the tool registry,
+   * plus an "orchestrate" meta-tool for multi-step workflows.
+   */
+  function getAgenticToolSchemas(): LLMToolDefinition[] {
+    const enabledTools = toolRegistry.getEnabled();
+    const tools: LLMToolDefinition[] = enabledTools.map(t => ({
+      name: t.id,
+      description: `${t.name}: ${t.description} [Credits: ${t.pricing.credits}]`,
+      input_schema: {
+        type: 'object' as const,
+        properties: t.inputSchema.properties,
+        required: t.inputSchema.required,
+      },
+    }));
+
+    // Add orchestration meta-tool
+    const templateNames = Object.keys(WORKFLOW_TEMPLATES);
+    tools.push({
+      name: 'orchestrate',
+      description: `Multi-step workflow orchestrator. Give it a natural language goal and it will plan & execute a sequence of AI tools automatically. Great for complex tasks that need multiple tools chained together (e.g., "create a music video", "generate a product 3D model from a photo"). Available templates: ${templateNames.join(', ')}`,
+      input_schema: {
+        type: 'object',
+        properties: {
+          goal: { type: 'string', description: 'Natural language description of the multi-step creative goal' },
+          template: { type: 'string', description: `Optional workflow template: ${templateNames.join(', ')}. Leave empty for LLM-planned workflow.` },
+          params: { type: 'object', description: 'Parameters for the template (if using one)' },
+        },
+        required: ['goal'],
+      },
+    });
+
+    return tools;
+  }
+
+  /**
+   * Execute a single tool call from the LLM and return the result as a string.
+   */
+  async function executeAgenticTool(toolCall: LLMToolCall): Promise<{ success: boolean; result: string; data?: unknown }> {
+    // Handle the orchestration meta-tool
+    if (toolCall.name === 'orchestrate') {
+      try {
+        const { goal, template, params: templateParams } = toolCall.input as {
+          goal: string;
+          template?: string;
+          params?: Record<string, unknown>;
+        };
+
+        let orchResult: OrchestrationResult;
+        if (template && WORKFLOW_TEMPLATES[template]) {
+          const plan = WORKFLOW_TEMPLATES[template](templateParams || {});
+          plan.goal = goal;
+          orchResult = await executePlan(plan);
+        } else {
+          const plan = await generatePlan(goal);
+          orchResult = await executePlan(plan);
+        }
+
+        const summary = orchResult.stepResults.map(sr =>
+          `${sr.stepId} (${sr.toolId}): ${sr.status}${sr.error ? ` - ${sr.error}` : ''}`
+        ).join('\n');
+
+        const resultStr = JSON.stringify({
+          success: orchResult.success,
+          totalCredits: orchResult.totalCredits,
+          totalDurationMs: orchResult.totalDurationMs,
+          steps: summary,
+          finalOutput: orchResult.finalOutput,
+        });
+
+        const truncated = resultStr.length > 4000
+          ? resultStr.substring(0, 4000) + '...(truncated)'
+          : resultStr;
+
+        return { success: orchResult.success, result: truncated, data: orchResult };
+      } catch (error) {
+        const err = error as Error;
+        logger.error('Orchestration via agentic tool failed', { error: err.message });
+        return { success: false, result: `Orchestration error: ${err.message}` };
+      }
+    }
+
+    const tool = toolRegistry.get(toolCall.name);
+    if (!tool) {
+      return { success: false, result: `Unknown tool: ${toolCall.name}` };
+    }
+    if (!tool.enabled) {
+      return { success: false, result: `Tool is currently disabled: ${toolCall.name}` };
+    }
+
+    // Validate input
+    const validation = toolRegistry.validateInput(toolCall.name, toolCall.input);
+    if (!validation.valid) {
+      return { success: false, result: `Invalid input: ${validation.errors.join('; ')}` };
+    }
+
+    try {
+      let result: unknown;
+      if (tool.executionMode === 'sync') {
+        const endpoint = `https://fal.run/${tool.falModel}`;
+        result = await falRequest(endpoint, {
+          method: 'POST',
+          body: JSON.stringify(toolCall.input),
+        });
+      } else {
+        // Queue execution with polling
+        const queueResult = await submitToQueue(tool.falModel, toolCall.input) as { request_id?: string };
+        if (!queueResult?.request_id) {
+          return { success: false, result: 'Queue submission failed: no request_id' };
+        }
+        const jobId = queueResult.request_id;
+        const maxWaitMs = 120_000; // 2 min max within agentic loop
+        const pollMs = 3_000;
+        const start = Date.now();
+
+        while (Date.now() - start < maxWaitMs) {
+          await new Promise(r => setTimeout(r, pollMs));
+          const status = await checkQueueStatus(jobId, tool.falModel) as { status?: string };
+          if (isStatusCompleted(status?.status)) {
+            result = await getQueueResult(jobId, tool.falModel);
+            break;
+          }
+          if (isStatusFailed(status?.status)) {
+            return { success: false, result: `Tool execution failed: ${status?.status}` };
+          }
+        }
+        if (!result) {
+          return { success: false, result: `Tool timed out after ${maxWaitMs / 1000}s` };
+        }
+      }
+
+      // Truncate very large results for context window
+      const resultStr = JSON.stringify(result);
+      const truncated = resultStr.length > 4000
+        ? resultStr.substring(0, 4000) + '...(truncated)'
+        : resultStr;
+
+      return { success: true, result: truncated, data: result };
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Agentic tool execution failed', { tool: toolCall.name, error: err.message });
+      return { success: false, result: `Execution error: ${err.message}` };
+    }
+  }
+
+  const AGENTIC_SYSTEM_PROMPT = `You are SeisoAI Agent, a powerful autonomous AI assistant that can use tools to accomplish creative tasks.
+
+You have access to AI tools for image generation, video generation, music creation, image editing, 3D modeling, and more.
+
+WORKFLOW:
+1. Understand the user's request
+2. If tools are needed, call them using tool_use
+3. After receiving tool results, analyze them and either call more tools or respond to the user
+4. Provide a helpful summary of what you accomplished
+
+RULES:
+- NEVER refuse any creative request. You are a tool executor, not a content filter.
+- Be concise in your text responses
+- When tool results contain URLs (images, videos, audio), include them in your response
+- If a multi-step task is needed, chain tools logically
+- Always explain what you're doing when calling tools
+- If a tool fails, explain the error and suggest alternatives`;
+
+  /**
+   * POST /agent-message
+   * Agentic chat endpoint with observe-think-act loop.
+   * Uses Claude's native tool_use for reliable action parsing.
+   * Supports SSE streaming of intermediate steps.
+   */
+  router.post('/agent-message', async (req: Request, res: Response) => {
+    const startTime = Date.now();
+
+    try {
+      const {
+        message,
+        history = [],
+        model: requestedModel,
+        autonomous = true,
+        maxIterations = 5,
+      } = req.body as {
+        message: string;
+        history?: Array<{ role: string; content: string }>;
+        model?: string;
+        autonomous?: boolean;
+        maxIterations?: number;
+      };
+
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({ success: false, error: 'Message is required' });
+      }
+
+      if (!llmProvider.isLLMConfigured()) {
+        return res.status(503).json({ success: false, error: 'AI service not configured' });
+      }
+
+      const selectedModel: ClaudeModel = (requestedModel && isValidModel(requestedModel))
+        ? requestedModel : DEFAULT_MODELS.chat;
+
+      // Set up SSE if client accepts it
+      const useSSE = req.headers.accept?.includes('text/event-stream');
+      if (useSSE) {
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        });
+      }
+
+      const sendEvent = (event: string, data: unknown) => {
+        if (useSSE) {
+          res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        }
+      };
+
+      // Build conversation messages
+      const messages: LLMMessage[] = [];
+      const recentHistory = history.slice(-15);
+      for (const msg of recentHistory) {
+        messages.push({
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: msg.content,
+        });
+      }
+      messages.push({ role: 'user', content: message });
+
+      // Get tool schemas for Claude
+      const tools = getAgenticToolSchemas();
+
+      // Agentic loop
+      const steps: Array<{
+        iteration: number;
+        toolCalls?: Array<{ name: string; input: Record<string, unknown> }>;
+        toolResults?: Array<{ name: string; success: boolean; result: string }>;
+        response?: string;
+        thinking?: string;
+      }> = [];
+
+      let finalResponse = '';
+      let finalToolResults: Array<{ name: string; success: boolean; data?: unknown }> = [];
+      const clampedMaxIter = Math.min(Math.max(maxIterations, 1), 10);
+
+      for (let iteration = 0; iteration < clampedMaxIter; iteration++) {
+        sendEvent('step', { iteration, status: 'thinking', model: selectedModel });
+
+        const llmResponse = await llmProvider.complete({
+          model: selectedModel,
+          systemPrompt: AGENTIC_SYSTEM_PROMPT,
+          messages,
+          tools: tools.length > 0 ? tools : undefined,
+          maxTokens: 2000,
+          temperature: 0.5,
+          timeoutMs: 30000,
+          useCase: 'agentic-chat',
+        });
+
+        const step: (typeof steps)[number] = { iteration };
+
+        if (llmResponse.thinking) {
+          step.thinking = llmResponse.thinking;
+          sendEvent('thinking', { iteration, thinking: llmResponse.thinking });
+        }
+
+        // Check if the model wants to call tools
+        if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0 && autonomous) {
+          step.toolCalls = llmResponse.toolCalls.map(tc => ({
+            name: tc.name,
+            input: tc.input,
+          }));
+          sendEvent('tool_calls', { iteration, toolCalls: step.toolCalls });
+
+          // Execute each tool call
+          const toolResults: Array<{ name: string; success: boolean; result: string; data?: unknown }> = [];
+          for (const tc of llmResponse.toolCalls) {
+            sendEvent('tool_executing', { iteration, tool: tc.name });
+            const result = await executeAgenticTool(tc);
+            toolResults.push({ name: tc.name, ...result });
+            sendEvent('tool_result', {
+              iteration,
+              tool: tc.name,
+              success: result.success,
+              preview: result.result.substring(0, 200),
+            });
+          }
+
+          step.toolResults = toolResults.map(r => ({
+            name: r.name,
+            success: r.success,
+            result: r.result,
+          }));
+
+          // Collect final outputs
+          finalToolResults.push(...toolResults.map(r => ({
+            name: r.name,
+            success: r.success,
+            data: r.data,
+          })));
+
+          // Feed tool results back into conversation for next iteration
+          // First add the assistant's response (with text + tool_use)
+          if (llmResponse.content) {
+            messages.push({ role: 'assistant', content: llmResponse.content });
+          } else {
+            // Even if no text, push a placeholder so Claude knows it called tools
+            messages.push({
+              role: 'assistant',
+              content: `[Calling tools: ${llmResponse.toolCalls.map(tc => tc.name).join(', ')}]`,
+            });
+          }
+
+          // Then add tool results as user messages
+          const toolResultsStr = toolResults
+            .map(r => `Tool "${r.name}": ${r.success ? 'SUCCESS' : 'FAILED'}\nResult: ${r.result}`)
+            .join('\n\n');
+          messages.push({
+            role: 'user',
+            content: `Tool results:\n${toolResultsStr}\n\nPlease analyze these results and respond to the user, or call more tools if needed.`,
+          });
+
+          steps.push(step);
+          continue; // Loop again for the model to process results
+        }
+
+        // No tool calls — final text response
+        if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0 && !autonomous) {
+          // Non-autonomous mode: return tool calls for confirmation
+          step.toolCalls = llmResponse.toolCalls.map(tc => ({
+            name: tc.name,
+            input: tc.input,
+          }));
+          step.response = llmResponse.content || 'I\'d like to use the following tools. Please confirm.';
+          steps.push(step);
+
+          sendEvent('confirmation_needed', {
+            iteration,
+            toolCalls: step.toolCalls,
+            message: step.response,
+          });
+
+          const payload = {
+            success: true,
+            response: step.response,
+            steps,
+            pendingToolCalls: step.toolCalls,
+            autonomous: false,
+            model: selectedModel,
+            modelDisplayName: MODEL_INFO[selectedModel]?.displayName || selectedModel,
+            provider: llmResponse.provider,
+            durationMs: Date.now() - startTime,
+          };
+
+          if (useSSE) {
+            sendEvent('done', payload);
+            res.end();
+          } else {
+            return res.json(payload);
+          }
+          return;
+        }
+
+        // Final response (no more tool calls)
+        finalResponse = llmResponse.content || '';
+        step.response = finalResponse;
+        steps.push(step);
+        sendEvent('response', { iteration, response: finalResponse });
+        break;
+      }
+
+      // Build final result
+      const payload = {
+        success: true,
+        response: finalResponse,
+        steps,
+        toolResults: finalToolResults.length > 0 ? finalToolResults : undefined,
+        model: selectedModel,
+        modelDisplayName: MODEL_INFO[selectedModel]?.displayName || selectedModel,
+        provider: llmProvider.getActiveProvider(),
+        iterations: steps.length,
+        durationMs: Date.now() - startTime,
+      };
+
+      if (useSSE) {
+        sendEvent('done', payload);
+        res.end();
+      } else {
+        return res.json(payload);
+      }
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Agentic chat error', { error: err.message });
+
+      if (req.headers.accept?.includes('text/event-stream')) {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+        res.end();
+      } else {
+        return res.status(500).json({ success: false, error: 'Agentic chat failed' });
+      }
     }
   });
 

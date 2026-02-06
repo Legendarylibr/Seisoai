@@ -102,6 +102,7 @@ export interface Config {
   SESSION_SECRET?: string;
   ENCRYPTION_KEY?: string;
   FAL_API_KEY?: string;
+  ANTHROPIC_API_KEY?: string;
   ALLOWED_ORIGINS?: string;
   ETH_RPC_URL?: string;
   POLYGON_RPC_URL?: string;
@@ -144,6 +145,12 @@ export interface Config {
   // Coinbase CDP API (for x402 payment facilitation)
   CDP_API_KEY_ID?: string;
   CDP_API_KEY_SECRET?: string;
+  // Orchestrator
+  ORCHESTRATOR_MAX_TOKENS?: number;
+  ORCHESTRATOR_TIMEOUT_MS?: number;
+  ORCHESTRATOR_QUEUE_MAX_WAIT_MS?: number;
+  ORCHESTRATOR_QUEUE_POLL_INTERVAL_MS?: number;
+  ORCHESTRATOR_MAX_RETRIES?: number;
   isProduction: boolean;
   isDevelopment: boolean;
 }
@@ -169,6 +176,7 @@ export const config: Config = {
   
   // APIs
   FAL_API_KEY: process.env.FAL_API_KEY,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   
   // CORS
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
@@ -221,7 +229,14 @@ export const config: Config = {
   // Coinbase CDP API (for x402 payment facilitation)
   CDP_API_KEY_ID: process.env.CDP_API_KEY_ID,
   CDP_API_KEY_SECRET: process.env.CDP_API_KEY_SECRET,
-  
+
+  // Orchestrator
+  ORCHESTRATOR_MAX_TOKENS: parseInt(process.env.ORCHESTRATOR_MAX_TOKENS || '2048', 10),
+  ORCHESTRATOR_TIMEOUT_MS: parseInt(process.env.ORCHESTRATOR_TIMEOUT_MS || '30000', 10),
+  ORCHESTRATOR_QUEUE_MAX_WAIT_MS: parseInt(process.env.ORCHESTRATOR_QUEUE_MAX_WAIT_MS || '300000', 10),
+  ORCHESTRATOR_QUEUE_POLL_INTERVAL_MS: parseInt(process.env.ORCHESTRATOR_QUEUE_POLL_INTERVAL_MS || '3000', 10),
+  ORCHESTRATOR_MAX_RETRIES: parseInt(process.env.ORCHESTRATOR_MAX_RETRIES || '1', 10),
+
   // Flags
   isProduction: process.env.NODE_ENV === 'production',
   isDevelopment: process.env.NODE_ENV !== 'production'

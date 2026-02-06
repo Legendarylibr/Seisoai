@@ -227,12 +227,13 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
     const webhookSecret = req.apiKey?.webhookSecret;
     const requestId = (req as any).requestId || `gw-${Date.now()}`;
 
-    // Validate required fields
-    const missingFields = tool.inputSchema.required.filter(field => !(field in input));
-    if (missingFields.length > 0) {
+    // Validate input against tool's JSON Schema
+    const validation = toolRegistry.validateInput(toolId, input);
+    if (!validation.valid) {
       return res.status(400).json({
         success: false,
-        error: `Missing required fields: ${missingFields.join(', ')}`,
+        error: `Invalid input: ${validation.errors.join('; ')}`,
+        validationErrors: validation.errors,
         schema: tool.inputSchema,
       });
     }
@@ -779,9 +780,9 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
    * GET /api/gateway/agents
    * Machine-readable agent discovery — list all custom agents with invoke URLs
    */
-  router.get('/agents', (req: Request, res: Response) => {
+  router.get('/agents', async (req: Request, res: Response) => {
     try {
-      const agents = getAllCustomAgents();
+      const agents = await getAllCustomAgents();
       const baseUrl = `${req.protocol}://${req.get('host')}`;
 
       res.json({
@@ -817,8 +818,8 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
    * GET /api/gateway/agent/:agentId
    * Canonical agent info — single machine-readable contract for callers
    */
-  router.get('/agent/:agentId', (req: Request, res: Response) => {
-    const agent = getCustomAgentById(req.params.agentId);
+  router.get('/agent/:agentId', async (req: Request, res: Response) => {
+    const agent = await getCustomAgentById(req.params.agentId);
     if (!agent) {
       return res.status(404).json({ success: false, error: `Agent not found: ${req.params.agentId}` });
     }
@@ -870,8 +871,8 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
    * GET /api/gateway/agent/:agentId/mcp-manifest
    * Per-agent MCP manifest — only this agent's tools
    */
-  router.get('/agent/:agentId/mcp-manifest', (req: Request, res: Response) => {
-    const agent = getCustomAgentById(req.params.agentId);
+  router.get('/agent/:agentId/mcp-manifest', async (req: Request, res: Response) => {
+    const agent = await getCustomAgentById(req.params.agentId);
     if (!agent) {
       return res.status(404).json({ success: false, error: `Agent not found: ${req.params.agentId}` });
     }
@@ -895,7 +896,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
    * Body: { toolId, ...input } or use /invoke/:toolId
    */
   router.post('/agent/:agentId/invoke/:toolId?', async (req: Request, res: Response) => {
-    const agent = getCustomAgentById(req.params.agentId);
+    const agent = await getCustomAgentById(req.params.agentId);
     if (!agent) {
       return res.status(404).json({ success: false, error: `Agent not found: ${req.params.agentId}` });
     }
@@ -1047,7 +1048,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
    * Body: { goal: string, context?: object, planOnly?: boolean }
    */
   router.post('/agent/:agentId/orchestrate', async (req: Request, res: Response) => {
-    const agent = getCustomAgentById(req.params.agentId);
+    const agent = await getCustomAgentById(req.params.agentId);
     if (!agent) {
       return res.status(404).json({ success: false, error: `Agent not found: ${req.params.agentId}` });
     }

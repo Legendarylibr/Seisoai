@@ -4,6 +4,9 @@
  */
 import { Router, type Request, type Response } from 'express';
 import logger from '../utils/logger';
+import CustomAgent, { type ICustomAgent } from '../models/CustomAgent';
+import { toolRegistry } from '../services/toolRegistry';
+import { getTrace, getTracesForUser } from '../services/agentTracer';
 import {
   getAgentInfo,
   getAgentsByOwner,
@@ -17,47 +20,32 @@ import {
 
 const router = Router();
 
-// ── Custom agent type (in-memory store) ──
-export interface CustomAgentRecord {
-  agentId: string;
-  name: string;
-  description: string;
-  type: string;
-  tools: string[];
-  owner: string;
-  agentURI: string;
-  registration: Record<string, unknown>;
-  skillMd: string;
-  systemPrompt: string;
-  createdAt: string;
-  isCustom: boolean;
-}
+// ── Custom agent type ──
+export type CustomAgentRecord = ICustomAgent;
 
 /**
- * Resolve a custom agent by agentId across all owners.
+ * Resolve a custom agent by agentId.
  * Returns the agent record or null.
  */
-export function getCustomAgentById(agentId: string): CustomAgentRecord | null {
-  const agentsMap = (globalThis as Record<string, unknown>)._customAgents as Map<string, CustomAgentRecord[]> | undefined;
-  if (!agentsMap) return null;
-  for (const agents of agentsMap.values()) {
-    const found = agents.find(a => a.agentId === agentId);
-    if (found) return found;
+export async function getCustomAgentById(agentId: string): Promise<ICustomAgent | null> {
+  try {
+    return await CustomAgent.findOne({ agentId }).lean<ICustomAgent>();
+  } catch (error) {
+    logger.error('Failed to find custom agent', { agentId, error: (error as Error).message });
+    return null;
   }
-  return null;
 }
 
 /**
- * Return all custom agents across all owners.
+ * Return all custom agents.
  */
-export function getAllCustomAgents(): CustomAgentRecord[] {
-  const agentsMap = (globalThis as Record<string, unknown>)._customAgents as Map<string, CustomAgentRecord[]> | undefined;
-  if (!agentsMap) return [];
-  const all: CustomAgentRecord[] = [];
-  for (const agents of agentsMap.values()) {
-    all.push(...agents);
+export async function getAllCustomAgents(): Promise<ICustomAgent[]> {
+  try {
+    return await CustomAgent.find().sort({ createdAt: -1 }).lean<ICustomAgent[]>();
+  } catch (error) {
+    logger.error('Failed to list custom agents', { error: (error as Error).message });
+    return [];
   }
-  return all;
 }
 
 /**
@@ -66,7 +54,7 @@ export function getAllCustomAgents(): CustomAgentRecord[] {
  */
 router.get('/list', async (_req: Request, res: Response) => {
   try {
-    const agents = getAllCustomAgents();
+    const agents = await getAllCustomAgents();
     const baseUrl = `${_req.protocol}://${_req.get('host')}`;
 
     res.json({
@@ -246,7 +234,7 @@ router.post('/create', async (req: Request, res: Response) => {
     const { name, description, type, tools, image, services, skillMd, systemPrompt } = req.body;
 
     // Get wallet address from session
-    const walletAddress = (req as Record<string, unknown>).walletAddress as string
+    const walletAddress = (req as unknown as Record<string, unknown>).walletAddress as string
       || req.headers['x-wallet-address'] as string;
 
     if (!walletAddress) {
@@ -270,6 +258,17 @@ router.post('/create', async (req: Request, res: Response) => {
     }
     if (!tools || !Array.isArray(tools) || tools.length === 0) {
       res.status(400).json({ success: false, error: 'At least one tool must be selected' });
+      return;
+    }
+
+    // Validate tool IDs against registry
+    const toolValidation = toolRegistry.validateToolIds(tools);
+    if (!toolValidation.valid) {
+      res.status(400).json({
+        success: false,
+        error: `Unknown tool IDs: ${toolValidation.unknownTools.join(', ')}`,
+        unknownTools: toolValidation.unknownTools,
+      });
       return;
     }
 
@@ -299,9 +298,8 @@ router.post('/create', async (req: Request, res: Response) => {
 
     const agentURI = createAgentURI(registration);
 
-    // Store in a simple in-memory map for now (upgrade to MongoDB when needed)
-    // In production, save to a UserAgent collection
-    const agent = {
+    // Persist to MongoDB
+    const agent = await CustomAgent.create({
       agentId,
       name,
       description,
@@ -312,18 +310,10 @@ router.post('/create', async (req: Request, res: Response) => {
       registration,
       skillMd: skillMd || '',
       systemPrompt: systemPrompt || '',
-      createdAt: new Date().toISOString(),
+      imageUrl: image || 'https://seisoai.com/seiso-logo.png',
+      services: registration.services || [],
       isCustom: true,
-    };
-
-    // Store in global map (persists per server instance)
-    if (!globalThis._customAgents) {
-      (globalThis as Record<string, unknown>)._customAgents = new Map();
-    }
-    const agentsMap = (globalThis as Record<string, unknown>)._customAgents as Map<string, unknown[]>;
-    const ownerAgents = agentsMap.get(walletAddress) || [];
-    ownerAgents.push(agent);
-    agentsMap.set(walletAddress, ownerAgents);
+    });
 
     logger.info('Custom agent created', { agentId, name, owner: walletAddress, toolCount: tools.length });
 
@@ -352,8 +342,7 @@ router.get('/custom/:address', async (req: Request, res: Response) => {
       return;
     }
 
-    const agentsMap = (globalThis as Record<string, unknown>)._customAgents as Map<string, unknown[]> | undefined;
-    const agents = agentsMap?.get(address) || [];
+    const agents = await CustomAgent.find({ owner: address }).sort({ createdAt: -1 }).lean();
 
     res.json({ success: true, agents, count: agents.length });
   } catch (error) {
@@ -370,7 +359,7 @@ router.get('/custom/:address', async (req: Request, res: Response) => {
 router.delete('/custom/:agentId', async (req: Request, res: Response) => {
   try {
     const { agentId } = req.params;
-    const walletAddress = (req as Record<string, unknown>).walletAddress as string
+    const walletAddress = (req as unknown as Record<string, unknown>).walletAddress as string
       || req.headers['x-wallet-address'] as string;
 
     if (!walletAddress) {
@@ -378,13 +367,14 @@ router.delete('/custom/:agentId', async (req: Request, res: Response) => {
       return;
     }
 
-    const agentsMap = (globalThis as Record<string, unknown>)._customAgents as Map<string, Array<{ agentId: string }>>;
-    if (agentsMap) {
-      const ownerAgents = agentsMap.get(walletAddress) || [];
-      const filtered = ownerAgents.filter((a) => a.agentId !== agentId);
-      agentsMap.set(walletAddress, filtered);
+    const result = await CustomAgent.findOneAndDelete({ agentId, owner: walletAddress });
+
+    if (!result) {
+      res.status(404).json({ success: false, error: 'Agent not found or not owned by you' });
+      return;
     }
 
+    logger.info('Custom agent deleted', { agentId, owner: walletAddress });
     res.json({ success: true });
   } catch (error) {
     const err = error as Error;
@@ -428,6 +418,43 @@ router.post('/generate-uri', async (req: Request, res: Response) => {
     const err = error as Error;
     logger.error('Failed to generate agent URI', { error: err.message });
     res.status(500).json({ success: false, error: 'Failed to generate URI' });
+  }
+});
+
+// ── Execution traces ──
+
+/**
+ * GET /api/agents/traces/:traceId
+ * Get a specific execution trace
+ */
+router.get('/traces/:traceId', async (req: Request, res: Response) => {
+  try {
+    const trace = await getTrace(req.params.traceId);
+    if (!trace) {
+      res.status(404).json({ success: false, error: 'Trace not found' });
+      return;
+    }
+    res.json({ success: true, trace });
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to get trace', { error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to get trace' });
+  }
+});
+
+/**
+ * GET /api/agents/traces/user/:address
+ * List recent traces for a user
+ */
+router.get('/traces/user/:address', async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 20;
+    const traces = await getTracesForUser(req.params.address, Math.min(limit, 100));
+    res.json({ success: true, traces, count: traces.length });
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to get user traces', { error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to get traces' });
   }
 });
 

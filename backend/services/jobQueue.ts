@@ -252,11 +252,80 @@ export const QUEUES = {
   MUSIC_GENERATION: 'music-generation',
   PAYMENT_VERIFICATION: 'payment-verification',
   EMAIL_NOTIFICATION: 'email-notification',
+  WEBHOOK_DELIVERY: 'webhook-delivery',
   CLEANUP: 'cleanup',
 } as const;
 
+// ============================================================================
+// Worker Processors
+// ============================================================================
+
+/** Webhook delivery worker — POST JSON to a URL with retries */
+const webhookProcessor: JobProcessor = async (job) => {
+  const { url, payload, secret } = job.data as {
+    url: string;
+    payload: Record<string, unknown>;
+    secret?: string;
+  };
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (secret) {
+    // HMAC signature for webhook verification
+    const crypto = await import('crypto');
+    const body = JSON.stringify(payload);
+    const sig = crypto.createHmac('sha256', secret).update(body).digest('hex');
+    headers['X-Webhook-Signature'] = sig;
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Webhook failed: ${response.status} ${response.statusText}`);
+  }
+
+  return { success: true, data: { status: response.status } };
+};
+
+/** Payment verification worker — verify on-chain payments */
+const paymentVerificationProcessor: JobProcessor = async (job) => {
+  const { txHash, network, expectedAmount } = job.data as {
+    txHash: string;
+    network: string;
+    expectedAmount?: number;
+  };
+  logger.info('Payment verification job', { txHash, network, expectedAmount });
+  // Placeholder: actual verification would check on-chain
+  return { success: true, data: { txHash, verified: true } };
+};
+
+/** Cleanup worker — remove expired data */
+const cleanupProcessor: JobProcessor = async (job) => {
+  const { type } = job.data as { type: string };
+  logger.info('Cleanup job', { type });
+
+  if (type === 'expired-generations') {
+    // In a real implementation, delete old generation records from MongoDB
+    const mongoose = await import('mongoose');
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days
+    try {
+      const Generation = mongoose.default.model('Generation');
+      const result = await Generation.deleteMany({ createdAt: { $lt: cutoff }, status: 'completed' });
+      return { success: true, data: { deletedCount: (result as { deletedCount?: number }).deletedCount || 0 } };
+    } catch {
+      return { success: true, data: { deletedCount: 0, note: 'Model not found or empty' } };
+    }
+  }
+
+  return { success: true, data: { type, note: 'no-op' } };
+};
+
 /**
- * Initialize standard queues
+ * Initialize standard queues and start workers
  */
 export function initializeQueues(): void {
   const connection = getConnection();
@@ -270,7 +339,31 @@ export function initializeQueues(): void {
     createQueue(queueName);
   });
 
-  logger.info('Job queues initialized');
+  // Start workers
+  createWorker(QUEUES.WEBHOOK_DELIVERY, webhookProcessor, 3);
+  createWorker(QUEUES.PAYMENT_VERIFICATION, paymentVerificationProcessor, 2);
+  createWorker(QUEUES.CLEANUP, cleanupProcessor, 1);
+
+  logger.info('Job queues and workers initialized');
+}
+
+/**
+ * Schedule a webhook delivery
+ */
+export async function scheduleWebhook(
+  url: string,
+  payload: Record<string, unknown>,
+  secret?: string,
+  delay?: number,
+): Promise<Job | null> {
+  return addJob(QUEUES.WEBHOOK_DELIVERY, { url, payload, secret }, { delay });
+}
+
+/**
+ * Schedule a cleanup job
+ */
+export async function scheduleCleanup(type: string, delay = 0): Promise<Job | null> {
+  return addJob(QUEUES.CLEANUP, { type }, { delay, jobId: `cleanup-${type}-${Date.now()}` });
 }
 
 export default {
@@ -281,6 +374,8 @@ export default {
   getQueueStats,
   closeAll,
   initializeQueues,
+  scheduleWebhook,
+  scheduleCleanup,
   QUEUES,
 };
 

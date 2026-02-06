@@ -12,7 +12,25 @@
  */
 import { toolRegistry, type ToolDefinition } from './toolRegistry';
 import { falRequest, submitToQueue, checkQueueStatus, getQueueResult, isStatusCompleted, isStatusFailed } from './fal';
+import llmProvider, { type ClaudeModel, DEFAULT_MODELS } from './llmProvider';
 import logger from '../utils/logger';
+import config from '../config/env';
+
+// ============================================
+// Orchestrator Config (from environment)
+// ============================================
+const ORCH_CONFIG = {
+  /** Max tokens for LLM plan generation */
+  maxTokens: config.ORCHESTRATOR_MAX_TOKENS || 2048,
+  /** Timeout for LLM plan generation call */
+  timeoutMs: config.ORCHESTRATOR_TIMEOUT_MS || 30000,
+  /** Max wait for queue-based tool execution */
+  queueMaxWaitMs: config.ORCHESTRATOR_QUEUE_MAX_WAIT_MS || 300_000,
+  /** Polling interval for queue status */
+  queuePollIntervalMs: config.ORCHESTRATOR_QUEUE_POLL_INTERVAL_MS || 3_000,
+  /** Number of retries per tool execution on failure */
+  maxRetries: config.ORCHESTRATOR_MAX_RETRIES ?? 1,
+};
 
 // ============================================
 // Types
@@ -61,8 +79,17 @@ export interface OrchestrationResult {
 /**
  * Generate an execution plan from a natural language goal using an LLM
  */
-export async function generatePlan(goal: string, context?: Record<string, unknown>): Promise<OrchestrationPlan> {
-  const tools = toolRegistry.getEnabled();
+export async function generatePlan(
+  goal: string, 
+  context?: Record<string, unknown>,
+  options?: { model?: ClaudeModel }
+): Promise<OrchestrationPlan> {
+  // If context specifies allowedTools, filter to only those tools
+  const allowedTools = context?.allowedTools as string[] | undefined;
+  const allTools = toolRegistry.getEnabled();
+  const tools = allowedTools
+    ? toolRegistry.getToolsForAgent(allowedTools)
+    : allTools;
   
   // Build tool catalog for the LLM
   const toolCatalog = tools.map(t => ({
@@ -106,27 +133,26 @@ Respond with ONLY a JSON object:
 }`;
 
   const userPrompt = `Goal: ${goal}${context ? `\nContext: ${JSON.stringify(context)}` : ''}`;
+  const planModel = options?.model || DEFAULT_MODELS.planning;
 
   try {
-    const endpoint = 'https://fal.run/fal-ai/any-llm';
-    const response = await falRequest<{ output?: string }>(endpoint, {
-      method: 'POST',
-      body: JSON.stringify({
-        model: 'anthropic/claude-3-haiku',
-        prompt: userPrompt,
-        system_prompt: systemPrompt,
-        max_tokens: 2048,
-      }),
+    const llmResponse = await llmProvider.complete({
+      model: planModel,
+      systemPrompt,
+      prompt: userPrompt,
+      maxTokens: ORCH_CONFIG.maxTokens,
+      timeoutMs: ORCH_CONFIG.timeoutMs,
+      useCase: 'orchestrator-planning',
     });
 
-    const output = response.output || '';
+    const output = llmResponse.content || '';
     
-    // Parse JSON from the response
+    // Parse JSON from the response using robust extraction
     let planData: { steps: OrchestrationStep[]; estimatedCredits: number; estimatedDurationSeconds: number };
     
-    const jsonMatch = output.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      planData = JSON.parse(jsonMatch[0]);
+    const parsed = llmProvider.extractJSON<typeof planData>(output);
+    if (parsed && parsed.steps) {
+      planData = parsed;
     } else {
       throw new Error('No valid JSON plan found in LLM response');
     }
@@ -207,7 +233,7 @@ function resolveInputMappings(
 /**
  * Execute a single tool and wait for results (handles both sync and queue)
  */
-async function executeTool(tool: ToolDefinition, input: Record<string, unknown>): Promise<unknown> {
+async function executeToolOnce(tool: ToolDefinition, input: Record<string, unknown>): Promise<unknown> {
   if (tool.executionMode === 'sync') {
     const endpoint = `https://fal.run/${tool.falModel}`;
     return await falRequest(endpoint, {
@@ -222,12 +248,10 @@ async function executeTool(tool: ToolDefinition, input: Record<string, unknown>)
     }
 
     const jobId = queueResult.request_id;
-    const maxWaitMs = 300_000; // 5 minutes
-    const pollIntervalMs = 3_000;
     const startTime = Date.now();
 
-    while (Date.now() - startTime < maxWaitMs) {
-      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    while (Date.now() - startTime < ORCH_CONFIG.queueMaxWaitMs) {
+      await new Promise(resolve => setTimeout(resolve, ORCH_CONFIG.queuePollIntervalMs));
       const status = await checkQueueStatus(jobId, tool.falModel) as { status?: string };
 
       if (isStatusCompleted(status?.status)) {
@@ -239,72 +263,172 @@ async function executeTool(tool: ToolDefinition, input: Record<string, unknown>)
       }
     }
 
-    throw new Error(`Tool execution timed out after ${maxWaitMs / 1000}s`);
+    throw new Error(`Tool execution timed out after ${ORCH_CONFIG.queueMaxWaitMs / 1000}s`);
   }
 }
 
 /**
- * Execute a full orchestration plan
+ * Execute a single tool with retries (exponential backoff)
+ */
+async function executeTool(tool: ToolDefinition, input: Record<string, unknown>): Promise<unknown> {
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= ORCH_CONFIG.maxRetries; attempt++) {
+    try {
+      return await executeToolOnce(tool, input);
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt < ORCH_CONFIG.maxRetries) {
+        const backoffMs = Math.min(1000 * 2 ** attempt, 10000);
+        logger.warn('Tool execution failed, retrying', {
+          toolId: tool.id,
+          attempt: attempt + 1,
+          maxRetries: ORCH_CONFIG.maxRetries,
+          backoffMs,
+          error: lastError.message,
+        });
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Build a dependency graph from an orchestration plan.
+ * A step depends on another if its inputMappings reference that step's output ($stepId.path).
+ */
+function buildDependencyGraph(steps: OrchestrationStep[]): Map<string, Set<string>> {
+  const deps = new Map<string, Set<string>>();
+  for (const step of steps) {
+    const stepDeps = new Set<string>();
+    if (step.inputMappings) {
+      for (const ref of Object.values(step.inputMappings)) {
+        if (ref.startsWith('$')) {
+          const depStepId = ref.slice(1).split('.')[0];
+          if (depStepId && depStepId !== step.stepId) {
+            stepDeps.add(depStepId);
+          }
+        }
+      }
+    }
+    deps.set(step.stepId, stepDeps);
+  }
+  return deps;
+}
+
+/**
+ * Execute a full orchestration plan with DAG-based dependency resolution.
+ * Independent steps run in parallel; failed steps cause dependents to be skipped.
  */
 export async function executePlan(plan: OrchestrationPlan): Promise<OrchestrationResult> {
   const startTime = Date.now();
   const stepResults: StepResult[] = [];
   const stepOutputs = new Map<string, unknown>();
+  const failedSteps = new Set<string>();
   let totalCredits = 0;
 
   logger.info('Orchestrator executing plan', { goal: plan.goal, stepCount: plan.steps.length });
 
-  for (const step of plan.steps) {
-    const stepStart = Date.now();
-    const tool = toolRegistry.get(step.toolId);
+  const deps = buildDependencyGraph(plan.steps);
+  const stepsById = new Map(plan.steps.map(s => [s.stepId, s]));
+  const completed = new Set<string>();
+  const remaining = new Set(plan.steps.map(s => s.stepId));
 
-    if (!tool) {
-      stepResults.push({
-        stepId: step.stepId,
-        toolId: step.toolId,
-        status: 'skipped',
-        error: `Tool not found: ${step.toolId}`,
-        durationMs: 0,
-      });
-      continue;
+  // Process in waves until all steps are done
+  while (remaining.size > 0) {
+    // Find steps whose dependencies are all satisfied
+    const ready: string[] = [];
+    for (const stepId of remaining) {
+      const stepDeps = deps.get(stepId) || new Set();
+      const allDepsComplete = [...stepDeps].every(d => completed.has(d));
+      if (allDepsComplete) {
+        // Check if any dependency failed
+        const hasFailedDep = [...stepDeps].some(d => failedSteps.has(d));
+        if (hasFailedDep) {
+          // Skip this step
+          remaining.delete(stepId);
+          completed.add(stepId);
+          failedSteps.add(stepId);
+          stepResults.push({
+            stepId,
+            toolId: stepsById.get(stepId)!.toolId,
+            status: 'skipped',
+            error: `Skipped: dependency failed`,
+            durationMs: 0,
+          });
+          continue;
+        }
+        ready.push(stepId);
+      }
     }
 
-    try {
-      // Resolve input mappings from previous step outputs
-      const resolvedInput = resolveInputMappings(step.input, step.inputMappings, stepOutputs);
+    if (ready.length === 0 && remaining.size > 0) {
+      // Deadlock — circular dependency or unfulfillable deps
+      for (const stepId of remaining) {
+        stepResults.push({
+          stepId,
+          toolId: stepsById.get(stepId)!.toolId,
+          status: 'skipped',
+          error: 'Skipped: circular or unfulfillable dependency',
+          durationMs: 0,
+        });
+      }
+      break;
+    }
 
-      logger.info('Orchestrator executing step', { stepId: step.stepId, toolId: step.toolId, description: step.description });
+    // Execute ready steps in parallel
+    const promises = ready.map(async (stepId) => {
+      const step = stepsById.get(stepId)!;
+      const stepStart = Date.now();
+      const tool = toolRegistry.get(step.toolId);
 
-      const result = await executeTool(tool, resolvedInput);
-      
-      stepOutputs.set(step.stepId, result);
-      
-      const price = toolRegistry.calculatePrice(step.toolId, resolvedInput);
-      totalCredits += price?.credits || 0;
+      if (!tool) {
+        failedSteps.add(stepId);
+        return {
+          stepId,
+          toolId: step.toolId,
+          status: 'skipped' as const,
+          error: `Tool not found: ${step.toolId}`,
+          durationMs: 0,
+        };
+      }
 
-      stepResults.push({
-        stepId: step.stepId,
-        toolId: step.toolId,
-        status: 'completed',
-        result,
-        durationMs: Date.now() - stepStart,
-      });
+      try {
+        const resolvedInput = resolveInputMappings(step.input, step.inputMappings, stepOutputs);
+        logger.info('Orchestrator executing step', { stepId, toolId: step.toolId, description: step.description });
 
-      logger.info('Orchestrator step completed', { stepId: step.stepId, durationMs: Date.now() - stepStart });
-    } catch (error) {
-      const err = error as Error;
-      logger.error('Orchestrator step failed', { stepId: step.stepId, toolId: step.toolId, error: err.message });
+        const result = await executeTool(tool, resolvedInput);
+        stepOutputs.set(stepId, result);
 
-      stepResults.push({
-        stepId: step.stepId,
-        toolId: step.toolId,
-        status: 'failed',
-        error: err.message,
-        durationMs: Date.now() - stepStart,
-      });
+        const price = toolRegistry.calculatePrice(step.toolId, resolvedInput);
+        totalCredits += price?.credits || 0;
 
-      // Continue with remaining steps that don't depend on this one
-      // (in a more advanced version, we'd analyze the dependency graph)
+        return {
+          stepId,
+          toolId: step.toolId,
+          status: 'completed' as const,
+          result,
+          durationMs: Date.now() - stepStart,
+        };
+      } catch (error) {
+        const err = error as Error;
+        logger.error('Orchestrator step failed', { stepId, toolId: step.toolId, error: err.message });
+        failedSteps.add(stepId);
+        return {
+          stepId,
+          toolId: step.toolId,
+          status: 'failed' as const,
+          error: err.message,
+          durationMs: Date.now() - stepStart,
+        };
+      }
+    });
+
+    const results = await Promise.all(promises);
+    for (const result of results) {
+      stepResults.push(result);
+      remaining.delete(result.stepId);
+      completed.add(result.stepId);
     }
   }
 
