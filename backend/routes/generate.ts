@@ -12,7 +12,6 @@ import { requireAuth } from '../utils/responses';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatusCompleted, isStatusFailed, normalizeStatus, FAL_STATUS } from '../services/fal';
 import llmProvider, { DEFAULT_MODELS } from '../services/llmProvider';
 import { buildUserUpdateQuery } from '../services/user';
-// createEmailHash import removed - SECURITY: Use authenticated user from JWT instead
 import type { IUser } from '../models/User';
 import { calculateVideoCredits, calculateMusicCredits, calculateUpscaleCredits, calculateVideoToAudioCredits } from '../utils/creditCalculations';
 import { applyClawMarkup } from '../middleware/credits';
@@ -23,169 +22,36 @@ import { recordProvenance, getProvenanceAgentRegistry, isProvenanceConfigured } 
 import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
 import { requireTokenGate } from '../middleware/tokenGate';
 import config from '../config/env';
+import {
+  deductCredits,
+  refundCredits,
+  validateUser,
+  ServiceNotConfiguredError
+} from '../services/creditTransaction';
+import {
+  optimizePromptForFlux2T2I,
+  optimizePromptForFlux2Edit,
+  type PromptOptimizationResult
+} from '../services/promptOptimizer';
 
-// Types
+// Re-export prompt optimizers (used by chatAssistant.ts)
+export {
+  optimizePromptForMusic,
+  optimizePromptForFlux2T2I,
+  optimizePromptForFlux2Edit,
+  optimizePromptForFluxEdit,
+  optimizePromptForNanoBananaEdit,
+} from '../services/promptOptimizer';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
 interface Dependencies {
   authenticateFlexible?: RequestHandler;
   requireCreditsForModel: () => RequestHandler;
   requireCreditsForVideo: () => RequestHandler;
   requireCredits: (credits: number) => RequestHandler;
-}
-
-// ============================================================================
-// ASIAN LANGUAGE TO ENGLISH PROMPT TRANSLATION (Japanese, Chinese)
-// ============================================================================
-
-/**
- * Detect if text contains Japanese characters (Hiragana, Katakana)
- */
-function containsJapaneseKana(text: string): boolean {
-  // Hiragana: \u3040-\u309F
-  // Katakana: \u30A0-\u30FF
-  const japaneseKanaRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
-  return japaneseKanaRegex.test(text);
-}
-
-/**
- * Detect if text contains CJK characters (shared by Japanese Kanji and Chinese)
- */
-function containsCJK(text: string): boolean {
-  // CJK Unified Ideographs: \u4E00-\u9FFF
-  // CJK Extension A: \u3400-\u4DBF
-  const cjkRegex = /[\u4E00-\u9FFF\u3400-\u4DBF]/;
-  return cjkRegex.test(text);
-}
-
-/**
- * Detect the source language for translation
- */
-function detectAsianLanguage(text: string): 'japanese' | 'chinese' | null {
-  if (containsJapaneseKana(text)) {
-    return 'japanese'; // Has kana = definitely Japanese
-  }
-  if (containsCJK(text)) {
-    // Has CJK but no kana - could be Chinese or Japanese kanji-only
-    // Default to Chinese since kanji-only Japanese is rare in prompts
-    return 'chinese';
-  }
-  return null;
-}
-
-interface TranslationResult {
-  translatedPrompt: string;
-  wasTranslated: boolean;
-  sourceLanguage?: 'japanese' | 'chinese';
-  error?: string;
-}
-
-/**
- * Translate Japanese or Chinese prompt to English for AI generation
- * This happens invisibly - user sees their language, AI gets English
- */
-async function translateAsianToEnglish(prompt: string): Promise<TranslationResult> {
-  const sourceLanguage = detectAsianLanguage(prompt);
-  
-  // Skip if no Asian characters detected
-  if (!sourceLanguage) {
-    return { translatedPrompt: prompt, wasTranslated: false };
-  }
-
-  if (!llmProvider.isLLMConfigured()) {
-    logger.warn('Translation skipped: No LLM provider configured');
-    return { translatedPrompt: prompt, wasTranslated: false, error: 'LLM not configured' };
-  }
-
-  try {
-    const languageName = sourceLanguage === 'japanese' ? 'Japanese' : 'Chinese';
-    const translationPrompt = `Translate the following ${languageName} text to English. This is a prompt for AI image/video/music generation, so preserve all descriptive details, style keywords, and artistic directions. Output ONLY the English translation, nothing else.
-
-${languageName} text: ${prompt}
-
-English translation:`;
-
-    const llmResponse = await llmProvider.complete({
-      model: DEFAULT_MODELS.internal,
-      prompt: translationPrompt,
-      maxTokens: 500,
-      timeoutMs: 8000,
-      useCase: 'translation',
-    });
-
-    const output = llmResponse.content.trim();
-
-    if (output && output.length > 0) {
-      logger.debug('Prompt translated', { 
-        sourceLanguage,
-        original: prompt.substring(0, 50),
-        translated: output.substring(0, 50)
-      });
-      return { translatedPrompt: output, wasTranslated: true, sourceLanguage };
-    }
-
-    return { translatedPrompt: prompt, wasTranslated: false, error: 'Empty translation response' };
-
-  } catch (error) {
-    const err = error as Error;
-    logger.error('Translation error', { error: err.message, language: sourceLanguage });
-    return { translatedPrompt: prompt, wasTranslated: false, error: err.message };
-  }
-}
-
-/**
- * Refund credits to a user after a failed generation
- * @param user - The user to refund
- * @param credits - Number of credits to refund
- * @param reason - Reason for the refund (for logging)
- * @returns The updated user document or null if refund failed
- */
-async function refundCredits(
-  user: IUser,
-  credits: number,
-  reason: string
-): Promise<IUser | null> {
-  try {
-    // Validate credits is a valid positive number
-    if (!Number.isFinite(credits) || credits <= 0) {
-      logger.error('Cannot refund invalid credits amount', { credits, reason, userId: user.userId });
-      return null;
-    }
-    
-    const User = mongoose.model<IUser>('User');
-    const updateQuery = buildUserUpdateQuery(user);
-    
-    if (!updateQuery) {
-      logger.error('Cannot refund credits: no valid user identifier', { userId: user.userId });
-      return null;
-    }
-
-    const updatedUser = await User.findOneAndUpdate(
-      updateQuery,
-      {
-        $inc: { credits: credits, totalCreditsSpent: -credits }
-      },
-      { new: true }
-    );
-
-    if (updatedUser) {
-      logger.info('Credits refunded for failed generation', {
-        userId: user.userId || user.email || user.walletAddress,
-        creditsRefunded: credits,
-        newBalance: updatedUser.credits,
-        reason
-      });
-    }
-
-    return updatedUser;
-  } catch (error) {
-    const err = error as Error;
-    logger.error('Failed to refund credits', {
-      userId: user.userId,
-      credits,
-      reason,
-      error: err.message
-    });
-    return null;
-  }
 }
 
 interface AuthenticatedRequest extends Request {
@@ -200,726 +66,269 @@ interface FalImageResponse {
 }
 
 // ============================================================================
-// MUSIC PROMPT OPTIMIZATION SERVICE
+// ASIAN LANGUAGE TO ENGLISH PROMPT TRANSLATION
 // ============================================================================
 
-/**
- * Music prompt optimization guidelines for CassetteAI
- */
-const MUSIC_PROMPT_GUIDELINES = `You are an expert music producer helping optimize prompts for AI music generation.
+function containsJapaneseKana(text: string): boolean {
+  return /[\u3040-\u309F\u30A0-\u30FF]/.test(text);
+}
 
-CRITICAL: Keep prompts SHORT - under 200 characters. Long prompts slow down generation.
+function containsCJK(text: string): boolean {
+  return /[\u4E00-\u9FFF\u3400-\u4DBF]/.test(text);
+}
 
-Include only essential elements:
-- Genre/style (specific: "lo-fi hip hop" not "hip hop")
-- 2-3 instruments max
-- Mood word
-- Optional: tempo or key (not both)
+function detectAsianLanguage(text: string): 'japanese' | 'chinese' | null {
+  if (containsJapaneseKana(text)) return 'japanese';
+  if (containsCJK(text)) return 'chinese';
+  return null;
+}
 
-Examples (note brevity):
-- "chill music" → "Relaxing lo-fi hip hop, mellow piano, soft drums, warm bass, 85 BPM"
-- "rock song" → "Energetic rock, crunchy guitars, driving drums, punchy bass, 140 BPM"
-- "sad piano" → "Melancholic piano piece, gentle melodies, soft reverb, D Minor"
-
-JSON only:
-{"optimizedPrompt": "enhanced version under 200 chars", "reasoning": "brief explanation"}`;
-
-interface MusicOptimizationResult {
-  optimizedPrompt: string;
-  reasoning: string | null;
-  skipped: boolean;
+interface TranslationResult {
+  translatedPrompt: string;
+  wasTranslated: boolean;
+  sourceLanguage?: 'japanese' | 'chinese';
   error?: string;
 }
 
-/**
- * Optimize a prompt for music generation
- */
-export async function optimizePromptForMusic(
-  originalPrompt: string,
-  selectedGenre: string | null = null
-): Promise<MusicOptimizationResult> {
-  // Skip optimization for empty prompts
-  if (!originalPrompt || originalPrompt.trim() === '') {
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
-  }
+async function translateAsianToEnglish(prompt: string): Promise<TranslationResult> {
+  const sourceLanguage = detectAsianLanguage(prompt);
+  if (!sourceLanguage) return { translatedPrompt: prompt, wasTranslated: false };
 
   if (!llmProvider.isLLMConfigured()) {
-    logger.warn('Music prompt optimization skipped: No LLM provider configured');
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM not configured' };
-  }
-
-  const genreContext = selectedGenre 
-    ? `The user has selected the genre "${selectedGenre}". Use this as context but still enhance based on their written prompt.`
-    : '';
-
-  try {
-    const userPrompt = `Enhance this music prompt. Keep it SHORT (under 200 chars): "${originalPrompt}"
-${genreContext ? genreContext + '\n' : ''}Add genre, 2-3 instruments, mood. Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
-
-    const llmResponse = await llmProvider.complete({
-      model: DEFAULT_MODELS.internal,
-      systemPrompt: MUSIC_PROMPT_GUIDELINES,
-      prompt: userPrompt,
-      temperature: 0.6,
-      maxTokens: 250,
-      timeoutMs: 8000,
-      useCase: 'music-prompt-optimization',
-    });
-
-    const output = llmResponse.content;
-
-    // Try to parse JSON response
-    try {
-      const parsed = llmProvider.extractJSON<{ optimizedPrompt?: string; reasoning?: string }>(output);
-      if (parsed) {
-        const optimized = parsed.optimizedPrompt || originalPrompt;
-        return {
-          optimizedPrompt: truncatePrompt(optimized.trim()),
-          reasoning: parsed.reasoning || null,
-          skipped: false
-        };
-      }
-    } catch {
-      if (output && output.length > 10) {
-        return {
-          optimizedPrompt: truncatePrompt(output.trim()),
-          reasoning: 'Enhanced by AI',
-          skipped: false
-        };
-      }
-    }
-
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'Failed to parse LLM response' };
-
-  } catch (error) {
-    const err = error as Error;
-    logger.error('Music prompt optimization error', { error: err.message });
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: err.message };
-  }
-}
-
-// ============================================================================
-// END MUSIC PROMPT OPTIMIZATION SERVICE
-// ============================================================================
-
-// ============================================================================
-// FLUX 2 IMAGE EDITING PROMPT OPTIMIZATION SERVICE
-// ============================================================================
-
-/**
- * FLUX 2 image editing prompt optimization guidelines
- * Tailored for precise modifications using natural language descriptions
- */
-const FLUX2_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompts for FLUX 2 image editing AI.
-
-CRITICAL: Keep prompts SHORT - under 150 characters. Long prompts slow down generation significantly.
-
-Optimal prompt structure:
-1. Use action verbs: "Change", "Make", "Replace", "Add", "Remove", "Transfer", "Apply"
-2. Be specific but brief - ONE main edit per prompt
-3. Include hex colors only if the user mentioned a specific color
-
-SINGLE IMAGE EDIT examples:
-- "Change the shirt to red flannel"
-- "Make hair blonde with highlights"
-- "Replace background with sunset beach"
-
-MULTI-IMAGE EDIT examples (when combining elements from multiple images):
-- "Transfer the hat from reference to subject's head"
-- "Apply outfit from second image to person"
-- "Composite: keep subject, use reference background"
-- "Blend reference accessory onto subject naturally"
-
-For multi-image: focus on WHAT to transfer and WHERE to place it.
-
-JSON response:
-{"optimizedPrompt": "short action-oriented instruction under 150 chars", "reasoning": "brief explanation"}`;
-
-interface ImageEditOptimizationResult {
-  optimizedPrompt: string;
-  reasoning: string | null;
-  skipped: boolean;
-  error?: string;
-}
-
-/**
- * Optimize a prompt for FLUX 2 image editing
- */
-export async function optimizePromptForFlux2Edit(
-  originalPrompt: string,
-  options?: { hasMultipleImages?: boolean; numImages?: number }
-): Promise<ImageEditOptimizationResult> {
-  // Skip optimization for empty prompts
-  if (!originalPrompt || originalPrompt.trim() === '') {
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
-  }
-
-  if (!llmProvider.isLLMConfigured()) {
-    logger.warn('FLUX 2 prompt optimization skipped: No LLM provider configured');
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM not configured' };
+    logger.warn('Translation skipped: No LLM provider configured');
+    return { translatedPrompt: prompt, wasTranslated: false, error: 'LLM not configured' };
   }
 
   try {
-    const multiImageContext = options?.hasMultipleImages 
-      ? `\n\nThis is a MULTI-IMAGE EDIT with ${options.numImages || 2} images. First image is BASE, others are REFERENCE for elements to transfer.`
-      : '';
-
-    const userPrompt = `Make this edit instruction SHORT (under 150 chars): "${originalPrompt}"${multiImageContext}
-
-Use action verb, be specific. ${options?.hasMultipleImages ? 'Focus on what to TRANSFER from reference to base.' : ''} Brevity is critical.
-Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
-
+    const languageName = sourceLanguage === 'japanese' ? 'Japanese' : 'Chinese';
     const llmResponse = await llmProvider.complete({
       model: DEFAULT_MODELS.internal,
-      systemPrompt: FLUX2_EDIT_PROMPT_GUIDELINES,
-      prompt: userPrompt,
-      temperature: 0.5,
-      maxTokens: 200,
+      prompt: `Translate the following ${languageName} text to English. This is a prompt for AI image/video/music generation, so preserve all descriptive details, style keywords, and artistic directions. Output ONLY the English translation, nothing else.\n\n${languageName} text: ${prompt}\n\nEnglish translation:`,
+      maxTokens: 500,
       timeoutMs: 8000,
-      useCase: 'flux2-edit-prompt-optimization',
+      useCase: 'translation',
     });
 
-    const output = llmResponse.content;
-
-    // Try to parse JSON response
-    try {
-      const parsed = llmProvider.extractJSON<{ optimizedPrompt?: string; reasoning?: string }>(output);
-      if (parsed?.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
-        const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim(), 200);
-        logger.debug('FLUX 2 prompt optimized', { 
-          original: originalPrompt.substring(0, 50),
-          optimized: truncatedPrompt.substring(0, 50),
-          truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
-        });
-        return {
-          optimizedPrompt: truncatedPrompt,
-          reasoning: parsed.reasoning || null,
-          skipped: false
-        };
-      }
-    } catch {
-      // If JSON parsing fails but we have reasonable output, use it
-      if (output && output.length > 10 && output.length < 500) {
-        return {
-          optimizedPrompt: truncatePrompt(output.trim(), 200),
-          reasoning: 'Enhanced for FLUX 2 editing',
-          skipped: false
-        };
-      }
+    const output = llmResponse.content.trim();
+    if (output.length > 0) {
+      logger.debug('Prompt translated', {
+        sourceLanguage,
+        original: prompt.substring(0, 50),
+        translated: output.substring(0, 50)
+      });
+      return { translatedPrompt: output, wasTranslated: true, sourceLanguage };
     }
 
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'Failed to parse LLM response' };
-
+    return { translatedPrompt: prompt, wasTranslated: false, error: 'Empty translation response' };
   } catch (error) {
     const err = error as Error;
-    logger.error('FLUX 2 prompt optimization error', { error: err.message });
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: err.message };
+    logger.error('Translation error', { error: err.message, language: sourceLanguage });
+    return { translatedPrompt: prompt, wasTranslated: false, error: err.message };
   }
 }
 
 // ============================================================================
-// END FLUX 2 IMAGE EDITING PROMPT OPTIMIZATION SERVICE
+// SHARED HELPERS
 // ============================================================================
 
-// ============================================================================
-// FLUX (STANDARD) IMAGE EDITING PROMPT OPTIMIZATION SERVICE
-// ============================================================================
+const ASPECT_TO_SIZE: Record<string, string> = {
+  '1:1': 'square',
+  '4:3': 'landscape_4_3',
+  '16:9': 'landscape_16_9',
+  '3:4': 'portrait_4_3',
+  '9:16': 'portrait_16_9'
+};
 
-/**
- * FLUX standard image editing prompt optimization guidelines
- * Optimized for img2img transformations with FLUX schnell/dev
- */
-const FLUX_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompts for FLUX image-to-image editing.
+/** Extract image URLs from FAL API response */
+function extractFalImageUrls(result: FalImageResponse): string[] {
+  const images: string[] = [];
+  if (result.images && Array.isArray(result.images)) {
+    for (const img of result.images) {
+      if (typeof img === 'string') images.push(img);
+      else if (img?.url) images.push(img.url);
+    }
+  } else if (result.image) {
+    if (typeof result.image === 'string') images.push(result.image);
+    else if (result.image.url) images.push(result.image.url);
+  }
+  return images;
+}
 
-CRITICAL: Keep prompts SHORT - under 200 characters. Long prompts slow down generation.
+/** Extract video URL from deeply nested FAL response objects */
+function extractVideoUrl(data: Record<string, unknown>): {
+  url: string | null;
+  meta: { content_type?: string; file_name?: string; file_size?: number } | null;
+} {
+  // Paths that may contain { url, content_type, ... } or a bare string
+  const objectPaths = ['video', 'data.video', 'output.video', 'response.video', 'result.video', 'payload.video'];
+  // Paths that only contain a bare string URL
+  const stringPaths = ['url', 'video_url', 'output.url'];
 
-SINGLE IMAGE EDIT:
-1. Describe the desired result briefly
-2. Include 1-2 style modifiers max
-3. Be specific but concise
+  const resolve = (obj: unknown, dotPath: string): unknown => {
+    let cur = obj;
+    for (const key of dotPath.split('.')) {
+      if (cur && typeof cur === 'object') cur = (cur as Record<string, unknown>)[key];
+      else return undefined;
+    }
+    return cur;
+  };
 
-Examples:
-- "Portrait with stylish black sunglasses, same pose, high quality"
-- "Same subject, blue background, studio lighting"
-
-MULTI-IMAGE EDIT (combining elements from multiple images):
-1. Describe what element to transfer from reference image
-2. Specify where to place it on the base image
-3. Include blending/style instructions
-
-Multi-image examples:
-- "Subject wearing the outfit from reference image, natural fit, same pose"
-- "Base image with background replaced by reference scene, seamless blend"
-- "Transfer the hairstyle from reference to subject, matching lighting"
-- "Combine: subject from base, accessories from reference, cohesive style"
-
-JSON response:
-{"optimizedPrompt": "brief scene description under 200 chars", "reasoning": "brief explanation"}`;
-
-/**
- * Optimize a prompt for FLUX (standard) image editing
- */
-export async function optimizePromptForFluxEdit(
-  originalPrompt: string,
-  originalImagePrompt?: string,
-  options?: { hasMultipleImages?: boolean; numImages?: number }
-): Promise<ImageEditOptimizationResult> {
-  if (!originalPrompt || originalPrompt.trim() === '') {
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
+  for (const p of objectPaths) {
+    const value = resolve(data, p);
+    if (!value) continue;
+    if (typeof value === 'string') return { url: value, meta: null };
+    if (typeof value === 'object' && (value as { url?: string }).url) {
+      return {
+        url: (value as { url: string }).url,
+        meta: value as { content_type?: string; file_name?: string; file_size?: number },
+      };
+    }
   }
 
-  if (!llmProvider.isLLMConfigured()) {
-    logger.warn('FLUX edit prompt optimization skipped: No LLM provider configured');
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM not configured' };
+  for (const p of stringPaths) {
+    const value = resolve(data, p);
+    if (typeof value === 'string') return { url: value, meta: null };
   }
 
+  return { url: null, meta: null };
+}
+
+/** Translate Asian-language prompt to English if needed */
+async function translatePromptIfNeeded(prompt: string, context: string): Promise<string> {
   try {
-    const contextInfo = originalImagePrompt 
-      ? ` Original: "${originalImagePrompt.substring(0, 50)}"`
-      : '';
+    const result = await translateAsianToEnglish(prompt);
+    if (result.wasTranslated) {
+      logger.info(`${context} prompt translated`, {
+        sourceLanguage: result.sourceLanguage,
+        originalLength: prompt.length,
+        translatedLength: result.translatedPrompt.length
+      });
+      return result.translatedPrompt;
+    }
+  } catch (err) {
+    logger.warn(`Translation failed for ${context}, using original`, { error: (err as Error).message });
+  }
+  return prompt;
+}
 
-    const multiImageContext = options?.hasMultipleImages 
-      ? `\n\nThis is a MULTI-IMAGE EDIT with ${options.numImages || 2} images. First image is BASE, others are REFERENCE for elements to transfer.`
-      : '';
+/** Conditionally refund credits on failure */
+async function tryRefundCredits(
+  user: IUser | undefined,
+  credits: number,
+  hasFreeAccess: boolean,
+  reason: string
+): Promise<number> {
+  if (!user || hasFreeAccess || credits <= 0) return 0;
+  await refundCredits(user, credits, reason);
+  return credits;
+}
 
-    const userPrompt = `Create SHORT FLUX edit prompt (under 200 chars): "${originalPrompt}"${contextInfo}${multiImageContext}
+/** Settle x402 payment and record provenance for generated content */
+async function settleAndRecordProvenance(
+  req: AuthenticatedRequest,
+  resultUrl: string,
+  type: 'image' | 'video' | 'music'
+): Promise<{ provenance: Record<string, unknown>; x402?: Record<string, unknown> }> {
+  const contentHash = ethers.keccak256(ethers.toUtf8Bytes(resultUrl));
+  const result: { provenance: Record<string, unknown>; x402?: Record<string, unknown> } = {
+    provenance: { contentHash }
+  };
 
-${options?.hasMultipleImages ? 'Describe what to transfer from reference to base, with blending instructions.' : 'Describe result briefly.'} Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
+  const x402Req = req as X402Request;
+  if (x402Req.isX402Paid && x402Req.x402Payment) {
+    const settlement = await settleX402Payment(x402Req);
+    if (!settlement.success) {
+      logger.error(`x402 settlement failed after ${type} generation`, { error: settlement.error });
+    }
+    result.x402 = {
+      settled: x402Req.x402Payment.settled,
+      transactionHash: x402Req.x402Payment.transactionHash,
+    };
 
-    const llmResponse = await llmProvider.complete({
-      model: DEFAULT_MODELS.internal,
-      systemPrompt: FLUX_EDIT_PROMPT_GUIDELINES,
-      prompt: userPrompt,
-      temperature: 0.5,
-      maxTokens: 200,
-      timeoutMs: 8000,
-      useCase: 'flux-edit-prompt-optimization',
-    });
-
-    const output = llmResponse.content;
-
-    try {
-      const parsed = llmProvider.extractJSON<{ optimizedPrompt?: string; reasoning?: string }>(output);
-      if (parsed?.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
-        const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
-        logger.debug('FLUX edit prompt optimized', { 
-          original: originalPrompt.substring(0, 50),
-          optimized: truncatedPrompt.substring(0, 50),
-          truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
-        });
-        return {
-          optimizedPrompt: truncatedPrompt,
-          reasoning: parsed.reasoning || null,
-          skipped: false
-        };
-      }
-    } catch {
-      if (output && output.length > 10 && output.length < 500) {
-        return { optimizedPrompt: truncatePrompt(output.trim()), reasoning: 'Enhanced for FLUX editing', skipped: false };
+    // Mint provenance NFT for x402-paid requests (fire-and-forget)
+    if (isProvenanceConfigured()) {
+      const agentRegistry = getProvenanceAgentRegistry();
+      const chainId = config.ERC8004_CHAIN_ID;
+      const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
+      if (agentRegistry && chainId) {
+        recordProvenance({ agentId, agentRegistry, chainId, type, resultUrl, recipient: req.user?.walletAddress })
+          .catch(() => {});
       }
     }
-
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'Failed to parse response' };
-
-  } catch (error) {
-    const err = error as Error;
-    logger.error('FLUX edit prompt optimization error', { error: err.message });
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: err.message };
   }
+
+  return result;
+}
+
+/** Make an authenticated POST request to FAL API */
+async function falFetch(endpoint: string, body: Record<string, unknown>): Promise<globalThis.Response> {
+  return fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Authorization': `Key ${getFalApiKey()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Make an authenticated GET request to FAL API */
+async function falGet(endpoint: string): Promise<globalThis.Response> {
+  return fetch(endpoint, {
+    headers: { 'Authorization': `Key ${getFalApiKey()}` },
+  });
 }
 
 // ============================================================================
-// END FLUX (STANDARD) IMAGE EDITING PROMPT OPTIMIZATION SERVICE
+// 360 PANORAMA PROMPT BUILDER
 // ============================================================================
 
-// ============================================================================
-// NANO BANANA IMAGE EDITING PROMPT OPTIMIZATION SERVICE
-// ============================================================================
-
-/**
- * Nano Banana Pro image editing prompt optimization guidelines
- * Optimized for high-quality image transformations
- */
-const NANO_BANANA_EDIT_PROMPT_GUIDELINES = `You are an expert at crafting prompts for Nano Banana Pro image editing.
-
-CRITICAL: Keep prompts SHORT - under 200 characters. Long prompts slow down generation.
-
-SINGLE IMAGE EDIT:
-1. Describe desired result briefly
-2. Include 1-2 quality modifiers max
-3. Be specific but concise
-
-Single image examples:
-- "Portrait with pearl necklace, same lighting, high detail"
-- "Same scene as oil painting, impressionist style"
-- "Subject in magical forest, dappled sunlight"
-
-MULTI-IMAGE EDIT (combining elements from multiple images):
-1. Describe what element to transfer from reference
-2. Specify placement and integration
-3. Include style/blending instructions
-
-Multi-image examples:
-- "Subject wearing reference outfit, natural fit, cohesive lighting"
-- "Base scene with reference object added, seamless integration"
-- "Transfer hairstyle from reference to subject, same style"
-- "Combine: subject from base with background from reference"
-
-JSON response:
-{"optimizedPrompt": "brief result description under 200 chars", "reasoning": "brief explanation"}`;
-
-/**
- * Optimize a prompt for Nano Banana Pro image editing
- */
-export async function optimizePromptForNanoBananaEdit(
-  originalPrompt: string,
-  originalImagePrompt?: string,
-  options?: { hasMultipleImages?: boolean; numImages?: number }
-): Promise<ImageEditOptimizationResult> {
-  if (!originalPrompt || originalPrompt.trim() === '') {
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
-  }
-
-  if (!llmProvider.isLLMConfigured()) {
-    logger.warn('Nano Banana edit prompt optimization skipped: No LLM provider configured');
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM not configured' };
-  }
-
-  try {
-    const contextInfo = originalImagePrompt 
-      ? ` Original: "${originalImagePrompt.substring(0, 50)}"`
-      : '';
-
-    const multiImageContext = options?.hasMultipleImages 
-      ? `\n\nThis is a MULTI-IMAGE EDIT with ${options.numImages || 2} images. First image is BASE, others are REFERENCE for elements to transfer.`
-      : '';
-
-    const userPrompt = `Create SHORT Nano Banana edit prompt (under 200 chars): "${originalPrompt}"${contextInfo}${multiImageContext}
-
-${options?.hasMultipleImages ? 'Describe what to transfer from reference to base, with integration instructions.' : 'Describe result briefly.'} Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
-
-    const llmResponse = await llmProvider.complete({
-      model: DEFAULT_MODELS.internal,
-      systemPrompt: NANO_BANANA_EDIT_PROMPT_GUIDELINES,
-      prompt: userPrompt,
-      temperature: 0.6,
-      maxTokens: 250,
-      timeoutMs: 8000,
-      useCase: 'nano-banana-edit-prompt-optimization',
-    });
-
-    const output = llmResponse.content;
-
-    try {
-      const parsed = llmProvider.extractJSON<{ optimizedPrompt?: string; reasoning?: string }>(output);
-      if (parsed?.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
-        const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
-        logger.debug('Nano Banana edit prompt optimized', { 
-          original: originalPrompt.substring(0, 50),
-          optimized: truncatedPrompt.substring(0, 50),
-          truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
-        });
-        return {
-          optimizedPrompt: truncatedPrompt,
-          reasoning: parsed.reasoning || null,
-          skipped: false
-        };
-      }
-    } catch {
-      if (output && output.length > 10 && output.length < 500) {
-        return { optimizedPrompt: truncatePrompt(output.trim()), reasoning: 'Enhanced for Nano Banana', skipped: false };
-      }
-    }
-
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'Failed to parse response' };
-
-  } catch (error) {
-    const err = error as Error;
-    logger.error('Nano Banana edit prompt optimization error', { error: err.message });
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: err.message };
-  }
-}
-
-// ============================================================================
-// END NANO BANANA IMAGE EDITING PROMPT OPTIMIZATION SERVICE
-// ============================================================================
-
-// ============================================================================
-// FLUX 2 TEXT-TO-IMAGE PROMPT OPTIMIZATION SERVICE
-// ============================================================================
-
-/**
- * Flux 2 text-to-image prompt optimization guidelines
- * Optimized for FLUX.2 [dev] from Black Forest Labs
- */
-// Maximum character limit for optimized prompts to keep generation times fast
-const MAX_OPTIMIZED_PROMPT_LENGTH = 250;
-
-/**
- * Truncate a prompt to the maximum length, preserving meaning
- * Tries to cut at a comma or space boundary
- */
-function truncatePrompt(prompt: string, maxLength: number = MAX_OPTIMIZED_PROMPT_LENGTH): string {
-  if (prompt.length <= maxLength) return prompt;
-  
-  // Try to cut at a comma boundary
-  const truncated = prompt.substring(0, maxLength);
-  const lastComma = truncated.lastIndexOf(',');
-  if (lastComma > maxLength * 0.6) {
-    return truncated.substring(0, lastComma).trim();
-  }
-  
-  // Otherwise cut at last space
-  const lastSpace = truncated.lastIndexOf(' ');
-  if (lastSpace > maxLength * 0.6) {
-    return truncated.substring(0, lastSpace).trim();
-  }
-  
-  return truncated.trim();
-}
-
-const FLUX2_T2I_PROMPT_GUIDELINES = `You are an expert prompt engineer for FLUX.2, a state-of-the-art text-to-image AI model.
-
-CRITICAL: Keep prompts SHORT - under 200 characters. Long prompts slow down generation significantly.
-
-Your goal: Transform a user's image description into a concise, effective prompt.
-
-Guidelines:
-1. Add 2-3 key visual elements max:
-   - Camera angle OR lighting (not both unless essential)
-   - One style descriptor (photorealistic, cinematic, etc.)
-   - One mood/atmosphere word
-
-2. Keep the user's core intent - enhance, don't change the subject
-3. BREVITY IS KEY - shorter prompts generate faster with similar quality
-4. Skip unnecessary adjectives and redundant details
-
-Examples (note the brevity):
-- "a cat" → "Fluffy tabby cat, striking green eyes, soft natural light, photorealistic"
-- "futuristic city" → "Cyberpunk cityscape at night, neon lights, rain-slicked streets, cinematic"
-- "woman portrait" → "Professional headshot, confident expression, studio lighting, sharp focus"
-
-JSON only:
-{"optimizedPrompt": "enhanced version under 200 chars", "reasoning": "brief explanation"}`;
-
-interface Flux2T2IOptimizationResult {
-  optimizedPrompt: string;
-  reasoning: string | null;
-  skipped: boolean;
-  error?: string;
-}
-
-/**
- * Optimize a prompt for FLUX 2 text-to-image generation
- */
-export async function optimizePromptForFlux2T2I(
-  originalPrompt: string
-): Promise<Flux2T2IOptimizationResult> {
-  // Skip optimization for empty prompts
-  if (!originalPrompt || originalPrompt.trim() === '') {
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true };
-  }
-
-  if (!llmProvider.isLLMConfigured()) {
-    logger.warn('FLUX 2 T2I prompt optimization skipped: No LLM provider configured');
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'LLM not configured' };
-  }
-
-  try {
-    const userPrompt = `Enhance this FLUX.2 image prompt. Keep it SHORT (under 200 chars): "${originalPrompt}"
-
-Add 2-3 key elements max. Brevity is critical for fast generation.
-Return JSON: {"optimizedPrompt": "...", "reasoning": "..."}`;
-
-    const llmResponse = await llmProvider.complete({
-      model: DEFAULT_MODELS.internal,
-      systemPrompt: FLUX2_T2I_PROMPT_GUIDELINES,
-      prompt: userPrompt,
-      temperature: 0.6,
-      maxTokens: 300,
-      timeoutMs: 8000,
-      useCase: 'flux2-t2i-prompt-optimization',
-    });
-
-    const output = llmResponse.content;
-
-    // Try to parse JSON response
-    try {
-      const parsed = llmProvider.extractJSON<{ optimizedPrompt?: string; reasoning?: string }>(output);
-      if (parsed?.optimizedPrompt && parsed.optimizedPrompt.trim().length > 0) {
-        const truncatedPrompt = truncatePrompt(parsed.optimizedPrompt.trim());
-        logger.debug('FLUX 2 T2I prompt optimized', { 
-          original: originalPrompt.substring(0, 50),
-          optimized: truncatedPrompt.substring(0, 50),
-          truncated: truncatedPrompt.length < parsed.optimizedPrompt.trim().length
-        });
-        return {
-          optimizedPrompt: truncatedPrompt,
-          reasoning: parsed.reasoning || null,
-          skipped: false
-        };
-      }
-    } catch {
-      // If JSON parsing fails but we have reasonable output, use it
-      if (output && output.length > 10 && output.length < 500) {
-        return {
-          optimizedPrompt: truncatePrompt(output.trim()),
-          reasoning: 'Enhanced for FLUX 2 text-to-image',
-          skipped: false
-        };
-      }
-    }
-
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: 'Failed to parse LLM response' };
-
-  } catch (error) {
-    const err = error as Error;
-    logger.error('FLUX 2 T2I prompt optimization error', { error: err.message });
-    return { optimizedPrompt: originalPrompt, reasoning: null, skipped: true, error: err.message };
-  }
-}
-
-// ============================================================================
-// END FLUX 2 TEXT-TO-IMAGE PROMPT OPTIMIZATION SERVICE
-// ============================================================================
-
-// ============================================================================
-// 360 PANORAMA PROMPT BUILDER FOR NANO BANANA PRO
-// ============================================================================
-
-/**
- * Build a comprehensive 360 panorama JSON prompt for Nano Banana Pro
- * Dynamically constructs the JSON structure based on the user's scene description
- * Triggered when user includes "360" in their prompt
- * @param userPrompt - The user's full prompt including "360"
- * @returns A detailed JSON prompt structure for 360 equirectangular panorama generation
- */
 function build360PanoramaPrompt(userPrompt: string): string {
-  // Extract scene description by removing "360" keyword and cleaning up
   const sceneDescription = userPrompt
     .replace(/\b360\s*(degree|°|view|panorama|panoramic)?\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 
-  // Optimized concise JSON structure - only essential fields for Nano Banana Pro
-  const panoramaPrompt = {
-    type: "360 equirectangular panorama",
+  return JSON.stringify({
+    type: '360 equirectangular panorama',
     scene: sceneDescription,
-    style: "Professional panoramic photography, seamless 360° coverage",
-    constraints: {
-      avoid: ["logos", "watermarks", "UI elements", "text overlays", "visible seams"]
-    }
-  };
-
-  return JSON.stringify(panoramaPrompt);
+    style: 'Professional panoramic photography, seamless 360° coverage',
+    constraints: { avoid: ['logos', 'watermarks', 'UI elements', 'text overlays', 'visible seams'] },
+  });
 }
 
-/**
- * Check if prompt requests 360 panorama generation
- */
 function is360PanoramaRequest(prompt: string): boolean {
   return /\b360\b/i.test(prompt);
 }
 
 // ============================================================================
-// END 360 PANORAMA PROMPT BUILDER
+// ROUTE FACTORY
 // ============================================================================
 
 export function createGenerationRoutes(deps: Dependencies) {
   const router = Router();
-  const { 
-    authenticateFlexible,
-    requireCreditsForModel,
-    requireCreditsForVideo,
-    requireCredits
-  } = deps;
-
+  const { authenticateFlexible, requireCreditsForModel, requireCreditsForVideo, requireCredits } = deps;
   const flexibleAuth = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
 
-  // Token gate for generation routes — bypasses x402-paid requests
+  // Token gate — bypasses x402-paid requests
   const generationTokenGate = (): RequestHandler => {
     const tokenGate = requireTokenGate();
     return (req: Request, res: Response, next: () => void) => {
-      if ((req as X402Request).isX402Paid) {
-        return next();
-      }
+      if ((req as X402Request).isX402Paid) return next();
       return tokenGate(req, res, next);
     };
   };
 
-  /**
-   * Generate image
-   * POST /api/generate/image
-   */
+  // ==========================================================================
+  // POST /api/generate/image — Generate image
+  // ==========================================================================
   router.post('/image', flexibleAuth, generationTokenGate(), requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
-      if (!user) {
-        res.status(401).json({
-          success: false,
-          error: 'User authentication required'
-        });
-        return;
-      }
-
-      const FAL_API_KEY = getFalApiKey();
-      if (!FAL_API_KEY) {
-        res.status(500).json({
-          success: false,
-          error: 'AI service not configured'
-        });
-        return;
-      }
+      validateUser(user);
+      if (!getFalApiKey()) throw new ServiceNotConfiguredError();
 
       const creditsRequired = req.creditsRequired || 1;
       const hasFreeAccess = req.hasFreeAccess || false;
-      
-      // Deduct credits atomically (skip for free access users)
-      const User = mongoose.model<IUser>('User');
-      const updateQuery = buildUserUpdateQuery(user);
-      
-      if (!updateQuery) {
-        res.status(400).json({
-          success: false,
-          error: 'User account required'
-        });
-        return;
-      }
+      const { remainingCredits, actualCreditsDeducted } = await deductCredits(user, creditsRequired, hasFreeAccess);
 
-      // Skip credit deduction for NFT/Token holders with free access
-      let remainingCredits = user.credits || 0;
-      let actualCreditsDeducted = 0;
-      
-      if (!hasFreeAccess) {
-        const updateResult = await User.findOneAndUpdate(
-          {
-            ...updateQuery,
-            credits: { $gte: creditsRequired }
-          },
-          {
-            $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
-          },
-          { new: true }
-        );
-
-        if (!updateResult) {
-          res.status(402).json({
-            success: false,
-            error: 'Insufficient credits'
-          });
-          return;
-        }
-        remainingCredits = updateResult.credits;
-        actualCreditsDeducted = creditsRequired;
-      } else {
-        logger.info('Free generation - no credits deducted', {
-          userId: user.userId || user.walletAddress,
-          creditsWouldHaveCost: creditsRequired
-        });
-      }
-
-      // Extract request parameters
-      // Support both numImages (camelCase) and num_images (snake_case) for compatibility
       const {
         prompt,
         guidanceScale = 7.5,
@@ -930,124 +339,73 @@ export function createGenerationRoutes(deps: Dependencies) {
         aspect_ratio,
         seed,
         model,
-        optimizePrompt = false,
-        enhancePrompt = true // Default to true, but can be disabled for batch variations
+        optimizePrompt: shouldOptimize = false,
+        enhancePrompt = true,
       } = req.body as {
-        prompt?: string;
-        guidanceScale?: number;
-        numImages?: number;
-        num_images?: number;
-        image_url?: string;
-        image_urls?: string[];
-        aspect_ratio?: string;
-        seed?: number;
-        model?: string;
-        optimizePrompt?: boolean;
-        enhancePrompt?: boolean;
+        prompt?: string; guidanceScale?: number; numImages?: number; num_images?: number;
+        image_url?: string; image_urls?: string[]; aspect_ratio?: string; seed?: number;
+        model?: string; optimizePrompt?: boolean; enhancePrompt?: boolean;
       };
-      
-      // Use either naming convention, defaulting to 1
-      const numImages = numImagesParam || numImagesSnake || 1;
 
-      // Prompt is required for text-to-image, optional for image-to-image
+      const numImages = numImagesParam || numImagesSnake || 1;
       const hasImages = image_url || (image_urls && Array.isArray(image_urls) && image_urls.length > 0);
       let trimmedPrompt = (prompt && typeof prompt === 'string') ? prompt.trim() : '';
-      
+
       if (!hasImages && !trimmedPrompt) {
-        res.status(400).json({
-          success: false,
-          error: 'prompt is required for text-to-image generation'
-        });
+        res.status(400).json({ success: false, error: 'prompt is required for text-to-image generation' });
         return;
       }
 
-      // Translate Japanese/Chinese prompts to English for better AI results
-      // This is invisible to the user - they see their language, AI gets English
+      // Translate Asian-language prompts
       if (trimmedPrompt) {
-        try {
-          const translationResult = await translateAsianToEnglish(trimmedPrompt);
-          if (translationResult.wasTranslated) {
-            logger.info('Prompt translated for generation', {
-              sourceLanguage: translationResult.sourceLanguage,
-              originalLength: trimmedPrompt.length,
-              translatedLength: translationResult.translatedPrompt.length
-            });
-            trimmedPrompt = translationResult.translatedPrompt;
-          }
-        } catch (err) {
-          logger.warn('Translation failed, using original prompt', { error: (err as Error).message });
-        }
+        trimmedPrompt = await translatePromptIfNeeded(trimmedPrompt, 'Image generation');
       }
 
-      // Determine image inputs first for optimization decision
       const isMultipleImages = image_urls && Array.isArray(image_urls) && image_urls.length >= 2;
       const isSingleImage = image_url || (image_urls && image_urls.length === 1);
       const isFlux2Model = model === 'flux-2';
 
-      // Apply FLUX 2 prompt optimization if requested
-      // For image-to-image with no prompt, use a generic edit prompt
+      // Prompt optimization for FLUX 2
       let finalPrompt = trimmedPrompt || (hasImages ? 'enhance and refine the image' : '');
-      let promptOptimizationResult: ImageEditOptimizationResult | Flux2T2IOptimizationResult | null = null;
-      
-      if (optimizePrompt && isFlux2Model && trimmedPrompt) {
+      let promptOptimizationResult: PromptOptimizationResult | null = null;
+
+      if (shouldOptimize && isFlux2Model && trimmedPrompt) {
         try {
-          if (hasImages) {
-            // Use edit-specific optimization for image editing
-            promptOptimizationResult = await optimizePromptForFlux2Edit(trimmedPrompt);
-            
-            if (promptOptimizationResult && !promptOptimizationResult.skipped && promptOptimizationResult.optimizedPrompt) {
-              finalPrompt = promptOptimizationResult.optimizedPrompt;
-              logger.debug('FLUX 2 prompt optimized for editing', { 
-                original: trimmedPrompt.substring(0, 50),
-                optimized: finalPrompt.substring(0, 50)
-              });
-            }
-          } else {
-            // Use text-to-image optimization for generation
-            promptOptimizationResult = await optimizePromptForFlux2T2I(trimmedPrompt);
-            
-            if (promptOptimizationResult && !promptOptimizationResult.skipped && promptOptimizationResult.optimizedPrompt) {
-              finalPrompt = promptOptimizationResult.optimizedPrompt;
-              logger.debug('FLUX 2 prompt optimized for text-to-image', { 
-                original: trimmedPrompt.substring(0, 50),
-                optimized: finalPrompt.substring(0, 50)
-              });
-            }
+          promptOptimizationResult = hasImages
+            ? await optimizePromptForFlux2Edit(trimmedPrompt)
+            : await optimizePromptForFlux2T2I(trimmedPrompt);
+
+          if (promptOptimizationResult && !promptOptimizationResult.skipped && promptOptimizationResult.optimizedPrompt) {
+            finalPrompt = promptOptimizationResult.optimizedPrompt;
+            logger.debug('FLUX 2 prompt optimized', {
+              original: trimmedPrompt.substring(0, 50),
+              optimized: finalPrompt.substring(0, 50)
+            });
           }
         } catch (err) {
-          logger.warn('FLUX 2 prompt optimization failed, using original prompt', { error: (err as Error).message });
+          logger.warn('FLUX 2 prompt optimization failed, using original', { error: (err as Error).message });
         }
       }
 
-      // Check if 360 panorama is requested - forces Nano Banana Pro regardless of model selection
+      // 360 panorama detection — forces Nano Banana Pro
       const is360Request = is360PanoramaRequest(finalPrompt);
-      
-      // Determine endpoint based on image inputs and model selection
-      // 360 panorama requests automatically use Nano Banana Pro
       const isNanoBananaPro = model === 'nano-banana-pro' || is360Request;
-      const isFlux2 = isFlux2Model && !is360Request; // Disable FLUX 2 if 360 request
-      const isControlNet = model === 'controlnet-canny' && !is360Request; // Disable ControlNet if 360 request
-      
+      const isFlux2 = isFlux2Model && !is360Request;
+      const isControlNet = model === 'controlnet-canny' && !is360Request;
+
       if (is360Request && model !== 'nano-banana-pro') {
-        logger.info('360 panorama detected - switching to Nano Banana Pro', {
-          originalModel: model,
-          prompt: finalPrompt.substring(0, 100)
-        });
+        logger.info('360 panorama detected - switching to Nano Banana Pro', { originalModel: model });
       }
 
+      // Determine endpoint
       let endpoint: string;
       if (isControlNet && hasImages) {
-        // ControlNet Canny - uses edge detection to preserve structure
         endpoint = 'https://fal.run/fal-ai/flux-control-lora-canny';
       } else if (isNanoBananaPro) {
-        endpoint = hasImages 
-          ? 'https://fal.run/fal-ai/nano-banana-pro/edit'
-          : 'https://fal.run/fal-ai/nano-banana-pro';
+        endpoint = hasImages ? 'https://fal.run/fal-ai/nano-banana-pro/edit' : 'https://fal.run/fal-ai/nano-banana-pro';
       } else if (isFlux2 && hasImages) {
-        // FLUX 2 Edit - precise image editing with natural language
         endpoint = 'https://fal.run/fal-ai/flux-2/edit';
-      } else if (isFlux2 && !hasImages) {
-        // FLUX 2 Text-to-Image - enhanced realism and crisper text
+      } else if (isFlux2) {
         endpoint = 'https://fal.run/fal-ai/flux-2';
       } else if (isMultipleImages) {
         endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/max/multi';
@@ -1057,115 +415,49 @@ export function createGenerationRoutes(deps: Dependencies) {
         endpoint = 'https://fal.run/fal-ai/flux-pro/kontext/text-to-image';
       }
 
-      // Build request body based on model
+      // Build request body
       let requestBody: Record<string, unknown>;
-      
       if (isControlNet && hasImages) {
-        // ControlNet Canny - preserves edges/structure from control image
-        // Using control_lora_image_url as per FAL API docs
         const controlImageUrl = image_url || (image_urls && image_urls[0]);
-        
-        logger.info('ControlNet generation', { 
-          hasControlImage: !!controlImageUrl,
-          imageLength: controlImageUrl?.length || 0 
-        });
-        
         requestBody = {
           prompt: finalPrompt,
-          control_lora_image_url: controlImageUrl, // Correct parameter name for flux-control-lora-canny
+          control_lora_image_url: controlImageUrl,
           num_images: 1,
-          guidance_scale: guidanceScale || 6.0, // Higher for better prompt adherence
+          guidance_scale: guidanceScale || 6.0,
           num_inference_steps: 28,
           output_format: 'jpeg',
-          enable_safety_checker: false
+          enable_safety_checker: false,
+          ...(seed !== undefined && { seed }),
         };
-        
-        if (seed !== undefined) {
-          requestBody.seed = seed;
-        }
       } else if (isNanoBananaPro) {
-        // Use 360 panorama JSON prompt if 360 was detected (is360Request already set above)
-        const nanoBananaPrompt = is360Request 
-          ? build360PanoramaPrompt(finalPrompt)
-          : finalPrompt;
-        
-        requestBody = {
-          prompt: nanoBananaPrompt,
-          resolution: '1K'
-        };
+        const nanoBananaPrompt = is360Request ? build360PanoramaPrompt(finalPrompt) : finalPrompt;
+        requestBody = { prompt: nanoBananaPrompt, resolution: '1K' };
         if (isMultipleImages) {
           requestBody.image_urls = image_urls;
         } else if (isSingleImage) {
-          const singleImageUrl = image_url || (image_urls && image_urls[0]);
-          requestBody.image_urls = [singleImageUrl];
+          requestBody.image_urls = [image_url || (image_urls && image_urls[0])];
         }
-        // For 360 panoramas, use 16:9 landscape (closest supported ratio to 2:1 equirectangular)
-        if (is360Request) {
-          requestBody.aspect_ratio = '16:9';
-        } else if (aspect_ratio) {
-          requestBody.aspect_ratio = aspect_ratio;
-        }
-        // Support batch output from single source or text-to-image
-        if (numImages && numImages > 1) {
-          requestBody.num_images = numImages;
-        }
+        requestBody.aspect_ratio = is360Request ? '16:9' : (aspect_ratio || undefined);
+        if (numImages > 1) requestBody.num_images = numImages;
       } else if (isFlux2 && hasImages) {
-        // FLUX 2 Edit API format - precise image editing
-        // Build image_urls array from available image inputs
         const imageUrlsArray: string[] = [];
-        if (image_urls && Array.isArray(image_urls)) {
-          imageUrlsArray.push(...image_urls);
-        } else if (image_url) {
-          imageUrlsArray.push(image_url);
-        }
-        
+        if (image_urls && Array.isArray(image_urls)) imageUrlsArray.push(...image_urls);
+        else if (image_url) imageUrlsArray.push(image_url);
         requestBody = {
-          prompt: finalPrompt, // Use optimized prompt if available
-          image_urls: imageUrlsArray,
-          guidance_scale: 2.5, // FLUX 2 default
-          num_inference_steps: 28, // FLUX 2 default
-          num_images: numImages,
-          output_format: 'png',
-          enable_safety_checker: false, // Disabled for user flexibility
-          acceleration: 'regular'
+          prompt: finalPrompt, image_urls: imageUrlsArray,
+          guidance_scale: 2.5, num_inference_steps: 28, num_images: numImages,
+          output_format: 'png', enable_safety_checker: false, acceleration: 'regular',
+          ...(seed !== undefined && { seed }),
         };
-        
-        if (seed !== undefined) {
-          requestBody.seed = seed;
-        }
-      } else if (isFlux2 && !hasImages) {
-        // FLUX 2 Text-to-Image API format
-        // Based on https://fal.ai/models/fal-ai/flux-2/api
+      } else if (isFlux2) {
         requestBody = {
-          prompt: finalPrompt, // Use optimized prompt if available
-          guidance_scale: 2.5, // FLUX 2 default
-          num_inference_steps: 28, // FLUX 2 default
-          num_images: numImages,
-          output_format: 'png',
-          enable_safety_checker: false, // Disabled for user flexibility
-          acceleration: 'regular'
+          prompt: finalPrompt,
+          guidance_scale: 2.5, num_inference_steps: 28, num_images: numImages,
+          output_format: 'png', enable_safety_checker: false, acceleration: 'regular',
+          image_size: ASPECT_TO_SIZE[aspect_ratio || ''] || 'landscape_4_3',
+          ...(seed !== undefined && { seed }),
         };
-        
-        // Add image size/aspect ratio
-        if (aspect_ratio) {
-          // Convert aspect ratio to image_size format
-          const aspectToSize: Record<string, string> = {
-            '1:1': 'square',
-            '4:3': 'landscape_4_3',
-            '16:9': 'landscape_16_9',
-            '3:4': 'portrait_4_3',
-            '9:16': 'portrait_16_9'
-          };
-          requestBody.image_size = aspectToSize[aspect_ratio] || 'landscape_4_3';
-        } else {
-          requestBody.image_size = 'landscape_4_3';
-        }
-        
-        if (seed !== undefined) {
-          requestBody.seed = seed;
-        }
       } else {
-        // FLUX Kontext API format
         requestBody = {
           prompt: finalPrompt,
           guidance_scale: guidanceScale,
@@ -1173,146 +465,60 @@ export function createGenerationRoutes(deps: Dependencies) {
           output_format: 'jpeg',
           safety_tolerance: '6',
           prompt_safety_tolerance: '6',
-          enhance_prompt: enhancePrompt, // Can be disabled for batch variations with custom prompts
-          seed: seed ?? Math.floor(Math.random() * 2147483647)
+          enhance_prompt: enhancePrompt,
+          seed: seed ?? Math.floor(Math.random() * 2147483647),
         };
-
-        if (isMultipleImages) {
-          requestBody.image_urls = image_urls;
-        } else if (isSingleImage) {
-          requestBody.image_url = image_url || (image_urls && image_urls[0]);
-        }
-
-        if (aspect_ratio) {
-          requestBody.aspect_ratio = aspect_ratio;
-        }
+        if (isMultipleImages) requestBody.image_urls = image_urls;
+        else if (isSingleImage) requestBody.image_url = image_url || (image_urls && image_urls[0]);
+        if (aspect_ratio) requestBody.aspect_ratio = aspect_ratio;
       }
 
       logger.debug('Calling FAL API', { endpoint, model: model || 'flux' });
 
-      // Make FAL API call
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
+      const response = await falFetch(endpoint, requestBody);
 
       if (!response.ok) {
         const errorText = await response.text();
         logger.error('FAL API error', { status: response.status, error: errorText });
-        // Refund credits on API failure (only if credits were deducted)
-        if (!hasFreeAccess) {
-          await refundCredits(user, creditsRequired, `FAL API error: ${response.status}`);
-        }
-        res.status(500).json({
-          success: false,
-          error: `Image generation failed: ${response.status}`,
-          creditsRefunded: creditsRequired
-        });
+        await tryRefundCredits(user, creditsRequired, hasFreeAccess, `FAL API error: ${response.status}`);
+        res.status(500).json({ success: false, error: `Image generation failed: ${response.status}`, creditsRefunded: creditsRequired });
         return;
       }
 
       const result = await response.json() as FalImageResponse;
+      const images = extractFalImageUrls(result);
 
-      // Extract image URLs from response
-      const images: string[] = [];
-      if (result.images && Array.isArray(result.images)) {
-        for (const img of result.images) {
-          if (typeof img === 'string') {
-            images.push(img);
-          } else if (img && typeof img === 'object' && img.url) {
-            images.push(img.url);
-          }
-        }
-      } else if (result.image) {
-        if (typeof result.image === 'string') {
-          images.push(result.image);
-        } else if (result.image.url) {
-          images.push(result.image.url);
-        }
-      }
-
-      // x402: Settle payment after successful generation
-      const x402Req = req as X402Request;
-      if (x402Req.isX402Paid && x402Req.x402Payment) {
-        const settlement = await settleX402Payment(x402Req);
-        if (!settlement.success) {
-          logger.error('x402 settlement failed after image generation', { 
-            error: settlement.error,
-            images: images.length 
-          });
-          // Still return the images - we verified payment, settlement can be retried
-        }
-      }
-      
-      // Build response with optional prompt optimization info
+      // Build response
       const responseData: Record<string, unknown> = {
-        success: true,
-        images,
-        remainingCredits,
-        creditsDeducted: actualCreditsDeducted,
-        freeAccess: hasFreeAccess
+        success: true, images, remainingCredits,
+        creditsDeducted: actualCreditsDeducted, freeAccess: hasFreeAccess,
       };
-      
-      // Include x402 payment info if applicable
-      if (x402Req.isX402Paid && x402Req.x402Payment) {
-        responseData.x402 = {
-          settled: x402Req.x402Payment.settled,
-          transactionHash: x402Req.x402Payment.transactionHash,
-        };
-      }
-      
-      // Include prompt optimization details if optimization was performed for FLUX 2
+
       if (promptOptimizationResult && !promptOptimizationResult.skipped) {
         responseData.promptOptimization = {
           originalPrompt: trimmedPrompt,
           optimizedPrompt: promptOptimizationResult.optimizedPrompt,
-          reasoning: promptOptimizationResult.reasoning
+          reasoning: promptOptimizationResult.reasoning,
         };
       }
 
-      // Provenance: always include contentHash; mint NFT for x402 (fire-and-forget)
-      // Platform pays gas; NFT goes to user's wallet if available, else platform vault
       if (images.length > 0) {
-        const contentHash = ethers.keccak256(ethers.toUtf8Bytes(images[0]));
-        responseData.provenance = { contentHash };
-        if (x402Req.isX402Paid && isProvenanceConfigured()) {
-          const agentRegistry = getProvenanceAgentRegistry();
-          const chainId = config.ERC8004_CHAIN_ID;
-          const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
-          if (agentRegistry && chainId) {
-            recordProvenance({ agentId, agentRegistry, chainId, type: 'image', resultUrl: images[0], recipient: req.user?.walletAddress })
-              .catch(() => {});
-          }
-        }
+        const provenanceResult = await settleAndRecordProvenance(req, images[0], 'image');
+        Object.assign(responseData, provenanceResult);
       }
-      
+
       res.json(responseData);
     } catch (error) {
       const err = error as Error;
       logger.error('Image generation error:', { error: err.message });
-      // Refund credits on unexpected error
-      const user = req.user;
-      const creditsRequired = req.creditsRequired || 1;
-      if (user) {
-        await refundCredits(user, creditsRequired, `Image generation error: ${err.message}`);
-      }
-      res.status(500).json({
-        success: false,
-        error: err.message,
-        creditsRefunded: user ? creditsRequired : 0
-      });
+      const creditsRefunded = await tryRefundCredits(req.user, req.creditsRequired || 1, req.hasFreeAccess || false, `Image generation error: ${err.message}`);
+      res.status(500).json({ success: false, error: err.message, creditsRefunded });
     }
   });
 
-  /**
-   * FLUX 2 Image Editing with Streaming
-   * POST /api/generate/image-stream
-   * Uses Server-Sent Events for real-time progress updates
-   */
+  // ==========================================================================
+  // POST /api/generate/image-stream — FLUX 2 with SSE streaming
+  // ==========================================================================
   router.post('/image-stream', flexibleAuth, generationTokenGate(), requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -1325,85 +531,37 @@ export function createGenerationRoutes(deps: Dependencies) {
 
     try {
       const user = req.user;
-      if (!user) {
-        sendEvent('error', { error: 'User authentication required' });
-        res.end();
-        return;
-      }
-
-      const FAL_API_KEY = getFalApiKey();
-      if (!FAL_API_KEY) {
-        sendEvent('error', { error: 'AI service not configured' });
-        res.end();
-        return;
-      }
+      if (!user) { sendEvent('error', { error: 'User authentication required' }); res.end(); return; }
+      if (!getFalApiKey()) { sendEvent('error', { error: 'AI service not configured' }); res.end(); return; }
 
       const creditsRequired = req.creditsRequired || 1;
       const hasFreeAccess = req.hasFreeAccess || false;
-      const User = mongoose.model<IUser>('User');
-      const updateQuery = buildUserUpdateQuery(user);
 
-      if (!updateQuery) {
-        sendEvent('error', { error: 'User account required' });
+      let remainingCredits: number;
+      let actualCreditsDeducted: number;
+      try {
+        const result = await deductCredits(user, creditsRequired, hasFreeAccess);
+        remainingCredits = result.remainingCredits;
+        actualCreditsDeducted = result.actualCreditsDeducted;
+        if (actualCreditsDeducted > 0) {
+          sendEvent('credits', { creditsDeducted: creditsRequired, remainingCredits });
+        }
+      } catch (creditErr) {
+        sendEvent('error', { error: (creditErr as Error).message });
         res.end();
         return;
       }
 
-      let remainingCredits = user.credits || 0;
-      let actualCreditsDeducted = 0;
-
-      if (!hasFreeAccess) {
-        const updateResult = await User.findOneAndUpdate(
-          {
-            ...updateQuery,
-            credits: { $gte: creditsRequired }
-          },
-          {
-            $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
-          },
-          { new: true }
-        );
-
-        if (!updateResult) {
-          sendEvent('error', { error: 'Insufficient credits' });
-          res.end();
-          return;
-        }
-        remainingCredits = updateResult.credits;
-        actualCreditsDeducted = creditsRequired;
-        sendEvent('credits', { creditsDeducted: creditsRequired, remainingCredits });
-      } else {
-        logger.info('Free generation (streaming) - no credits deducted', {
-          userId: user.userId || user.walletAddress,
-          creditsWouldHaveCost: creditsRequired
-        });
-        sendEvent('credits', { creditsDeducted: 0, remainingCredits, freeAccess: true });
-      }
-
       const {
-        prompt,
-        image_url,
-        image_urls,
-        seed,
-        numImages = 1,
-        aspect_ratio,
-        optimizePrompt = false
+        prompt, image_url, image_urls, seed, numImages = 1, aspect_ratio, optimizePrompt: shouldOptimize = false
       } = req.body as {
-        prompt?: string;
-        image_url?: string;
-        image_urls?: string[];
-        seed?: number;
-        numImages?: number;
-        aspect_ratio?: string;
-        optimizePrompt?: boolean;
+        prompt?: string; image_url?: string; image_urls?: string[]; seed?: number;
+        numImages?: number; aspect_ratio?: string; optimizePrompt?: boolean;
       };
 
       const imageUrlsArray: string[] = [];
-      if (image_urls && Array.isArray(image_urls)) {
-        imageUrlsArray.push(...image_urls);
-      } else if (image_url) {
-        imageUrlsArray.push(image_url);
-      }
+      if (image_urls && Array.isArray(image_urls)) imageUrlsArray.push(...image_urls);
+      else if (image_url) imageUrlsArray.push(image_url);
 
       const hasImages = imageUrlsArray.length > 0;
       const isTextToImage = !hasImages;
@@ -1414,31 +572,26 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      // Apply FLUX 2 prompt optimization if requested
-      // For image-to-image with no prompt, use a default variation prompt that preserves pose/position
+      // Prompt optimization
       let finalPrompt = trimmedPrompt || (hasImages ? 'create variations of all features except pose and position' : '');
-      let streamPromptOptimization: ImageEditOptimizationResult | Flux2T2IOptimizationResult | null = null;
-      
-      if (optimizePrompt && trimmedPrompt) {
-        sendEvent('status', { 
-          message: isTextToImage ? 'Optimizing prompt for FLUX 2 generation...' : 'Optimizing prompt for FLUX 2 editing...', 
-          progress: 5 
+      let streamPromptOptimization: PromptOptimizationResult | null = null;
+
+      if (shouldOptimize && trimmedPrompt) {
+        sendEvent('status', {
+          message: isTextToImage ? 'Optimizing prompt for FLUX 2 generation...' : 'Optimizing prompt for FLUX 2 editing...',
+          progress: 5,
         });
         try {
-          if (isTextToImage) {
-            // Use text-to-image optimization
-            streamPromptOptimization = await optimizePromptForFlux2T2I(trimmedPrompt);
-          } else {
-            // Use edit-specific optimization
-            streamPromptOptimization = await optimizePromptForFlux2Edit(trimmedPrompt);
-          }
-          
+          streamPromptOptimization = isTextToImage
+            ? await optimizePromptForFlux2T2I(trimmedPrompt)
+            : await optimizePromptForFlux2Edit(trimmedPrompt);
+
           if (streamPromptOptimization && !streamPromptOptimization.skipped && streamPromptOptimization.optimizedPrompt) {
             finalPrompt = streamPromptOptimization.optimizedPrompt;
             sendEvent('promptOptimized', {
               originalPrompt: trimmedPrompt,
               optimizedPrompt: finalPrompt,
-              reasoning: streamPromptOptimization.reasoning
+              reasoning: streamPromptOptimization.reasoning,
             });
           }
         } catch (err) {
@@ -1446,88 +599,53 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
       }
 
-      sendEvent('status', { 
-        message: isTextToImage ? 'Starting FLUX 2 generation...' : 'Starting FLUX 2 image editing...', 
-        progress: 10 
+      sendEvent('status', {
+        message: isTextToImage ? 'Starting FLUX 2 generation...' : 'Starting FLUX 2 image editing...',
+        progress: 10,
       });
 
-      // Build request body based on mode
+      // Build request
       let requestBody: Record<string, unknown>;
       let queueEndpoint: string;
 
       if (isTextToImage) {
-        // FLUX 2 Text-to-Image
         queueEndpoint = 'https://queue.fal.run/fal-ai/flux-2';
-        
-        // Convert aspect ratio to image_size format
-        const aspectToSize: Record<string, string> = {
-          '1:1': 'square',
-          '4:3': 'landscape_4_3',
-          '16:9': 'landscape_16_9',
-          '3:4': 'portrait_4_3',
-          '9:16': 'portrait_16_9'
-        };
-        
         requestBody = {
-          prompt: finalPrompt, // Use optimized prompt if available
-          guidance_scale: 2.5,
-          num_inference_steps: 28,
-          num_images: numImages,
-          image_size: aspect_ratio ? (aspectToSize[aspect_ratio] || 'landscape_4_3') : 'landscape_4_3',
-          output_format: 'png',
-          enable_safety_checker: false,
-          acceleration: 'regular',
-          ...(seed !== undefined && { seed })
+          prompt: finalPrompt,
+          guidance_scale: 2.5, num_inference_steps: 28, num_images: numImages,
+          image_size: ASPECT_TO_SIZE[aspect_ratio || ''] || 'landscape_4_3',
+          output_format: 'png', enable_safety_checker: false, acceleration: 'regular',
+          ...(seed !== undefined && { seed }),
         };
       } else {
-        // FLUX 2 Image Editing
         queueEndpoint = 'https://queue.fal.run/fal-ai/flux-2/edit';
-        
         requestBody = {
-          prompt: finalPrompt, // Use optimized prompt if available
-          image_urls: imageUrlsArray,
-          guidance_scale: 2.5,
-          num_inference_steps: 28,
-          num_images: numImages,
-          output_format: 'png',
-          enable_safety_checker: false,
-          acceleration: 'regular',
-          ...(seed !== undefined && { seed })
+          prompt: finalPrompt, image_urls: imageUrlsArray,
+          guidance_scale: 2.5, num_inference_steps: 28, num_images: numImages,
+          output_format: 'png', enable_safety_checker: false, acceleration: 'regular',
+          ...(seed !== undefined && { seed }),
         };
       }
 
-      logger.debug('FLUX 2 streaming request', { 
-        endpoint: queueEndpoint, 
+      logger.debug('FLUX 2 streaming request', {
+        endpoint: queueEndpoint,
         mode: isTextToImage ? 'text-to-image' : 'edit',
-        imageCount: imageUrlsArray.length 
+        imageCount: imageUrlsArray.length,
       });
-      
-      // Submit to queue
-      const submitResponse = await fetch(queueEndpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
+
+      const submitResponse = await falFetch(queueEndpoint, requestBody);
 
       if (!submitResponse.ok) {
         const errorText = await submitResponse.text();
         logger.error('FLUX 2 queue submit error', { status: submitResponse.status, error: errorText });
-        // Refund credits on queue submit failure (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, `FLUX 2 queue submit error: ${submitResponse.status}`);
-        }
-        sendEvent('error', { error: `Failed to start generation: ${submitResponse.status}`, creditsRefunded: actualCreditsDeducted });
+        const refunded = await tryRefundCredits(user, actualCreditsDeducted, false, `FLUX 2 queue submit error: ${submitResponse.status}`);
+        sendEvent('error', { error: `Failed to start generation: ${submitResponse.status}`, creditsRefunded: refunded });
         res.end();
         return;
       }
 
       const queueData = await submitResponse.json() as { request_id: string };
       const requestId = queueData.request_id;
-      
-      // Determine the model path for polling based on mode
       const modelPath = isTextToImage ? 'fal-ai/flux-2' : 'fal-ai/flux-2/edit';
 
       sendEvent('status', { message: 'Processing...', progress: 10, requestId });
@@ -1535,390 +653,175 @@ export function createGenerationRoutes(deps: Dependencies) {
       // Poll for status
       let completed = false;
       let attempts = 0;
-      const maxAttempts = 120; // 2 minutes max with 1s intervals
-      
+      const maxAttempts = 120;
+
       while (!completed && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         attempts++;
 
-        const statusResponse = await fetch(
-          `https://queue.fal.run/${modelPath}/requests/${requestId}/status`,
-          {
-            headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-          }
-        );
+        const statusResponse = await falGet(`https://queue.fal.run/${modelPath}/requests/${requestId}/status`);
+        if (!statusResponse.ok) continue;
 
-        if (!statusResponse.ok) {
-          continue;
-        }
-
-        const statusData = await statusResponse.json() as { 
-          status: string; 
-          logs?: Array<{ message: string }>; 
-          queue_position?: number 
+        const statusData = await statusResponse.json() as {
+          status: string; logs?: Array<{ message: string }>; queue_position?: number;
         };
-        
         const streamStatus = normalizeStatus(statusData.status);
+
         if (streamStatus === FAL_STATUS.IN_QUEUE) {
-          const queuePos = statusData.queue_position ?? 0;
-          sendEvent('status', { 
-            message: `In queue (position: ${queuePos})...`, 
-            progress: 15,
-            queuePosition: queuePos
-          });
+          sendEvent('status', { message: `In queue (position: ${statusData.queue_position ?? 0})...`, progress: 15, queuePosition: statusData.queue_position ?? 0 });
         } else if (streamStatus === FAL_STATUS.IN_PROGRESS) {
-          // Send progress based on attempts
-          const progress = Math.min(20 + (attempts * 2), 90);
-          sendEvent('status', { 
-            message: 'Generating...', 
-            progress,
-            logs: statusData.logs?.map(l => l.message) 
-          });
+          sendEvent('status', { message: 'Generating...', progress: Math.min(20 + (attempts * 2), 90), logs: statusData.logs?.map(l => l.message) });
         } else if (isStatusCompleted(streamStatus)) {
           completed = true;
           sendEvent('status', { message: 'Finalizing...', progress: 95 });
         } else if (isStatusFailed(streamStatus)) {
-          // Refund credits on generation failure (only if credits were actually deducted)
-          if (actualCreditsDeducted > 0) {
-            await refundCredits(user, actualCreditsDeducted, 'FLUX 2 streaming generation failed');
-          }
-          sendEvent('error', { error: 'Generation failed', creditsRefunded: actualCreditsDeducted });
+          const refunded = await tryRefundCredits(user, actualCreditsDeducted, false, 'FLUX 2 streaming generation failed');
+          sendEvent('error', { error: 'Generation failed', creditsRefunded: refunded });
           res.end();
           return;
         }
       }
 
       if (!completed) {
-        // Refund credits on timeout (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, 'FLUX 2 streaming generation timed out');
-        }
-        sendEvent('error', { error: 'Generation timed out', creditsRefunded: actualCreditsDeducted });
+        const refunded = await tryRefundCredits(user, actualCreditsDeducted, false, 'FLUX 2 streaming generation timed out');
+        sendEvent('error', { error: 'Generation timed out', creditsRefunded: refunded });
         res.end();
         return;
       }
 
       // Fetch result
-      const resultResponse = await fetch(
-        `https://queue.fal.run/${modelPath}/requests/${requestId}`,
-        {
-          headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-        }
-      );
-
+      const resultResponse = await falGet(`https://queue.fal.run/${modelPath}/requests/${requestId}`);
       if (!resultResponse.ok) {
-        // Refund credits if result fetch fails (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, 'Failed to fetch FLUX 2 streaming result');
-        }
-        sendEvent('error', { error: 'Failed to fetch result', creditsRefunded: actualCreditsDeducted });
+        const refunded = await tryRefundCredits(user, actualCreditsDeducted, false, 'Failed to fetch FLUX 2 streaming result');
+        sendEvent('error', { error: 'Failed to fetch result', creditsRefunded: refunded });
         res.end();
         return;
       }
 
       const result = await resultResponse.json() as FalImageResponse;
+      const images = extractFalImageUrls(result);
 
-      // Extract image URLs
-      const images: string[] = [];
-      if (result.images && Array.isArray(result.images)) {
-        for (const img of result.images) {
-          if (typeof img === 'string') {
-            images.push(img);
-          } else if (img && typeof img === 'object' && img.url) {
-            images.push(img.url);
-          }
-        }
-      }
-
-      // x402: Settle payment after successful streaming generation
-      const x402Req = req as X402Request;
-      if (x402Req.isX402Paid && x402Req.x402Payment) {
-        const settlement = await settleX402Payment(x402Req);
-        if (!settlement.success) {
-          logger.error('x402 settlement failed after streaming image generation', { error: settlement.error });
-        }
-      }
-      
       const completeData: Record<string, unknown> = {
-        success: true,
-        images,
-        remainingCredits,
+        success: true, images, remainingCredits,
         creditsDeducted: hasFreeAccess ? 0 : creditsRequired,
-        freeAccess: hasFreeAccess
+        freeAccess: hasFreeAccess,
       };
-      
-      if (x402Req.isX402Paid && x402Req.x402Payment) {
-        completeData.x402 = {
-          settled: x402Req.x402Payment.settled,
-          transactionHash: x402Req.x402Payment.transactionHash,
-        };
-      }
 
-      // Provenance: always include contentHash; mint NFT for x402 (fire-and-forget)
-      // Platform pays gas; NFT goes to user's wallet if available, else platform vault
       if (images.length > 0) {
-        const contentHash = ethers.keccak256(ethers.toUtf8Bytes(images[0]));
-        completeData.provenance = { contentHash };
-        if (x402Req.isX402Paid && isProvenanceConfigured()) {
-          const agentRegistry = getProvenanceAgentRegistry();
-          const chainId = config.ERC8004_CHAIN_ID;
-          const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
-          if (agentRegistry && chainId) {
-            recordProvenance({ agentId, agentRegistry, chainId, type: 'image', resultUrl: images[0], recipient: req.user?.walletAddress })
-              .catch(() => {});
-          }
-        }
+        const provenanceResult = await settleAndRecordProvenance(req, images[0], 'image');
+        Object.assign(completeData, provenanceResult);
       }
 
       sendEvent('complete', completeData);
-      
       res.end();
     } catch (error) {
       const err = error as Error;
       logger.error('FLUX 2 streaming error:', { error: err.message });
-      // Refund credits on unexpected error (only if not a free access user)
-      const user = req.user;
-      const creditsRequired = req.creditsRequired || 1;
-      const hasFreeAccess = req.hasFreeAccess || false;
-      // Only refund if credits were actually deducted (non-free users)
-      if (user && !hasFreeAccess) {
-        await refundCredits(user, creditsRequired, `FLUX 2 streaming error: ${err.message}`);
-      }
-      const creditsRefunded = (user && !hasFreeAccess) ? creditsRequired : 0;
+      const creditsRefunded = await tryRefundCredits(req.user, req.creditsRequired || 1, req.hasFreeAccess || false, `FLUX 2 streaming error: ${err.message}`);
       sendEvent('error', { error: err.message, creditsRefunded });
       res.end();
     }
   });
 
-  /**
-   * Generate video - Veo 3.1 (multiple modes supported)
-   * POST /api/generate/video
-   * Modes: text-to-video, image-to-video, first-last-frame
-   */
+  // ==========================================================================
+  // POST /api/generate/video — Video generation (Veo 3.1 / LTX-2)
+  // ==========================================================================
   router.post('/video', flexibleAuth, generationTokenGate(), requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
-      if (!user) {
-        res.status(401).json({
-          success: false,
-          error: 'User authentication required'
-        });
-        return;
-      }
+      validateUser(user);
+      if (!getFalApiKey()) throw new ServiceNotConfiguredError();
 
-      const FAL_API_KEY = getFalApiKey();
-      if (!FAL_API_KEY) {
-        res.status(500).json({
-          success: false,
-          error: 'AI service not configured'
-        });
-        return;
-      }
-
-      // Extract video generation parameters
       const {
         prompt,
-        first_frame_url,
-        last_frame_url,
-        aspect_ratio = 'auto',
-        duration = '8s',
-        resolution = '720p',
-        generate_audio = true,
-        generation_mode = 'first-last-frame',
-        quality = 'fast',
-        model = 'veo'
+        first_frame_url, last_frame_url,
+        aspect_ratio = 'auto', duration = '8s', resolution = '720p',
+        generate_audio = true, generation_mode = 'first-last-frame',
+        quality = 'fast', model = 'veo',
       } = req.body as {
-        prompt?: string;
-        first_frame_url?: string;
-        last_frame_url?: string;
-        aspect_ratio?: string;
-        duration?: string;
-        resolution?: string;
-        generate_audio?: boolean;
-        generation_mode?: string;
-        quality?: string;
-        model?: string;
+        prompt?: string; first_frame_url?: string; last_frame_url?: string;
+        aspect_ratio?: string; duration?: string; resolution?: string;
+        generate_audio?: boolean; generation_mode?: string; quality?: string; model?: string;
       };
 
-      // Generation mode configurations for Veo 3.1
-      const VIDEO_GENERATION_MODES: Record<string, { requiresFirstFrame: boolean; requiresLastFrame: boolean; endpoint: string }> = {
-        'text-to-video': {
-          requiresFirstFrame: false,
-          requiresLastFrame: false,
-          endpoint: ''
-        },
-        'image-to-video': {
-          requiresFirstFrame: true,
-          requiresLastFrame: false,
-          endpoint: 'image-to-video'
-        },
-        'first-last-frame': {
-          requiresFirstFrame: true,
-          requiresLastFrame: true,
-          endpoint: 'first-last-frame-to-video'
-        }
+      // Mode configuration
+      const VIDEO_MODES: Record<string, { requiresFirstFrame: boolean; requiresLastFrame: boolean; endpoint: string }> = {
+        'text-to-video': { requiresFirstFrame: false, requiresLastFrame: false, endpoint: '' },
+        'image-to-video': { requiresFirstFrame: true, requiresLastFrame: false, endpoint: 'image-to-video' },
+        'first-last-frame': { requiresFirstFrame: true, requiresLastFrame: true, endpoint: 'first-last-frame-to-video' },
       };
+      const modeConfig = VIDEO_MODES[generation_mode] || VIDEO_MODES['first-last-frame'];
 
-      const modeConfig = VIDEO_GENERATION_MODES[generation_mode] || VIDEO_GENERATION_MODES['first-last-frame'];
-
-      // Validate model parameter
-      const validModels = ['veo', 'ltx'];
-      if (!validModels.includes(model)) {
+      // Validation
+      if (!['veo', 'ltx'].includes(model)) {
         res.status(400).json({ success: false, error: 'model must be veo (quality) or ltx (cheap)' });
         return;
       }
-
-      // LTX-2 doesn't support first-last-frame mode
       if (model === 'ltx' && generation_mode === 'first-last-frame') {
         res.status(400).json({ success: false, error: 'LTX-2 model only supports text-to-video and image-to-video modes' });
         return;
       }
 
-      // Calculate credits based on duration, audio, quality, and model using shared utility (20% markup for Claw clients)
       const creditsToDeduct = applyClawMarkup(req, calculateVideoCredits(duration, generate_audio, quality, model));
       const hasFreeAccess = req.hasFreeAccess || false;
+      const { remainingCredits } = await deductCredits(user, creditsToDeduct, hasFreeAccess);
 
-      // Deduct credits atomically (skip for free access users / x402)
-      const User = mongoose.model<IUser>('User');
-      const updateQuery = buildUserUpdateQuery(user);
-      
-      if (!updateQuery) {
-        res.status(400).json({
-          success: false,
-          error: 'User account required'
-        });
-        return;
-      }
-
-      let remainingCredits = user.credits || 0;
-      
-      if (!hasFreeAccess) {
-        const updateResult = await User.findOneAndUpdate(
-          {
-            ...updateQuery,
-            credits: { $gte: creditsToDeduct }
-          },
-          {
-            $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct }
-          },
-          { new: true }
-        );
-
-        if (!updateResult) {
-          const currentUser = await User.findOne(updateQuery);
-          const currentCredits = currentUser?.credits || 0;
-          res.status(402).json({
-            success: false,
-            error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsToDeduct}.`
-          });
-          return;
-        }
-        remainingCredits = updateResult.credits;
-      } else {
-        logger.info('Free video generation - no credits deducted', {
-          userId: user.userId || user.walletAddress,
-          creditsWouldHaveCost: creditsToDeduct
-        });
-      }
-
-      // Validate required inputs
       if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
         res.status(400).json({ success: false, error: 'prompt is required and must be a non-empty string' });
         return;
       }
 
-      // Translate Japanese/Chinese prompts to English for better AI results
-      let videoPrompt = prompt.trim();
-      try {
-        const translationResult = await translateAsianToEnglish(videoPrompt);
-        if (translationResult.wasTranslated) {
-          logger.info('Video prompt translated', {
-            sourceLanguage: translationResult.sourceLanguage,
-            originalLength: videoPrompt.length,
-            translatedLength: translationResult.translatedPrompt.length
-          });
-          videoPrompt = translationResult.translatedPrompt;
-        }
-      } catch (err) {
-        logger.warn('Translation failed for video, using original', { error: (err as Error).message });
-      }
+      const videoPrompt = await translatePromptIfNeeded(prompt.trim(), 'Video');
 
       if (modeConfig.requiresFirstFrame && !first_frame_url) {
         res.status(400).json({ success: false, error: 'first_frame_url is required for this mode' });
         return;
       }
-
       if (modeConfig.requiresLastFrame && !last_frame_url) {
         res.status(400).json({ success: false, error: 'last_frame_url is required for this mode' });
         return;
       }
-
-      // Validate aspect_ratio, duration, resolution, quality
-      const validAspectRatios = ['auto', '16:9', '9:16'];
-      if (!validAspectRatios.includes(aspect_ratio)) {
+      if (!['auto', '16:9', '9:16'].includes(aspect_ratio)) {
         res.status(400).json({ success: false, error: 'aspect_ratio must be auto, 16:9, or 9:16' });
         return;
       }
 
-      // Validate duration based on model
       const validVeoDurations = ['4s', '6s', '8s'];
       if (model === 'veo' && !validVeoDurations.includes(duration)) {
         res.status(400).json({ success: false, error: 'duration must be 4s, 6s, or 8s for Veo model' });
         return;
       }
-      // LTX-2 accepts duration in seconds (we'll convert '4s' format to number)
       const ltxDurationSeconds = parseInt(duration.replace('s', '')) || 5;
       if (model === 'ltx' && (ltxDurationSeconds < 1 || ltxDurationSeconds > 10)) {
         res.status(400).json({ success: false, error: 'duration must be between 1-10 seconds for LTX model' });
         return;
       }
-
-      const validResolutions = ['720p', '1080p'];
-      if (!validResolutions.includes(resolution)) {
+      if (!['720p', '1080p'].includes(resolution)) {
         res.status(400).json({ success: false, error: 'resolution must be 720p or 1080p' });
         return;
       }
-
-      const validQualities = ['fast', 'quality'];
-      if (!validQualities.includes(quality)) {
+      if (!['fast', 'quality'].includes(quality)) {
         res.status(400).json({ success: false, error: 'quality must be fast or quality' });
         return;
       }
 
-      // Build request body based on model
+      // Build request based on model
       const apiAspectRatio = aspect_ratio === 'auto' ? '16:9' : aspect_ratio;
       let requestBody: Record<string, unknown>;
       let endpoint: string;
       let modelPath: string;
 
       if (model === 'ltx') {
-        // LTX-2 19B model - cheaper option
-        // Convert aspect ratio to video_size format for LTX-2
-        const ltxVideoSizeMap: Record<string, string> = {
-          '16:9': 'landscape_16_9',
-          '9:16': 'portrait_16_9',
-          '1:1': 'square',
-          '4:3': 'landscape_4_3',
-          '3:4': 'portrait_4_3'
-        };
-        const ltxVideoSize = ltxVideoSizeMap[apiAspectRatio] || 'landscape_16_9';
-
-        // Convert duration to num_frames (25 fps)
-        const numFrames = Math.min(121, Math.max(25, ltxDurationSeconds * 25));
-
+        const ltxVideoSizeMap: Record<string, string> = { '16:9': 'landscape_16_9', '9:16': 'portrait_16_9', '1:1': 'square', '4:3': 'landscape_4_3', '3:4': 'portrait_4_3' };
         requestBody = {
           prompt: videoPrompt,
-          video_size: ltxVideoSize,
-          num_frames: numFrames,
-          generate_audio,
-          guidance_scale: 10, // High for strong prompt adherence
-          num_inference_steps: 50 // More steps for better quality (default was 40)
+          video_size: ltxVideoSizeMap[apiAspectRatio] || 'landscape_16_9',
+          num_frames: Math.min(121, Math.max(25, ltxDurationSeconds * 25)),
+          generate_audio, guidance_scale: 10, num_inference_steps: 50,
         };
-
-        // LTX-2 endpoints
         if (generation_mode === 'image-to-video' && first_frame_url) {
           requestBody.image_url = first_frame_url;
-          requestBody.strength = 0.4; // Prompt-driven: 40% image, 60% prompt influence
+          requestBody.strength = 0.4;
           endpoint = 'https://queue.fal.run/fal-ai/ltx-2-19b/image-to-video';
           modelPath = 'fal-ai/ltx-2-19b/image-to-video';
         } else {
@@ -1926,28 +829,13 @@ export function createGenerationRoutes(deps: Dependencies) {
           modelPath = 'fal-ai/ltx-2-19b/text-to-video';
         }
       } else {
-        // Veo 3.1 model - quality option (existing)
-        requestBody = {
-          prompt: videoPrompt,
-          aspect_ratio: apiAspectRatio,
-          duration,
-          resolution,
-          generate_audio
-        };
-
-        // Add frame URLs based on mode for Veo
+        requestBody = { prompt: videoPrompt, aspect_ratio: apiAspectRatio, duration, resolution, generate_audio };
         if (modeConfig.requiresFirstFrame && first_frame_url) {
-          if (generation_mode === 'image-to-video') {
-            requestBody.image_url = first_frame_url;
-          } else {
-            requestBody.first_frame_url = first_frame_url;
-          }
+          requestBody[generation_mode === 'image-to-video' ? 'image_url' : 'first_frame_url'] = first_frame_url;
         }
         if (modeConfig.requiresLastFrame && last_frame_url) {
           requestBody.last_frame_url = last_frame_url;
         }
-
-        // Veo 3.1 endpoints
         if (generation_mode === 'text-to-video') {
           endpoint = 'https://queue.fal.run/fal-ai/veo3.1';
           modelPath = 'fal-ai/veo3.1';
@@ -1958,75 +846,43 @@ export function createGenerationRoutes(deps: Dependencies) {
       }
 
       logger.info('Video generation request', {
-        model: model === 'ltx' ? 'ltx-2-19b' : 'veo3.1',
-        mode: generation_mode,
-        quality,
-        duration,
-        resolution,
-        aspect_ratio: apiAspectRatio,
-        promptLength: prompt.length,
-        hasFirstFrame: !!first_frame_url,
-        hasLastFrame: !!last_frame_url,
-        userId: user.userId
+        model: model === 'ltx' ? 'ltx-2-19b' : 'veo3.1', mode: generation_mode,
+        quality, duration, resolution, aspect_ratio: apiAspectRatio,
+        promptLength: prompt.length, hasFirstFrame: !!first_frame_url, hasLastFrame: !!last_frame_url,
+        userId: user.userId,
       });
 
-      // Submit to FAL queue
-      const submitResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
+      // Submit to queue
+      const submitResponse = await falFetch(endpoint, requestBody);
 
       if (!submitResponse.ok) {
         let errorMessage = `HTTP error! status: ${submitResponse.status}`;
         try {
           const errorData = await submitResponse.json() as { detail?: string | unknown[]; error?: string };
-          logger.error('Veo 3.1 API submit error', { errorData });
+          logger.error('Video API submit error', { errorData });
           if (errorData.detail) {
             errorMessage = Array.isArray(errorData.detail)
-              ? errorData.detail.map(err => typeof err === 'object' && err !== null ? (err as { msg?: string }).msg || JSON.stringify(err) : String(err)).join('; ')
+              ? errorData.detail.map(e => typeof e === 'object' && e !== null ? (e as { msg?: string }).msg || JSON.stringify(e) : String(e)).join('; ')
               : String(errorData.detail);
           } else if (errorData.error) {
             errorMessage = errorData.error;
           }
-        } catch {
-          logger.error('Failed to parse Veo 3.1 error response');
-        }
-        // Refund credits on video submit failure (only if credits were deducted)
-        if (!hasFreeAccess) {
-          await refundCredits(user, creditsToDeduct, `Veo 3.1 submit error: ${submitResponse.status}`);
-        }
+        } catch { logger.error('Failed to parse video error response'); }
+        await tryRefundCredits(user, creditsToDeduct, hasFreeAccess, `Video submit error: ${submitResponse.status}`);
         res.status(submitResponse.status).json({ success: false, error: errorMessage, creditsRefunded: creditsToDeduct });
         return;
       }
 
-      const submitData = await submitResponse.json() as {
-        request_id?: string;
-        requestId?: string;
-        id?: string;
-        status_url?: string;
-        response_url?: string;
-        video?: { url?: string; content_type?: string; file_name?: string; file_size?: number } | string;
-        data?: { video?: { url?: string } | string };
-        output?: { video?: { url?: string }; url?: string };
-        url?: string;
-        video_url?: string;
-      };
+      const submitData = await submitResponse.json() as Record<string, unknown>;
 
-      // Log FULL submit response for debugging
-      logger.info('Video submit response FULL', { 
-        submitDataKeys: Object.keys(submitData),
-        submitData: JSON.stringify(submitData).substring(0, 500),
-        hasStatusUrl: !!submitData.status_url,
-        hasResponseUrl: !!submitData.response_url
+      logger.info('Video submit response', {
+        keys: Object.keys(submitData),
+        data: JSON.stringify(submitData).substring(0, 500),
       });
 
-      const requestId = submitData.request_id || submitData.requestId || submitData.id;
-      const providedStatusUrl = submitData.status_url;
-      const providedResponseUrl = submitData.response_url;
+      const requestId = (submitData.request_id || submitData.requestId || submitData.id) as string | undefined;
+      const providedStatusUrl = submitData.status_url as string | undefined;
+      const providedResponseUrl = submitData.response_url as string | undefined;
 
       if (!requestId) {
         logger.error('No request_id in submit response', { submitData: JSON.stringify(submitData).substring(0, 500) });
@@ -2034,49 +890,14 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      logger.info('Video generation submitted', { requestId, endpoint, modelPath, hasProvidedStatusUrl: !!providedStatusUrl });
-
-      // Log polling endpoints for debugging
-      logger.debug('Polling endpoints will be', { 
-        statusEndpoint: providedStatusUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}/status`,
-        resultEndpoint: providedResponseUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}`
-      });
-
       // Check if already completed synchronously
-      let syncVideoUrl: string | null = null;
-      let syncVideoMeta: { content_type?: string; file_name?: string; file_size?: number } | null = null;
-
-      if (submitData.video && typeof submitData.video === 'object' && submitData.video.url) {
-        syncVideoUrl = submitData.video.url;
-        syncVideoMeta = submitData.video;
-      } else if (submitData.video && typeof submitData.video === 'string') {
-        syncVideoUrl = submitData.video;
-      } else if (submitData.data?.video && typeof submitData.data.video === 'object' && submitData.data.video.url) {
-        syncVideoUrl = submitData.data.video.url;
-      } else if (submitData.data?.video && typeof submitData.data.video === 'string') {
-        syncVideoUrl = submitData.data.video;
-      } else if (submitData.output?.video && typeof submitData.output.video === 'object' && submitData.output.video.url) {
-        syncVideoUrl = submitData.output.video.url;
-      } else if (submitData.url) {
-        syncVideoUrl = submitData.url;
-      } else if (submitData.video_url) {
-        syncVideoUrl = submitData.video_url;
-      } else if (submitData.output?.url) {
-        syncVideoUrl = submitData.output.url;
-      }
-
+      const { url: syncVideoUrl, meta: syncVideoMeta } = extractVideoUrl(submitData);
       if (syncVideoUrl) {
         logger.info('Video completed synchronously', { requestId });
         res.json({
           success: true,
-          video: {
-            url: syncVideoUrl,
-            content_type: syncVideoMeta?.content_type || 'video/mp4',
-            file_name: syncVideoMeta?.file_name || `video-${requestId}.mp4`,
-            file_size: syncVideoMeta?.file_size
-          },
-          remainingCredits,
-          creditsDeducted: creditsToDeduct
+          video: { url: syncVideoUrl, content_type: syncVideoMeta?.content_type || 'video/mp4', file_name: syncVideoMeta?.file_name || `video-${requestId}.mp4`, file_size: syncVideoMeta?.file_size },
+          remainingCredits, creditsDeducted: creditsToDeduct,
         });
         return;
       }
@@ -2084,247 +905,78 @@ export function createGenerationRoutes(deps: Dependencies) {
       // Poll for completion
       const statusEndpoint = providedStatusUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}/status`;
       const resultEndpoint = providedResponseUrl || `https://queue.fal.run/${modelPath}/requests/${requestId}`;
-
-      const maxWaitTime = 10 * 60 * 1000; // 10 minutes (Veo 3.1 can take longer for quality/longer durations)
-      const pollInterval = 3000; // Poll every 3 seconds to reduce load
+      const maxWaitTime = 10 * 60 * 1000;
+      const pollInterval = 3000;
       const startTime = Date.now();
       let firstCheck = true;
 
       while (Date.now() - startTime < maxWaitTime) {
-        if (!firstCheck) {
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
-        }
+        if (!firstCheck) await new Promise(resolve => setTimeout(resolve, pollInterval));
         firstCheck = false;
 
-        const statusResponse = await fetch(statusEndpoint, {
-          headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-        });
-
+        const statusResponse = await falGet(statusEndpoint);
         if (!statusResponse.ok) {
-          let errorBody = '';
-          try {
-            errorBody = await statusResponse.text();
-          } catch { /* ignore */ }
-          logger.warn('Video status check failed', { 
-            status: statusResponse.status, 
-            statusText: statusResponse.statusText,
-            statusEndpoint,
-            errorBody: errorBody.substring(0, 300)
-          });
+          try { await statusResponse.text(); } catch { /* ignore */ }
           continue;
         }
 
-        const statusData = await statusResponse.json() as {
-          status?: string;
-          video?: { url?: string; content_type?: string; file_name?: string; file_size?: number };
-          data?: { video?: { url?: string } };
-          output?: { video?: { url?: string } };
-          response?: { video?: { url?: string } };
-          result?: { video?: { url?: string } };
-          payload?: { video?: { url?: string } };
-          response_url?: string;
-        };
+        const statusData = await statusResponse.json() as Record<string, unknown>;
+        const normalizedStatus = ((statusData.status as string) || '').toUpperCase();
 
-        const normalizedStatus = (statusData.status || '').toUpperCase();
-
-        logger.info('Video polling status', { 
-          requestId, 
-          status: statusData.status,
-          normalizedStatus,
-          pollCount: Math.round((Date.now() - startTime) / pollInterval),
+        logger.info('Video polling status', {
+          requestId, status: statusData.status, normalizedStatus,
           elapsed: Math.round((Date.now() - startTime) / 1000) + 's',
-          hasVideo: !!(statusData.video || statusData.data?.video || statusData.response?.video || statusData.result?.video),
-          responseKeys: Object.keys(statusData),
-          fullResponse: JSON.stringify(statusData).substring(0, 500)
         });
 
-        // Check if status response contains video
-        let statusVideoUrl: string | null = null;
-        let statusVideoMeta: { content_type?: string; file_name?: string; file_size?: number } | null = null;
-
-        if (statusData.video?.url) {
-          statusVideoUrl = statusData.video.url;
-          statusVideoMeta = statusData.video;
-        } else if (statusData.data?.video?.url) {
-          statusVideoUrl = statusData.data.video.url;
-        } else if (statusData.output?.video?.url) {
-          statusVideoUrl = statusData.output.video.url;
-        } else if (statusData.response?.video?.url) {
-          statusVideoUrl = statusData.response.video.url;
-        } else if (statusData.result?.video?.url) {
-          statusVideoUrl = statusData.result.video.url;
-        } else if (statusData.payload?.video?.url) {
-          statusVideoUrl = statusData.payload.video.url;
-        }
-
+        // Check if video URL is in status response
+        const { url: statusVideoUrl, meta: statusVideoMeta } = extractVideoUrl(statusData);
         if (statusVideoUrl) {
           logger.info('Video found in status response', { requestId });
           res.json({
             success: true,
-            video: {
-              url: statusVideoUrl,
-              content_type: statusVideoMeta?.content_type || 'video/mp4',
-              file_name: statusVideoMeta?.file_name || `video-${requestId}.mp4`,
-              file_size: statusVideoMeta?.file_size
-            },
-            remainingCredits,
-            creditsDeducted: creditsToDeduct
+            video: { url: statusVideoUrl, content_type: statusVideoMeta?.content_type || 'video/mp4', file_name: statusVideoMeta?.file_name || `video-${requestId}.mp4`, file_size: statusVideoMeta?.file_size },
+            remainingCredits, creditsDeducted: creditsToDeduct,
           });
           return;
         }
 
-        // Check for completed status
         if (isStatusCompleted(normalizedStatus)) {
-          const fetchUrl = statusData.response_url || resultEndpoint;
-          logger.info('Fetching video result', { requestId, fetchUrl, hasResponseUrl: !!statusData.response_url });
-          
-          const resultResponse = await fetch(fetchUrl, {
-            headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-          });
+          const fetchUrl = (statusData.response_url as string) || resultEndpoint;
+          const resultResponse = await falGet(fetchUrl);
 
           if (!resultResponse.ok) {
-            let errorDetails = '';
-            try {
-              const errorBody = await resultResponse.text();
-              errorDetails = errorBody.substring(0, 500);
-            } catch { /* ignore */ }
-            logger.error('Failed to fetch video result', { 
-              requestId,
-              status: resultResponse.status, 
-              statusText: resultResponse.statusText,
-              fetchUrl,
-              errorDetails
-            });
-            // Refund credits on fetch result failure (only if credits were deducted)
-            if (!hasFreeAccess) {
-              await refundCredits(user, creditsToDeduct, `Failed to fetch video result: ${resultResponse.status}`);
-            }
+            await tryRefundCredits(user, creditsToDeduct, hasFreeAccess, `Failed to fetch video result: ${resultResponse.status}`);
             res.status(500).json({ success: false, error: `Failed to fetch video result (${resultResponse.status})`, creditsRefunded: creditsToDeduct });
             return;
           }
 
-          const resultData = await resultResponse.json() as {
-            video?: { url?: string; content_type?: string; file_name?: string; file_size?: number } | string;
-            data?: { video?: { url?: string } | string };
-            output?: { video?: { url?: string }; url?: string };
-            response?: { video?: { url?: string } };
-            result?: { video?: { url?: string } | string };
-            payload?: { video?: { url?: string } };
-            url?: string;
-            video_url?: string;
-          };
+          const resultData = await resultResponse.json() as Record<string, unknown>;
+          logger.info('Video result response', { requestId, keys: Object.keys(resultData), data: JSON.stringify(resultData).substring(0, 1000) });
 
-          // Log full response for debugging
-          logger.info('Video result response FULL', { 
-            requestId,
-            fullResponse: JSON.stringify(resultData).substring(0, 1000),
-            hasVideo: !!resultData.video,
-            hasDataVideo: !!(resultData.data?.video),
-            responseKeys: Object.keys(resultData)
-          });
-
-          // Extract video URL from result
-          let videoUrl: string | null = null;
-          let videoMeta: { content_type?: string; file_name?: string; file_size?: number } | null = null;
-
-          if (resultData.video && typeof resultData.video === 'object' && resultData.video.url) {
-            videoUrl = resultData.video.url;
-            videoMeta = resultData.video;
-          } else if (resultData.data?.video && typeof resultData.data.video === 'object' && resultData.data.video.url) {
-            videoUrl = resultData.data.video.url;
-          } else if (resultData.output?.video && typeof resultData.output.video === 'object' && resultData.output.video.url) {
-            videoUrl = resultData.output.video.url;
-          } else if (resultData.response?.video?.url) {
-            videoUrl = resultData.response.video.url;
-          } else if (resultData.result?.video && typeof resultData.result.video === 'object' && resultData.result.video.url) {
-            videoUrl = resultData.result.video.url;
-          } else if (resultData.payload?.video?.url) {
-            videoUrl = resultData.payload.video.url;
-          } else if (resultData.data?.video && typeof resultData.data.video === 'string') {
-            videoUrl = resultData.data.video;
-          } else if (resultData.video && typeof resultData.video === 'string') {
-            videoUrl = resultData.video;
-          } else if (resultData.result?.video && typeof resultData.result.video === 'string') {
-            videoUrl = resultData.result.video;
-          } else if (resultData.url) {
-            videoUrl = resultData.url;
-          } else if (resultData.video_url) {
-            videoUrl = resultData.video_url;
-          } else if (resultData.output?.url) {
-            videoUrl = resultData.output.url;
-          }
+          const { url: videoUrl, meta: videoMeta } = extractVideoUrl(resultData);
 
           if (videoUrl) {
-            logger.info('Video generation completed - RETURNING', { requestId, videoUrl: videoUrl.substring(0, 100) });
-            
-            // x402: Settle payment after successful generation
-            const x402Req = req as X402Request;
-            if (x402Req.isX402Paid && x402Req.x402Payment) {
-              const settlement = await settleX402Payment(x402Req);
-              if (!settlement.success) {
-                logger.error('x402 settlement failed after video generation', { error: settlement.error });
-              }
-            }
-            
+            logger.info('Video generation completed', { requestId, videoUrl: videoUrl.substring(0, 100) });
             const responseData: Record<string, unknown> = {
               success: true,
-              video: {
-                url: videoUrl,
-                content_type: videoMeta?.content_type || 'video/mp4',
-                file_name: videoMeta?.file_name || `video-${requestId}.mp4`,
-                file_size: videoMeta?.file_size
-              },
-              remainingCredits,
-              creditsDeducted: creditsToDeduct
+              video: { url: videoUrl, content_type: videoMeta?.content_type || 'video/mp4', file_name: videoMeta?.file_name || `video-${requestId}.mp4`, file_size: videoMeta?.file_size },
+              remainingCredits, creditsDeducted: creditsToDeduct,
             };
-            
-            if (x402Req.isX402Paid && x402Req.x402Payment) {
-              responseData.x402 = {
-                settled: x402Req.x402Payment.settled,
-                transactionHash: x402Req.x402Payment.transactionHash,
-              };
-            }
-
-            // Provenance: always include contentHash; mint NFT for x402 (fire-and-forget)
-            // Platform pays gas; NFT goes to user's wallet if available, else platform vault
-            {
-              const contentHash = ethers.keccak256(ethers.toUtf8Bytes(videoUrl));
-              responseData.provenance = { contentHash };
-              if (x402Req.isX402Paid && isProvenanceConfigured()) {
-                const agentRegistry = getProvenanceAgentRegistry();
-                const chainId = config.ERC8004_CHAIN_ID;
-                const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
-                if (agentRegistry && chainId) {
-                  recordProvenance({ agentId, agentRegistry, chainId, type: 'video', resultUrl: videoUrl, recipient: req.user?.walletAddress })
-                    .catch(() => {});
-                }
-              }
-            }
-            
+            const provenanceResult = await settleAndRecordProvenance(req, videoUrl, 'video');
+            Object.assign(responseData, provenanceResult);
             res.json(responseData);
             return;
           }
 
-          logger.error('No video URL in result - all extraction attempts failed', { 
-            requestId,
-            resultData: JSON.stringify(resultData).substring(0, 1000),
-            checkedPaths: ['video.url', 'data.video.url', 'output.video.url', 'response.video.url', 'result.video.url', 'payload.video.url', 'url', 'video_url', 'output.url']
-          });
-          // Refund credits when video URL not found (only if credits were deducted)
-          if (!hasFreeAccess) {
-            await refundCredits(user, creditsToDeduct, 'Video completed but no URL found');
-          }
+          logger.error('No video URL in result', { requestId, resultData: JSON.stringify(resultData).substring(0, 1000) });
+          await tryRefundCredits(user, creditsToDeduct, hasFreeAccess, 'Video completed but no URL found');
           res.status(500).json({ success: false, error: 'Video generation completed but no video URL found', creditsRefunded: creditsToDeduct });
           return;
         }
 
-        // Check for failed status
         if (isStatusFailed(normalizedStatus)) {
           logger.error('Video generation failed', { requestId, status: normalizedStatus });
-          // Refund credits on generation failure (only if credits were deducted)
-          if (!hasFreeAccess) {
-            await refundCredits(user, creditsToDeduct, `Video generation failed: ${normalizedStatus}`);
-          }
+          await tryRefundCredits(user, creditsToDeduct, hasFreeAccess, `Video generation failed: ${normalizedStatus}`);
           res.status(500).json({ success: false, error: 'Video generation failed', creditsRefunded: creditsToDeduct });
           return;
         }
@@ -2332,173 +984,64 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       // Timeout
       logger.error('Video generation timeout', { requestId, elapsed: maxWaitTime / 1000 + 's' });
-      // Refund credits on timeout (only if credits were deducted)
-      if (!hasFreeAccess) {
-        await refundCredits(user, creditsToDeduct, 'Video generation timed out');
-      }
+      await tryRefundCredits(user, creditsToDeduct, hasFreeAccess, 'Video generation timed out');
       res.status(504).json({ success: false, error: 'Video generation timed out. Please try again.', creditsRefunded: creditsToDeduct });
     } catch (error) {
       const err = error as Error;
       logger.error('Video generation error:', { error: err.message });
-      // Refund credits on unexpected error
-      const user = req.user;
-      // Calculate credits for refund using shared utility
-      const { duration = '8s', generate_audio = true, quality = 'fast', model = 'veo' } = req.body as {
-        duration?: string;
-        generate_audio?: boolean;
-        quality?: string;
-        model?: string;
-      };
-      const creditsToRefund = applyClawMarkup(req, calculateVideoCredits(duration, generate_audio, quality, model));
-      if (user) {
-        await refundCredits(user, creditsToRefund, `Video generation error: ${err.message}`);
-      }
-      res.status(500).json({
-        success: false,
-        error: err.message,
-        creditsRefunded: user ? creditsToRefund : 0
-      });
+      const { duration = '8s', generate_audio = true, quality = 'fast', model = 'veo' } = req.body as { duration?: string; generate_audio?: boolean; quality?: string; model?: string };
+      const creditsRefunded = await tryRefundCredits(req.user, applyClawMarkup(req, calculateVideoCredits(duration, generate_audio, quality, model)), req.hasFreeAccess || false, `Video generation error: ${err.message}`);
+      res.status(500).json({ success: false, error: err.message, creditsRefunded });
     }
   });
 
-  /**
-   * Generate music
-   * POST /api/generate/music
-   */
+  // ==========================================================================
+  // POST /api/generate/music — Music generation
+  // ==========================================================================
   router.post('/music', flexibleAuth, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
-      if (!user) {
-        res.status(401).json({
-          success: false,
-          error: 'User authentication required'
-        });
-        return;
-      }
+      validateUser(user);
 
-      // Parse request body first to calculate credits based on duration
-      const { prompt, duration = 30, optimizePrompt = false, selectedGenre = null } = req.body as {
-        prompt?: string;
-        duration?: number;
-        optimizePrompt?: boolean;
-        selectedGenre?: string | null;
+      const { prompt, duration = 30, optimizePrompt: shouldOptimize = false, selectedGenre = null } = req.body as {
+        prompt?: string; duration?: number; optimizePrompt?: boolean; selectedGenre?: string | null;
       };
-      
-      // Clamp duration between 10 and 180 seconds
-      const clampedDuration = Math.max(10, Math.min(180, duration));
 
-      // Calculate credits based on duration using shared utility
+      const clampedDuration = Math.max(10, Math.min(180, duration));
       const creditsRequired = applyClawMarkup(req, calculateMusicCredits(clampedDuration));
       const hasFreeAccess = req.hasFreeAccess || false;
-      
-      // Deduct credits (skip for free access users)
-      const User = mongoose.model<IUser>('User');
-      const updateQuery = buildUserUpdateQuery(user);
-      
-      if (!updateQuery) {
-        res.status(400).json({
-          success: false,
-          error: 'User account required'
-        });
-        return;
-      }
+      const { remainingCredits, actualCreditsDeducted } = await deductCredits(user, creditsRequired, hasFreeAccess);
 
-      // Skip credit deduction for NFT/Token holders with free access
-      let remainingCredits = user.credits || 0;
-      let actualCreditsDeducted = 0;
-      
-      if (!hasFreeAccess) {
-        const updateResult = await User.findOneAndUpdate(
-          {
-            ...updateQuery,
-            credits: { $gte: creditsRequired }
-          },
-          {
-            $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
-          },
-          { new: true }
-        );
-
-        if (!updateResult) {
-          const currentUser = await User.findOne(updateQuery);
-          const currentCredits = currentUser?.credits || 0;
-          res.status(402).json({
-            success: false,
-            error: `Insufficient credits. You have ${currentCredits} credit${currentCredits !== 1 ? 's' : ''} but need ${creditsRequired}.`
-          });
-          return;
-        }
-        remainingCredits = updateResult.credits;
-        actualCreditsDeducted = creditsRequired;
-      } else {
-        logger.info('Free music generation - no credits deducted', {
-          userId: user.userId || user.walletAddress,
-          creditsWouldHaveCost: creditsRequired
-        });
-      }
-
-      // Submit to FAL - CassetteAI Music Generator
-      // Documentation: https://fal.ai/models/cassetteai/music-generator/api
-
-      // Check FAL API key is configured
-      const FAL_API_KEY = getFalApiKey();
-      if (!FAL_API_KEY) {
-        logger.error('Music generation failed: FAL_API_KEY not configured');
+      if (!getFalApiKey()) {
         res.status(500).json({ success: false, error: 'AI service not configured' });
         return;
       }
-
-      // Validate prompt
       if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
         res.status(400).json({ success: false, error: 'Prompt is required' });
         return;
       }
 
-      // Translate Japanese/Chinese prompts to English for better AI results
-      let musicPrompt = prompt.trim();
-      try {
-        const translationResult = await translateAsianToEnglish(musicPrompt);
-        if (translationResult.wasTranslated) {
-          logger.info('Music prompt translated', {
-            sourceLanguage: translationResult.sourceLanguage,
-            originalLength: musicPrompt.length,
-            translatedLength: translationResult.translatedPrompt.length
-          });
-          musicPrompt = translationResult.translatedPrompt;
-        }
-      } catch (err) {
-        logger.warn('Translation failed for music, using original', { error: (err as Error).message });
-      }
+      let musicPrompt = await translatePromptIfNeeded(prompt.trim(), 'Music');
 
-      // Optimize prompt if enabled (off by default)
-      let finalPrompt = musicPrompt;
-      let promptOptimizationResult: MusicOptimizationResult | null = null;
-
-      if (optimizePrompt) {
+      // Prompt optimization (off by default)
+      let promptOptimizationResult: PromptOptimizationResult | null = null;
+      if (shouldOptimize) {
         try {
-          promptOptimizationResult = await optimizePromptForMusic(musicPrompt, selectedGenre);
-
+          const { optimizePromptForMusic: optimizeMusic } = await import('../services/promptOptimizer');
+          promptOptimizationResult = await optimizeMusic(musicPrompt, selectedGenre);
           if (promptOptimizationResult && !promptOptimizationResult.skipped && promptOptimizationResult.optimizedPrompt) {
-            finalPrompt = promptOptimizationResult.optimizedPrompt;
-            logger.debug('Music prompt optimized', { 
-              original: musicPrompt.substring(0, 50),
-              optimized: finalPrompt.substring(0, 50),
-              selectedGenre
-            });
-          } else {
-            logger.debug('Music prompt optimization skipped or returned no result, using original prompt');
+            musicPrompt = promptOptimizationResult.optimizedPrompt;
+            logger.debug('Music prompt optimized', { original: prompt.substring(0, 50), optimized: musicPrompt.substring(0, 50), selectedGenre });
           }
         } catch (optError) {
-          const err = optError as Error;
-          logger.warn('Music prompt optimization failed, using original prompt', { error: err.message });
-          promptOptimizationResult = null;
+          logger.warn('Music prompt optimization failed, using original', { error: (optError as Error).message });
         }
       }
-      
+
       const musicModel = 'CassetteAI/music-generator';
       const result = await submitToQueue<{ request_id?: string }>(musicModel, {
-        prompt: finalPrompt,
-        duration: clampedDuration
+        prompt: musicPrompt,
+        duration: clampedDuration,
       });
 
       const requestId = result.request_id;
@@ -2509,605 +1052,243 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       logger.info('Music generation submitted', { requestId });
 
-      // Poll for completion (music generation is fast: 30s in ~2s, 3min in ~10s)
-      const maxWaitTime = 60 * 1000; // 1 minute max wait (should be much faster)
-      const pollInterval = 500; // Poll every 500ms for faster response
+      // Poll for completion
+      const maxWaitTime = 60 * 1000;
+      const pollInterval = 500;
       const startTime = Date.now();
       let pollCount = 0;
       let consecutiveErrors = 0;
       const maxConsecutiveErrors = 5;
 
       while (Date.now() - startTime < maxWaitTime) {
-        // First poll happens immediately, then wait between polls
-        if (pollCount > 0) {
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
-        }
+        if (pollCount > 0) await new Promise(resolve => setTimeout(resolve, pollInterval));
         pollCount++;
 
         try {
           const statusData = await checkQueueStatus<{ status?: string; response?: { audio_file?: { url?: string } } }>(requestId, musicModel);
-          consecutiveErrors = 0; // Reset on successful poll
+          consecutiveErrors = 0;
 
-          // Normalize status to uppercase for comparison
           const normalizedStatus = (statusData.status || '').toUpperCase();
-
-          logger.debug('Music polling status', { 
-            requestId, 
-            status: statusData.status,
-            normalizedStatus,
-            pollCount,
-            elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
-          });
+          logger.debug('Music polling status', { requestId, status: statusData.status, pollCount, elapsed: Math.round((Date.now() - startTime) / 1000) + 's' });
 
           if (isStatusCompleted(normalizedStatus)) {
-            // Fetch the result
             const resultData = await getQueueResult<{ audio_file?: { url?: string; content_type?: string; file_name?: string; file_size?: number } }>(requestId, musicModel);
 
-            if (resultData.audio_file && resultData.audio_file.url) {
-              logger.info('Music generation completed', {
-                requestId,
-                audioUrl: resultData.audio_file.url.substring(0, 50) + '...',
-                wasOptimized: promptOptimizationResult && !promptOptimizationResult.skipped,
-                totalPolls: pollCount,
-                elapsedMs: Date.now() - startTime
-              });
+            if (resultData.audio_file?.url) {
+              logger.info('Music generation completed', { requestId, totalPolls: pollCount, elapsedMs: Date.now() - startTime });
 
-              // x402: Settle payment after successful generation
-              const x402Req = req as X402Request;
-              if (x402Req.isX402Paid && x402Req.x402Payment) {
-                const settlement = await settleX402Payment(x402Req);
-                if (!settlement.success) {
-                  logger.error('x402 settlement failed after music generation', { error: settlement.error });
-                }
-              }
-              
-              // Build response
               const responseData: Record<string, unknown> = {
-                success: true,
-                audio_file: resultData.audio_file,
-                remainingCredits,
-                creditsDeducted: actualCreditsDeducted,
-                freeAccess: hasFreeAccess
+                success: true, audio_file: resultData.audio_file,
+                remainingCredits, creditsDeducted: actualCreditsDeducted, freeAccess: hasFreeAccess,
               };
 
-              // Add x402 payment info if applicable
-              if (x402Req.isX402Paid && x402Req.x402Payment) {
-                responseData.x402 = {
-                  settled: x402Req.x402Payment.settled,
-                  transactionHash: x402Req.x402Payment.transactionHash,
-                };
-              }
-
-              // Add prompt optimization details if optimization was performed
               if (promptOptimizationResult && !promptOptimizationResult.skipped) {
                 responseData.promptOptimization = {
                   originalPrompt: prompt.trim(),
                   optimizedPrompt: promptOptimizationResult.optimizedPrompt,
-                  reasoning: promptOptimizationResult.reasoning
+                  reasoning: promptOptimizationResult.reasoning,
                 };
               }
 
-              // Provenance: always include contentHash; mint NFT for x402 (fire-and-forget)
-              // Platform pays gas; NFT goes to user's wallet if available, else platform vault
-              {
-                const musicUrl = resultData.audio_file.url;
-                const contentHash = ethers.keccak256(ethers.toUtf8Bytes(musicUrl));
-                responseData.provenance = { contentHash };
-                if (x402Req.isX402Paid && isProvenanceConfigured()) {
-                  const agentRegistry = getProvenanceAgentRegistry();
-                  const chainId = config.ERC8004_CHAIN_ID;
-                  const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
-                  if (agentRegistry && chainId) {
-                    recordProvenance({ agentId, agentRegistry, chainId, type: 'music', resultUrl: musicUrl, recipient: req.user?.walletAddress })
-                      .catch(() => {});
-                  }
-                }
-              }
+              const provenanceResult = await settleAndRecordProvenance(req, resultData.audio_file.url, 'music');
+              Object.assign(responseData, provenanceResult);
 
               res.json(responseData);
               return;
             } else {
-              logger.error('Music completed but no audio in response', { requestId, resultData: JSON.stringify(resultData).substring(0, 500) });
-              // Refund credits when no audio in response (only if credits were actually deducted)
-              if (actualCreditsDeducted > 0) {
-                await refundCredits(user, actualCreditsDeducted, 'Music completed but no audio in response');
-              }
+              logger.error('Music completed but no audio in response', { requestId });
+              await tryRefundCredits(user, actualCreditsDeducted, false, 'Music completed but no audio in response');
               res.status(500).json({ success: false, error: 'No audio in response', creditsRefunded: actualCreditsDeducted });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
-            logger.error('Music generation failed', { requestId, statusData });
-            // Refund credits on music generation failure (only if credits were actually deducted)
-            if (actualCreditsDeducted > 0) {
-              await refundCredits(user, actualCreditsDeducted, `Music generation failed: ${normalizedStatus}`);
-            }
+            logger.error('Music generation failed', { requestId });
+            await tryRefundCredits(user, actualCreditsDeducted, false, `Music generation failed: ${normalizedStatus}`);
             res.status(500).json({ success: false, error: 'Music generation failed', creditsRefunded: actualCreditsDeducted });
             return;
           }
-
-          // Still in progress (IN_QUEUE, IN_PROGRESS, etc.), continue polling
         } catch (pollError) {
           consecutiveErrors++;
-          const pollErr = pollError as Error;
-          logger.warn('Music polling error', { 
-            error: pollErr.message, 
-            requestId, 
-            pollCount,
-            consecutiveErrors
-          });
+          logger.warn('Music polling error', { error: (pollError as Error).message, requestId, pollCount, consecutiveErrors });
 
-          // If too many consecutive errors, abort
           if (consecutiveErrors >= maxConsecutiveErrors) {
-            logger.error('Music generation aborted due to repeated polling errors', { 
-              requestId, 
-              consecutiveErrors,
-              lastError: pollErr.message 
-            });
-            // Refund credits on repeated polling errors (only if credits were actually deducted)
-            if (actualCreditsDeducted > 0) {
-              await refundCredits(user, actualCreditsDeducted, 'Music generation polling errors');
-            }
+            logger.error('Music generation aborted due to repeated polling errors', { requestId, consecutiveErrors });
+            await tryRefundCredits(user, actualCreditsDeducted, false, 'Music generation polling errors');
             res.status(500).json({ success: false, error: 'Music generation failed - polling errors', creditsRefunded: actualCreditsDeducted });
             return;
           }
         }
       }
 
-      // Timeout reached
+      // Timeout
       logger.warn('Music generation timed out', { requestId, pollCount, elapsedMs: Date.now() - startTime });
-      // Refund credits on timeout (only if credits were actually deducted)
-      if (actualCreditsDeducted > 0) {
-        await refundCredits(user, actualCreditsDeducted, 'Music generation timed out');
-      }
+      await tryRefundCredits(user, actualCreditsDeducted, false, 'Music generation timed out');
       res.status(504).json({ success: false, error: 'Music generation timed out. Please try again.', creditsRefunded: actualCreditsDeducted });
     } catch (error) {
       const err = error as Error;
       logger.error('Music generation error:', { error: err.message });
-      // Refund credits on unexpected error (only if not a free access user)
-      const user = req.user;
-      const hasFreeAccess = req.hasFreeAccess || false;
-      // Calculate credits for refund using shared utility
       const { duration = 30 } = req.body as { duration?: number };
-      const clampedDuration = Math.max(10, Math.min(180, duration));
-      const creditsToRefund = hasFreeAccess ? 0 : applyClawMarkup(req, calculateMusicCredits(clampedDuration));
-      if (user && creditsToRefund > 0) {
-        await refundCredits(user, creditsToRefund, `Music generation error: ${err.message}`);
-      }
-      res.status(500).json({
-        success: false,
-        error: err.message,
-        creditsRefunded: creditsToRefund
-      });
+      const hasFreeAccess = req.hasFreeAccess || false;
+      const creditsRefunded = await tryRefundCredits(req.user, hasFreeAccess ? 0 : applyClawMarkup(req, calculateMusicCredits(Math.max(10, Math.min(180, duration)))), false, `Music generation error: ${err.message}`);
+      res.status(500).json({ success: false, error: err.message, creditsRefunded });
     }
   });
 
-  /**
-   * Check generation status
-   * GET /api/generate/status/:requestId
-   * SECURITY FIX: Now requires authentication to prevent information disclosure
-   */
+  // ==========================================================================
+  // GET /api/generate/status/:requestId — Check generation status
+  // ==========================================================================
   router.get('/status/:requestId', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      // SECURITY: Require authentication
       if (!requireAuth(req, res)) return;
 
       const { requestId } = req.params;
-      
-      // SECURITY: Validate requestId format to prevent injection
       if (!requestId || !/^[a-zA-Z0-9._-]+$/.test(requestId) || requestId.length > 200) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid request ID format'
-        });
+        res.status(400).json({ success: false, error: 'Invalid request ID format' });
         return;
       }
 
       const status = await checkQueueStatus<{ status?: string; [key: string]: unknown }>(requestId);
-      
-      res.json({
-        success: true,
-        status: status.status,
-        ...status
-      });
+      res.json({ success: true, status: status.status, ...status });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Status check error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to check status'
-      });
+      logger.error('Status check error:', { error: (error as Error).message });
+      res.status(500).json({ success: false, error: 'Failed to check status' });
     }
   });
 
-  /**
-   * Get generation result
-   * GET /api/generate/result/:requestId
-   * SECURITY FIX: Now requires authentication to prevent information disclosure
-   */
+  // ==========================================================================
+  // GET /api/generate/result/:requestId — Get generation result
+  // ==========================================================================
   router.get('/result/:requestId', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      // SECURITY: Require authentication
       if (!requireAuth(req, res)) return;
 
       const { requestId } = req.params;
-      
-      // SECURITY: Validate requestId format to prevent injection
       if (!requestId || !/^[a-zA-Z0-9._-]+$/.test(requestId) || requestId.length > 200) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid request ID format'
-        });
+        res.status(400).json({ success: false, error: 'Invalid request ID format' });
         return;
       }
 
       const result = await getQueueResult<Record<string, unknown>>(requestId);
-      
-      res.json({
-        success: true,
-        ...result
-      });
+      res.json({ success: true, ...result });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Result fetch error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch result'
-      });
+      logger.error('Result fetch error:', { error: (error as Error).message });
+      res.status(500).json({ success: false, error: 'Failed to fetch result' });
     }
   });
 
-  /**
-   * Upscale image
-   * POST /api/generate/upscale
-   * Uses fal.ai creative-upscaler for 2x/4x upscaling
-   */
+  // ==========================================================================
+  // POST /api/generate/upscale — Upscale image
+  // ==========================================================================
   router.post('/upscale', flexibleAuth, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
-      if (!user) {
-        res.status(401).json({
-          success: false,
-          error: 'User authentication required'
-        });
-        return;
-      }
+      validateUser(user);
+      if (!getFalApiKey()) throw new ServiceNotConfiguredError();
 
-      const FAL_API_KEY = getFalApiKey();
-      if (!FAL_API_KEY) {
-        res.status(500).json({
-          success: false,
-          error: 'AI service not configured'
-        });
-        return;
-      }
-
-      const { image_url, scale = 2 } = req.body as {
-        image_url?: string;
-        scale?: number;
-      };
+      const { image_url, scale = 2 } = req.body as { image_url?: string; scale?: number };
 
       if (!image_url) {
-        res.status(400).json({
-          success: false,
-          error: 'image_url is required'
-        });
+        res.status(400).json({ success: false, error: 'image_url is required' });
         return;
       }
 
-      // Validate scale (2 or 4)
       const validScale = scale === 4 ? 4 : 2;
-      
-      // Credits based on scale using shared utility
       const creditsRequired = applyClawMarkup(req, calculateUpscaleCredits(validScale));
       const hasFreeAccess = req.hasFreeAccess || false;
+      const { remainingCredits, actualCreditsDeducted } = await deductCredits(user, creditsRequired, hasFreeAccess);
 
-      // Deduct credits atomically (skip for free access users)
-      const User = mongoose.model<IUser>('User');
-      const updateQuery = buildUserUpdateQuery(user);
-      
-      if (!updateQuery) {
-        res.status(400).json({
-          success: false,
-          error: 'User account required'
-        });
-        return;
-      }
+      logger.info('Upscale request', { scale: validScale, userId: user.userId, creditsRequired, freeAccess: hasFreeAccess });
 
-      // Skip credit deduction for NFT/Token holders with free access
-      let remainingCredits = user.credits || 0;
-      let actualCreditsDeducted = 0;
-      
-      if (!hasFreeAccess) {
-        const updateResult = await User.findOneAndUpdate(
-          {
-            ...updateQuery,
-            credits: { $gte: creditsRequired }
-          },
-          {
-            $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
-          },
-          { new: true }
-        );
-
-        if (!updateResult) {
-          res.status(402).json({
-            success: false,
-            error: 'Insufficient credits'
-          });
-          return;
-        }
-        remainingCredits = updateResult.credits;
-        actualCreditsDeducted = creditsRequired;
-      } else {
-        logger.info('Free upscale - no credits deducted', {
-          userId: user.userId || user.walletAddress,
-          creditsWouldHaveCost: creditsRequired
-        });
-      }
-
-      logger.info('Upscale request', { 
-        scale: validScale, 
-        userId: user.userId,
-        creditsRequired,
-        freeAccess: hasFreeAccess
-      });
-
-      // Use fal.ai creative-upscaler
-      // API: https://fal.ai/models/fal-ai/creative-upscaler/api
-      const endpoint = 'https://fal.run/fal-ai/creative-upscaler';
-      
-      const requestBody = {
-        image_url,
-        scale: validScale,
-        creativity: 0.3, // Low creativity to preserve original
-        detail: 1.0,
-        shape_preservation: 0.75,
-        prompt_suffix: '' // No additional styling
-      };
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
+      const response = await falFetch('https://fal.run/fal-ai/creative-upscaler', {
+        image_url, scale: validScale, creativity: 0.3, detail: 1.0,
+        shape_preservation: 0.75, prompt_suffix: '',
       });
 
       if (!response.ok) {
         const errorText = await response.text();
         logger.error('Upscale API error', { status: response.status, error: errorText });
-        // Refund credits on API failure (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, `Upscale API error: ${response.status}`);
-        }
-        res.status(500).json({
-          success: false,
-          error: `Upscale failed: ${response.status}`,
-          creditsRefunded: actualCreditsDeducted
-        });
+        await tryRefundCredits(user, actualCreditsDeducted, false, `Upscale API error: ${response.status}`);
+        res.status(500).json({ success: false, error: `Upscale failed: ${response.status}`, creditsRefunded: actualCreditsDeducted });
         return;
       }
 
       const result = await response.json() as { image?: { url?: string }; images?: Array<{ url?: string }> };
-
-      // Extract upscaled image URL
-      let upscaledUrl: string | null = null;
-      if (result.image?.url) {
-        upscaledUrl = result.image.url;
-      } else if (result.images?.[0]?.url) {
-        upscaledUrl = result.images[0].url;
-      }
+      const upscaledUrl = result.image?.url || result.images?.[0]?.url || null;
 
       if (!upscaledUrl) {
-        // Refund credits if no image returned (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, 'No upscaled image returned');
-        }
-        res.status(500).json({
-          success: false,
-          error: 'No upscaled image returned',
-          creditsRefunded: actualCreditsDeducted
-        });
+        await tryRefundCredits(user, actualCreditsDeducted, false, 'No upscaled image returned');
+        res.status(500).json({ success: false, error: 'No upscaled image returned', creditsRefunded: actualCreditsDeducted });
         return;
       }
 
-      logger.info('Upscale completed', { 
-        scale: validScale, 
-        userId: user.userId 
-      });
+      logger.info('Upscale completed', { scale: validScale, userId: user.userId });
 
-      // x402: Settle payment after successful upscale
+      const responseData: Record<string, unknown> = {
+        success: true, image_url: upscaledUrl, scale: validScale,
+        remainingCredits, creditsDeducted: actualCreditsDeducted, freeAccess: hasFreeAccess,
+      };
+
       const x402Req = req as X402Request;
       if (x402Req.isX402Paid && x402Req.x402Payment) {
         const settlement = await settleX402Payment(x402Req);
-        if (!settlement.success) {
-          logger.error('x402 settlement failed after upscale', { error: settlement.error });
-        }
-      }
-
-      const responseData: Record<string, unknown> = {
-        success: true,
-        image_url: upscaledUrl,
-        scale: validScale,
-        remainingCredits,
-        creditsDeducted: actualCreditsDeducted,
-        freeAccess: hasFreeAccess
-      };
-      
-      if (x402Req.isX402Paid && x402Req.x402Payment) {
-        responseData.x402 = {
-          settled: x402Req.x402Payment.settled,
-          transactionHash: x402Req.x402Payment.transactionHash,
-        };
+        if (!settlement.success) logger.error('x402 settlement failed after upscale', { error: settlement.error });
+        responseData.x402 = { settled: x402Req.x402Payment.settled, transactionHash: x402Req.x402Payment.transactionHash };
       }
 
       res.json(responseData);
-
     } catch (error) {
       const err = error as Error;
       logger.error('Upscale error:', { error: err.message });
-      // Refund credits on unexpected error (only if not a free access user)
-      const user = req.user;
-      const hasFreeAccess = req.hasFreeAccess || false;
       const { scale = 2 } = req.body as { scale?: number };
-      const creditsToRefund = hasFreeAccess ? 0 : applyClawMarkup(req, calculateUpscaleCredits(scale === 4 ? 4 : 2));
-      if (user && creditsToRefund > 0) {
-        await refundCredits(user, creditsToRefund, `Upscale error: ${err.message}`);
-      }
-      res.status(500).json({
-        success: false,
-        error: err.message,
-        creditsRefunded: creditsToRefund
-      });
+      const creditsRefunded = await tryRefundCredits(req.user, applyClawMarkup(req, calculateUpscaleCredits(scale === 4 ? 4 : 2)), req.hasFreeAccess || false, `Upscale error: ${err.message}`);
+      res.status(500).json({ success: false, error: err.message, creditsRefunded });
     }
   });
 
-  /**
-   * Generate audio from video (MMAudio V2)
-   * POST /api/generate/video-to-audio
-   * Uses fal.ai MMAudio V2 for synchronized audio generation
-   */
+  // ==========================================================================
+  // POST /api/generate/video-to-audio — Generate audio from video (MMAudio V2)
+  // ==========================================================================
   router.post('/video-to-audio', flexibleAuth, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
-      if (!user) {
-        res.status(401).json({
-          success: false,
-          error: 'User authentication required'
-        });
-        return;
-      }
+      validateUser(user);
+      if (!getFalApiKey()) throw new ServiceNotConfiguredError();
 
-      const FAL_API_KEY = getFalApiKey();
-      if (!FAL_API_KEY) {
-        res.status(500).json({
-          success: false,
-          error: 'AI service not configured'
-        });
-        return;
-      }
-
-      const { 
-        video_url, 
-        prompt = '',
-        negative_prompt = '',
-        num_steps = 25,
-        cfg_strength = 4.5,
-        duration = 8
+      const {
+        video_url, prompt = '', negative_prompt = '',
+        num_steps = 25, cfg_strength = 4.5, duration = 8,
       } = req.body as {
-        video_url?: string;
-        prompt?: string;
-        negative_prompt?: string;
-        num_steps?: number;
-        cfg_strength?: number;
-        duration?: number;
+        video_url?: string; prompt?: string; negative_prompt?: string;
+        num_steps?: number; cfg_strength?: number; duration?: number;
       };
 
       if (!video_url) {
-        res.status(400).json({
-          success: false,
-          error: 'video_url is required'
-        });
+        res.status(400).json({ success: false, error: 'video_url is required' });
         return;
       }
 
-      // Credits for video-to-audio generation using shared utility
       const creditsRequired = applyClawMarkup(req, calculateVideoToAudioCredits());
       const hasFreeAccess = req.hasFreeAccess || false;
+      const { remainingCredits, actualCreditsDeducted } = await deductCredits(user, creditsRequired, hasFreeAccess);
 
-      // Deduct credits atomically (skip for free access users)
-      const User = mongoose.model<IUser>('User');
-      const updateQuery = buildUserUpdateQuery(user);
-      
-      if (!updateQuery) {
-        res.status(400).json({
-          success: false,
-          error: 'User account required'
-        });
-        return;
-      }
+      logger.info('Video-to-audio request', { userId: user.userId, hasPrompt: !!prompt, duration, creditsRequired, freeAccess: hasFreeAccess });
 
-      // Skip credit deduction for NFT/Token holders with free access
-      let remainingCredits = user.credits || 0;
-      let actualCreditsDeducted = 0;
-      
-      if (!hasFreeAccess) {
-        const updateResult = await User.findOneAndUpdate(
-          {
-            ...updateQuery,
-            credits: { $gte: creditsRequired }
-          },
-          {
-            $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
-          },
-          { new: true }
-        );
-
-        if (!updateResult) {
-          res.status(402).json({
-            success: false,
-            error: 'Insufficient credits'
-          });
-          return;
-        }
-        remainingCredits = updateResult.credits;
-        actualCreditsDeducted = creditsRequired;
-      } else {
-        logger.info('Free video-to-audio - no credits deducted', {
-          userId: user.userId || user.walletAddress,
-          creditsWouldHaveCost: creditsRequired
-        });
-      }
-
-      logger.info('Video-to-audio request', { 
-        userId: user.userId,
-        hasPrompt: !!prompt,
-        duration,
-        creditsRequired,
-        freeAccess: hasFreeAccess
-      });
-
-      // Submit to MMAudio V2 queue
-      // API: https://fal.ai/models/fal-ai/mmaudio-v2/api
-      const queueEndpoint = 'https://queue.fal.run/fal-ai/mmaudio-v2';
-      
       const requestBody: Record<string, unknown> = {
         video_url,
         num_steps: Math.min(50, Math.max(10, num_steps)),
         cfg_strength: Math.min(10, Math.max(1, cfg_strength)),
-        duration: Math.min(30, Math.max(1, duration))
+        duration: Math.min(30, Math.max(1, duration)),
       };
+      if (prompt?.trim()) requestBody.prompt = prompt.trim();
+      if (negative_prompt?.trim()) requestBody.negative_prompt = negative_prompt.trim();
 
-      // Add optional prompts
-      if (prompt && prompt.trim()) {
-        requestBody.prompt = prompt.trim();
-      }
-      if (negative_prompt && negative_prompt.trim()) {
-        requestBody.negative_prompt = negative_prompt.trim();
-      }
-
-      const submitResponse = await fetch(queueEndpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
+      const submitResponse = await falFetch('https://queue.fal.run/fal-ai/mmaudio-v2', requestBody);
 
       if (!submitResponse.ok) {
         const errorText = await submitResponse.text();
         logger.error('MMAudio V2 submit error', { status: submitResponse.status, error: errorText });
-        // Refund credits on submit failure (only if credits were actually deducted)
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, `MMAudio submit error: ${submitResponse.status}`);
-        }
-        res.status(500).json({
-          success: false,
-          error: `Failed to start audio generation: ${submitResponse.status}`,
-          creditsRefunded: actualCreditsDeducted
-        });
+        await tryRefundCredits(user, actualCreditsDeducted, false, `MMAudio submit error: ${submitResponse.status}`);
+        res.status(500).json({ success: false, error: `Failed to start audio generation: ${submitResponse.status}`, creditsRefunded: actualCreditsDeducted });
         return;
       }
 
@@ -3116,104 +1297,56 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       if (!requestId) {
         logger.error('No request_id from MMAudio', { submitData });
-        if (actualCreditsDeducted > 0) {
-          await refundCredits(user, actualCreditsDeducted, 'No request_id from MMAudio');
-        }
-        res.status(500).json({
-          success: false,
-          error: 'Failed to submit audio generation request',
-          creditsRefunded: actualCreditsDeducted
-        });
+        await tryRefundCredits(user, actualCreditsDeducted, false, 'No request_id from MMAudio');
+        res.status(500).json({ success: false, error: 'Failed to submit audio generation request', creditsRefunded: actualCreditsDeducted });
         return;
       }
 
       logger.info('MMAudio V2 submitted', { requestId });
 
       // Poll for completion
-      const modelPath = 'fal-ai/mmaudio-v2';
-      const maxWaitTime = 3 * 60 * 1000; // 3 minutes max
-      const pollInterval = 2000; // Poll every 2 seconds
+      const mmModelPath = 'fal-ai/mmaudio-v2';
+      const maxWaitTime = 3 * 60 * 1000;
+      const pollInterval = 2000;
       const startTime = Date.now();
 
       while (Date.now() - startTime < maxWaitTime) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
 
-        const statusResponse = await fetch(
-          `https://queue.fal.run/${modelPath}/requests/${requestId}/status`,
-          {
-            headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-          }
-        );
+        const statusResponse = await falGet(`https://queue.fal.run/${mmModelPath}/requests/${requestId}/status`);
+        if (!statusResponse.ok) continue;
 
-        if (!statusResponse.ok) {
-          continue;
-        }
-
-        const statusData = await statusResponse.json() as { 
+        const statusData = await statusResponse.json() as {
           status?: string;
           audio?: { url?: string; content_type?: string; file_name?: string; file_size?: number };
         };
-        
         const normalizedStatus = (statusData.status || '').toUpperCase();
 
-        logger.debug('MMAudio polling', { 
-          requestId, 
-          status: normalizedStatus,
-          elapsed: Math.round((Date.now() - startTime) / 1000) + 's'
-        });
+        logger.debug('MMAudio polling', { requestId, status: normalizedStatus, elapsed: Math.round((Date.now() - startTime) / 1000) + 's' });
 
-        // Check if audio in status response
+        // Audio in status response
         if (statusData.audio?.url) {
           logger.info('MMAudio completed (from status)', { requestId });
-          res.json({
-            success: true,
-            audio: statusData.audio,
-            remainingCredits,
-            creditsDeducted: actualCreditsDeducted,
-            freeAccess: hasFreeAccess
-          });
+          res.json({ success: true, audio: statusData.audio, remainingCredits, creditsDeducted: actualCreditsDeducted, freeAccess: hasFreeAccess });
           return;
         }
 
         if (isStatusCompleted(normalizedStatus)) {
-          // Fetch the result
-          const resultResponse = await fetch(
-            `https://queue.fal.run/${modelPath}/requests/${requestId}`,
-            {
-              headers: { 'Authorization': `Key ${FAL_API_KEY}` }
-            }
-          );
+          const resultResponse = await falGet(`https://queue.fal.run/${mmModelPath}/requests/${requestId}`);
 
           if (!resultResponse.ok) {
-            if (actualCreditsDeducted > 0) {
-              await refundCredits(user, actualCreditsDeducted, 'Failed to fetch MMAudio result');
-            }
-            res.status(500).json({
-              success: false,
-              error: 'Failed to fetch audio result',
-              creditsRefunded: actualCreditsDeducted
-            });
+            await tryRefundCredits(user, actualCreditsDeducted, false, 'Failed to fetch MMAudio result');
+            res.status(500).json({ success: false, error: 'Failed to fetch audio result', creditsRefunded: actualCreditsDeducted });
             return;
           }
 
           const resultData = await resultResponse.json() as {
             audio?: { url?: string; content_type?: string; file_name?: string; file_size?: number };
-            audio_url?: string;
-            url?: string;
+            audio_url?: string; url?: string;
           };
 
-          // Extract audio URL
-          let audioUrl: string | null = null;
-          let audioMeta: { content_type?: string; file_name?: string; file_size?: number } | null = null;
-
-          if (resultData.audio?.url) {
-            audioUrl = resultData.audio.url;
-            audioMeta = resultData.audio;
-          } else if (resultData.audio_url) {
-            audioUrl = resultData.audio_url;
-          } else if (resultData.url) {
-            audioUrl = resultData.url;
-          }
+          const audioUrl = resultData.audio?.url || resultData.audio_url || resultData.url || null;
+          const audioMeta = resultData.audio || null;
 
           if (audioUrl) {
             logger.info('MMAudio V2 completed', { requestId, audioUrl: audioUrl.substring(0, 50) });
@@ -3223,83 +1356,47 @@ export function createGenerationRoutes(deps: Dependencies) {
                 url: audioUrl,
                 content_type: audioMeta?.content_type || 'audio/wav',
                 file_name: audioMeta?.file_name || `audio-${requestId}.wav`,
-                file_size: audioMeta?.file_size
+                file_size: audioMeta?.file_size,
               },
-              remainingCredits,
-              creditsDeducted: actualCreditsDeducted,
-              freeAccess: hasFreeAccess
+              remainingCredits, creditsDeducted: actualCreditsDeducted, freeAccess: hasFreeAccess,
             });
             return;
           }
 
           logger.error('No audio URL in MMAudio result', { resultData: JSON.stringify(resultData).substring(0, 500) });
-          if (actualCreditsDeducted > 0) {
-            await refundCredits(user, actualCreditsDeducted, 'No audio in MMAudio result');
-          }
-          res.status(500).json({
-            success: false,
-            error: 'Audio generation completed but no audio URL found',
-            creditsRefunded: actualCreditsDeducted
-          });
+          await tryRefundCredits(user, actualCreditsDeducted, false, 'No audio in MMAudio result');
+          res.status(500).json({ success: false, error: 'Audio generation completed but no audio URL found', creditsRefunded: actualCreditsDeducted });
           return;
         }
 
         if (isStatusFailed(normalizedStatus)) {
           logger.error('MMAudio generation failed', { requestId, status: normalizedStatus });
-          if (actualCreditsDeducted > 0) {
-            await refundCredits(user, actualCreditsDeducted, `MMAudio failed: ${normalizedStatus}`);
-          }
-          res.status(500).json({
-            success: false,
-            error: 'Audio generation failed',
-            creditsRefunded: actualCreditsDeducted
-          });
+          await tryRefundCredits(user, actualCreditsDeducted, false, `MMAudio failed: ${normalizedStatus}`);
+          res.status(500).json({ success: false, error: 'Audio generation failed', creditsRefunded: actualCreditsDeducted });
           return;
         }
       }
 
       // Timeout
       logger.error('MMAudio generation timeout', { requestId });
-      if (actualCreditsDeducted > 0) {
-        await refundCredits(user, actualCreditsDeducted, 'MMAudio timeout');
-      }
-      res.status(504).json({
-        success: false,
-        error: 'Audio generation timed out. Please try again.',
-        creditsRefunded: actualCreditsDeducted
-      });
-
+      await tryRefundCredits(user, actualCreditsDeducted, false, 'MMAudio timeout');
+      res.status(504).json({ success: false, error: 'Audio generation timed out. Please try again.', creditsRefunded: actualCreditsDeducted });
     } catch (error) {
       const err = error as Error;
       logger.error('Video-to-audio error:', { error: err.message });
-      const user = req.user;
-      const hasFreeAccess = req.hasFreeAccess || false;
-      const creditsToRefund = hasFreeAccess ? 0 : applyClawMarkup(req, calculateVideoToAudioCredits());
-      if (user && creditsToRefund > 0) {
-        await refundCredits(user, creditsToRefund, `Video-to-audio error: ${err.message}`);
-      }
-      res.status(500).json({
-        success: false,
-        error: err.message,
-        creditsRefunded: creditsToRefund
-      });
+      const creditsRefunded = await tryRefundCredits(req.user, applyClawMarkup(req, calculateVideoToAudioCredits()), req.hasFreeAccess || false, `Video-to-audio error: ${err.message}`);
+      res.status(500).json({ success: false, error: err.message, creditsRefunded });
     }
   });
 
-  /**
-   * Add generation to history
-   * POST /api/generations/add
-   * SECURITY: Requires JWT authentication
-   */
+  // ==========================================================================
+  // POST /api/generations/add — Add generation to history
+  // ==========================================================================
   router.post('/add', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
-      // SECURITY: Require JWT authentication, not body-based
       if (!user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required. Please sign in with a valid token.'
-        });
+        res.status(401).json({ success: false, error: 'Authentication required. Please sign in with a valid token.' });
         return;
       }
 
@@ -3308,82 +1405,52 @@ export function createGenerationRoutes(deps: Dependencies) {
         authenticatedEmail: user.email,
         authenticatedWallet: user.walletAddress,
         hasImageUrl: !!req.body?.imageUrl,
-        hasVideoUrl: !!req.body?.videoUrl
+        hasVideoUrl: !!req.body?.videoUrl,
       });
 
       const { prompt, style, imageUrl, videoUrl, requestId, status, creditsUsed } = req.body as {
-        prompt?: string;
-        style?: string;
-        imageUrl?: string;
-        videoUrl?: string;
-        requestId?: string;
-        status?: string;
-        creditsUsed?: number;
+        prompt?: string; style?: string; imageUrl?: string; videoUrl?: string;
+        requestId?: string; status?: string; creditsUsed?: number;
       };
 
       if (!imageUrl && !videoUrl) {
-        res.status(400).json({
-          success: false,
-          error: 'Missing required field: imageUrl or videoUrl is required'
-        });
+        res.status(400).json({ success: false, error: 'Missing required field: imageUrl or videoUrl is required' });
         return;
       }
 
       if (!user.walletAddress && !user.email) {
-        res.status(400).json({
-          success: false,
-          error: 'User account must have wallet address or email'
-        });
+        res.status(400).json({ success: false, error: 'User account must have wallet address or email' });
         return;
       }
-
-      // Credits are already deducted in generation endpoints
-      const creditsUsedForHistory = creditsUsed || 1;
 
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
-      
+
       if (!updateQuery) {
-        res.status(400).json({
-          success: false,
-          error: 'User account must have wallet address, userId, or email'
-        });
+        res.status(400).json({ success: false, error: 'User account must have wallet address, userId, or email' });
         return;
       }
 
-      // Deduplication: Check if this requestId already exists in history
-      // This prevents duplicate entries when client retries on network errors
+      // Deduplication: prevent duplicate entries on client retries
       if (requestId) {
-        const existingUser = await User.findOne({
-          ...updateQuery,
-          'generationHistory.requestId': requestId
-        }).select('_id').lean();
-        
+        const existingUser = await User.findOne({ ...updateQuery, 'generationHistory.requestId': requestId }).select('_id').lean();
         if (existingUser) {
           logger.debug('Generation already tracked (dedup)', { requestId });
           res.json({
-            success: true,
-            generationId: `existing_${requestId}`,
-            deduplicated: true,
-            credits: user.credits,
-            totalCreditsEarned: user.totalCreditsEarned,
-            totalCreditsSpent: user.totalCreditsSpent
+            success: true, generationId: `existing_${requestId}`, deduplicated: true,
+            credits: user.credits, totalCreditsEarned: user.totalCreditsEarned, totalCreditsSpent: user.totalCreditsSpent,
           });
           return;
         }
       }
 
-      // Create generation record
-      // Encrypt prompt if encryption is configured (findOneAndUpdate bypasses pre-save hooks)
+      // Encrypt prompt if configured
       let encryptedPrompt = prompt || 'No prompt';
       if (encryptedPrompt && isEncryptionConfigured()) {
-        // Check if already encrypted (shouldn't be, but be safe)
-        const isEncrypted = encryptedPrompt.includes(':') && encryptedPrompt.split(':').length === 3;
-        if (!isEncrypted) {
-          encryptedPrompt = encrypt(encryptedPrompt);
-        }
+        const isAlreadyEncrypted = encryptedPrompt.includes(':') && encryptedPrompt.split(':').length === 3;
+        if (!isAlreadyEncrypted) encryptedPrompt = encrypt(encryptedPrompt);
       }
-      
+
       const generationId = `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const generationItem = {
         id: generationId,
@@ -3393,37 +1460,21 @@ export function createGenerationRoutes(deps: Dependencies) {
         ...(videoUrl && { videoUrl }),
         ...(requestId && { requestId }),
         ...(status && { status }),
-        creditsUsed: creditsUsedForHistory,
-        timestamp: new Date()
+        creditsUsed: creditsUsed || 1,
+        timestamp: new Date(),
       };
 
-      // Add to generationHistory for internal tracking (not shown to users)
-      // Gallery is populated separately via frontend localStorage
-      // Use retry logic to handle concurrent write conflicts (Plan executor errors)
       await withRetry(
         () => User.findOneAndUpdate(
           updateQuery,
-          {
-            $push: {
-              generationHistory: {
-                $each: [generationItem],
-                $slice: -10 // Keep last 10 for tracking
-              }
-            }
-          }
+          { $push: { generationHistory: { $each: [generationItem], $slice: -10 } } }
         ),
         { operation: 'Add generation to history', maxRetries: 3 }
       );
 
-      logger.info('Generation tracked', {
-        userId: user.userId,
-        generationId,
-        hasImage: !!imageUrl,
-        hasVideo: !!videoUrl
-      });
+      logger.info('Generation tracked', { userId: user.userId, generationId, hasImage: !!imageUrl, hasVideo: !!videoUrl });
 
-      // Provenance: compute contentHash for any output; mint NFT if configured
-      // Platform pays gas; NFT goes to user's wallet if available, else platform vault
+      // Provenance: always record if configured (not just for x402)
       const resultUrl = imageUrl || videoUrl;
       const provenanceData: Record<string, unknown> = {};
       if (resultUrl) {
@@ -3435,85 +1486,52 @@ export function createGenerationRoutes(deps: Dependencies) {
           const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
           if (agentRegistry && chainId) {
             recordProvenance({
-              agentId,
-              agentRegistry,
-              chainId,
+              agentId, agentRegistry, chainId,
               type: imageUrl ? 'image' : 'video',
-              resultUrl,
-              recipient: req.user?.walletAddress,
+              resultUrl, recipient: req.user?.walletAddress,
             }).catch(() => {});
           }
         }
       }
 
       res.json({
-        success: true,
-        generationId,
-        credits: user.credits,
-        totalCreditsEarned: user.totalCreditsEarned,
-        totalCreditsSpent: user.totalCreditsSpent,
-        ...(provenanceData.contentHash ? { provenance: provenanceData } : {})
+        success: true, generationId,
+        credits: user.credits, totalCreditsEarned: user.totalCreditsEarned, totalCreditsSpent: user.totalCreditsSpent,
+        ...(provenanceData.contentHash ? { provenance: provenanceData } : {}),
       });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Add generation error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to add generation'
-      });
+      logger.error('Add generation error:', { error: (error as Error).message });
+      res.status(500).json({ success: false, error: 'Failed to add generation' });
     }
   });
 
-  /**
-   * Update a generation (e.g., when video completes)
-   * PUT /api/generations/update/:generationId
-   * SECURITY FIX: Requires JWT authentication and verifies ownership
-   */
+  // ==========================================================================
+  // PUT /api/generations/update/:generationId — Update a generation
+  // ==========================================================================
   router.put('/update/:generationId', flexibleAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      // SECURITY: Require JWT authentication
       if (!requireAuth(req, res)) return;
 
       const { generationId } = req.params;
-      const { 
-        videoUrl,
-        imageUrl,
-        status
-      } = req.body as {
-        videoUrl?: string;
-        imageUrl?: string;
-        status?: string;
-      };
+      const { videoUrl, imageUrl, status } = req.body as { videoUrl?: string; imageUrl?: string; status?: string };
 
       if (!generationId) {
-        res.status(400).json({
-          success: false,
-          error: 'generationId is required'
-        });
+        res.status(400).json({ success: false, error: 'generationId is required' });
         return;
       }
 
-      // SECURITY: Use authenticated user, not body parameters
       const user = req.user;
       const User = mongoose.model<IUser>('User');
       const updateQuery = buildUserUpdateQuery(user);
 
       if (!updateQuery) {
-        res.status(400).json({
-          success: false,
-          error: 'User account not properly configured'
-        });
+        res.status(400).json({ success: false, error: 'User account not properly configured' });
         return;
       }
 
-      // Fetch user to verify ownership
       const userWithHistory = await User.findOne(updateQuery).select('generationHistory');
-      
       if (!userWithHistory) {
-        res.status(404).json({
-          success: false,
-          error: 'User not found'
-        });
+        res.status(404).json({ success: false, error: 'User not found' });
         return;
       }
 
@@ -3522,44 +1540,31 @@ export function createGenerationRoutes(deps: Dependencies) {
       if (!existingGen) {
         logger.warn('SECURITY: Blocked generation update attempt for non-owned generation', {
           requestedGenerationId: generationId,
-          authenticatedUserId: user.userId,
-          path: req.path,
-          ip: req.ip
+          authenticatedUserId: user?.userId,
+          path: req.path, ip: req.ip,
         });
-        res.status(404).json({
-          success: false,
-          error: 'Generation not found or does not belong to you'
-        });
+        res.status(404).json({ success: false, error: 'Generation not found or does not belong to you' });
         return;
       }
 
-      // Build update object for generationHistory (internal tracking)
       const updateFields: Record<string, string> = {};
       if (videoUrl) updateFields['generationHistory.$.videoUrl'] = videoUrl;
       if (imageUrl) updateFields['generationHistory.$.imageUrl'] = imageUrl;
       if (status) updateFields['generationHistory.$.status'] = status;
 
-      // Update generation in history
       await User.updateOne(
         { ...updateQuery, 'generationHistory.id': generationId },
         { $set: updateFields }
       );
 
-      logger.info('Generation updated', { 
-        generationId, 
-        userId: user.userId,
-        status, 
-        hasVideoUrl: !!videoUrl, 
-        hasImageUrl: !!imageUrl 
+      logger.info('Generation updated', {
+        generationId, userId: user?.userId, status,
+        hasVideoUrl: !!videoUrl, hasImageUrl: !!imageUrl,
       });
 
-      res.json({
-        success: true,
-        message: 'Generation updated successfully'
-      });
+      res.json({ success: true, message: 'Generation updated successfully' });
     } catch (error) {
-      const err = error as Error;
-      logger.error('Error updating generation:', { error: err.message });
+      logger.error('Error updating generation:', { error: (error as Error).message });
       res.status(500).json({ success: false, error: 'Failed to update generation' });
     }
   });
@@ -3568,4 +1573,3 @@ export function createGenerationRoutes(deps: Dependencies) {
 }
 
 export default createGenerationRoutes;
-

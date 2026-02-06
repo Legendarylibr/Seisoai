@@ -15,7 +15,7 @@
     "start": "node --import tsx start-app.ts",
     "start:backend": "cd backend && node --import tsx server-modular.ts",
     "build:start": "npm run build && npm start",
-    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "docker:build": "docker build -t seiso-ai:latest .",
     "docker:build:frontend": "docker build -f Dockerfile.frontend -t seiso-frontend:latest .",

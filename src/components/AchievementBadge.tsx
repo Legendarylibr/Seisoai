@@ -5,7 +5,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Trophy, Gift, Award, TrendingUp, Users, Flame, Target } from 'lucide-react';
 import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
@@ -55,7 +54,6 @@ const categoryLabels: Record<string, string> = {
 };
 
 const AchievementDashboard: React.FC<AchievementDashboardProps> = ({ isOpen, onClose }) => {
-  const { isAuthenticated, userId } = useEmailAuth();
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [stats, setStats] = useState<AchievementStats | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -105,13 +103,13 @@ const AchievementDashboard: React.FC<AchievementDashboardProps> = ({ isOpen, onC
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated]);
+  }, []);
 
   useEffect(() => {
-    if (isOpen && isAuthenticated) {
+    if (isOpen) {
       fetchAchievements();
     }
-  }, [isOpen, isAuthenticated, fetchAchievements]);
+  }, [isOpen, fetchAchievements]);
 
   // Filter achievements by category
   const filteredAchievements = activeTab === 'all' 
@@ -155,11 +153,7 @@ const AchievementDashboard: React.FC<AchievementDashboardProps> = ({ isOpen, onC
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4" style={{ background: WIN95.bg }}>
-          {!isAuthenticated ? (
-            <div className="text-center py-8">
-              <p style={{ color: WIN95.text }}>Please sign in to view your achievements.</p>
-            </div>
-          ) : isLoading ? (
+          {isLoading ? (
             <div className="text-center py-8">
               <p style={{ color: WIN95.text }}>Loading achievements...</p>
             </div>
@@ -231,16 +225,15 @@ const AchievementDashboard: React.FC<AchievementDashboardProps> = ({ isOpen, onC
                           key={entry.rank}
                           className="flex items-center gap-2 py-2 px-2 text-xs"
                           style={{ 
-                            background: entry.userId === userId ? WIN95.highlight : 
-                                       entry.rank % 2 === 0 ? WIN95.inputBg : 'transparent',
-                            color: entry.userId === userId ? WIN95.highlightText : WIN95.text
+                            background: entry.rank % 2 === 0 ? WIN95.inputBg : 'transparent',
+                            color: WIN95.text
                           }}
                         >
                           <span className="w-6 font-bold">
                             {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}
                           </span>
                           <span className="flex-1 truncate">
-                            {entry.userId === userId ? 'You' : `${entry.userId.substring(0, 12)}...`}
+                            {`${entry.userId.substring(0, 12)}...`}
                           </span>
                           <span className="font-mono">{entry.achievementCount} badges</span>
                           <span className="font-mono text-[10px]" style={{ opacity: 0.7 }}>

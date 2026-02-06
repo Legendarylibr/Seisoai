@@ -163,6 +163,16 @@ export function decryptFields<T extends Record<string, unknown>>(
 }
 
 /**
+ * Check if a string value is already encrypted (matches our iv:authTag:ciphertext format)
+ * Shared helper used by models to prevent double-encryption
+ */
+export function isEncrypted(value: string): boolean {
+  if (!value) return false;
+  const parts = value.split(':');
+  return parts.length === 3 && parts[0].length > 10;
+}
+
+/**
  * Check if encryption is properly configured
  */
 export function isEncryptionConfigured(): boolean {
@@ -221,6 +231,7 @@ export default {
   createBlindIndex,
   encryptFields,
   decryptFields,
+  isEncrypted,
   isEncryptionConfigured,
   generateEncryptionKey,
   encryptUserData,

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useMemo, ReactNode, useEffect } from 'react';
 import type { VisualStyle } from '../types';
 
 const GALLERY_STORAGE_KEY_PREFIX = 'seiso_gallery_';
@@ -349,81 +349,83 @@ export const ImageGeneratorProvider: React.FC<ImageGeneratorProviderProps> = ({ 
     };
   }, []);
 
-  const selectStyle = (style: VisualStyle | null): void => {
+  // All dispatch functions wrapped in useCallback to prevent unnecessary re-renders
+  const selectStyle = useCallback((style: VisualStyle | null): void => {
     dispatch({ type: 'SELECT_STYLE', payload: style });
-  };
+  }, []);
 
-  const setGenerating = (isGenerating: boolean): void => {
+  const setGenerating = useCallback((isGenerating: boolean): void => {
     dispatch({ type: 'SET_GENERATING', payload: isGenerating });
-  };
+  }, []);
 
-  const setGeneratedImage = (image: string | string[]): void => {
+  const setGeneratedImage = useCallback((image: string | string[]): void => {
     dispatch({ type: 'SET_GENERATED_IMAGE', payload: image });
-  };
+  }, []);
 
-  const setError = (error: string | null): void => {
+  const setError = useCallback((error: string | null): void => {
     dispatch({ type: 'SET_ERROR', payload: error });
-  };
+  }, []);
 
-  const clearGeneration = (): void => {
+  const clearGeneration = useCallback((): void => {
     dispatch({ type: 'CLEAR_GENERATION' });
-  };
+  }, []);
 
-  const clearAll = (): void => {
+  const clearAll = useCallback((): void => {
     dispatch({ type: 'CLEAR_ALL' });
-  };
+  }, []);
 
-  const setGuidanceScale = (scale: number): void => {
+  const setGuidanceScale = useCallback((scale: number): void => {
     dispatch({ type: 'SET_GUIDANCE_SCALE', payload: scale });
-  };
+  }, []);
 
-  const setInferenceSteps = (steps: number): void => {
+  const setInferenceSteps = useCallback((steps: number): void => {
     dispatch({ type: 'SET_INFERENCE_STEPS', payload: steps });
-  };
+  }, []);
 
-  const setImageSize = (size: string): void => {
+  const setImageSize = useCallback((size: string): void => {
     dispatch({ type: 'SET_IMAGE_SIZE', payload: size });
-  };
+  }, []);
 
-  const setNumImages = (num: number): void => {
+  const setNumImages = useCallback((num: number): void => {
     dispatch({ type: 'SET_NUM_IMAGES', payload: num });
-  };
+  }, []);
 
-  const setSafetyChecker = (enabled: boolean): void => {
+  const setSafetyChecker = useCallback((enabled: boolean): void => {
     dispatch({ type: 'SET_SAFETY_CHECKER', payload: enabled });
-  };
+  }, []);
 
-  const setGenerationMode = (mode: string): void => {
+  const setGenerationMode = useCallback((mode: string): void => {
     dispatch({ type: 'SET_GENERATION_MODE', payload: mode });
-  };
+  }, []);
 
-  const setMultiImageModel = (model: string | null): void => {
+  const setMultiImageModel = useCallback((model: string | null): void => {
     dispatch({ type: 'SET_MULTI_IMAGE_MODEL', payload: model });
-  };
+  }, []);
 
-  const setControlNetType = (type: string | null): void => {
+  const setControlNetType = useCallback((type: string | null): void => {
     dispatch({ type: 'SET_CONTROL_NET_TYPE', payload: type });
-  };
+  }, []);
 
-  const setControlNetImage = (image: string | string[] | null, dimensions: ImageDimensions | null = null): void => {
+  const setControlNetImage = useCallback((image: string | string[] | null, dimensions: ImageDimensions | null = null): void => {
     // Normalize to single image for storage (take first if array)
     const normalizedImage = Array.isArray(image) ? (image[0] ?? null) : image;
     dispatch({ type: 'SET_CONTROL_NET_IMAGE', payload: { image: normalizedImage, dimensions } });
-  };
+  }, []);
 
-  const setCurrentGeneration = (generation: CurrentGeneration | null): void => {
+  const setCurrentGeneration = useCallback((generation: CurrentGeneration | null): void => {
     dispatch({ type: 'SET_CURRENT_GENERATION', payload: generation });
-  };
+  }, []);
 
-  const setOptimizePrompt = (enabled: boolean): void => {
+  const setOptimizePrompt = useCallback((enabled: boolean): void => {
     dispatch({ type: 'SET_OPTIMIZE_PROMPT', payload: enabled });
-  };
+  }, []);
 
-  const setPromptOptimizationResult = (result: PromptOptimizationResult | null): void => {
+  const setPromptOptimizationResult = useCallback((result: PromptOptimizationResult | null): void => {
     dispatch({ type: 'SET_PROMPT_OPTIMIZATION_RESULT', payload: result });
-  };
+  }, []);
 
-  const value: ImageGeneratorContextValue = {
+  // Memoize context value to prevent unnecessary re-renders of consumers
+  const value: ImageGeneratorContextValue = useMemo(() => ({
     ...state,
     selectStyle,
     setControlNetImage,
@@ -443,7 +445,10 @@ export const ImageGeneratorProvider: React.FC<ImageGeneratorProviderProps> = ({ 
     setCurrentGeneration,
     setOptimizePrompt,
     setPromptOptimizationResult
-  };
+  }), [state, selectStyle, setControlNetImage, setControlNetType, setGenerating, setGeneratedImage,
+    setError, clearGeneration, clearAll, setGuidanceScale, setInferenceSteps, setImageSize,
+    setNumImages, setSafetyChecker, setGenerationMode, setMultiImageModel, setCurrentGeneration,
+    setOptimizePrompt, setPromptOptimizationResult]);
 
   return (
     <ImageGeneratorContext.Provider value={value}>

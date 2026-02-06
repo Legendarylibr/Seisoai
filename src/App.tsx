@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense, Component } from 'react';
-import type { ReactNode, ErrorInfo } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import logger from './utils/logger';
 import { ImageGeneratorProvider } from './contexts/ImageGeneratorContext';
 import { SimpleWalletProvider, useSimpleWallet } from './contexts/SimpleWalletContext';
@@ -18,8 +17,9 @@ import AuthGuard from './components/AuthGuard';
 import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
 import PromptLab from './components/PromptLab';
+import ErrorBoundary from './components/ErrorBoundary';
 import { useImageGenerator } from './contexts/ImageGeneratorContext';
-import { Grid, Sparkles, Film, Music, Layers, MessageCircle, Cpu, Bot, type LucideIcon } from 'lucide-react';
+import { Grid, Globe, Sparkles, Film, Music, Layers, MessageCircle, Cpu, Bot, type LucideIcon } from 'lucide-react';
 import { ensureCSRFToken } from './utils/apiConfig';
 
 // Build version - check console to verify deployment
@@ -37,79 +37,10 @@ const ChatAssistant = lazy(() => import('./components/ChatAssistant'));
 const ModelTraining = lazy(() => import('./components/ModelTraining'));
 const AgentMarketplace = lazy(() => import('./components/AgentMarketplace'));
 const TermsModal = lazy(() => import('./components/TermsModal'));
+const OnboardingWizard = lazy(() => import('./components/OnboardingWizard'));
+const PublicGallery = lazy(() => import('./components/PublicGallery'));
 import Footer from './components/Footer';
 import type { LegalPage } from './components/TermsModal';
-
-// Error Boundary - prevents image/content rendering errors from crashing the entire app
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-interface ErrorBoundaryProps {
-  children: ReactNode;
-  fallbackText?: string;
-}
-
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    logger.error('ErrorBoundary caught error', {
-      error: error.message,
-      componentStack: errorInfo.componentStack?.substring(0, 500)
-    });
-  }
-
-  render(): ReactNode {
-    if (this.state.hasError) {
-      return (
-        <div
-          className="h-full flex flex-col items-center justify-center p-4 lg:p-8"
-          style={{
-            background: 'var(--win95-bg)',
-            fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-          }}
-        >
-          <div
-            className="p-4 lg:p-6 text-center max-w-sm"
-            style={{
-              background: 'var(--win95-bg)',
-              boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), inset 2px 2px 0 var(--win95-bg-light), inset -2px -2px 0 var(--win95-bg-dark)'
-            }}
-          >
-            <p className="text-[12px] font-bold mb-2" style={{ color: 'var(--win95-text)' }}>
-              {this.props.fallbackText || 'Something went wrong'}
-            </p>
-            <p className="text-[10px] mb-3" style={{ color: 'var(--win95-text-disabled)' }}>
-              {this.state.error?.message || 'An unexpected error occurred'}
-            </p>
-            <button
-              onClick={() => this.setState({ hasError: false, error: null })}
-              className="px-4 py-1.5 text-[11px] font-bold"
-              style={{
-                background: 'var(--win95-button-face)',
-                boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)',
-                border: 'none',
-                cursor: 'pointer',
-                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-              }}
-            >
-              Try Again
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
 
 interface Tab {
   id: string;
@@ -157,7 +88,8 @@ function AppContentInner(): JSX.Element {
     { id: 'training', name: t.nav.training || 'Training', icon: Cpu },
     // TEMPORARILY DISABLED - 3D not working, re-enable when fixed
     // { id: '3d', name: '3D', icon: Box },
-    { id: 'gallery', name: t.nav.gallery, icon: Grid }
+    { id: 'gallery', name: t.nav.gallery, icon: Grid },
+    { id: 'community', name: 'Community', icon: Globe }
   ];
 
   // Filter tabs to only show user-enabled features
@@ -219,6 +151,10 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
   const [userPrompt, setUserPrompt] = useState('');
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsPage, setTermsPage] = useState<LegalPage>('terms');
+  // Onboarding wizard for first-time users
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    try { return !localStorage.getItem('onboarding_completed'); } catch { return false; }
+  });
   // Track video model and mode for PromptLab optimization
   const [videoModel, setVideoModel] = useState<string>('ltx');
   const [videoGenerationMode, setVideoGenerationMode] = useState<string>('text-to-video');
@@ -259,9 +195,8 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
     setShowPaymentModal(true);
   }, []);
 
-  // Keep legacy handlers pointing to the unified modal for backwards compatibility
+  // Keep legacy handler pointing to the unified modal for backwards compatibility
   const handleShowTokenPayment = handleShowPayment;
-  const handleShowStripePayment = handleShowPayment;
 
   const handleOpenTerms = useCallback((page: LegalPage = 'terms'): void => {
     setTermsPage(page);
@@ -390,7 +325,7 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
                       <MultiImageModelSelector />
                     </div>
                     <GenerationQueue
-                      onShowStripePayment={handleShowStripePayment}
+                      onShowStripePayment={handleShowPayment}
                     />
                   </div>
                 </div>
@@ -473,6 +408,16 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
             </div>
           </ErrorBoundary>
         )}
+        
+        {activeTab === 'community' && (
+          <ErrorBoundary fallbackText="Community gallery encountered an error">
+            <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
+              <Suspense fallback={<Win95LoadingFallback text="Loading Community Gallery..." />}>
+                <PublicGallery showHeader={true} />
+              </Suspense>
+            </div>
+          </ErrorBoundary>
+        )}
       </div>
 
       {/* Token Payment Modal - On-chain stablecoin payments (USDC) */}
@@ -495,6 +440,23 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
             isOpen={showTermsModal}
             onClose={() => setShowTermsModal(false)}
             initialPage={termsPage}
+          />
+        </Suspense>
+      )}
+
+      {/* Onboarding Wizard - shown for first-time users */}
+      {showOnboarding && isConnected && (
+        <Suspense fallback={null}>
+          <OnboardingWizard
+            isOpen={showOnboarding}
+            onClose={() => {
+              setShowOnboarding(false);
+              try { localStorage.setItem('onboarding_completed', 'true'); } catch { /* ignore */ }
+            }}
+            onComplete={() => {
+              setShowOnboarding(false);
+              try { localStorage.setItem('onboarding_completed', 'true'); } catch { /* ignore */ }
+            }}
           />
         </Suspense>
       )}

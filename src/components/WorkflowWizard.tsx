@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useRef, ChangeEvent } from 'react';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { 
   Sparkles, User, Film, Music, Upload, X, Check, ChevronRight, 
@@ -116,11 +115,9 @@ interface WorkflowWizardProps {
 }
 
 const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
-  const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   
-  const isEmailAuth = emailContext.isAuthenticated;
-  const isConnected = isEmailAuth || walletContext.isConnected;
+  const isConnected = walletContext.isConnected;
   
   // State
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowDefinition | null>(null);
@@ -258,9 +255,7 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
             body: JSON.stringify({
               text: scriptText,
               language: 'en',
-              walletAddress: walletContext.address,
-              userId: emailContext.userId,
-              email: emailContext.email
+              walletAddress: walletContext.address
             })
           });
           
@@ -279,9 +274,7 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
               image_url: portraitUrl,
               audio_url: voiceAudioUrl,
               expression_scale: 1.0,
-              walletAddress: walletContext.address,
-              userId: emailContext.userId,
-              email: emailContext.email
+              walletAddress: walletContext.address
             })
           });
           
@@ -307,9 +300,7 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
             body: JSON.stringify({
               prompt: musicPrompt,
               duration: 30,
-              walletAddress: walletContext.address,
-              userId: emailContext.userId,
-              email: emailContext.email
+              walletAddress: walletContext.address
             })
           });
           
@@ -330,9 +321,7 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
               generation_mode: 'text-to-video',
               quality: 'fast',
               generate_audio: false,
-              walletAddress: walletContext.address,
-              userId: emailContext.userId,
-              email: emailContext.email
+              walletAddress: walletContext.address
             })
           });
           
@@ -357,9 +346,7 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
             body: JSON.stringify({
               prompt: `portrait of ${characterDescription}, centered, high quality, detailed face`,
               aspect_ratio: '1:1',
-              walletAddress: walletContext.address,
-              userId: emailContext.userId,
-              email: emailContext.email
+              walletAddress: walletContext.address
             })
           });
           
@@ -382,9 +369,7 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
                 prompt: `${characterDescription}, ${pose}, same person, consistent appearance`,
                 image_url: baseCharacterUrl,
                 model: 'flux-2',
-                walletAddress: walletContext.address,
-                userId: emailContext.userId,
-                email: emailContext.email
+                walletAddress: walletContext.address
               })
             });
             
@@ -411,9 +396,7 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
             credentials: 'include',
             body: JSON.stringify({
               audio_url: remixSourceUrl,
-              walletAddress: walletContext.address,
-              userId: emailContext.userId,
-              email: emailContext.email
+              walletAddress: walletContext.address
             })
           });
           
@@ -428,9 +411,7 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
       }
       
       // Refresh credits
-      if (isEmailAuth && emailContext.refreshCredits) {
-        emailContext.refreshCredits();
-      } else if (walletContext.fetchCredits && walletContext.address) {
+      if (walletContext.fetchCredits && walletContext.address) {
         walletContext.fetchCredits(walletContext.address, 3, true);
       }
       
@@ -440,7 +421,7 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedWorkflow, currentStep, isConnected, scriptText, portraitUrl, voiceAudioUrl, musicPrompt, visualPrompt, characterDescription, baseCharacterUrl, remixSourceUrl, emailContext, walletContext, isEmailAuth]);
+  }, [selectedWorkflow, currentStep, isConnected, scriptText, portraitUrl, voiceAudioUrl, musicPrompt, visualPrompt, characterDescription, baseCharacterUrl, remixSourceUrl, walletContext]);
   
   // Check if current step can proceed
   const canProceed = useCallback(() => {

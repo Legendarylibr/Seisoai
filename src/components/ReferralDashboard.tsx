@@ -5,7 +5,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Copy, Check, Users, Gift, Trophy, ExternalLink } from 'lucide-react';
 import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import {
   getReferralStats,
   getReferralLeaderboard,
@@ -21,7 +20,6 @@ interface ReferralDashboardProps {
 }
 
 const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }) => {
-  const { isAuthenticated } = useEmailAuth();
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,8 +28,6 @@ const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }
 
   // Fetch data on mount
   const fetchData = useCallback(async () => {
-    if (!isAuthenticated) return;
-    
     setIsLoading(true);
     try {
       const [statsData, leaderboardData] = await Promise.all([
@@ -46,13 +42,13 @@ const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated]);
+  }, []);
 
   useEffect(() => {
-    if (isOpen && isAuthenticated) {
+    if (isOpen) {
       fetchData();
     }
-  }, [isOpen, isAuthenticated, fetchData]);
+  }, [isOpen, fetchData]);
 
   // Handle copy to clipboard
   const handleCopy = async (text: string, type: string) => {
@@ -121,11 +117,7 @@ const ReferralDashboard: React.FC<ReferralDashboardProps> = ({ isOpen, onClose }
 
         {/* Content */}
         <div className="p-4 overflow-y-auto flex-1" style={{ background: WIN95.bg }}>
-          {!isAuthenticated ? (
-            <div className="text-center py-8">
-              <p style={{ color: WIN95.text }}>Please sign in to access the referral program.</p>
-            </div>
-          ) : isLoading ? (
+          {isLoading ? (
             <div className="text-center py-8">
               <p style={{ color: WIN95.text }}>Loading...</p>
             </div>

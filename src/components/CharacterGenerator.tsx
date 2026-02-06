@@ -10,7 +10,6 @@
  * - components/3d/GenerationQueue.tsx (queue display)
  */
 import React, { useState, useRef, useCallback, memo, ChangeEvent, useEffect } from 'react';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generate3dModel } from '../services/model3dService';
 import { addGeneration } from '../services/galleryService';
@@ -249,11 +248,9 @@ const StepIndicator = memo<StepIndicatorProps>(function StepIndicator({ currentS
 });
 
 const CharacterGenerator = memo(function CharacterGenerator() {
-  const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   
-  const isEmailAuth = emailContext.isAuthenticated;
-  const isConnected = isEmailAuth || walletContext.isConnected;
+  const isConnected = walletContext.isConnected;
   
   // Workflow state
   const [currentStep, setCurrentStep] = useState<WorkflowStep>('create');
@@ -368,9 +365,7 @@ const CharacterGenerator = memo(function CharacterGenerator() {
           model: 'nano-banana-pro',
           aspect_ratio: '1:1', // Square works best for 3D
           num_images: 1,
-          walletAddress: walletContext.address ?? undefined,
-          userId: emailContext.userId ?? undefined,
-          email: emailContext.email ?? undefined
+          walletAddress: walletContext.address ?? undefined
         })
       });
 
@@ -387,9 +382,7 @@ const CharacterGenerator = memo(function CharacterGenerator() {
         setCurrentStep('preview');
         
         // Refresh credits
-        if (isEmailAuth && emailContext.refreshCredits) {
-          emailContext.refreshCredits();
-        } else if (walletContext.fetchCredits && walletContext.address) {
+        if (walletContext.fetchCredits && walletContext.address) {
           walletContext.fetchCredits(walletContext.address, 3, true);
         }
       }
@@ -401,7 +394,7 @@ const CharacterGenerator = memo(function CharacterGenerator() {
       setIsGeneratingImage(false);
       stopTimer();
     }
-  }, [prompt, isConnected, walletContext, emailContext, isEmailAuth, startTimer, stopTimer]);
+  }, [prompt, isConnected, walletContext, startTimer, stopTimer]);
 
   // Edit image with Nano Banana Pro
   const handleEditImage = useCallback(async () => {
@@ -429,9 +422,7 @@ const CharacterGenerator = memo(function CharacterGenerator() {
           model: 'nano-banana-pro',
           image_urls: [imageUrl],
           num_images: 1,
-          walletAddress: walletContext.address ?? undefined,
-          userId: emailContext.userId ?? undefined,
-          email: emailContext.email ?? undefined
+          walletAddress: walletContext.address ?? undefined
         })
       });
 
@@ -448,9 +439,7 @@ const CharacterGenerator = memo(function CharacterGenerator() {
         setIsUploadedImage(false); // AI-edited image no longer needs optimization
         
         // Refresh credits
-        if (isEmailAuth && emailContext.refreshCredits) {
-          emailContext.refreshCredits();
-        } else if (walletContext.fetchCredits && walletContext.address) {
+        if (walletContext.fetchCredits && walletContext.address) {
           walletContext.fetchCredits(walletContext.address, 3, true);
         }
       }
@@ -462,7 +451,7 @@ const CharacterGenerator = memo(function CharacterGenerator() {
       setIsEditing(false);
       stopTimer();
     }
-  }, [editPrompt, imageUrl, isConnected, walletContext, emailContext, isEmailAuth, startTimer, stopTimer]);
+  }, [editPrompt, imageUrl, isConnected, walletContext, startTimer, stopTimer]);
 
   // Optimize image for 3D generation using AI (fast optimized version)
   const optimizeImageFor3d = useCallback(async (inputImageUrl: string): Promise<string> => {
@@ -513,9 +502,7 @@ const CharacterGenerator = memo(function CharacterGenerator() {
         image_urls: [preprocessedUrl],
         num_images: 1,
         aspect_ratio: '1:1',
-        walletAddress: walletContext.address ?? undefined,
-        userId: emailContext.userId ?? undefined,
-        email: emailContext.email ?? undefined
+        walletAddress: walletContext.address ?? undefined
       })
     });
 
@@ -532,7 +519,7 @@ const CharacterGenerator = memo(function CharacterGenerator() {
 
     logger.info('Image optimized for 3D generation');
     return optimizedUrl;
-  }, [walletContext.address, emailContext.userId, emailContext.email]);
+  }, [walletContext.address]);
 
   // Generate 3D model
   const handleGenerate3d = useCallback(async () => {
@@ -556,9 +543,7 @@ const CharacterGenerator = memo(function CharacterGenerator() {
         setIsUploadedImage(false); // Mark as processed
         
         // Refresh credits after optimization
-        if (isEmailAuth && emailContext.refreshCredits) {
-          emailContext.refreshCredits();
-        } else if (walletContext.fetchCredits && walletContext.address) {
+        if (walletContext.fetchCredits && walletContext.address) {
           walletContext.fetchCredits(walletContext.address, 3, true);
         }
       } finally {
@@ -576,8 +561,6 @@ const CharacterGenerator = memo(function CharacterGenerator() {
         generate_type: generateType,
         polygon_type: 'triangle',
         walletAddress: walletContext.address ?? undefined,
-        userId: emailContext.userId ?? undefined,
-        email: emailContext.email ?? undefined,
         // Progress callback for polling updates
         onProgress: (status: string, elapsed: number) => {
           setPollElapsed(elapsed);
@@ -608,9 +591,7 @@ const CharacterGenerator = memo(function CharacterGenerator() {
         setError('3D generation is taking longer than expected. It will appear in your gallery when complete. You can continue using the app while it processes.');
         setCurrentStep('preview');
         // Refresh credits since they were already deducted
-        if (isEmailAuth && emailContext.refreshCredits) {
-          emailContext.refreshCredits();
-        } else if (walletContext.fetchCredits && walletContext.address) {
+        if (walletContext.fetchCredits && walletContext.address) {
           walletContext.fetchCredits(walletContext.address, 3, true);
         }
         return;
@@ -625,14 +606,12 @@ const CharacterGenerator = memo(function CharacterGenerator() {
         setCurrentStep('result');
         
         // Refresh credits
-        if (isEmailAuth && emailContext.refreshCredits) {
-          emailContext.refreshCredits();
-        } else if (walletContext.fetchCredits && walletContext.address) {
+        if (walletContext.fetchCredits && walletContext.address) {
           walletContext.fetchCredits(walletContext.address, 3, true);
         }
 
         // Save to main gallery with 3D model URLs (expires after 1 day)
-        const identifier = isEmailAuth ? emailContext.userId : walletContext.address;
+        const identifier = walletContext.address;
         const glbUrl = result.model_glb?.url || result.model_urls?.glb?.url;
         if (identifier && glbUrl) {
           addGeneration(identifier, {
@@ -640,8 +619,6 @@ const CharacterGenerator = memo(function CharacterGenerator() {
             style: `3D ${generateType}`,
             imageUrl: result.thumbnail?.url || finalImageUrl,
             creditsUsed: generateType === 'Geometry' ? 2 : 3,
-            userId: isEmailAuth ? (emailContext.userId ?? undefined) : undefined,
-            email: isEmailAuth ? (emailContext.email ?? undefined) : undefined,
             // 3D model data - saved to gallery for 1 day
             modelType: '3d',
             glbUrl: glbUrl,
@@ -688,7 +665,7 @@ const CharacterGenerator = memo(function CharacterGenerator() {
       setPollElapsed(0);
       stopTimer();
     }
-  }, [imageUrl, isConnected, enablePbr, faceCount, generateType, prompt, walletContext, emailContext, isEmailAuth, startTimer, stopTimer, sessionGallery, isUploadedImage, optimizeImageFor3d]);
+  }, [imageUrl, isConnected, enablePbr, faceCount, generateType, prompt, walletContext, startTimer, stopTimer, sessionGallery, isUploadedImage, optimizeImageFor3d]);
 
   // Download 3D model
   const handleDownload = useCallback(async (url: string, format: string) => {

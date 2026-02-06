@@ -7,7 +7,7 @@ on:
     branches: [main, develop]
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '22'
 
 jobs:
   # ============================================================================
@@ -59,7 +59,7 @@ jobs:
 
       - name: Run linter
         working-directory: backend
-        run: npm run lint || true  # Don't fail on lint errors for now
+        run: npm run lint
 
       - name: Run tests
         working-directory: backend
@@ -109,6 +109,9 @@ jobs:
       - name: Run TypeScript type check
         run: npx tsc --noEmit
 
+      - name: Run linter
+        run: npm run lint
+
       - name: Build frontend
         run: npm run build
         env:
@@ -138,11 +141,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Audit frontend dependencies
-        run: npm audit --audit-level=high || true
+        run: npm audit --audit-level=high
+        continue-on-error: true
 
       - name: Audit backend dependencies
         working-directory: backend
-        run: npm audit --audit-level=high || true
+        run: npm audit --audit-level=high
+        continue-on-error: true
 
   # ============================================================================
   # Docker Build

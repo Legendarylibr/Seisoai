@@ -1,5 +1,4 @@
 import React, { useState, useCallback, memo } from 'react';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateMusic, calculateMusicCredits } from '../services/musicService';
 import { Music, Play, Pause, Download, AlertCircle, ChevronDown, Square, Brain } from 'lucide-react';
@@ -293,11 +292,9 @@ const CollapsibleMusicHowToUse = memo(function CollapsibleMusicHowToUse(): React
 });
 
 const MusicGenerator = memo(function MusicGenerator() {
-  const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   
-  const isEmailAuth = emailContext.isAuthenticated;
-  const isConnected = isEmailAuth || walletContext.isConnected;
+  const isConnected = walletContext.isConnected;
   
   // State
   const [prompt, setPrompt] = useState<string>('');
@@ -329,9 +326,9 @@ const MusicGenerator = memo(function MusicGenerator() {
       const result = await generateMusic({
         prompt,
         duration,
-        userId: emailContext.userId,
+        userId: undefined,
         walletAddress: walletContext.address,
-        email: emailContext.email,
+        email: undefined,
         optimizePrompt,
         selectedGenre
       });
@@ -339,9 +336,7 @@ const MusicGenerator = memo(function MusicGenerator() {
       setGeneratedAudioUrl(result.audioUrl);
       setProgress(null);
       
-      if (isEmailAuth && emailContext.refreshCredits) {
-        emailContext.refreshCredits();
-      } else if (walletContext.fetchCredits && walletContext.address) {
+      if (walletContext.fetchCredits && walletContext.address) {
         walletContext.fetchCredits(walletContext.address, 3, true);
       }
       
@@ -353,7 +348,7 @@ const MusicGenerator = memo(function MusicGenerator() {
     } finally {
       setIsGenerating(false);
     }
-  }, [canGenerate, prompt, duration, emailContext, walletContext, isEmailAuth, optimizePrompt, selectedGenre]);
+  }, [canGenerate, prompt, duration, walletContext, optimizePrompt, selectedGenre]);
 
   const handleDownload = useCallback(async () => {
     if (!generatedAudioUrl) return;

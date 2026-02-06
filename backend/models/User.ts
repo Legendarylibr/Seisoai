@@ -6,7 +6,7 @@
 import mongoose, { type Document, type Model } from 'mongoose';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
-import { encrypt, decrypt, createBlindIndex, isEncryptionConfigured } from '../utils/encryption.js';
+import { encrypt, decrypt, createBlindIndex, isEncrypted, isEncryptionConfigured } from '../utils/encryption.js';
 
 // Types
 interface NFTCollection {
@@ -479,13 +479,6 @@ userSchema.index({ totalGenerations: -1 }); // For achievement leaderboards
 // TTL index on expiresAt - MongoDB will auto-delete when expiresAt < now
 // Users with credits/activity have expiresAt extended on each login
 userSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-
-// Helper to check if a string is already encrypted (contains our format)
-function isEncrypted(value: string): boolean {
-  if (!value) return false;
-  const parts = value.split(':');
-  return parts.length === 3 && parts[0].length > 10;
-}
 
 // Helper to validate email format (before encryption)
 function isValidEmail(email: string): boolean {

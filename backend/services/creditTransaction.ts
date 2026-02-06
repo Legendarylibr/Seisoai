@@ -1,216 +1,213 @@
 /**
  * Credit Transaction Service
- * Atomic credit deduction with rollback support.
- *
- * Pattern:
- *   const tx = await CreditTx.begin(userId, amount, 'tool-invocation');
- *   try {
- *     await doWork();
- *     await CreditTx.commit(tx);
- *   } catch {
- *     await CreditTx.rollback(tx);
- *   }
+ * Centralized credit deduction and refund logic
+ * 
+ * Eliminates the ~40-line credit deduction boilerplate
+ * previously copy-pasted across 6 generation route handlers.
  */
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
+import { buildUserUpdateQuery } from './user';
+import type { IUser } from '../models/User';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-export interface CreditTransaction {
-  /** Unique transaction ID */
-  txId: string;
-  /** User identifier (wallet address or API key ID) */
-  userId: string;
-  /** Source type */
-  source: 'wallet' | 'api-key';
-  /** Amount deducted */
-  amount: number;
-  /** Reason / use-case label */
-  reason: string;
-  /** Current state */
-  status: 'pending' | 'committed' | 'rolled-back';
-  /** Timestamp */
-  createdAt: Date;
+export interface CreditDeductionResult {
+  remainingCredits: number;
+  actualCreditsDeducted: number;
 }
 
-// In-memory ledger for pending transactions (TTL: 10 min)
-const pendingTx = new Map<string, CreditTransaction>();
-
-// Auto-cleanup stale pending transactions every 5 min
-setInterval(() => {
-  const now = Date.now();
-  for (const [txId, tx] of pendingTx) {
-    if (tx.status === 'pending' && now - tx.createdAt.getTime() > 10 * 60 * 1000) {
-      logger.warn('Auto-rolling-back stale credit transaction', { txId, userId: tx.userId, amount: tx.amount });
-      rollback(txId).catch(() => { /* best-effort */ });
-    }
-  }
-}, 5 * 60 * 1000);
-
-// ============================================================================
-// Wallet-based users (User model)
-// ============================================================================
-
-async function deductUserCredits(walletAddress: string, amount: number): Promise<boolean> {
-  try {
-    const User = mongoose.model('User');
-    const result = await User.findOneAndUpdate(
-      {
-        $or: [
-          { walletAddress, credits: { $gte: amount } },
-          { 'walletAddress_bi': walletAddress, credits: { $gte: amount } },
-        ],
-      },
-      { $inc: { credits: -amount } },
-      { new: true },
-    );
-    return !!result;
-  } catch (error) {
-    logger.error('Failed to deduct user credits', { walletAddress, amount, error: (error as Error).message });
-    return false;
+export class InsufficientCreditsError extends Error {
+  public statusCode = 402;
+  constructor() {
+    super('Insufficient credits');
+    this.name = 'InsufficientCreditsError';
   }
 }
 
-async function refundUserCredits(walletAddress: string, amount: number): Promise<boolean> {
-  try {
-    const User = mongoose.model('User');
-    await User.findOneAndUpdate(
-      { $or: [{ walletAddress }, { 'walletAddress_bi': walletAddress }] },
-      { $inc: { credits: amount } },
-    );
-    return true;
-  } catch (error) {
-    logger.error('Failed to refund user credits', { walletAddress, amount, error: (error as Error).message });
-    return false;
+export class UserAccountRequiredError extends Error {
+  public statusCode = 400;
+  constructor() {
+    super('User account required');
+    this.name = 'UserAccountRequiredError';
   }
 }
 
-// ============================================================================
-// API-key-based users
-// ============================================================================
-
-async function deductApiKeyCredits(apiKeyId: string, amount: number): Promise<boolean> {
-  try {
-    const ApiKey = mongoose.model('ApiKey');
-    const result = await ApiKey.findOneAndUpdate(
-      { _id: apiKeyId, credits: { $gte: amount } },
-      { $inc: { credits: -amount, totalCreditsSpent: amount } },
-      { new: true },
-    );
-    return !!result;
-  } catch (error) {
-    logger.error('Failed to deduct API key credits', { apiKeyId, amount, error: (error as Error).message });
-    return false;
+export class AuthenticationRequiredError extends Error {
+  public statusCode = 401;
+  constructor() {
+    super('User authentication required');
+    this.name = 'AuthenticationRequiredError';
   }
 }
 
-async function refundApiKeyCredits(apiKeyId: string, amount: number): Promise<boolean> {
-  try {
-    const ApiKey = mongoose.model('ApiKey');
-    await ApiKey.findOneAndUpdate(
-      { _id: apiKeyId },
-      { $inc: { credits: amount, totalCreditsSpent: -amount } },
-    );
-    return true;
-  } catch (error) {
-    logger.error('Failed to refund API key credits', { apiKeyId, amount, error: (error as Error).message });
-    return false;
+export class ServiceNotConfiguredError extends Error {
+  public statusCode = 500;
+  constructor(service = 'AI service') {
+    super(`${service} not configured`);
+    this.name = 'ServiceNotConfiguredError';
   }
-}
-
-// ============================================================================
-// Public API
-// ============================================================================
-
-function generateTxId(): string {
-  return `ctx_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
- * Begin a credit transaction — deducts credits upfront.
- * Returns txId on success, throws on insufficient credits.
+ * Validate that the user is authenticated and has a valid account
+ * @throws AuthenticationRequiredError if user is not authenticated
+ * @throws UserAccountRequiredError if user has no valid identifier
  */
-export async function begin(
-  userId: string,
-  amount: number,
-  reason: string,
-  source: 'wallet' | 'api-key' = 'wallet',
-): Promise<string> {
-  const txId = generateTxId();
+export function validateUser(user: IUser | undefined): asserts user is IUser {
+  if (!user) {
+    throw new AuthenticationRequiredError();
+  }
+  const updateQuery = buildUserUpdateQuery(user);
+  if (!updateQuery) {
+    throw new UserAccountRequiredError();
+  }
+}
 
-  const ok = source === 'api-key'
-    ? await deductApiKeyCredits(userId, amount)
-    : await deductUserCredits(userId, amount);
+/**
+ * Deduct credits from a user atomically
+ * Skips deduction for users with free access (NFT/Token holders)
+ * 
+ * @param user - The authenticated user
+ * @param creditsRequired - Number of credits to deduct
+ * @param hasFreeAccess - Whether the user has free access via NFT/Token holdings
+ * @returns The remaining credits and actual credits deducted
+ * @throws InsufficientCreditsError if user doesn't have enough credits
+ * @throws UserAccountRequiredError if user has no valid identifier
+ */
+export async function deductCredits(
+  user: IUser,
+  creditsRequired: number,
+  hasFreeAccess: boolean
+): Promise<CreditDeductionResult> {
+  const User = mongoose.model<IUser>('User');
+  const updateQuery = buildUserUpdateQuery(user);
 
-  if (!ok) {
-    throw new Error(`Insufficient credits. Needed ${amount} for ${reason}`);
+  if (!updateQuery) {
+    throw new UserAccountRequiredError();
   }
 
-  const tx: CreditTransaction = {
-    txId,
-    userId,
-    source,
-    amount,
-    reason,
-    status: 'pending',
-    createdAt: new Date(),
+  // Skip credit deduction for NFT/Token holders with free access
+  if (hasFreeAccess) {
+    logger.info('Free generation - no credits deducted', {
+      userId: user.userId || user.walletAddress,
+      creditsWouldHaveCost: creditsRequired
+    });
+    return {
+      remainingCredits: user.credits || 0,
+      actualCreditsDeducted: 0
+    };
+  }
+
+  const updateResult = await User.findOneAndUpdate(
+    {
+      ...updateQuery,
+      credits: { $gte: creditsRequired }
+    },
+    {
+      $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired }
+    },
+    { new: true }
+  );
+
+  if (!updateResult) {
+    throw new InsufficientCreditsError();
+  }
+
+  return {
+    remainingCredits: updateResult.credits,
+    actualCreditsDeducted: creditsRequired
   };
-  pendingTx.set(txId, tx);
-
-  logger.debug('Credit transaction begun', { txId, userId, amount, reason, source });
-  return txId;
 }
 
 /**
- * Commit a transaction — marks it as settled (no refund possible).
+ * Refund credits to a user after a failed generation
+ * @param user - The user to refund
+ * @param credits - Number of credits to refund
+ * @param reason - Reason for the refund (for logging)
+ * @returns The updated user document or null if refund failed
  */
-export async function commit(txId: string): Promise<void> {
-  const tx = pendingTx.get(txId);
-  if (!tx) {
-    logger.warn('Commit called for unknown transaction', { txId });
-    return;
+export async function refundCredits(
+  user: IUser,
+  credits: number,
+  reason: string
+): Promise<IUser | null> {
+  try {
+    // Validate credits is a valid positive number
+    if (!Number.isFinite(credits) || credits <= 0) {
+      logger.error('Cannot refund invalid credits amount', { credits, reason, userId: user.userId });
+      return null;
+    }
+
+    const User = mongoose.model<IUser>('User');
+    const updateQuery = buildUserUpdateQuery(user);
+
+    if (!updateQuery) {
+      logger.error('Cannot refund credits: no valid user identifier', { userId: user.userId });
+      return null;
+    }
+
+    const updatedUser = await User.findOneAndUpdate(
+      updateQuery,
+      {
+        $inc: { credits: credits, totalCreditsSpent: -credits }
+      },
+      { new: true }
+    );
+
+    if (updatedUser) {
+      logger.info('Credits refunded for failed generation', {
+        userId: user.userId || user.email || user.walletAddress,
+        creditsRefunded: credits,
+        newBalance: updatedUser.credits,
+        reason
+      });
+    }
+
+    return updatedUser;
+  } catch (error) {
+    const err = error as Error;
+    logger.error('Failed to refund credits', {
+      userId: user.userId,
+      credits,
+      reason,
+      error: err.message
+    });
+    return null;
   }
-  tx.status = 'committed';
-  pendingTx.delete(txId);
-  logger.debug('Credit transaction committed', { txId, userId: tx.userId, amount: tx.amount });
 }
 
 /**
- * Rollback a transaction — refunds credits.
+ * Handle credit-related errors in route handlers
+ * Sends the appropriate HTTP response based on error type
  */
-export async function rollback(txId: string): Promise<void> {
-  const tx = pendingTx.get(txId);
-  if (!tx) {
-    logger.warn('Rollback called for unknown transaction', { txId });
-    return;
+export function handleCreditError(err: unknown, res: {
+  status: (code: number) => { json: (body: unknown) => void };
+}): boolean {
+  if (err instanceof AuthenticationRequiredError) {
+    res.status(401).json({ success: false, error: err.message });
+    return true;
   }
-  if (tx.status !== 'pending') {
-    logger.warn('Rollback called for non-pending transaction', { txId, status: tx.status });
-    return;
+  if (err instanceof ServiceNotConfiguredError) {
+    res.status(500).json({ success: false, error: err.message });
+    return true;
   }
-
-  const ok = tx.source === 'api-key'
-    ? await refundApiKeyCredits(tx.userId, tx.amount)
-    : await refundUserCredits(tx.userId, tx.amount);
-
-  tx.status = 'rolled-back';
-  pendingTx.delete(txId);
-
-  if (ok) {
-    logger.info('Credit transaction rolled back', { txId, userId: tx.userId, amount: tx.amount });
-  } else {
-    logger.error('Credit rollback failed!', { txId, userId: tx.userId, amount: tx.amount });
+  if (err instanceof UserAccountRequiredError) {
+    res.status(400).json({ success: false, error: err.message });
+    return true;
   }
+  if (err instanceof InsufficientCreditsError) {
+    res.status(402).json({ success: false, error: err.message });
+    return true;
+  }
+  return false;
 }
 
-/**
- * Get transaction info (for debugging).
- */
-export function getTransaction(txId: string): CreditTransaction | undefined {
-  return pendingTx.get(txId);
-}
-
-export const CreditTx = { begin, commit, rollback, getTransaction };
-export default CreditTx;
+export default {
+  deductCredits,
+  refundCredits,
+  validateUser,
+  handleCreditError,
+  InsufficientCreditsError,
+  UserAccountRequiredError,
+  AuthenticationRequiredError,
+  ServiceNotConfiguredError
+};

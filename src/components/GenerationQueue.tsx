@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Upload, X, Play, Pause, RotateCcw, CheckCircle, AlertCircle, Loader2, Trash2, ChevronDown, ChevronUp, Brain, Sparkles, Image, Zap } from 'lucide-react';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { generateImage, batchVariate } from '../services/smartImageService';
 import { addGeneration } from '../services/galleryService';
@@ -40,9 +39,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowStripePayment }
   const abortRef = useRef(false);
 
   const { isConnected, address, credits, isNFTHolder, refreshCredits, setCreditsManually } = useSimpleWallet();
-  const emailContext = useEmailAuth();
-  const isEmailAuth = emailContext.isAuthenticated;
-  const availableCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
+  const availableCredits = credits ?? 0;
   
   const { setGeneratedImage, setCurrentGeneration, selectedStyle, multiImageModel, optimizePrompt, setOptimizePrompt } = useImageGenerator();
 
@@ -185,9 +182,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowStripePayment }
             item.imageDataUrl, 
             imagesToGenerate, 
             {
-              walletAddress: isEmailAuth ? undefined : (address || undefined),
-              userId: isEmailAuth ? (emailContext.userId || undefined) : undefined,
-              email: isEmailAuth ? (emailContext.email || undefined) : undefined
+              walletAddress: address || undefined
             },
             { useControlNet }
           );
@@ -225,9 +220,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowStripePayment }
                 selectedStyle,
                 variationPrompt,
                 {
-                  walletAddress: isEmailAuth ? undefined : (address || undefined),
-                  userId: isEmailAuth ? (emailContext.userId || undefined) : undefined,
-                  email: isEmailAuth ? (emailContext.email || undefined) : undefined,
+                  walletAddress: address || undefined,
                   isNFTHolder: isNFTHolder || false,
                   multiImageModel: variateResult.useControlNet ? 'controlnet-canny' : (multiImageModel || 'flux'),
                   numImages: 1,
@@ -269,9 +262,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowStripePayment }
             selectedStyle,
             promptToUse,
             {
-              walletAddress: isEmailAuth ? undefined : (address || undefined),
-              userId: isEmailAuth ? (emailContext.userId || undefined) : undefined,
-              email: isEmailAuth ? (emailContext.email || undefined) : undefined,
+              walletAddress: address || undefined,
               isNFTHolder: isNFTHolder || false,
               multiImageModel: multiImageModel || 'flux',
               numImages: 1
@@ -296,9 +287,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowStripePayment }
         // Update credits
         if (lastRemainingCredits !== undefined) {
           const validated = Math.max(0, Math.floor(Number(lastRemainingCredits) || 0));
-          if (isEmailAuth && emailContext.setCreditsManually) {
-            emailContext.setCreditsManually(validated);
-          } else if (setCreditsManually) {
+          if (setCreditsManually) {
             setCreditsManually(validated);
           }
         }
@@ -317,16 +306,14 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowStripePayment }
         });
 
         // Save all images to gallery (non-blocking)
-        const userIdentifier = isEmailAuth ? (emailContext.userId || '') : (address || '');
+        const userIdentifier = address || '';
         
         imageUrls.forEach((imgUrl) => {
           addGeneration(userIdentifier, {
             prompt: isSingleImageBatch ? 'AI variation' : (prompt.trim() || selectedStyle?.prompt || 'No prompt'),
             style: selectedStyle?.name || 'No Style',
             imageUrl: imgUrl,
-            creditsUsed: creditsPerImageWithPremium,
-            userId: isEmailAuth ? (emailContext.userId || undefined) : undefined,
-            email: isEmailAuth ? (emailContext.email || undefined) : undefined
+            creditsUsed: creditsPerImageWithPremium
           }).catch(e => logger.debug('Gallery save failed', { error: e instanceof Error ? e.message : 'Unknown error' }));
         });
 
@@ -349,12 +336,10 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowStripePayment }
     setProgressCount(0);
     
     // Refresh credits after processing
-    if (isEmailAuth && emailContext.refreshCredits) {
-      await emailContext.refreshCredits();
-    } else if (refreshCredits && address) {
+    if (refreshCredits && address) {
       await refreshCredits();
     }
-  }, [queue, prompt, selectedStyle, multiImageModel, availableCredits, isEmailAuth, emailContext, address, isNFTHolder, refreshCredits, setCreditsManually, setGeneratedImage, setCurrentGeneration, isPaused]);
+  }, [queue, prompt, selectedStyle, multiImageModel, availableCredits, address, isNFTHolder, refreshCredits, setCreditsManually, setGeneratedImage, setCurrentGeneration, isPaused]);
 
   // Pause/Resume
   const togglePause = useCallback(() => {
@@ -372,7 +357,7 @@ const GenerationQueue: React.FC<GenerationQueueProps> = ({ onShowStripePayment }
   const failedCount = queue.filter(i => i.status === 'failed').length;
   const processingItem = queue.find(i => i.status === 'processing');
 
-  const isAuthenticated = isConnected || isEmailAuth;
+  const isAuthenticated = isConnected;
 
   // Batch pricing: base cost per image + 15% convenience premium
   const BATCH_PREMIUM = 0.15; // 15% premium for batch convenience

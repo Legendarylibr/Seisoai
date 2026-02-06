@@ -15,7 +15,7 @@ import {
   optimizePromptForFluxEdit,
   optimizePromptForNanoBananaEdit,
   optimizePromptForMusic 
-} from './generate';
+} from '../services/promptOptimizer';
 
 // System prompt for the chat assistant - optimized for Claude 3 Haiku
 const SYSTEM_PROMPT = `You are a creative AI assistant for SeisoAI. Generate images, videos, and music.

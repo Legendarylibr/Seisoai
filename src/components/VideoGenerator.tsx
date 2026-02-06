@@ -10,7 +10,6 @@
  * - components/video/VideoControls.tsx (playback controls)
  */
 import React, { useState, useRef, useCallback, memo, useEffect, ReactNode, ChangeEvent } from 'react';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { generateVideo } from '../services/videoService';
 import { addGeneration } from '../services/galleryService';
@@ -359,11 +358,9 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
   onModelChange,
   onGenerationModeChange 
 }) {
-  const emailContext = useEmailAuth();
   const walletContext = useSimpleWallet();
   
-  const isEmailAuth = emailContext.isAuthenticated;
-  const isConnected = isEmailAuth || walletContext.isConnected;
+  const isConnected = walletContext.isConnected;
   
   // State
   const [generationMode, setGenerationMode] = useState<string>('text-to-video');
@@ -570,8 +567,8 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
             audio_url: audioUrl,
             expression_scale: 1.0,
             walletAddress: walletContext.address,
-            userId: emailContext.userId,
-            email: emailContext.email
+            userId: undefined,
+            email: undefined
           })
         });
         
@@ -598,32 +595,30 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
           generationMode: generationMode as 'text-to-video' | 'image-to-video' | 'first-last-frame',
           quality: quality as 'fast' | 'quality',
           model: model as 'veo' | 'ltx',
-          userId: emailContext.userId ?? undefined,
+          userId: undefined,
           walletAddress: walletContext.address ?? undefined,
-          email: emailContext.email ?? undefined
+          email: undefined
         });
       }
 
       setGeneratedVideoUrl(result.videoUrl);
       
       // Refresh credits
-      if (isEmailAuth && emailContext.refreshCredits) {
-        emailContext.refreshCredits();
-      } else if (walletContext.fetchCredits && walletContext.address) {
+      if (walletContext.fetchCredits && walletContext.address) {
         walletContext.fetchCredits(walletContext.address, 3, true);
       }
       
       // Save to gallery (non-blocking)
       const creditsUsed = result.creditsDeducted || (isLipSyncMode ? 3 : calculateVideoCredits(duration, generateAudio, quality, model));
-      const identifier = isEmailAuth ? emailContext.userId : walletContext.address;
+      const identifier = walletContext.address;
       if (identifier) {
         addGeneration(identifier, {
           prompt: prompt.trim() || (isLipSyncMode ? 'Lip Sync' : 'Video generation'),
           style: `${currentMode.label}${isLipSyncMode ? '' : ` - ${quality === 'quality' ? 'Quality' : 'Fast'}`}`,
           videoUrl: result.videoUrl,
           creditsUsed: creditsUsed,
-          userId: isEmailAuth ? emailContext.userId : undefined,
-          email: isEmailAuth ? emailContext.email : undefined
+          userId: undefined,
+          email: undefined
         }).catch(e => logger.debug('Gallery save failed', { error: e.message }));
       }
       
@@ -638,7 +633,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
     } finally {
       setIsGenerating(false);
     }
-  }, [canGenerate, prompt, firstFrameUrl, lastFrameUrl, audioUrl, aspectRatio, duration, resolution, generateAudio, generationMode, quality, model, currentMode, emailContext, walletContext, isEmailAuth, isLipSyncMode]);
+  }, [canGenerate, prompt, firstFrameUrl, lastFrameUrl, audioUrl, aspectRatio, duration, resolution, generateAudio, generationMode, quality, model, currentMode, walletContext, isLipSyncMode]);
 
   const handleDownload = useCallback(async () => {
     if (!generatedVideoUrl) return;
@@ -1049,9 +1044,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
                 }}
                 onCreditsEarned={() => {
                   // Refresh credits after earning
-                  if (isEmailAuth && emailContext.refreshCredits) {
-                    emailContext.refreshCredits();
-                  } else if (walletContext.fetchCredits && walletContext.address) {
+                  if (walletContext.fetchCredits && walletContext.address) {
                     walletContext.fetchCredits(walletContext.address, 3, true);
                   }
                 }}

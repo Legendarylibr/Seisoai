@@ -1,7 +1,6 @@
 import React, { useState, useEffect, memo, ReactNode, ChangeEvent } from 'react';
 import { useImageGenerator } from '../contexts/ImageGeneratorContext';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { generateImage } from '../services/smartImageService';
 import { extractLayers } from '../services/layerExtractionService';
 import { addGeneration } from '../services/galleryService';
@@ -42,9 +41,7 @@ const ImageOutput: React.FC = () => {
   } = useImageGenerator();
 
   const { isConnected, address, credits, isNFTHolder, refreshCredits, setCreditsManually } = useSimpleWallet();
-  const emailContext = useEmailAuth();
-  const isEmailAuth = emailContext.isAuthenticated;
-  const availableCredits = isEmailAuth ? (emailContext.credits ?? 0) : (credits ?? 0);
+  const availableCredits = credits ?? 0;
   
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [isRegenerating, setIsRegenerating] = useState<boolean>(false);
@@ -69,7 +66,7 @@ const ImageOutput: React.FC = () => {
     const img = imagesToDisplay[0];
     if (!img || isUpscaling) return;
     
-    const isAuthenticated = isConnected || isEmailAuth;
+    const isAuthenticated = isConnected;
     if (!isAuthenticated) {
       setError('Please sign in to upscale images');
       return;
@@ -99,9 +96,7 @@ const ImageOutput: React.FC = () => {
         body: JSON.stringify({
           image_url: img,
           scale,
-          walletAddress: isEmailAuth ? undefined : address,
-          userId: isEmailAuth ? emailContext.userId : undefined,
-          email: isEmailAuth ? emailContext.email : undefined
+          walletAddress: address
         })
       });
 
@@ -122,9 +117,7 @@ const ImageOutput: React.FC = () => {
         // Update credits
         if (data.remainingCredits !== undefined) {
           const validated = Math.max(0, Math.floor(Number(data.remainingCredits) || 0));
-          if (isEmailAuth && emailContext.setCreditsManually) {
-            emailContext.setCreditsManually(validated);
-          } else if (setCreditsManually) {
+          if (setCreditsManually) {
             setCreditsManually(validated);
           }
         }
@@ -201,9 +194,7 @@ const ImageOutput: React.FC = () => {
           numImages: currentGeneration.numImages || numImages,
           enableSafetyChecker: currentGeneration.enableSafetyChecker || enableSafetyChecker,
           generationMode: currentGeneration.generationMode || generationMode,
-          walletAddress: isEmailAuth ? null : address,
-          userId: isEmailAuth ? emailContext.userId : null,
-          email: isEmailAuth ? emailContext.email : null,
+          walletAddress: address,
           isNFTHolder: isNFTHolder || false
         },
         currentGeneration.referenceImage ?? null
@@ -233,8 +224,8 @@ const ImageOutput: React.FC = () => {
       return;
     }
     
-    const isAuthenticated = isConnected || isEmailAuth;
-    if (!isAuthenticated || !(isEmailAuth ? emailContext.userId : address)) {
+    const isAuthenticated = isConnected;
+    if (!isAuthenticated || !address) {
       setError('Please sign in first');
       return;
     }
@@ -271,9 +262,7 @@ const ImageOutput: React.FC = () => {
         result = await extractLayers(singleRefImage, {
           prompt: trimmedPrompt || undefined,
           num_layers: 4,
-          walletAddress: isEmailAuth ? null : address,
-          userId: isEmailAuth ? emailContext.userId : null,
-          email: isEmailAuth ? emailContext.email : null
+          walletAddress: address
         });
       } else {
         result = await generateImage(
@@ -286,9 +275,7 @@ const ImageOutput: React.FC = () => {
             enableSafetyChecker: currentGeneration?.enableSafetyChecker || enableSafetyChecker,
             generationMode: currentGeneration?.generationMode || generationMode,
             multiImageModel: selectedModel || multiImageModel,
-            walletAddress: isEmailAuth ? null : address,
-            userId: isEmailAuth ? emailContext.userId : null,
-            email: isEmailAuth ? emailContext.email : null,
+            walletAddress: address,
             isNFTHolder: isNFTHolder || false,
             optimizePrompt: optimizePromptEnabled
           },
@@ -307,7 +294,7 @@ const ImageOutput: React.FC = () => {
       if (!imageUrls?.length || !imageUrls[0]) throw new Error('No image returned');
       
       // Save and deduct credits
-      const userIdentifier = isEmailAuth ? emailContext.userId : (address ?? '');
+      const userIdentifier = address ?? '';
       // 20% above cost pricing
       const modelUsed = selectedModel || multiImageModel || 'flux';
       const creditsUsed = getCreditsForModel(modelUsed);
@@ -318,19 +305,15 @@ const ImageOutput: React.FC = () => {
           prompt: promptForHistory,
           style: currentGeneration?.style?.name || 'No Style',
           imageUrl: imageUrls[0],
-          creditsUsed,
-          userId: isEmailAuth ? emailContext.userId : undefined,
-          email: isEmailAuth ? emailContext.email : undefined
+          creditsUsed
         });
         
         if (deductResult?.remainingCredits !== undefined) {
           const validated = Math.max(0, Math.floor(Number(deductResult.remainingCredits) || 0));
-          if (isEmailAuth && emailContext.setCreditsManually) emailContext.setCreditsManually(validated);
-          else if (setCreditsManually) setCreditsManually(validated);
+          if (setCreditsManually) setCreditsManually(validated);
         }
         
-        if (isEmailAuth && emailContext.refreshCredits) await emailContext.refreshCredits();
-        else if (refreshCredits && address) await refreshCredits();
+        if (refreshCredits && address) await refreshCredits();
       } catch (e) {
         logger.debug('Save/deduct failed', { error: e instanceof Error ? e.message : 'Unknown error' });
       }
@@ -512,7 +495,7 @@ const ImageOutput: React.FC = () => {
     );
   }
   
-  const isNewPromptDisabled = isRegenerating || isGenerating || (!isConnected && !isEmailAuth) || !currentGeneration || availableCredits <= 0;
+  const isNewPromptDisabled = isRegenerating || isGenerating || !isConnected || !currentGeneration || availableCredits <= 0;
 
   return (
     <div 
@@ -671,9 +654,7 @@ const ImageOutput: React.FC = () => {
             }}
             onCreditsEarned={() => {
               // Refresh credits after earning
-              if (isEmailAuth && emailContext.refreshCredits) {
-                emailContext.refreshCredits();
-              } else if (refreshCredits && address) {
+              if (refreshCredits && address) {
                 refreshCredits();
               }
             }}

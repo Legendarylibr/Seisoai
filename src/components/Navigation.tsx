@@ -50,7 +50,7 @@ interface Tab {
   icon: LucideIcon;
 }
 
-interface Win95NavButtonProps {
+interface Win95NavButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
@@ -60,12 +60,13 @@ interface Win95NavButtonProps {
 }
 
 // Windows 95 style button component
-const Win95NavButton = memo(function Win95NavButton({ children, onClick, disabled, active, className = '', title }: Win95NavButtonProps) {
+const Win95NavButton = memo(function Win95NavButton({ children, onClick, disabled, active, className = '', title, ...rest }: Win95NavButtonProps) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       title={title}
+      {...rest}
       className={`flex items-center gap-2 px-3 py-1.5 transition-none select-none ${className}`}
       style={{
         background: active ? WIN95.bgDark : WIN95.buttonFace,
@@ -234,17 +235,21 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment }: 
           <div className="flex items-center justify-between">
             {/* Desktop Navigation - only show when authenticated and more than 1 tab */}
             {isConnected && tabs.length > 1 && (
-              <nav className="hidden md:flex items-center gap-1">
+              <nav role="tablist" aria-label="Feature tabs" className="hidden md:flex items-center gap-1">
                 {tabs.map((tab) => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
                   return (
                     <Win95NavButton
                       key={tab.id}
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-controls={`tabpanel-${tab.id}`}
+                      id={`tab-${tab.id}`}
                       onClick={() => setActiveTab(tab.id)}
                       active={isActive}
                     >
-                      <Icon className="w-4 h-4" />
+                      <Icon className="w-4 h-4" aria-hidden="true" />
                       <span>{tab.name}</span>
                     </Win95NavButton>
                   );
@@ -661,6 +666,8 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment }: 
       {/* Mobile Tab Bar - visible on small screens when more than 1 tab */}
       {isConnected && tabs.length > 1 && (
         <div 
+          role="tablist"
+          aria-label="Feature tabs"
           className="md:hidden flex items-center overflow-x-auto scrollbar-hide px-1 py-1 gap-0.5"
           style={{ 
             background: WIN95.bg,
@@ -675,6 +682,10 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment }: 
             return (
               <button
                 key={tab.id}
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={`tabpanel-${tab.id}`}
+                id={`tab-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
                 className="flex items-center gap-1 px-2 py-1 flex-shrink-0 transition-none select-none"
                 style={{
@@ -690,7 +701,7 @@ const Navigation = memo(({ activeTab, setActiveTab, tabs, onShowTokenPayment }: 
                   whiteSpace: 'nowrap'
                 }}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>{tab.name}</span>
               </button>
             );

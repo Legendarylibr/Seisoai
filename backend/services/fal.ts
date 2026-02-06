@@ -1,11 +1,52 @@
 /**
  * FAL.ai service
  * Handles AI image/video generation via FAL.ai API
+ * Includes timeout and retry logic for resilience
  */
 import logger from '../utils/logger';
 import config from '../config/env';
 
 const FAL_API_KEY = config.FAL_API_KEY;
+
+// Timeout and retry configuration
+const DEFAULT_TIMEOUT_MS = 30_000; // 30 seconds for most requests
+const QUEUE_SUBMIT_TIMEOUT_MS = 15_000; // 15 seconds for queue submissions
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1_000;
+
+/**
+ * Create an AbortSignal with a timeout
+ */
+function createTimeoutSignal(timeoutMs: number): AbortSignal {
+  return AbortSignal.timeout(timeoutMs);
+}
+
+/**
+ * Sleep for a specified duration (for retry backoff)
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Determine if an error is retryable (transient network/server errors)
+ */
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof Error) {
+    // Timeout errors
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') return true;
+    // Network errors
+    if (error.message.includes('fetch failed') || error.message.includes('ECONNRESET')) return true;
+  }
+  return false;
+}
+
+/**
+ * Determine if an HTTP status is retryable
+ */
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
 
 /**
  * Check if FAL is configured
@@ -22,33 +63,55 @@ export function getFalApiKey(): string | undefined {
 }
 
 /**
- * Make a FAL API request
+ * Make a FAL API request with timeout and retry
  */
 export async function falRequest<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
   if (!FAL_API_KEY) {
     throw new Error('FAL API not configured');
   }
 
-  const response = await fetch(endpoint, {
-    ...options,
-    headers: {
-      'Authorization': `Key ${FAL_API_KEY}`,
-      'Content-Type': 'application/json',
-      ...options.headers
-    }
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    const error = await response.text();
-    logger.error('FAL API request failed', { endpoint, status: response.status, error: error.substring(0, 500) });
-    throw new Error(`FAL API error: ${response.status} - ${error}`);
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(endpoint, {
+        ...options,
+        signal: createTimeoutSignal(DEFAULT_TIMEOUT_MS),
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`,
+          'Content-Type': 'application/json',
+          ...options.headers
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        if (isRetryableStatus(response.status) && attempt < MAX_RETRIES) {
+          logger.warn('FAL API retryable error, retrying', { endpoint, status: response.status, attempt });
+          await sleep(RETRY_DELAY_MS * (attempt + 1));
+          continue;
+        }
+        logger.error('FAL API request failed', { endpoint, status: response.status, error: error.substring(0, 500) });
+        throw new Error(`FAL API error: ${response.status} - ${error}`);
+      }
+
+      return response.json() as Promise<T>;
+    } catch (error) {
+      lastError = error as Error;
+      if (isRetryableError(error) && attempt < MAX_RETRIES) {
+        logger.warn('FAL API transient error, retrying', { endpoint, error: lastError.message, attempt });
+        await sleep(RETRY_DELAY_MS * (attempt + 1));
+        continue;
+      }
+      throw error;
+    }
   }
 
-  return response.json() as Promise<T>;
+  throw lastError || new Error('FAL API request failed after retries');
 }
 
 /**
- * Submit a FAL queue request
+ * Submit a FAL queue request with timeout and retry
  */
 export async function submitToQueue<T = unknown>(model: string, input: Record<string, unknown>): Promise<T> {
   if (!FAL_API_KEY) {
@@ -57,23 +120,44 @@ export async function submitToQueue<T = unknown>(model: string, input: Record<st
   }
 
   const endpoint = `https://queue.fal.run/${model}`;
-  
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Key ${FAL_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(input)
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    const error = await response.text();
-    logger.error('FAL queue submission failed', { model, status: response.status, error: error.substring(0, 500) });
-    throw new Error(`FAL queue error: ${response.status} - ${error}`);
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        signal: createTimeoutSignal(QUEUE_SUBMIT_TIMEOUT_MS),
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(input)
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        if (isRetryableStatus(response.status) && attempt < MAX_RETRIES) {
+          logger.warn('FAL queue submission retryable error', { model, status: response.status, attempt });
+          await sleep(RETRY_DELAY_MS * (attempt + 1));
+          continue;
+        }
+        logger.error('FAL queue submission failed', { model, status: response.status, error: error.substring(0, 500) });
+        throw new Error(`FAL queue error: ${response.status} - ${error}`);
+      }
+
+      return response.json() as Promise<T>;
+    } catch (error) {
+      lastError = error as Error;
+      if (isRetryableError(error) && attempt < MAX_RETRIES) {
+        logger.warn('FAL queue submission transient error', { model, error: lastError.message, attempt });
+        await sleep(RETRY_DELAY_MS * (attempt + 1));
+        continue;
+      }
+      throw error;
+    }
   }
 
-  return response.json() as Promise<T>;
+  throw lastError || new Error('FAL queue submission failed after retries');
 }
 
 /**

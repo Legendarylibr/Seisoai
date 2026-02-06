@@ -5,7 +5,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, ArrowRight, ArrowLeft, Gift, Sparkles, Image, Film, Music, Share2, Check } from 'lucide-react';
 import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
@@ -75,7 +74,6 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
 ];
 
 const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onClose, onComplete }) => {
-  const { isAuthenticated, userId, refreshCredits } = useEmailAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [isCompleting, setIsCompleting] = useState(false);
@@ -83,14 +81,14 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onClose, on
 
   // Check if user has already completed onboarding
   useEffect(() => {
-    if (isOpen && isAuthenticated) {
+    if (isOpen) {
       // Check localStorage for onboarding status
       const completed = localStorage.getItem('onboarding_completed');
       if (completed === 'true') {
         onClose();
       }
     }
-  }, [isOpen, isAuthenticated, onClose]);
+  }, [isOpen, onClose]);
 
   // Navigate to next step
   const nextStep = useCallback(() => {
@@ -115,38 +113,6 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onClose, on
     setIsCompleting(true);
     
     try {
-      // Award completion credits via API
-      if (isAuthenticated && userId) {
-        const csrfToken = await ensureCSRFToken();
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json'
-        };
-        
-        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
-        
-        const token = localStorage.getItem('authToken');
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        
-        const response = await fetch(`${API_URL}/api/user/complete-onboarding`, {
-          method: 'POST',
-          headers,
-          credentials: 'include',
-          body: JSON.stringify({ userId })
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.creditsAwarded) {
-            setTotalCreditsEarned(data.creditsAwarded);
-          }
-          
-          // Refresh credits
-          if (refreshCredits) {
-            await refreshCredits();
-          }
-        }
-      }
-      
       // Mark as completed in localStorage
       localStorage.setItem('onboarding_completed', 'true');
       
@@ -161,7 +127,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onClose, on
     } finally {
       setIsCompleting(false);
     }
-  }, [isAuthenticated, userId, refreshCredits, onComplete, onClose, isCompleting]);
+  }, [onComplete, onClose, isCompleting]);
 
   // Handle step action click
   const handleAction = useCallback(() => {

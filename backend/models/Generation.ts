@@ -4,7 +4,7 @@
  * Includes field-level encryption for prompts (sensitive user content)
  */
 import mongoose from 'mongoose';
-import { encrypt, decrypt, isEncryptionConfigured } from '../utils/encryption.js';
+import { encrypt, decrypt, isEncrypted, isEncryptionConfigured } from '../utils/encryption.js';
 import logger from '../utils/logger.js';
 
 // Types
@@ -84,13 +84,6 @@ generationSchema.index({ createdAt: 1 });
 // DATA MINIMIZATION: Auto-delete generations after 30 days
 // Minimum needed for dispute resolution, then automatically purged
 generationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
-
-// Helper to check if a string is already encrypted (contains our format)
-function isEncrypted(value: string): boolean {
-  if (!value) return false;
-  const parts = value.split(':');
-  return parts.length === 3 && parts[0].length > 10;
-}
 
 // Pre-save hook: Encrypt prompt
 generationSchema.pre('save', function(next) {

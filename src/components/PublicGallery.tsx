@@ -7,7 +7,6 @@ import { Image, Film, Box, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
 import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
 import { API_URL } from '../utils/apiConfig';
 import { copyToClipboard } from '../services/referralService';
-import { useEmailAuth } from '../contexts/EmailAuthContext';
 import logger from '../utils/logger';
 
 interface GalleryItem {
@@ -31,7 +30,6 @@ const PublicGallery: React.FC<PublicGalleryProps> = ({
   limit = 12,
   showHeader = true 
 }) => {
-  const { isAuthenticated: _isAuthenticated } = useEmailAuth();
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
