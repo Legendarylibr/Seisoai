@@ -1,7 +1,7 @@
 /**
  * AgentMarketplace → Agent Builder
  * The app's home — build agents, select capabilities, discover agents, ship with an API key.
- * Follows the same Win95 window/panel/status-bar patterns as VideoGenerator & ChatAssistant.
+ * Enhanced with visual multimodal hero, intuitive agent cards, and robust builder UX.
  */
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import {
@@ -10,7 +10,7 @@ import {
   Image, Film, Music, Mic, Box, Eye, Cpu, Wrench, Code,
   ExternalLink, Terminal, Layers, Activity,
   Play, Globe, Hash,
-  MessageCircle, Sparkles, Grid
+  MessageCircle, Sparkles, Grid, ArrowRight
 } from 'lucide-react';
 import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
@@ -71,6 +71,42 @@ const CATEGORY_META: Record<string, { icon: React.ReactNode; color: string; tab:
   'utility':           { icon: <Wrench size={13} />, color: '#78716c', tab: 'chat' },
   'text-generation':   { icon: <Code size={13} />,   color: '#22d3ee', tab: 'chat' },
 };
+
+// Multimodal capability cards for hero section
+const MULTIMODAL_CARDS = [
+  {
+    id: 'images',
+    icon: <Image size={20} />,
+    label: 'Images',
+    desc: 'Generate & edit with Flux, Flux 2, Nano Banana Pro',
+    gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+    features: ['Text-to-image', 'Image editing', 'Upscaling', '360° panorama'],
+  },
+  {
+    id: 'video',
+    icon: <Film size={20} />,
+    label: 'Video',
+    desc: 'Create videos from text or images',
+    gradient: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+    features: ['Text-to-video', 'Image-to-video', 'Lip sync'],
+  },
+  {
+    id: 'music',
+    icon: <Music size={20} />,
+    label: 'Music & Audio',
+    desc: 'Generate music tracks and sound effects',
+    gradient: 'linear-gradient(135deg, #10b981, #059669)',
+    features: ['Music generation', 'Sound effects', 'Multi-genre'],
+  },
+  {
+    id: 'chat',
+    icon: <MessageCircle size={20} />,
+    label: 'Chat & LLM',
+    desc: 'AI assistant for prompts and planning',
+    gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+    features: ['Prompt lab', 'Creative planning', 'Multi-turn'],
+  },
+];
 
 const font = 'Tahoma, "MS Sans Serif", sans-serif';
 const mono = '"Consolas", "Courier New", monospace';
@@ -149,7 +185,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [capFilter, setCapFilter] = useState('');
 
-  // Capability selector state — init from preferences (exclude workbench, it's always on)
+  // Capability selector state
   const selectableFeatures = useMemo(() => ALL_FEATURES.filter(f => f.id !== 'workbench'), []);
   const [selectedCaps, setSelectedCaps] = useState<Set<string>>(() => {
     const enabled = new Set(preferences.enabledTabs);
@@ -208,7 +244,6 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
     } catch (e) { logger.error('Fetch agents failed', { error: e }); }
   }, [address]);
 
-  // All agents directory
   const [allAgents, setAllAgents] = useState<AgentListItem[]>([]);
   const fetchAllAgents = useCallback(async () => {
     try {
@@ -292,6 +327,19 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
     URL.revokeObjectURL(url);
   }, []);
 
+  // Agent type color mapping
+  const getAgentColor = (type: string) => {
+    const map: Record<string, string> = {
+      'Image Generation': '#6366f1',
+      'Video Generation': '#ec4899',
+      'Music Generation': '#10b981',
+      'Chat/Assistant': '#3b82f6',
+      'Multi-Modal': '#f59e0b',
+      'Custom': '#6b7280',
+    };
+    return map[type] || '#6b7280';
+  };
+
   // ── Loading state ──
   if (isLoading) {
     return (
@@ -320,7 +368,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
         <span className="text-[11px] flex-1">Agent Builder</span>
         <button
           onClick={() => setShowCreator(true)}
-          className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold"
+          className="flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold"
           style={{
             background: 'rgba(255,255,255,0.15)',
             border: '1px solid rgba(255,255,255,0.3)',
@@ -351,6 +399,86 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
 
       {/* ═══ MAIN CONTENT ═══ */}
       <div className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-3 py-2 space-y-1" style={{ background: WIN95.bg }}>
+
+        {/* ── MULTIMODAL HERO ── */}
+        <GroupBox
+          title="Multimodal Capabilities"
+          icon={<Sparkles size={10} style={{ color: WIN95.highlight }} />}
+          actions={
+            <button
+              onClick={() => setShowCreator(true)}
+              className="flex items-center gap-0.5 text-[8px] px-1.5 py-0.5 font-bold generate-btn"
+              style={{ border: 'none', cursor: 'pointer', fontFamily: font }}
+            >
+              <Plus size={8} /> Build Agent
+            </button>
+          }
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-1">
+            {MULTIMODAL_CARDS.map((card) => (
+              <button
+                key={card.id}
+                onClick={() => {
+                  const targetTab = card.id === 'images' ? 'generate' : card.id;
+                  // Auto-enable the tab if not already enabled
+                  const currentTabs = new Set(preferences.enabledTabs);
+                  if (!currentTabs.has(targetTab)) {
+                    currentTabs.add(targetTab);
+                    updatePreference('enabledTabs', Array.from(currentTabs));
+                  }
+                  // Small delay for preferences to propagate
+                  setTimeout(() => onNavigate?.(targetTab), 50);
+                }}
+                className="p-2.5 text-left transition-all group"
+                style={{
+                  background: WIN95.inputBg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontFamily: font,
+                }}
+              >
+                <div
+                  className="w-9 h-9 flex items-center justify-center mb-2"
+                  style={{
+                    background: card.gradient,
+                    color: '#fff',
+                    borderRadius: 6,
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                  }}
+                >
+                  {card.icon}
+                </div>
+                <div className="text-[10px] font-bold mb-0.5" style={{ color: WIN95.text }}>
+                  {card.label}
+                </div>
+                <div className="text-[8px] line-clamp-2" style={{ color: WIN95.textDisabled }}>
+                  {card.desc}
+                </div>
+                <div className="flex flex-wrap gap-0.5 mt-1.5">
+                  {card.features.slice(0, 2).map((f) => (
+                    <span key={f} className="px-1 py-0.5 text-[7px]" style={{
+                      background: WIN95.bgDark,
+                      color: WIN95.textDisabled,
+                    }}>
+                      {f}
+                    </span>
+                  ))}
+                  {card.features.length > 2 && (
+                    <span className="text-[7px] px-0.5" style={{ color: WIN95.textDisabled }}>
+                      +{card.features.length - 2}
+                    </span>
+                  )}
+                </div>
+                {/* Try it arrow */}
+                <div className="flex items-center gap-0.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: WIN95.highlight }}>
+                  <span className="text-[8px] font-bold">Try it</span>
+                  <ArrowRight size={8} />
+                </div>
+              </button>
+            ))}
+          </div>
+        </GroupBox>
 
         {/* ── BUILD YOUR UI ── */}
         <GroupBox
@@ -429,59 +557,68 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
             </div>
           ) : customAgents.length === 0 ? (
             <div className="py-4 text-center">
-              <div className="inline-flex items-center justify-center w-10 h-10 mb-2" style={{
+              <div className="inline-flex items-center justify-center w-12 h-12 mb-2" style={{
                 ...PANEL.sunken,
                 borderRadius: 0,
               }}>
-                <Bot size={20} style={{ color: WIN95.textDisabled }} />
+                <Bot size={24} style={{ color: WIN95.textDisabled }} />
               </div>
-              <p className="text-[10px] font-bold mb-0.5" style={{ color: WIN95.text }}>No agents yet</p>
-              <p className="text-[9px] mb-2.5 max-w-xs mx-auto" style={{ color: WIN95.textDisabled }}>
-                Create an agent to bundle capabilities, generate a SKILL.md, and export it for use in any framework.
+              <p className="text-[11px] font-bold mb-0.5" style={{ color: WIN95.text }}>No agents yet</p>
+              <p className="text-[9px] mb-3 max-w-xs mx-auto" style={{ color: WIN95.textDisabled }}>
+                Build multimodal AI agents with image, video, music, and chat capabilities. Export as SKILL.md for Cursor or integrate via API.
               </p>
               <button
                 onClick={() => setShowCreator(true)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold generate-btn"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-[11px] font-bold generate-btn"
                 style={{ border: 'none', cursor: 'pointer', fontFamily: font }}
               >
-                <Plus size={10} /> Build Your First Agent
+                <Plus size={11} /> Build Your First Agent
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mt-1">
-              {customAgents.map(agent => (
-                <div key={agent.agentId} className="p-2 flex items-start gap-2" style={PANEL.sunken}>
-                  <div className="w-7 h-7 flex items-center justify-center flex-shrink-0" style={{
-                    background: WIN95.highlight,
-                    color: WIN95.highlightText,
-                  }}>
-                    <Bot size={14} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] font-bold truncate" style={{ color: WIN95.text }}>{agent.name}</span>
-                      <span className="text-[8px] px-1 flex-shrink-0" style={{ background: WIN95.bgDark, color: WIN95.textDisabled }}>{agent.type}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+              {customAgents.map(agent => {
+                const agentColor = getAgentColor(agent.type);
+                return (
+                  <div key={agent.agentId} className="p-2.5 flex items-start gap-2.5" style={PANEL.sunken}>
+                    <div className="w-9 h-9 flex items-center justify-center flex-shrink-0" style={{
+                      background: agentColor,
+                      color: '#fff',
+                      borderRadius: 4,
+                    }}>
+                      <Bot size={16} />
                     </div>
-                    <p className="text-[9px] mt-0.5 line-clamp-1" style={{ color: WIN95.textDisabled }}>{agent.description}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>
-                        <Hash size={7} className="inline" /> {agent.tools?.length || 0} tools
-                      </span>
-                      <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>&middot; {relTime(agent.createdAt)}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold truncate" style={{ color: WIN95.text }}>{agent.name}</span>
+                        <span className="text-[8px] px-1 flex-shrink-0" style={{
+                          background: agentColor,
+                          color: '#fff',
+                        }}>
+                          {agent.type}
+                        </span>
+                      </div>
+                      <p className="text-[9px] mt-0.5 line-clamp-1" style={{ color: WIN95.textDisabled }}>{agent.description}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>
+                          <Hash size={7} className="inline" /> {agent.tools?.length || 0} tools
+                        </span>
+                        <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>&middot; {relTime(agent.createdAt)}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex flex-col gap-0.5 flex-shrink-0">
-                    {agent.skillMd && (
-                      <button onClick={() => handleDownloadSkill(agent)} className="p-1" style={BTN.small} title="Export SKILL.md" {...hoverHandlers}>
-                        <Download size={9} />
+                    <div className="flex flex-col gap-0.5 flex-shrink-0">
+                      {agent.skillMd && (
+                        <button onClick={() => handleDownloadSkill(agent)} className="p-1" style={BTN.small} title="Export SKILL.md" {...hoverHandlers}>
+                          <Download size={9} />
+                        </button>
+                      )}
+                      <button onClick={() => handleDeleteAgent(agent.agentId)} className="p-1" style={BTN.small} title="Delete agent" {...hoverHandlers}>
+                        <Trash2 size={9} style={{ color: WIN95.errorText }} />
                       </button>
-                    )}
-                    <button onClick={() => handleDeleteAgent(agent.agentId)} className="p-1" style={BTN.small} title="Delete agent" {...hoverHandlers}>
-                      <Trash2 size={9} style={{ color: WIN95.errorText }} />
-                    </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </GroupBox>
@@ -517,14 +654,13 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
                 const isOpen = expandedCat === cat;
                 return (
                   <div key={cat}>
-                    {/* Category header */}
                     <button
                       onClick={() => setExpandedCat(isOpen ? null : cat)}
                       className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left group"
                       style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: font }}
                     >
                       <span className="flex items-center justify-center w-5 h-5 flex-shrink-0"
-                        style={{ background: meta.color, color: '#fff', fontSize: 0 }}>
+                        style={{ background: meta.color, color: '#fff', fontSize: 0, borderRadius: 3 }}>
                         {meta.icon}
                       </span>
                       <span className="flex-1 text-[10px] font-bold" style={{ color: WIN95.text }}>
@@ -533,6 +669,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
                       <span className="text-[8px] font-bold px-1.5 py-0.5" style={{
                         background: isOpen ? WIN95.highlight : WIN95.bgDark,
                         color: isOpen ? WIN95.highlightText : WIN95.textDisabled,
+                        borderRadius: 2,
                       }}>
                         {catTools.length}
                       </span>
@@ -543,7 +680,6 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
                       }} />
                     </button>
 
-                    {/* Expanded tool list */}
                     {isOpen && (
                       <div className="ml-2 mr-1 mb-1 border-l-2 pl-2 space-y-0.5"
                         style={{ borderColor: meta.color }}>
@@ -564,7 +700,14 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
                               {copied === tool.id ? <Check size={9} style={{ color: WIN95.successText }} /> : <Copy size={9} />}
                             </button>
                             {onNavigate && meta.tab && (
-                              <button onClick={() => onNavigate(meta.tab)}
+                              <button onClick={() => {
+                                const currentTabs = new Set(preferences.enabledTabs);
+                                if (!currentTabs.has(meta.tab)) {
+                                  currentTabs.add(meta.tab);
+                                  updatePreference('enabledTabs', Array.from(currentTabs));
+                                }
+                                setTimeout(() => onNavigate(meta.tab), 50);
+                              }}
                                 className="p-0.5 flex-shrink-0" style={{ ...BTN.small, cursor: 'pointer' }}
                                 title="Try it" {...hoverHandlers}>
                                 <Play size={9} style={{ color: meta.color }} />
@@ -594,11 +737,12 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
             <div className="space-y-1 mt-1">
               {allAgents.map(agent => (
                 <div key={agent.agentId} className="flex items-center gap-2 px-2 py-1.5" style={PANEL.sunken}>
-                  <div className="w-6 h-6 flex items-center justify-center flex-shrink-0" style={{
-                    background: WIN95.highlight,
-                    color: WIN95.highlightText,
+                  <div className="w-7 h-7 flex items-center justify-center flex-shrink-0" style={{
+                    background: getAgentColor(agent.type),
+                    color: '#fff',
+                    borderRadius: 3,
                   }}>
-                    <Bot size={12} />
+                    <Bot size={14} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1">
@@ -664,7 +808,6 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
             </div>
           ) : (
             <div className="space-y-1.5 mt-1">
-              {/* New key form */}
               {showNewKey && (
                 <div className="flex items-center gap-1.5 p-1.5" style={{
                   background: WIN95.inputBg,
@@ -693,7 +836,6 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
                 </div>
               )}
 
-              {/* Created key alert */}
               {createdKeyRaw && (
                 <div className="p-2" style={{ background: WIN95.bg, border: `2px solid ${WIN95.successText}` }}>
                   <div className="flex items-center gap-1 mb-1">
@@ -718,7 +860,6 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
                 </div>
               )}
 
-              {/* Key list */}
               {activeKeys.length === 0 && !showNewKey && (
                 <p className="text-[9px] py-1 text-center" style={{ color: WIN95.textDisabled }}>No API keys — create one to get started</p>
               )}
@@ -792,7 +933,12 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
       {/* ═══ AGENT CREATOR MODAL ═══ */}
       {showCreator && (
         <Suspense fallback={null}>
-          <AgentCreator isOpen={showCreator} onClose={() => setShowCreator(false)} onCreated={() => fetchCustomAgents()} />
+          <AgentCreator 
+            isOpen={showCreator} 
+            onClose={() => setShowCreator(false)} 
+            onCreated={() => fetchCustomAgents()} 
+            onNavigate={onNavigate}
+          />
         </Suspense>
       )}
     </div>
