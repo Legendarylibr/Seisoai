@@ -8,10 +8,27 @@ import { useSimpleWallet } from './SimpleWalletContext';
 import logger from '../utils/logger';
 import { API_URL } from '../utils/apiConfig';
 
+// All available features/tabs the user can enable
+export const ALL_FEATURES = [
+  { id: 'chat', label: 'Chat AI', description: 'Conversational AI assistant', icon: 'MessageCircle' },
+  { id: 'generate', label: 'Image Gen', description: 'Generate images with AI', icon: 'Sparkles' },
+  { id: 'batch', label: 'Batch', description: 'Generate multiple images at once', icon: 'Layers' },
+  { id: 'video', label: 'Video', description: 'Create AI videos', icon: 'Film' },
+  { id: 'music', label: 'Music', description: 'Generate music and audio', icon: 'Music' },
+  { id: 'training', label: 'Training', description: 'Train custom LoRA models', icon: 'Cpu' },
+  { id: 'marketplace', label: 'Agents', description: 'Agent marketplace and API keys', icon: 'Bot' },
+  { id: 'gallery', label: 'Gallery', description: 'Browse and manage generations', icon: 'Grid' },
+] as const;
+
+export const ALL_TAB_IDS = ALL_FEATURES.map((f) => f.id);
+
 export interface UserPreferences {
   // Theme
   theme: 'system' | 'light' | 'dark' | 'high-contrast';
   accentColor: string;
+
+  // UI — which features/tabs are visible
+  enabledTabs: string[];
 
   // Generation defaults
   defaultModel: string | null;
@@ -24,17 +41,22 @@ export interface UserPreferences {
 
   // Language
   language: 'en' | 'ja' | 'zh';
+
+  // Whether the user has completed the profile setup
+  profileCompleted: boolean;
 }
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   theme: 'system',
   accentColor: '#000080', // Win95 blue
+  enabledTabs: [...ALL_TAB_IDS], // all enabled by default
   defaultModel: null,
   defaultStyle: null,
   defaultAspectRatio: '1:1',
   defaultOptimizePrompt: false,
   defaultTab: 'chat',
   language: 'en',
+  profileCompleted: false,
 };
 
 const STORAGE_KEY = 'seiso_preferences';

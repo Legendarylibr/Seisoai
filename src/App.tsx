@@ -147,7 +147,7 @@ function AppContentInner(): JSX.Element {
   const [activeTab, setActiveTab] = useState(preferences.defaultTab || 'chat');
   const { t } = useLanguage();
 
-  const tabs: Tab[] = [
+  const allTabs: Tab[] = [
     { id: 'chat', name: t.nav.chat, icon: MessageCircle },
     { id: 'generate', name: t.nav.image, icon: Sparkles },
     { id: 'batch', name: t.nav.batch, icon: Layers },
@@ -159,6 +159,17 @@ function AppContentInner(): JSX.Element {
     { id: 'marketplace', name: 'Agents', icon: Bot },
     { id: 'gallery', name: t.nav.gallery, icon: Grid }
   ];
+
+  // Filter tabs to only show user-enabled features
+  const enabledSet = new Set(preferences.enabledTabs);
+  const tabs = allTabs.filter((tab) => enabledSet.has(tab.id));
+
+  // If current activeTab was disabled, switch to the first enabled tab
+  useEffect(() => {
+    if (tabs.length > 0 && !enabledSet.has(activeTab)) {
+      setActiveTab(tabs[0].id);
+    }
+  }, [preferences.enabledTabs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <ImageGeneratorProvider

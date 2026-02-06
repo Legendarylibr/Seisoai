@@ -1,14 +1,22 @@
 /**
  * SettingsPanel — Win95 modal for user preferences
- * Theme, generation defaults, agent settings
+ * Features toggle, theme, generation defaults, agent settings
  */
-import { useState, memo } from 'react';
-import { Settings, X, Monitor, Sun, Moon, Eye, RotateCcw, Palette, Sliders, Bot } from 'lucide-react';
+import { useState, useCallback, memo } from 'react';
+import {
+  Settings, X, Monitor, Sun, Moon, Eye, RotateCcw, Palette, Sliders, Bot,
+  MessageCircle, Sparkles, Layers, Film, Music, Cpu, Grid, LayoutGrid
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { WIN95, BTN, hoverHandlers } from '../utils/buttonStyles';
-import { useUserPreferences, ACCENT_COLORS } from '../contexts/UserPreferencesContext';
+import { useUserPreferences, ACCENT_COLORS, ALL_FEATURES } from '../contexts/UserPreferencesContext';
 import { useLanguage } from '../i18n';
 
 const font = 'Tahoma, "MS Sans Serif", sans-serif';
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  MessageCircle, Sparkles, Layers, Film, Music, Cpu, Bot, Grid,
+};
 
 const THEMES = [
   { id: 'system' as const, label: 'System', icon: Monitor, description: 'Follow OS setting' },
@@ -32,27 +40,31 @@ const ASPECT_RATIOS = [
   { id: '3:4', label: '3:4 Tall' },
 ];
 
-const TABS_LIST = [
-  { id: 'chat', label: 'Chat' },
-  { id: 'generate', label: 'Image' },
-  { id: 'batch', label: 'Batch' },
-  { id: 'video', label: 'Video' },
-  { id: 'music', label: 'Music' },
-  { id: 'training', label: 'Training' },
-  { id: 'marketplace', label: 'Agents' },
-  { id: 'gallery', label: 'Gallery' },
-];
-
-type SettingsTab = 'appearance' | 'generation' | 'agent';
+type SettingsTab = 'features' | 'appearance' | 'generation' | 'agent';
 
 const SettingsPanel = memo(function SettingsPanel() {
   const { preferences, updatePreference, resetDefaults, isSettingsOpen, closeSettings } = useUserPreferences();
   const { setLanguage } = useLanguage();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('features');
+
+  const toggleTab = useCallback((tabId: string) => {
+    const current = preferences.enabledTabs;
+    if (current.includes(tabId)) {
+      if (current.length <= 1) return;
+      updatePreference('enabledTabs', current.filter((t) => t !== tabId));
+      if (preferences.defaultTab === tabId) {
+        const remaining = current.filter((t) => t !== tabId);
+        updatePreference('defaultTab', remaining[0]);
+      }
+    } else {
+      updatePreference('enabledTabs', [...current, tabId]);
+    }
+  }, [preferences.enabledTabs, preferences.defaultTab, updatePreference]);
 
   if (!isSettingsOpen) return null;
 
   const settingsTabs = [
+    { id: 'features' as const, label: 'Features', icon: <LayoutGrid size={12} /> },
     { id: 'appearance' as const, label: 'Appearance', icon: <Palette size={12} /> },
     { id: 'generation' as const, label: 'Defaults', icon: <Sliders size={12} /> },
     { id: 'agent' as const, label: 'Agent', icon: <Bot size={12} /> },
@@ -65,7 +77,7 @@ const SettingsPanel = memo(function SettingsPanel() {
       onClick={(e) => { if (e.target === e.currentTarget) closeSettings(); }}
     >
       <div
-        className="w-full max-w-md max-h-[80vh] flex flex-col win95-window-open"
+        className="w-full max-w-md max-h-[85vh] flex flex-col win95-window-open"
         style={{
           background: WIN95.bg,
           boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}, 4px 4px 8px rgba(0,0,0,0.4)`,
@@ -74,11 +86,7 @@ const SettingsPanel = memo(function SettingsPanel() {
         {/* Title Bar */}
         <div
           className="flex items-center gap-2 px-3 py-2 flex-shrink-0"
-          style={{
-            background: 'var(--win95-active-title)',
-            color: '#ffffff',
-            fontFamily: font,
-          }}
+          style={{ background: 'var(--win95-active-title)', color: '#ffffff', fontFamily: font }}
         >
           <Settings className="w-4 h-4" />
           <span className="text-[12px] font-bold flex-1">Settings</span>
@@ -88,9 +96,7 @@ const SettingsPanel = memo(function SettingsPanel() {
             style={{
               background: WIN95.buttonFace,
               boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
-              color: WIN95.text,
-              border: 'none',
-              cursor: 'pointer',
+              color: WIN95.text, border: 'none', cursor: 'pointer',
             }}
           >
             <X className="w-3 h-3" />
@@ -98,21 +104,19 @@ const SettingsPanel = memo(function SettingsPanel() {
         </div>
 
         {/* Tab Bar */}
-        <div className="flex gap-0 px-2 pt-1 flex-shrink-0">
+        <div className="flex gap-0 px-2 pt-1 flex-shrink-0 overflow-x-auto">
           {settingsTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className="flex items-center gap-1 px-3 py-1 text-[11px] font-bold"
+              className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold whitespace-nowrap"
               style={{
                 background: activeTab === tab.id ? WIN95.bg : WIN95.bgDark,
                 color: activeTab === tab.id ? WIN95.text : WIN95.textDisabled,
                 boxShadow: activeTab === tab.id
                   ? `inset 1px 1px 0 ${WIN95.border.light}, inset -1px 0 0 ${WIN95.border.darker}`
                   : `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
-                border: 'none',
-                cursor: 'pointer',
-                fontFamily: font,
+                border: 'none', cursor: 'pointer', fontFamily: font,
                 marginBottom: activeTab === tab.id ? '-1px' : '0',
               }}
             >
@@ -124,6 +128,66 @@ const SettingsPanel = memo(function SettingsPanel() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 min-h-0">
+
+          {/* ===== FEATURES TAB ===== */}
+          {activeTab === 'features' && (
+            <div className="space-y-4">
+              <p className="text-[10px]" style={{ fontFamily: font, color: WIN95.textDisabled }}>
+                Toggle which features appear in your toolbar. Double-click any feature to set it as your home page.
+              </p>
+
+              <div className="grid grid-cols-2 gap-2">
+                {ALL_FEATURES.map((feature) => {
+                  const enabled = preferences.enabledTabs.includes(feature.id);
+                  const isDefault = preferences.defaultTab === feature.id;
+                  const Icon = ICON_MAP[feature.icon] || Bot;
+                  return (
+                    <button
+                      key={feature.id}
+                      onClick={() => toggleTab(feature.id)}
+                      onDoubleClick={() => {
+                        if (!preferences.enabledTabs.includes(feature.id)) {
+                          updatePreference('enabledTabs', [...preferences.enabledTabs, feature.id]);
+                        }
+                        updatePreference('defaultTab', feature.id);
+                      }}
+                      className="p-2.5 text-left flex items-start gap-2"
+                      style={{
+                        background: enabled ? 'var(--win95-info-green)' : WIN95.inputBg,
+                        boxShadow: enabled
+                          ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
+                          : `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                        border: 'none', cursor: 'pointer', fontFamily: font,
+                        opacity: enabled ? 1 : 0.6,
+                      }}
+                    >
+                      <Icon
+                        className="w-4 h-4 flex-shrink-0 mt-0.5"
+                        style={{ color: enabled ? 'var(--win95-success-text)' : WIN95.textDisabled }}
+                      />
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-bold flex items-center gap-1" style={{ color: WIN95.text }}>
+                          {feature.label}
+                          {isDefault && (
+                            <span className="text-[8px] px-1 py-0" style={{ background: WIN95.bgDark, color: WIN95.highlightText }}>HOME</span>
+                          )}
+                        </div>
+                        <div className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                          {feature.description}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="text-[9px]" style={{ fontFamily: font, color: WIN95.textDisabled }}>
+                {preferences.enabledTabs.length}/{ALL_FEATURES.length} features enabled. At least one must stay on.
+              </p>
+            </div>
+          )}
+
+          {/* ===== APPEARANCE TAB ===== */}
           {activeTab === 'appearance' && (
             <div className="space-y-5">
               {/* Theme */}
@@ -145,9 +209,7 @@ const SettingsPanel = memo(function SettingsPanel() {
                           boxShadow: isActive
                             ? `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`
                             : `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
-                          border: 'none',
-                          cursor: 'pointer',
-                          fontFamily: font,
+                          border: 'none', cursor: 'pointer', fontFamily: font,
                         }}
                       >
                         <div className="flex items-center gap-2">
@@ -177,8 +239,7 @@ const SettingsPanel = memo(function SettingsPanel() {
                         boxShadow: preferences.accentColor === color.value
                           ? `0 0 0 2px ${WIN95.text}, inset 1px 1px 0 rgba(255,255,255,0.3)`
                           : `inset 1px 1px 0 rgba(255,255,255,0.3), inset -1px -1px 0 rgba(0,0,0,0.3)`,
-                        border: 'none',
-                        cursor: 'pointer',
+                        border: 'none', cursor: 'pointer',
                       }}
                       title={color.name}
                     >
@@ -212,9 +273,7 @@ const SettingsPanel = memo(function SettingsPanel() {
                         ...(preferences.language === lang.id
                           ? { background: WIN95.bgDark, color: WIN95.highlightText, boxShadow: `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}` }
                           : BTN.base),
-                        fontFamily: font,
-                        border: 'none',
-                        cursor: 'pointer',
+                        fontFamily: font, border: 'none', cursor: 'pointer',
                       }}
                     >
                       {lang.flag} {lang.label}
@@ -225,9 +284,9 @@ const SettingsPanel = memo(function SettingsPanel() {
             </div>
           )}
 
+          {/* ===== GENERATION DEFAULTS TAB ===== */}
           {activeTab === 'generation' && (
             <div className="space-y-5">
-              {/* Default Model */}
               <div>
                 <label className="block text-[11px] font-bold mb-1" style={{ fontFamily: font, color: WIN95.text }}>
                   Default Image Model
@@ -239,10 +298,7 @@ const SettingsPanel = memo(function SettingsPanel() {
                   style={{
                     background: WIN95.inputBg,
                     boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
-                    border: 'none',
-                    color: WIN95.text,
-                    fontFamily: font,
-                    outline: 'none',
+                    border: 'none', color: WIN95.text, fontFamily: font, outline: 'none',
                   }}
                 >
                   {MODELS.map((m) => (
@@ -251,7 +307,6 @@ const SettingsPanel = memo(function SettingsPanel() {
                 </select>
               </div>
 
-              {/* Default Aspect Ratio */}
               <div>
                 <label className="block text-[11px] font-bold mb-2" style={{ fontFamily: font, color: WIN95.text }}>
                   Default Aspect Ratio
@@ -266,9 +321,7 @@ const SettingsPanel = memo(function SettingsPanel() {
                         ...(preferences.defaultAspectRatio === ar.id
                           ? { background: WIN95.bgDark, color: WIN95.highlightText, boxShadow: `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}` }
                           : BTN.base),
-                        fontFamily: font,
-                        border: 'none',
-                        cursor: 'pointer',
+                        fontFamily: font, border: 'none', cursor: 'pointer',
                       }}
                     >
                       {ar.label}
@@ -277,7 +330,6 @@ const SettingsPanel = memo(function SettingsPanel() {
                 </div>
               </div>
 
-              {/* AI Prompt Optimization */}
               <div>
                 <label
                   className="flex items-center gap-2 cursor-pointer select-none"
@@ -305,9 +357,9 @@ const SettingsPanel = memo(function SettingsPanel() {
             </div>
           )}
 
+          {/* ===== AGENT TAB ===== */}
           {activeTab === 'agent' && (
             <div className="space-y-5">
-              {/* Default Tab */}
               <div>
                 <label className="block text-[11px] font-bold mb-1" style={{ fontFamily: font, color: WIN95.text }}>
                   Default Tab on Launch
@@ -319,19 +371,15 @@ const SettingsPanel = memo(function SettingsPanel() {
                   style={{
                     background: WIN95.inputBg,
                     boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
-                    border: 'none',
-                    color: WIN95.text,
-                    fontFamily: font,
-                    outline: 'none',
+                    border: 'none', color: WIN95.text, fontFamily: font, outline: 'none',
                   }}
                 >
-                  {TABS_LIST.map((t) => (
+                  {ALL_FEATURES.filter((f) => preferences.enabledTabs.includes(f.id)).map((t) => (
                     <option key={t.id} value={t.id}>{t.label}</option>
                   ))}
                 </select>
               </div>
 
-              {/* Agent Personality - Coming Soon */}
               <div
                 className="p-3"
                 style={{
