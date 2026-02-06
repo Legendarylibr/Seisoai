@@ -1,15 +1,17 @@
 /**
- * AgentMarketplace Component
- * Public-facing marketplace page for discovering SeisoAI's AI capabilities
- * Shows all available tools, pricing, API docs, and API key management
+ * AgentMarketplace → Agent Workbench
+ * The app's home — build agents, wire capabilities, ship with an API key.
+ * Follows the same Win95 window/panel/status-bar patterns as VideoGenerator & ChatAssistant.
  */
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import {
-  Bot, Key, Zap, DollarSign, Code, Copy, Check, Plus,
-  Trash2, RefreshCw, ExternalLink, Search, Tag,
-  Image, Film, Music, Mic, Box, Eye, Cpu, Wrench, Download
+  Bot, Key, Zap, Copy, Check, Plus, ChevronDown,
+  Trash2, Download, Shield,
+  Image, Film, Music, Mic, Box, Eye, Cpu, Wrench, Code,
+  ExternalLink, Terminal, Layers, Activity,
+  Play, Globe, Hash
 } from 'lucide-react';
-import { BTN, PANEL, hoverHandlers, WINDOW_TITLE_STYLE, WIN95 } from '../utils/buttonStyles';
+import { BTN, PANEL, WIN95, hoverHandlers, WINDOW_TITLE_STYLE } from '../utils/buttonStyles';
 import { useSimpleWallet } from '../contexts/SimpleWalletContext';
 import { getCustomAgents, deleteCustomAgent } from '../services/agentRegistryService';
 import { API_URL, getAuthToken, ensureCSRFToken } from '../utils/apiConfig';
@@ -17,17 +19,7 @@ import logger from '../utils/logger';
 
 const AgentCreator = lazy(() => import('./AgentCreator'));
 
-// Types
-interface ToolPricing {
-  baseUsd: number;
-  credits: number;
-  perUnit?: {
-    usd: number;
-    credits: number;
-    unitType: string;
-  };
-}
-
+// ── Types ──
 interface ToolSummary {
   id: string;
   name: string;
@@ -35,17 +27,15 @@ interface ToolSummary {
   category: string;
   tags: string[];
   executionMode: 'sync' | 'queue';
-  pricing: ToolPricing;
+  pricing: { baseUsd: number; credits: number; perUnit?: { usd: number; credits: number; unitType: string } };
   enabled: boolean;
   version: string;
 }
-
 interface ApiKeyInfo {
   id: string;
   keyPrefix: string;
   name: string;
   credits: number;
-  totalCreditsLoaded: number;
   totalCreditsSpent: number;
   totalRequests: number;
   active: boolean;
@@ -53,32 +43,6 @@ interface ApiKeyInfo {
   createdAt: string;
   webhookUrl?: string;
 }
-
-interface NewKeyResponse {
-  key: string;
-  keyPrefix: string;
-  name: string;
-  credits: number;
-}
-
-// Category icons
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  'image-generation': <Image size={14} />,
-  'image-editing': <Image size={14} />,
-  'image-processing': <Image size={14} />,
-  'video-generation': <Film size={14} />,
-  'video-editing': <Film size={14} />,
-  'audio-generation': <Mic size={14} />,
-  'audio-processing': <Mic size={14} />,
-  'music-generation': <Music size={14} />,
-  '3d-generation': <Box size={14} />,
-  'vision': <Eye size={14} />,
-  'training': <Cpu size={14} />,
-  'utility': <Wrench size={14} />,
-  'text-generation': <Code size={14} />,
-};
-
-// Custom agent type
 interface CustomAgent {
   agentId: string;
   name: string;
@@ -89,532 +53,408 @@ interface CustomAgent {
   createdAt: string;
 }
 
-const AgentMarketplace: React.FC = () => {
+// ── Constants ──
+const CATEGORY_META: Record<string, { icon: React.ReactNode; color: string; tab: string }> = {
+  'image-generation':  { icon: <Image size={13} />,  color: '#6366f1', tab: 'generate' },
+  'image-editing':     { icon: <Image size={13} />,  color: '#8b5cf6', tab: 'generate' },
+  'image-processing':  { icon: <Image size={13} />,  color: '#a78bfa', tab: 'generate' },
+  'video-generation':  { icon: <Film size={13} />,   color: '#ec4899', tab: 'video' },
+  'video-editing':     { icon: <Film size={13} />,   color: '#f472b6', tab: 'video' },
+  'audio-generation':  { icon: <Mic size={13} />,    color: '#f59e0b', tab: 'chat' },
+  'audio-processing':  { icon: <Mic size={13} />,    color: '#d97706', tab: 'chat' },
+  'music-generation':  { icon: <Music size={13} />,  color: '#10b981', tab: 'music' },
+  '3d-generation':     { icon: <Box size={13} />,    color: '#06b6d4', tab: 'chat' },
+  'vision':            { icon: <Eye size={13} />,    color: '#0ea5e9', tab: 'chat' },
+  'training':          { icon: <Cpu size={13} />,    color: '#ef4444', tab: 'training' },
+  'utility':           { icon: <Wrench size={13} />, color: '#78716c', tab: 'chat' },
+  'text-generation':   { icon: <Code size={13} />,   color: '#22d3ee', tab: 'chat' },
+};
+
+const font = 'Tahoma, "MS Sans Serif", sans-serif';
+const mono = '"Consolas", "Courier New", monospace';
+
+// ── Helpers ──
+const catLabel = (c: string) => c.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+const relTime = (iso: string) => {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return 'just now';
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
+  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
+  return `${Math.floor(ms / 86_400_000)}d ago`;
+};
+
+// ── Win95 Group Box ──
+function GroupBox({ title, icon, children, className = '', actions }: {
+  title: string; icon?: React.ReactNode; children: React.ReactNode; className?: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className={`relative ${className}`} style={{ border: `1px solid ${WIN95.border.dark}`, padding: '12px 10px 10px', marginTop: 8 }}>
+      <div className="absolute flex items-center gap-1.5" style={{
+        top: -8, left: 8, background: WIN95.bg, padding: '0 4px',
+        fontSize: 10, fontWeight: 'bold', color: WIN95.text, fontFamily: font,
+      }}>
+        {icon}
+        {title}
+        {actions && <span className="ml-2">{actions}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Stat Chip ──
+function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
+  return (
+    <div className="flex items-center gap-1.5 px-2.5 py-1.5" style={PANEL.sunken}>
+      <span style={{ color: WIN95.textDisabled }}>{icon}</span>
+      <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>{label}</span>
+      <span className="text-[10px] font-bold" style={{ color: WIN95.text, fontFamily: mono }}>{value}</span>
+    </div>
+  );
+}
+
+// ── Component ──
+interface AgentMarketplaceProps {
+  onNavigate?: (tab: string) => void;
+}
+
+const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
   const { isConnected, address } = useSimpleWallet();
-  const [activeTab, setActiveTab] = useState<'tools' | 'api-keys' | 'docs'>('tools');
   const [tools, setTools] = useState<ToolSummary[]>([]);
   const [apiKeys, setApiKeys] = useState<ApiKeyInfo[]>([]);
+  const [customAgents, setCustomAgents] = useState<CustomAgent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [copied, setCopied] = useState<string | null>(null);
+  const [showCreator, setShowCreator] = useState(false);
+  const [showNewKey, setShowNewKey] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyCredits, setNewKeyCredits] = useState(10);
-  const [newKeyWebhook, setNewKeyWebhook] = useState('');
-  const [createdKey, setCreatedKey] = useState<NewKeyResponse | null>(null);
+  const [createdKeyRaw, setCreatedKeyRaw] = useState('');
   const [isCreatingKey, setIsCreatingKey] = useState(false);
+  const [expandedCat, setExpandedCat] = useState<string | null>(null);
+  const [capFilter, setCapFilter] = useState('');
 
-  // Agent Creator state
-  const [showAgentCreator, setShowAgentCreator] = useState(false);
-  const [customAgents, setCustomAgents] = useState<CustomAgent[]>([]);
+  // ── Data fetching ──
+  const fetchTools = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_URL}/gateway/tools`);
+      const d = await r.json();
+      if (d.success) setTools(d.tools || []);
+    } catch (e) { logger.error('Fetch tools failed', { error: e }); }
+  }, []);
 
-  // Fetch custom agents
+  const fetchApiKeys = useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) return;
+    try {
+      const r = await fetch(`${API_URL}/api-keys`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (d.success) setApiKeys(d.keys || []);
+    } catch (e) { logger.error('Fetch keys failed', { error: e }); }
+  }, []);
+
   const fetchCustomAgents = useCallback(async () => {
     if (!address) return;
     try {
       const agents = await getCustomAgents(address);
       setCustomAgents(agents as unknown as CustomAgent[]);
-    } catch (error) {
-      logger.error('Failed to fetch custom agents', { error });
-    }
+    } catch (e) { logger.error('Fetch agents failed', { error: e }); }
   }, [address]);
-
-  const handleDeleteAgent = useCallback(async (agentId: string) => {
-    const success = await deleteCustomAgent(agentId);
-    if (success) {
-      setCustomAgents((prev) => prev.filter((a) => a.agentId !== agentId));
-    }
-  }, []);
-
-  const handleDownloadSkillMd = useCallback((agent: CustomAgent) => {
-    if (!agent.skillMd) return;
-    const blob = new Blob([agent.skillMd], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'SKILL.md';
-    a.click();
-    URL.revokeObjectURL(url);
-  }, []);
-
-  // Fetch tools from gateway
-  const fetchTools = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_URL}/gateway/tools`);
-      const data = await response.json();
-      if (data.success) {
-        setTools(data.tools || []);
-      }
-    } catch (error) {
-      logger.error('Failed to fetch tools', { error });
-    }
-  }, []);
-
-  // Fetch API keys
-  const fetchApiKeys = useCallback(async () => {
-    const token = getAuthToken();
-    if (!token) return;
-
-    try {
-      const response = await fetch(`${API_URL}/api-keys`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      const data = await response.json();
-      if (data.success) {
-        setApiKeys(data.keys || []);
-      }
-    } catch (error) {
-      logger.error('Failed to fetch API keys', { error });
-    }
-  }, []);
 
   useEffect(() => {
     setIsLoading(true);
-    Promise.all([
-      fetchTools(),
-      isConnected ? fetchApiKeys() : Promise.resolve(),
-      isConnected ? fetchCustomAgents() : Promise.resolve(),
-    ]).finally(() => setIsLoading(false));
+    Promise.all([fetchTools(), isConnected ? fetchApiKeys() : Promise.resolve(), isConnected ? fetchCustomAgents() : Promise.resolve()])
+      .finally(() => setIsLoading(false));
   }, [fetchTools, fetchApiKeys, fetchCustomAgents, isConnected]);
 
-  // Create API key
+  // ── Derived ──
+  const toolsByCategory = useMemo(() => {
+    const m: Record<string, ToolSummary[]> = {};
+    const q = capFilter.toLowerCase();
+    for (const t of tools) {
+      if (q && !t.name.toLowerCase().includes(q) && !t.category.includes(q) && !t.tags.some(tag => tag.includes(q))) continue;
+      (m[t.category] ??= []).push(t);
+    }
+    return m;
+  }, [tools, capFilter]);
+
+  const categories = useMemo(() => Object.keys(toolsByCategory).sort(), [toolsByCategory]);
+  const activeKeys = useMemo(() => apiKeys.filter(k => k.active), [apiKeys]);
+  const totalRequests = useMemo(() => apiKeys.reduce((s, k) => s + k.totalRequests, 0), [apiKeys]);
+  const filteredToolCount = useMemo(() => Object.values(toolsByCategory).reduce((s, arr) => s + arr.length, 0), [toolsByCategory]);
+
+  // ── Actions ──
+  const copy = useCallback((text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
+  }, []);
+
   const handleCreateKey = async () => {
     if (!newKeyName.trim()) return;
     setIsCreatingKey(true);
-
     try {
       await ensureCSRFToken();
       const token = getAuthToken();
-      const response = await fetch(`${API_URL}/api-keys`, {
+      const r = await fetch(`${API_URL}/api-keys`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         credentials: 'include',
-        body: JSON.stringify({
-          name: newKeyName.trim(),
-          credits: newKeyCredits,
-          webhookUrl: newKeyWebhook.trim() || undefined,
-        }),
+        body: JSON.stringify({ name: newKeyName.trim(), credits: newKeyCredits }),
       });
-      const data = await response.json();
-      if (data.success) {
-        setCreatedKey({
-          key: data.apiKey.key,
-          keyPrefix: data.apiKey.keyPrefix,
-          name: data.apiKey.name,
-          credits: data.apiKey.credits,
-        });
+      const d = await r.json();
+      if (d.success) {
+        setCreatedKeyRaw(d.apiKey.key);
         setNewKeyName('');
         setNewKeyCredits(10);
-        setNewKeyWebhook('');
+        setShowNewKey(false);
         fetchApiKeys();
       }
-    } catch (error) {
-      logger.error('Failed to create API key', { error });
-    } finally {
-      setIsCreatingKey(false);
-    }
+    } catch (e) { logger.error('Create key failed', { error: e }); }
+    finally { setIsCreatingKey(false); }
   };
 
-  // Revoke API key
   const handleRevokeKey = async (keyId: string) => {
     try {
       await ensureCSRFToken();
       const token = getAuthToken();
-      await fetch(`${API_URL}/api-keys/${keyId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
-        credentials: 'include',
-      });
+      await fetch(`${API_URL}/api-keys/${keyId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` }, credentials: 'include' });
       fetchApiKeys();
-    } catch (error) {
-      logger.error('Failed to revoke API key', { error });
-    }
+    } catch (e) { logger.error('Revoke key failed', { error: e }); }
   };
 
-  // Copy to clipboard
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(label);
-    setTimeout(() => setCopied(null), 2000);
-  };
+  const handleDeleteAgent = useCallback(async (agentId: string) => {
+    if (await deleteCustomAgent(agentId)) setCustomAgents(prev => prev.filter(a => a.agentId !== agentId));
+  }, []);
 
-  // Filter tools
-  const filteredTools = tools.filter(tool => {
-    const matchesSearch = !searchQuery ||
-      tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tool.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tool.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesCategory = selectedCategory === 'all' || tool.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const handleDownloadSkill = useCallback((agent: CustomAgent) => {
+    if (!agent.skillMd) return;
+    const blob = new Blob([agent.skillMd], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${agent.name.replace(/\s+/g, '-').toLowerCase()}-SKILL.md`; a.click();
+    URL.revokeObjectURL(url);
+  }, []);
 
-  // Get unique categories
-  const categories = ['all', ...Array.from(new Set(tools.map(t => t.category)))];
+  // ── Loading state ──
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center" style={{ fontFamily: font, background: WIN95.bg }}>
+        <div className="text-center p-6" style={PANEL.base}>
+          <div className="w-6 h-6 mx-auto mb-2 border-2 border-t-transparent rounded-full animate-spin"
+            style={{ borderColor: WIN95.highlight, borderTopColor: 'transparent' }} />
+          <p className="text-[10px] font-bold" style={{ color: WIN95.text }}>Loading Workbench</p>
+          <p className="text-[9px] mt-0.5" style={{ color: WIN95.textDisabled }}>Fetching capabilities...</p>
+        </div>
+      </div>
+    );
+  }
 
-  const tabs = [
-    { id: 'tools' as const, label: 'Tools', icon: <Zap size={12} /> },
-    { id: 'api-keys' as const, label: 'API Keys', icon: <Key size={12} /> },
-    { id: 'docs' as const, label: 'Quick Start', icon: <Code size={12} /> },
-  ];
+  const curlExample = `curl -X POST ${window.location.origin}/api/gateway/invoke/image.generate.flux-pro \\
+  -H "X-API-Key: sk_live_YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"prompt":"a neon city at dusk"}'`;
 
   return (
-    <div className="h-full flex flex-col p-2 sm:p-4 overflow-auto" style={{ fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-      {/* Window */}
-      <div className="max-w-6xl mx-auto w-full" style={{ ...PANEL.window }}>
-        {/* Title Bar */}
-        <div className="flex items-center justify-between px-2 py-1" style={WINDOW_TITLE_STYLE}>
-          <div className="flex items-center gap-1.5">
-            <Bot size={14} />
-            <span className="text-[12px] font-bold">Agent Marketplace</span>
-          </div>
-          <span className="text-[10px] opacity-80">{tools.length} tools available</span>
+    <div className="h-full flex flex-col" style={{ fontFamily: font }}>
+
+      {/* ═══ TITLE BAR ═══ */}
+      <div className="flex items-center gap-2 px-2 py-1 flex-shrink-0" style={WINDOW_TITLE_STYLE}>
+        <Bot size={12} />
+        <span className="text-[11px] flex-1">Agent Workbench</span>
+        <button
+          onClick={() => setShowCreator(true)}
+          className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold"
+          style={{
+            background: 'rgba(255,255,255,0.15)',
+            border: '1px solid rgba(255,255,255,0.3)',
+            color: '#fff',
+            cursor: 'pointer',
+            fontFamily: font,
+            borderRadius: 0,
+          }}
+        >
+          <Plus size={9} /> New Agent
+        </button>
+      </div>
+
+      {/* ═══ DASHBOARD STATS ═══ */}
+      <div className="flex items-center gap-1 px-2 py-1.5 flex-shrink-0 flex-wrap" style={{ background: WIN95.bg, borderBottom: `1px solid ${WIN95.border.dark}` }}>
+        <Stat icon={<Zap size={9} />} label="Tools" value={tools.length} />
+        <Stat icon={<Bot size={9} />} label="Agents" value={customAgents.length} />
+        <Stat icon={<Key size={9} />} label="Keys" value={activeKeys.length} />
+        <Stat icon={<Activity size={9} />} label="Requests" value={totalRequests.toLocaleString()} />
+        <div className="flex-1" />
+        <div className="flex items-center gap-1">
+          <div className="w-1.5 h-1.5 rounded-full" style={{ background: isConnected ? WIN95.successText : WIN95.errorText }} />
+          <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>
+            {isConnected ? 'Connected' : 'Not connected'}
+          </span>
         </div>
+      </div>
 
-        {/* Tab Bar */}
-        <div className="flex gap-0 px-2 pt-1 items-end" style={{ background: 'var(--win95-bg)' }}>
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className="flex items-center gap-1 px-3 py-1 text-[11px] font-bold"
-              style={{
-                background: activeTab === tab.id ? 'var(--win95-bg)' : 'var(--win95-bg-dark)',
-                color: activeTab === tab.id ? 'var(--win95-text)' : 'var(--win95-text-disabled)',
-                boxShadow: activeTab === tab.id
-                  ? 'inset 1px 1px 0 var(--win95-border-light), inset -1px 0 0 var(--win95-border-darker), 0 1px 0 var(--win95-bg)'
-                  : 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)',
-                border: 'none',
-                cursor: 'pointer',
-                marginBottom: activeTab === tab.id ? '-1px' : '0',
-                zIndex: activeTab === tab.id ? 1 : 0,
-              }}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-          <div className="flex-1" />
-          {isConnected && (
-            <button
-              onClick={() => setShowAgentCreator(true)}
-              className="flex items-center gap-1 px-3 py-1 text-[11px] font-bold mb-0.5 generate-btn"
-              style={{
-                border: 'none',
-                cursor: 'pointer',
-                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-              }}
-            >
-              <Plus size={12} />
-              Create Agent
-            </button>
-          )}
-        </div>
+      {/* ═══ MAIN CONTENT ═══ */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-3 py-2 space-y-1" style={{ background: WIN95.bg }}>
 
-        {/* Content Area */}
-        <div className="p-3" style={{ background: 'var(--win95-bg)', minHeight: '400px' }}>
-
-          {/* TOOLS TAB */}
-          {activeTab === 'tools' && (
-            <div>
-              {/* Search & Filter Bar */}
-              <div className="flex flex-col sm:flex-row gap-2 mb-3">
-                <div className="flex-1 relative">
-                  <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--win95-text-disabled)' }} />
-                  <input
-                    type="text"
-                    placeholder="Search tools..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-6 pr-2 py-1 text-[11px]"
-                    style={{
-                      background: 'var(--win95-input-bg)',
-                      boxShadow: 'inset 1px 1px 0 var(--win95-border-dark), inset -1px -1px 0 var(--win95-border-light)',
-                      border: 'none',
-                      color: 'var(--win95-text)',
-                      fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                    }}
-                  />
-                </div>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="px-2 py-1 text-[11px]"
-                  style={{
-                    ...BTN.base,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>
-                      {cat === 'all' ? 'All Categories' : cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Tools Grid */}
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <RefreshCw size={16} className="animate-spin mr-2" style={{ color: 'var(--win95-text-disabled)' }} />
-                  <span className="text-[11px]" style={{ color: 'var(--win95-text-disabled)' }}>Loading tools...</span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {filteredTools.map(tool => (
-                    <div
-                      key={tool.id}
-                      className="p-2"
-                      style={{
-                        ...PANEL.base,
-                        borderBottom: '2px solid var(--win95-border-darker)',
-                      }}
-                    >
-                      {/* Tool Header */}
-                      <div className="flex items-start gap-1.5 mb-1">
-                        <span className="mt-0.5 flex-shrink-0" style={{ color: 'var(--win95-highlight)' }}>
-                          {CATEGORY_ICONS[tool.category] || <Zap size={14} />}
-                        </span>
-                        <div className="min-w-0">
-                          <h3 className="text-[11px] font-bold truncate" style={{ color: 'var(--win95-text)' }}>
-                            {tool.name}
-                          </h3>
-                          <p className="text-[9px] line-clamp-2 mt-0.5" style={{ color: 'var(--win95-text-disabled)' }}>
-                            {tool.description}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Tags */}
-                      <div className="flex flex-wrap gap-0.5 mb-1.5">
-                        {tool.tags.slice(0, 3).map(tag => (
-                          <span
-                            key={tag}
-                            className="flex items-center gap-0.5 px-1 text-[8px]"
-                            style={{
-                              background: 'var(--win95-bg-dark)',
-                              color: 'var(--win95-text-disabled)',
-                            }}
-                          >
-                            <Tag size={7} />
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-
-                      {/* Pricing */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1">
-                          <DollarSign size={10} style={{ color: 'var(--win95-success-text)' }} />
-                          <span className="text-[10px] font-bold" style={{ color: 'var(--win95-text)' }}>
-                            {tool.pricing.credits} {tool.pricing.credits === 1 ? 'credit' : 'credits'}
-                          </span>
-                          {tool.pricing.perUnit && (
-                            <span className="text-[9px]" style={{ color: 'var(--win95-text-disabled)' }}>
-                              (+{tool.pricing.perUnit.credits}/{tool.pricing.perUnit.unitType})
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[9px] px-1" style={{
-                          background: tool.executionMode === 'sync' ? 'var(--win95-highlight)' : 'var(--win95-bg-dark)',
-                          color: tool.executionMode === 'sync' ? '#fff' : 'var(--win95-text)',
-                        }}>
-                          {tool.executionMode === 'sync' ? 'instant' : 'async'}
-                        </span>
-                      </div>
-
-                      {/* Tool ID (copyable) */}
-                      <div className="mt-1.5 flex items-center gap-1">
-                        <code className="text-[9px] flex-1 truncate px-1 py-0.5" style={{
-                          background: 'var(--win95-input-bg)',
-                          color: 'var(--win95-text-disabled)',
-                          boxShadow: 'inset 1px 1px 0 var(--win95-border-dark)',
-                        }}>
-                          {tool.id}
-                        </code>
-                        <button
-                          onClick={() => copyToClipboard(tool.id, tool.id)}
-                          className="p-0.5"
-                          style={{ ...BTN.small, cursor: 'pointer', border: 'none' }}
-                          title="Copy tool ID"
-                        >
-                          {copied === tool.id ? <Check size={10} /> : <Copy size={10} />}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {!isLoading && filteredTools.length === 0 && (
-                <div className="text-center py-8">
-                  <p className="text-[11px]" style={{ color: 'var(--win95-text-disabled)' }}>No tools match your search</p>
-                </div>
-              )}
+        {/* ── YOUR AGENTS ── */}
+        <GroupBox
+          title="Your Agents"
+          icon={<Layers size={10} style={{ color: WIN95.highlight }} />}
+          actions={
+            customAgents.length > 0 ? (
+              <button onClick={() => setShowCreator(true)} className="text-[8px] px-1.5 py-0.5" style={BTN.small} {...hoverHandlers}>
+                <Plus size={8} />
+              </button>
+            ) : undefined
+          }
+        >
+          {!isConnected ? (
+            <div className="py-3 text-center">
+              <Shield size={16} className="mx-auto mb-1.5" style={{ color: WIN95.textDisabled }} />
+              <p className="text-[10px]" style={{ color: WIN95.textDisabled }}>Connect wallet to build agents</p>
             </div>
-          )}
-
-          {/* API KEYS TAB */}
-          {activeTab === 'api-keys' && (
-            <div>
-              {!isConnected ? (
-                <div className="text-center py-8" style={{ ...PANEL.sunken }}>
-                  <Key size={24} className="mx-auto mb-2" style={{ color: 'var(--win95-text-disabled)' }} />
-                  <p className="text-[11px] font-bold mb-1" style={{ color: 'var(--win95-text)' }}>Sign in to manage API keys</p>
-                  <p className="text-[10px]" style={{ color: 'var(--win95-text-disabled)' }}>
-                    Create API keys to let your agents access SeisoAI tools programmatically
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {/* Create New Key Form */}
-                  <div className="p-2" style={PANEL.base}>
-                    <h3 className="text-[11px] font-bold mb-2 flex items-center gap-1" style={{ color: 'var(--win95-text)' }}>
-                      <Plus size={12} /> Create New API Key
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
-                      <input
-                        type="text"
-                        placeholder="Key name (e.g., my-agent)"
-                        value={newKeyName}
-                        onChange={(e) => setNewKeyName(e.target.value)}
-                        maxLength={100}
-                        className="px-2 py-1 text-[11px]"
-                        style={{
-                          background: 'var(--win95-input-bg)',
-                          boxShadow: 'inset 1px 1px 0 var(--win95-border-dark), inset -1px -1px 0 var(--win95-border-light)',
-                          border: 'none',
-                          color: 'var(--win95-text)',
-                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                        }}
-                      />
-                      <input
-                        type="number"
-                        placeholder="Credits to allocate"
-                        value={newKeyCredits}
-                        onChange={(e) => setNewKeyCredits(Math.max(0, parseInt(e.target.value) || 0))}
-                        min={0}
-                        className="px-2 py-1 text-[11px]"
-                        style={{
-                          background: 'var(--win95-input-bg)',
-                          boxShadow: 'inset 1px 1px 0 var(--win95-border-dark), inset -1px -1px 0 var(--win95-border-light)',
-                          border: 'none',
-                          color: 'var(--win95-text)',
-                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                        }}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Webhook URL (optional)"
-                        value={newKeyWebhook}
-                        onChange={(e) => setNewKeyWebhook(e.target.value)}
-                        className="px-2 py-1 text-[11px]"
-                        style={{
-                          background: 'var(--win95-input-bg)',
-                          boxShadow: 'inset 1px 1px 0 var(--win95-border-dark), inset -1px -1px 0 var(--win95-border-light)',
-                          border: 'none',
-                          color: 'var(--win95-text)',
-                          fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-                        }}
-                      />
+          ) : customAgents.length === 0 ? (
+            <div className="py-4 text-center">
+              <div className="inline-flex items-center justify-center w-10 h-10 mb-2" style={{
+                ...PANEL.sunken,
+                borderRadius: 0,
+              }}>
+                <Bot size={20} style={{ color: WIN95.textDisabled }} />
+              </div>
+              <p className="text-[10px] font-bold mb-0.5" style={{ color: WIN95.text }}>No agents yet</p>
+              <p className="text-[9px] mb-2.5 max-w-xs mx-auto" style={{ color: WIN95.textDisabled }}>
+                Create an agent to bundle capabilities, generate a SKILL.md, and export it for use in any framework.
+              </p>
+              <button
+                onClick={() => setShowCreator(true)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold generate-btn"
+                style={{ border: 'none', cursor: 'pointer', fontFamily: font }}
+              >
+                <Plus size={10} /> Build Your First Agent
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mt-1">
+              {customAgents.map(agent => (
+                <div key={agent.agentId} className="p-2 flex items-start gap-2" style={PANEL.sunken}>
+                  <div className="w-7 h-7 flex items-center justify-center flex-shrink-0" style={{
+                    background: WIN95.highlight,
+                    color: WIN95.highlightText,
+                  }}>
+                    <Bot size={14} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold truncate" style={{ color: WIN95.text }}>{agent.name}</span>
+                      <span className="text-[8px] px-1 flex-shrink-0" style={{ background: WIN95.bgDark, color: WIN95.textDisabled }}>{agent.type}</span>
                     </div>
-                    <button
-                      onClick={handleCreateKey}
-                      disabled={!newKeyName.trim() || isCreatingKey}
-                      className="px-3 py-1 text-[11px] font-bold"
-                      style={newKeyName.trim() && !isCreatingKey ? BTN.base : BTN.disabled}
-                      {...(newKeyName.trim() && !isCreatingKey ? hoverHandlers : {})}
-                    >
-                      {isCreatingKey ? 'Creating...' : 'Create Key'}
+                    <p className="text-[9px] mt-0.5 line-clamp-1" style={{ color: WIN95.textDisabled }}>{agent.description}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>
+                        <Hash size={7} className="inline" /> {agent.tools?.length || 0} tools
+                      </span>
+                      <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>&middot; {relTime(agent.createdAt)}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-0.5 flex-shrink-0">
+                    {agent.skillMd && (
+                      <button onClick={() => handleDownloadSkill(agent)} className="p-1" style={BTN.small} title="Export SKILL.md" {...hoverHandlers}>
+                        <Download size={9} />
+                      </button>
+                    )}
+                    <button onClick={() => handleDeleteAgent(agent.agentId)} className="p-1" style={BTN.small} title="Delete agent" {...hoverHandlers}>
+                      <Trash2 size={9} style={{ color: WIN95.errorText }} />
                     </button>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </GroupBox>
 
-                  {/* Newly Created Key Display */}
-                  {createdKey && (
-                    <div className="p-2" style={{ background: 'var(--win95-bg)', border: '2px solid var(--win95-highlight)' }}>
-                      <p className="text-[11px] font-bold mb-1" style={{ color: 'var(--win95-highlight)' }}>
-                        Key Created - Copy it now! It won't be shown again.
-                      </p>
-                      <div className="flex items-center gap-1">
-                        <code className="flex-1 text-[10px] px-2 py-1 select-all" style={{
-                          background: 'var(--win95-input-bg)',
-                          color: 'var(--win95-text)',
-                          boxShadow: 'inset 1px 1px 0 var(--win95-border-dark)',
-                          wordBreak: 'break-all',
-                        }}>
-                          {createdKey.key}
-                        </code>
-                        <button
-                          onClick={() => copyToClipboard(createdKey.key, 'new-key')}
-                          className="p-1 flex-shrink-0"
-                          style={{ ...BTN.small, cursor: 'pointer', border: 'none' }}
-                        >
-                          {copied === 'new-key' ? <Check size={12} /> : <Copy size={12} />}
-                        </button>
-                      </div>
-                      <button
-                        onClick={() => setCreatedKey(null)}
-                        className="mt-1 px-2 py-0.5 text-[10px]"
-                        style={{ ...BTN.small, cursor: 'pointer', border: 'none' }}
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  )}
+        {/* ── CAPABILITIES ── */}
+        <GroupBox
+          title={`Capabilities — ${filteredToolCount} tool${filteredToolCount !== 1 ? 's' : ''}`}
+          icon={<Zap size={10} style={{ color: WIN95.highlight }} />}
+          actions={
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="filter..."
+                value={capFilter}
+                onChange={e => setCapFilter(e.target.value)}
+                className="pl-1.5 pr-1 py-0.5 text-[8px] w-20"
+                style={{
+                  background: WIN95.inputBg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}`,
+                  border: 'none', color: WIN95.text, fontFamily: font, outline: 'none',
+                }}
+              />
+            </div>
+          }
+        >
+          {categories.length === 0 ? (
+            <p className="text-[9px] py-2 text-center" style={{ color: WIN95.textDisabled }}>No tools match filter</p>
+          ) : (
+            <div className="space-y-0.5 mt-1">
+              {categories.map(cat => {
+                const catTools = toolsByCategory[cat];
+                const meta = CATEGORY_META[cat] || { icon: <Zap size={13} />, color: WIN95.highlight, tab: 'chat' };
+                const isOpen = expandedCat === cat;
+                return (
+                  <div key={cat}>
+                    {/* Category header */}
+                    <button
+                      onClick={() => setExpandedCat(isOpen ? null : cat)}
+                      className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left group"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: font }}
+                    >
+                      <span className="flex items-center justify-center w-5 h-5 flex-shrink-0"
+                        style={{ background: meta.color, color: '#fff', fontSize: 0 }}>
+                        {meta.icon}
+                      </span>
+                      <span className="flex-1 text-[10px] font-bold" style={{ color: WIN95.text }}>
+                        {catLabel(cat)}
+                      </span>
+                      <span className="text-[8px] font-bold px-1.5 py-0.5" style={{
+                        background: isOpen ? WIN95.highlight : WIN95.bgDark,
+                        color: isOpen ? WIN95.highlightText : WIN95.textDisabled,
+                      }}>
+                        {catTools.length}
+                      </span>
+                      <ChevronDown size={10} style={{
+                        color: WIN95.textDisabled,
+                        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.15s ease',
+                      }} />
+                    </button>
 
-                  {/* Existing Keys */}
-                  <div>
-                    <h3 className="text-[11px] font-bold mb-1.5 flex items-center gap-1" style={{ color: 'var(--win95-text)' }}>
-                      <Key size={12} /> Your API Keys ({apiKeys.length})
-                    </h3>
-                    {apiKeys.length === 0 ? (
-                      <p className="text-[10px] text-center py-4" style={{ ...PANEL.sunken, color: 'var(--win95-text-disabled)' }}>
-                        No API keys yet. Create one above to get started.
-                      </p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {apiKeys.map(key => (
-                          <div key={key.id} className="flex items-center justify-between p-2" style={PANEL.base}>
+                    {/* Expanded tool list */}
+                    {isOpen && (
+                      <div className="ml-2 mr-1 mb-1 border-l-2 pl-2 space-y-0.5"
+                        style={{ borderColor: meta.color }}>
+                        {catTools.map(tool => (
+                          <div key={tool.id} className="flex items-center gap-1.5 px-1.5 py-1"
+                            style={{ background: WIN95.inputBg, boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}` }}>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[11px] font-bold" style={{ color: 'var(--win95-text)' }}>{key.name}</span>
-                                <code className="text-[9px]" style={{ color: 'var(--win95-text-disabled)' }}>{key.keyPrefix}...</code>
-                                <span className={`text-[8px] px-1 ${key.active ? '' : 'line-through'}`} style={{
-                                  background: key.active ? 'var(--win95-highlight)' : 'var(--win95-bg-dark)',
-                                  color: key.active ? '#fff' : 'var(--win95-text-disabled)',
-                                }}>
-                                  {key.active ? 'active' : 'revoked'}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3 mt-0.5">
-                                <span className="text-[9px]" style={{ color: 'var(--win95-text-disabled)' }}>
-                                  Credits: <b style={{ color: 'var(--win95-text)' }}>{key.credits.toFixed(1)}</b>
-                                </span>
-                                <span className="text-[9px]" style={{ color: 'var(--win95-text-disabled)' }}>
-                                  Requests: <b style={{ color: 'var(--win95-text)' }}>{key.totalRequests}</b>
-                                </span>
-                                <span className="text-[9px]" style={{ color: 'var(--win95-text-disabled)' }}>
-                                  Spent: <b style={{ color: 'var(--win95-text)' }}>{key.totalCreditsSpent.toFixed(1)}</b>
-                                </span>
-                                {key.lastUsedAt && (
-                                  <span className="text-[9px]" style={{ color: 'var(--win95-text-disabled)' }}>
-                                    Last used: {new Date(key.lastUsedAt).toLocaleDateString()}
-                                  </span>
-                                )}
-                              </div>
+                              <div className="text-[9px] font-bold truncate" style={{ color: WIN95.text }}>{tool.name}</div>
+                              <div className="text-[8px] truncate" style={{ color: WIN95.textDisabled }}>{tool.description}</div>
                             </div>
-                            {key.active && (
-                              <button
-                                onClick={() => handleRevokeKey(key.id)}
-                                className="p-1 ml-2 flex-shrink-0"
-                                style={{ ...BTN.small, cursor: 'pointer', border: 'none' }}
-                                title="Revoke key"
-                              >
-                                <Trash2 size={12} style={{ color: 'var(--win95-error-text)' }} />
+                            <span className="text-[8px] font-bold px-1 py-0.5 flex-shrink-0"
+                              style={{ background: WIN95.bgDark, color: WIN95.text, fontFamily: mono }}>
+                              {tool.pricing.credits}cr
+                            </span>
+                            <button onClick={() => copy(tool.id, tool.id)}
+                              className="p-0.5 flex-shrink-0" style={{ ...BTN.small, cursor: 'pointer' }}
+                              title={`Copy: ${tool.id}`} {...hoverHandlers}>
+                              {copied === tool.id ? <Check size={9} style={{ color: WIN95.successText }} /> : <Copy size={9} />}
+                            </button>
+                            {onNavigate && meta.tab && (
+                              <button onClick={() => onNavigate(meta.tab)}
+                                className="p-0.5 flex-shrink-0" style={{ ...BTN.small, cursor: 'pointer' }}
+                                title="Try it" {...hoverHandlers}>
+                                <Play size={9} style={{ color: meta.color }} />
                               </button>
                             )}
                           </div>
@@ -622,242 +462,161 @@ const AgentMarketplace: React.FC = () => {
                       </div>
                     )}
                   </div>
-                </div>
-              )}
+                );
+              })}
             </div>
           )}
+        </GroupBox>
 
-          {/* DOCS TAB */}
-          {activeTab === 'docs' && (
-            <div className="space-y-3">
-              {/* Quick Start */}
-              <div className="p-2" style={PANEL.base}>
-                <h3 className="text-[12px] font-bold mb-2" style={{ color: 'var(--win95-text)' }}>
-                  Quick Start - Invoke a Tool
-                </h3>
-                <div className="relative">
-                  <pre className="text-[10px] p-2 overflow-x-auto" style={{
-                    background: 'var(--win95-input-bg)',
-                    color: 'var(--win95-text)',
-                    boxShadow: 'inset 1px 1px 0 var(--win95-border-dark)',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-all',
-                  }}>
-{`curl -X POST ${window.location.origin}/api/gateway/invoke/image.generate.flux-pro-kontext \\
-  -H "X-API-Key: sk_live_your_key_here" \\
-  -H "Content-Type: application/json" \\
-  -d '{"prompt": "a cute robot painting"}'`}
-                  </pre>
-                  <button
-                    onClick={() => copyToClipboard(
-                      `curl -X POST ${window.location.origin}/api/gateway/invoke/image.generate.flux-pro-kontext \\\n  -H "X-API-Key: sk_live_your_key_here" \\\n  -H "Content-Type: application/json" \\\n  -d '{"prompt": "a cute robot painting"}'`,
-                      'curl'
-                    )}
-                    className="absolute top-1 right-1 p-0.5"
-                    style={{ ...BTN.small, cursor: 'pointer', border: 'none' }}
-                  >
-                    {copied === 'curl' ? <Check size={10} /> : <Copy size={10} />}
+        {/* ── API ACCESS ── */}
+        <GroupBox
+          title="API Access"
+          icon={<Key size={10} style={{ color: WIN95.highlight }} />}
+          actions={
+            isConnected && !showNewKey ? (
+              <button onClick={() => setShowNewKey(true)} className="text-[8px] px-1.5 py-0.5 flex items-center gap-0.5"
+                style={BTN.small} {...hoverHandlers}>
+                <Plus size={8} /> Key
+              </button>
+            ) : undefined
+          }
+        >
+          {!isConnected ? (
+            <div className="py-3 text-center">
+              <Key size={16} className="mx-auto mb-1.5" style={{ color: WIN95.textDisabled }} />
+              <p className="text-[10px]" style={{ color: WIN95.textDisabled }}>Connect wallet to create API keys</p>
+            </div>
+          ) : (
+            <div className="space-y-1.5 mt-1">
+              {/* New key form */}
+              {showNewKey && (
+                <div className="flex items-center gap-1.5 p-1.5" style={{
+                  background: WIN95.inputBg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, 0 0 0 1px ${WIN95.highlight}`,
+                }}>
+                  <input type="text" placeholder="key name" value={newKeyName}
+                    onChange={e => setNewKeyName(e.target.value)} maxLength={64} autoFocus
+                    className="flex-1 px-1.5 py-1 text-[9px]"
+                    style={{ background: '#fff', boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}`, border: 'none', color: WIN95.text, fontFamily: font, outline: 'none' }}
+                  />
+                  <input type="number" value={newKeyCredits}
+                    onChange={e => setNewKeyCredits(Math.max(0, parseInt(e.target.value) || 0))}
+                    min={0} className="w-14 px-1.5 py-1 text-[9px] text-right"
+                    style={{ background: '#fff', boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}`, border: 'none', color: WIN95.text, fontFamily: mono, outline: 'none' }}
+                    title="Credits to load"
+                  />
+                  <button onClick={handleCreateKey} disabled={!newKeyName.trim() || isCreatingKey}
+                    className="px-2 py-1 text-[9px] font-bold generate-btn"
+                    style={{ border: 'none', cursor: newKeyName.trim() && !isCreatingKey ? 'pointer' : 'default', fontFamily: font, opacity: newKeyName.trim() && !isCreatingKey ? 1 : 0.5 }}>
+                    {isCreatingKey ? '...' : 'Create'}
+                  </button>
+                  <button onClick={() => { setShowNewKey(false); setNewKeyName(''); }}
+                    className="px-1.5 py-1 text-[9px]" style={{ ...BTN.small, cursor: 'pointer' }} {...hoverHandlers}>
+                    Cancel
                   </button>
                 </div>
-              </div>
+              )}
 
-              {/* Authentication Methods */}
-              <div className="p-2" style={PANEL.base}>
-                <h3 className="text-[12px] font-bold mb-2" style={{ color: 'var(--win95-text)' }}>
-                  Authentication Methods
-                </h3>
-                <div className="space-y-2">
-                  <div className="p-1.5" style={PANEL.sunken}>
-                    <p className="text-[11px] font-bold" style={{ color: 'var(--win95-highlight)' }}>1. API Key (Recommended for agents)</p>
-                    <p className="text-[10px] mt-0.5" style={{ color: 'var(--win95-text-disabled)' }}>
-                      Add <code style={{ background: 'var(--win95-bg-dark)', padding: '0 2px' }}>X-API-Key: sk_live_...</code> header. Credits deducted from key balance.
-                    </p>
+              {/* Created key alert */}
+              {createdKeyRaw && (
+                <div className="p-2" style={{ background: WIN95.bg, border: `2px solid ${WIN95.successText}` }}>
+                  <div className="flex items-center gap-1 mb-1">
+                    <Check size={10} style={{ color: WIN95.successText }} />
+                    <span className="text-[9px] font-bold" style={{ color: WIN95.successText }}>Key created — copy now, shown once</span>
                   </div>
-                  <div className="p-1.5" style={PANEL.sunken}>
-                    <p className="text-[11px] font-bold" style={{ color: 'var(--win95-text)' }}>2. x402 Pay-Per-Request</p>
-                    <p className="text-[10px] mt-0.5" style={{ color: 'var(--win95-text-disabled)' }}>
-                      Pay with USDC on Base. No account needed. Include <code style={{ background: 'var(--win95-bg-dark)', padding: '0 2px' }}>payment-signature</code> header.
-                    </p>
+                  <div className="flex items-center gap-1">
+                    <code className="flex-1 text-[8px] px-1.5 py-1 select-all" style={{
+                      background: WIN95.inputBg, color: WIN95.text,
+                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}`, wordBreak: 'break-all', fontFamily: mono,
+                    }}>
+                      {createdKeyRaw}
+                    </code>
+                    <button onClick={() => copy(createdKeyRaw, 'raw-key')} className="p-1" style={{ ...BTN.small, cursor: 'pointer' }} {...hoverHandlers}>
+                      {copied === 'raw-key' ? <Check size={10} style={{ color: WIN95.successText }} /> : <Copy size={10} />}
+                    </button>
                   </div>
-                  <div className="p-1.5" style={PANEL.sunken}>
-                    <p className="text-[11px] font-bold" style={{ color: 'var(--win95-text)' }}>3. JWT Bearer Token</p>
-                    <p className="text-[10px] mt-0.5" style={{ color: 'var(--win95-text-disabled)' }}>
-                      For authenticated users. Add <code style={{ background: 'var(--win95-bg-dark)', padding: '0 2px' }}>Authorization: Bearer &lt;jwt&gt;</code> header.
-                    </p>
-                  </div>
+                  <button onClick={() => setCreatedKeyRaw('')} className="mt-1 text-[8px] underline"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: WIN95.textDisabled }}>
+                    dismiss
+                  </button>
                 </div>
-              </div>
+              )}
 
-              {/* Webhook Setup */}
-              <div className="p-2" style={PANEL.base}>
-                <h3 className="text-[12px] font-bold mb-2" style={{ color: 'var(--win95-text)' }}>
-                  Webhook Callbacks
-                </h3>
-                <p className="text-[10px] mb-1.5" style={{ color: 'var(--win95-text-disabled)' }}>
-                  Receive results automatically when async jobs complete. Set a webhook URL on your API key or pass it per-request.
-                </p>
-                <pre className="text-[10px] p-2 overflow-x-auto" style={{
-                  background: 'var(--win95-input-bg)',
-                  color: 'var(--win95-text)',
-                  boxShadow: 'inset 1px 1px 0 var(--win95-border-dark)',
-                  whiteSpace: 'pre-wrap',
-                }}>
-{`// Per-request webhook
-{
-  "prompt": "a sunset over mountains",
-  "webhookUrl": "https://your-agent.com/webhook"
-}
-
-// Your webhook receives:
-{
-  "event": "generation.completed",
-  "requestId": "gw-123456",
-  "toolId": "image.generate.flux-pro-kontext",
-  "data": { "result": { "images": [...] } }
-}`}
-                </pre>
-              </div>
-
-              {/* Endpoints */}
-              <div className="p-2" style={PANEL.base}>
-                <h3 className="text-[12px] font-bold mb-2" style={{ color: 'var(--win95-text)' }}>
-                  API Endpoints
-                </h3>
-                <div className="space-y-1">
-                  {[
-                    { method: 'GET', path: '/api/gateway/tools', desc: 'List all tools' },
-                    { method: 'GET', path: '/api/gateway/tools/:id', desc: 'Tool details + schema' },
-                    { method: 'GET', path: '/api/gateway/price/:id', desc: 'Calculate price' },
-                    { method: 'POST', path: '/api/gateway/invoke/:id', desc: 'Invoke a tool' },
-                    { method: 'POST', path: '/api/gateway/batch', desc: 'Batch invoke (max 10)' },
-                    { method: 'GET', path: '/api/gateway/jobs/:id', desc: 'Check async job status' },
-                    { method: 'GET', path: '/api/gateway/jobs/:id/result', desc: 'Get async result' },
-                    { method: 'POST', path: '/api/gateway/orchestrate', desc: 'AI-planned pipeline' },
-                    { method: 'GET', path: '/api/gateway/mcp-manifest', desc: 'MCP tool listing' },
-                  ].map((ep, i) => (
-                    <div key={i} className="flex items-center gap-2 py-0.5 px-1" style={{ borderBottom: '1px solid var(--win95-bg-dark)' }}>
-                      <span className="text-[9px] font-bold px-1 flex-shrink-0" style={{
-                        background: ep.method === 'GET' ? 'var(--win95-highlight)' : '#808000',
-                        color: '#fff',
-                        minWidth: '32px',
-                        textAlign: 'center',
-                      }}>
-                        {ep.method}
-                      </span>
-                      <code className="text-[10px] flex-1" style={{ color: 'var(--win95-text)' }}>{ep.path}</code>
-                      <span className="text-[9px] flex-shrink-0" style={{ color: 'var(--win95-text-disabled)' }}>{ep.desc}</span>
-                    </div>
-                  ))}
+              {/* Key list */}
+              {activeKeys.length === 0 && !showNewKey && (
+                <p className="text-[9px] py-1 text-center" style={{ color: WIN95.textDisabled }}>No API keys — create one to get started</p>
+              )}
+              {activeKeys.map(k => (
+                <div key={k.id} className="flex items-center gap-1.5 px-2 py-1" style={PANEL.sunken}>
+                  <Key size={9} style={{ color: WIN95.textDisabled }} />
+                  <span className="text-[9px] font-bold truncate" style={{ color: WIN95.text }}>{k.name}</span>
+                  <code className="text-[8px]" style={{ color: WIN95.textDisabled, fontFamily: mono }}>{k.keyPrefix}...</code>
+                  <div className="flex-1" />
+                  <span className="text-[8px] font-bold" style={{ color: WIN95.text, fontFamily: mono }}>{k.credits.toFixed(1)}cr</span>
+                  <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>{k.totalRequests} req</span>
+                  {k.lastUsedAt && <span className="text-[7px]" style={{ color: WIN95.textDisabled }}>{relTime(k.lastUsedAt)}</span>}
+                  <button onClick={() => handleRevokeKey(k.id)} className="p-0.5" style={{ ...BTN.small, cursor: 'pointer' }} title="Revoke" {...hoverHandlers}>
+                    <Trash2 size={8} style={{ color: WIN95.errorText }} />
+                  </button>
                 </div>
-              </div>
-
-              {/* Links */}
-              <div className="flex gap-2">
-                <a
-                  href={`${window.location.origin}/api/gateway`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-3 py-1 text-[11px] font-bold no-underline"
-                  style={{ ...BTN.base }}
-                  {...hoverHandlers}
-                >
-                  <ExternalLink size={10} /> Gateway API
-                </a>
-                <a
-                  href={`${window.location.origin}/api/gateway/mcp-manifest`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-3 py-1 text-[11px] font-bold no-underline"
-                  style={{ ...BTN.base }}
-                  {...hoverHandlers}
-                >
-                  <Bot size={10} /> MCP Manifest
-                </a>
-                <a
-                  href={`${window.location.origin}/api/docs`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-3 py-1 text-[11px] font-bold no-underline"
-                  style={{ ...BTN.base }}
-                  {...hoverHandlers}
-                >
-                  <Code size={10} /> OpenAPI Docs
-                </a>
-              </div>
+              ))}
             </div>
           )}
-          {/* MY AGENTS SECTION */}
-          {isConnected && customAgents.length > 0 && (
-            <div className="mt-3 pt-3" style={{ borderTop: `1px solid var(--win95-bg-dark)` }}>
-              <div className="flex items-center gap-2 mb-2">
-                <Bot size={14} style={{ color: WIN95.highlight }} />
-                <span className="text-[12px] font-bold" style={{ color: WIN95.text }}>
-                  My Agents ({customAgents.length})
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {customAgents.map((agent) => (
-                  <div
-                    key={agent.agentId}
-                    className="p-3"
-                    style={{
-                      background: WIN95.inputBg,
-                      boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
-                    }}
-                  >
-                    <div className="flex items-start justify-between mb-1">
-                      <div>
-                        <div className="text-[11px] font-bold" style={{ color: WIN95.text }}>
-                          {agent.name}
-                        </div>
-                        <div className="text-[9px]" style={{ color: WIN95.textDisabled }}>
-                          {agent.type} — {agent.tools?.length || 0} tools
-                        </div>
-                      </div>
-                      <div className="flex gap-1">
-                        {agent.skillMd && (
-                          <button
-                            onClick={() => handleDownloadSkillMd(agent)}
-                            className="p-1"
-                            style={{ ...BTN.base }}
-                            title="Download SKILL.md"
-                            {...hoverHandlers}
-                          >
-                            <Download size={10} />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDeleteAgent(agent.agentId)}
-                          className="p-1"
-                          style={{ ...BTN.base }}
-                          title="Delete agent"
-                          {...hoverHandlers}
-                        >
-                          <Trash2 size={10} />
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-[9px]" style={{ color: WIN95.textDisabled }}>
-                      {agent.description?.slice(0, 80)}{agent.description?.length > 80 ? '...' : ''}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        </GroupBox>
+
+        {/* ── QUICK INTEGRATE ── */}
+        <GroupBox title="Quick Integrate" icon={<Terminal size={10} style={{ color: WIN95.highlight }} />}>
+          <div className="mt-1 relative">
+            <pre className="text-[8px] sm:text-[9px] p-2 overflow-x-auto" style={{
+              ...PANEL.sunken, color: WIN95.text, fontFamily: mono,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.7,
+            }}>
+              {curlExample}
+            </pre>
+            <button onClick={() => copy(curlExample, 'curl')}
+              className="absolute top-2.5 right-2.5 p-1" style={{ ...BTN.small, cursor: 'pointer' }} {...hoverHandlers}>
+              {copied === 'curl' ? <Check size={9} style={{ color: WIN95.successText }} /> : <Copy size={9} />}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {[
+              { href: '/api/gateway', label: 'Gateway', icon: <Globe size={8} /> },
+              { href: '/api/gateway/mcp-manifest', label: 'MCP', icon: <Bot size={8} /> },
+              { href: '/api/gateway/schema', label: 'OpenAPI', icon: <Code size={8} /> },
+              { href: '/api/docs', label: 'Docs', icon: <ExternalLink size={8} /> },
+            ].map(link => (
+              <a key={link.label} href={`${window.location.origin}${link.href}`} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 px-2 py-1 text-[9px] font-bold no-underline"
+                style={{ ...BTN.base, color: WIN95.text }} {...hoverHandlers}>
+                {link.icon} {link.label}
+              </a>
+            ))}
+          </div>
+        </GroupBox>
+
+      </div>
+
+      {/* ═══ STATUS BAR ═══ */}
+      <div className="flex items-center gap-0.5 px-1 py-0.5 flex-shrink-0" style={{ background: WIN95.bg, borderTop: `1px solid ${WIN95.border.light}` }}>
+        <div className="flex-1 px-1.5 py-0.5 text-[8px] truncate" style={{
+          ...PANEL.sunken, color: WIN95.textDisabled,
+        }}>
+          {isConnected
+            ? `${address?.slice(0, 6)}...${address?.slice(-4)} — ${customAgents.length} agent${customAgents.length !== 1 ? 's' : ''}, ${activeKeys.length} key${activeKeys.length !== 1 ? 's' : ''}`
+            : 'Connect wallet to unlock agent builder & API keys'}
+        </div>
+        <div className="px-1.5 py-0.5 text-[8px]" style={{ ...PANEL.sunken, color: WIN95.textDisabled }}>
+          {tools.length} capabilities
+        </div>
+        <div className="px-1.5 py-0.5 text-[8px] font-bold" style={{ ...PANEL.sunken, color: WIN95.text }}>
+          SeisoAI
         </div>
       </div>
 
-      {/* Agent Creator Modal */}
-      {showAgentCreator && (
+      {/* ═══ AGENT CREATOR MODAL ═══ */}
+      {showCreator && (
         <Suspense fallback={null}>
-          <AgentCreator
-            isOpen={showAgentCreator}
-            onClose={() => setShowAgentCreator(false)}
-            onCreated={() => {
-              fetchCustomAgents();
-            }}
-          />
+          <AgentCreator isOpen={showCreator} onClose={() => setShowCreator(false)} onCreated={() => fetchCustomAgents()} />
         </Suspense>
       )}
     </div>

@@ -144,10 +144,11 @@ function Win95LoadingFallback({ text }: { text: string }): JSX.Element {
 
 function AppContentInner(): JSX.Element {
   const { preferences } = useUserPreferences();
-  const [activeTab, setActiveTab] = useState(preferences.defaultTab || 'chat');
+  const [activeTab, setActiveTab] = useState(preferences.defaultTab || 'workbench');
   const { t } = useLanguage();
 
   const allTabs: Tab[] = [
+    { id: 'workbench', name: 'Agents', icon: Bot },
     { id: 'chat', name: t.nav.chat, icon: MessageCircle },
     { id: 'generate', name: t.nav.image, icon: Sparkles },
     { id: 'batch', name: t.nav.batch, icon: Layers },
@@ -156,7 +157,6 @@ function AppContentInner(): JSX.Element {
     { id: 'training', name: t.nav.training || 'Training', icon: Cpu },
     // TEMPORARILY DISABLED - 3D not working, re-enable when fixed
     // { id: '3d', name: '3D', icon: Box },
-    { id: 'marketplace', name: 'Agents', icon: Bot },
     { id: 'gallery', name: t.nav.gallery, icon: Grid }
   ];
 
@@ -452,11 +452,11 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         )}
         */}
         
-        {activeTab === 'marketplace' && (
-          <ErrorBoundary fallbackText="Agent marketplace encountered an error">
+        {activeTab === 'workbench' && (
+          <ErrorBoundary fallbackText="Agent workbench encountered an error">
             <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-              <Suspense fallback={<Win95LoadingFallback text="Loading Agent Marketplace..." />}>
-                <AgentMarketplace />
+              <Suspense fallback={<Win95LoadingFallback text="Loading Agent Workbench..." />}>
+                <AgentMarketplace onNavigate={setActiveTab} />
               </Suspense>
             </div>
           </ErrorBoundary>

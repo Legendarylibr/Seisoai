@@ -10,13 +10,13 @@ import { API_URL } from '../utils/apiConfig';
 
 // All available features/tabs the user can enable
 export const ALL_FEATURES = [
+  { id: 'workbench', label: 'Agents', description: 'Build agents, wire capabilities, manage API keys', icon: 'Bot' },
   { id: 'chat', label: 'Chat AI', description: 'Conversational AI assistant', icon: 'MessageCircle' },
   { id: 'generate', label: 'Image Gen', description: 'Generate images with AI', icon: 'Sparkles' },
   { id: 'batch', label: 'Batch', description: 'Generate multiple images at once', icon: 'Layers' },
   { id: 'video', label: 'Video', description: 'Create AI videos', icon: 'Film' },
   { id: 'music', label: 'Music', description: 'Generate music and audio', icon: 'Music' },
   { id: 'training', label: 'Training', description: 'Train custom LoRA models', icon: 'Cpu' },
-  { id: 'marketplace', label: 'Agents', description: 'Agent marketplace and API keys', icon: 'Bot' },
   { id: 'gallery', label: 'Gallery', description: 'Browse and manage generations', icon: 'Grid' },
 ] as const;
 
@@ -54,7 +54,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   defaultStyle: null,
   defaultAspectRatio: '1:1',
   defaultOptimizePrompt: false,
-  defaultTab: 'chat',
+  defaultTab: 'workbench',
   language: 'en',
   profileCompleted: false,
 };
@@ -93,12 +93,29 @@ export function useUserPreferences(): UserPreferencesContextValue {
   return useContext(UserPreferencesContext);
 }
 
+function migratePreferences(prefs: UserPreferences): UserPreferences {
+  // Migrate "marketplace" → "workbench" (v2026.02 rename)
+  if (prefs.enabledTabs?.includes('marketplace')) {
+    prefs.enabledTabs = prefs.enabledTabs.map(t => t === 'marketplace' ? 'workbench' : t);
+    // Deduplicate in case workbench was already present
+    prefs.enabledTabs = [...new Set(prefs.enabledTabs)];
+  }
+  // Ensure workbench is always in enabledTabs if missing
+  if (prefs.enabledTabs && !prefs.enabledTabs.includes('workbench')) {
+    prefs.enabledTabs = ['workbench', ...prefs.enabledTabs];
+  }
+  if ((prefs as unknown as Record<string, unknown>).defaultTab === 'marketplace') {
+    prefs.defaultTab = 'workbench';
+  }
+  return prefs;
+}
+
 function loadPreferences(): UserPreferences {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      return { ...DEFAULT_PREFERENCES, ...parsed };
+      return migratePreferences({ ...DEFAULT_PREFERENCES, ...parsed });
     }
   } catch (error) {
     logger.warn('Failed to load preferences from localStorage', { error });
