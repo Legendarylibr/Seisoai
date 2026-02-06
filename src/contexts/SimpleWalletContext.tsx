@@ -104,6 +104,20 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
   const [tokenGateConfig, setTokenGateConfig] = useState<TokenGateConfig | null>(null);
   const lastFetchRef = useRef(0);
 
+  // Track if we've done initial disconnect to clear stale connections
+  const hasDisconnectedOnMount = useRef(false);
+
+  // Disconnect any persisted wallet on mount to require fresh connection each visit
+  useEffect(() => {
+    if (!hasDisconnectedOnMount.current && wagmiConnected) {
+      hasDisconnectedOnMount.current = true;
+      disconnect();
+      logger.info('Cleared persisted wallet connection - fresh auth required');
+    } else {
+      hasDisconnectedOnMount.current = true;
+    }
+  }, [wagmiConnected, disconnect]);
+
   // Derived state from wagmi
   const isConnected = wagmiConnected;
   const address = wagmiAddress?.toLowerCase() || null;
