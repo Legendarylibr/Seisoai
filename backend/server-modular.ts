@@ -612,7 +612,13 @@ async function startServer(): Promise<void> {
     //   logger.info('JWT key rotation scheduled');
     // }
 
-    // Log FAL configuration
+    // Log API key configuration
+    if (config.ANTHROPIC_API_KEY) {
+      logger.info('Anthropic API key configured — Claude models enabled');
+    } else {
+      logger.warn('ANTHROPIC_API_KEY not set — chat assistant and LLM features will return 503');
+    }
+
     if (config.FAL_API_KEY) {
       logger.info('FAL API key configured');
     } else {

@@ -1,6 +1,6 @@
 // Gallery and generation history service
 import logger from '../utils/logger';
-import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, apiFetch, ensureCSRFToken } from '../utils/apiConfig';
 import { getAuthToken } from '../utils/apiConfig';
 
 // Types
@@ -284,18 +284,8 @@ export const updateSettings = async (
   settings: Record<string, unknown>
 ): Promise<{ success: boolean }> => {
   try {
-    // Note: API_URL can be empty string for same-origin production deployments
-    
-    // Ensure CSRF token is available
-    const csrfToken = await ensureCSRFToken();
-
-    const response = await fetch(`${API_URL}/api/users/${walletAddress}/settings`, {
+    const response = await apiFetch(`${API_URL}/api/users/${walletAddress}/settings`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
-      },
-      credentials: 'include',
       body: JSON.stringify({ settings })
     });
 

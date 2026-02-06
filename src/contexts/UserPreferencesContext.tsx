@@ -6,7 +6,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useSimpleWallet } from './SimpleWalletContext';
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, apiFetch } from '../utils/apiConfig';
 
 // All available features/tabs the user can enable
 export const ALL_FEATURES = [
@@ -190,11 +190,9 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }): 
   useEffect(() => {
     if (isConnected && address) {
       // Async sync to backend — fire and forget
-      fetch(`${API_URL}/api/users/${address}/settings`, {
+      apiFetch(`${API_URL}/api/users/${address}/settings`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ preferences }),
+        body: JSON.stringify({ settings: preferences }),
       }).catch(() => {
         // Silent fail — localStorage is the primary store
       });

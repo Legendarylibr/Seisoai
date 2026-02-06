@@ -174,9 +174,9 @@ export const config: Config = {
   SESSION_SECRET: process.env.SESSION_SECRET,
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
   
-  // APIs
-  FAL_API_KEY: process.env.FAL_API_KEY,
-  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  // APIs (trim to handle copy-paste whitespace from deployment platforms)
+  FAL_API_KEY: process.env.FAL_API_KEY?.trim(),
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY?.trim(),
   
   // CORS
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
