@@ -67,7 +67,9 @@ const MultiImageModelSelector: React.FC<MultiImageModelSelectorProps> = () => {
   const { controlNetImage, multiImageModel, setMultiImageModel } = useImageGenerator();
   const { isConnected, address } = useSimpleWallet();
   const [trainedModels, setTrainedModels] = useState<TrainedModel[]>([]);
-  const [showLoraModels, setShowLoraModels] = useState(false);
+  // Auto-expand if a LoRA model is already selected
+  const isLoraSelected = multiImageModel?.startsWith('lora:') ?? false;
+  const [showLoraModels, setShowLoraModels] = useState(isLoraSelected);
 
   // Load trained models
   useEffect(() => {
@@ -77,6 +79,11 @@ const MultiImageModelSelector: React.FC<MultiImageModelSelectorProps> = () => {
         .catch(() => { /* ignore */ });
     }
   }, [isConnected, address]);
+
+  // Auto-expand LoRA section when a LoRA model gets selected
+  useEffect(() => {
+    if (isLoraSelected) setShowLoraModels(true);
+  }, [isLoraSelected]);
 
   const getImageCount = (): number => {
     if (!controlNetImage) return 0;
@@ -217,65 +224,98 @@ const MultiImageModelSelector: React.FC<MultiImageModelSelectorProps> = () => {
         ))}
       </div>
       
-      {/* Trained LoRA models */}
-      {trainedModels.length > 0 && (
-        <div className="px-2 pb-2">
-          <button
-            onClick={() => setShowLoraModels(!showLoraModels)}
-            className="flex items-center gap-1 w-full px-2 py-1 text-[9px] font-bold"
-            style={{
-              background: WIN95.buttonFace,
-              color: WIN95.text,
-              border: 'none',
-              boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}`,
-              fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
-              cursor: 'pointer'
-            }}
-          >
-            <GraduationCap className="w-3 h-3" />
-            <span>{showLoraModels ? '▾' : '▸'} My Trained Models ({trainedModels.length})</span>
-          </button>
-          
-          {showLoraModels && (
-            <div className="flex flex-wrap gap-1 mt-1">
-              {trainedModels.map(model => {
-                const isSelected = currentModel === `lora:${model.id}`;
-                return (
-                  <button
-                    key={model.id}
-                    type="button"
-                    onClick={() => {
-                      logger.debug('Selected LoRA model', { modelId: model.id, name: model.name });
-                      setMultiImageModel(`lora:${model.id}`);
-                    }}
-                    className="flex-1 flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 min-w-[70px]"
-                    style={isSelected ? {
-                      background: WIN95.highlight,
-                      color: WIN95.highlightText,
-                      border: 'none',
-                      boxShadow: `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`,
-                      fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                    } : {
-                      background: WIN95.buttonFace,
-                      color: WIN95.text,
-                      border: 'none',
-                      boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
-                      fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-                    }}
-                  >
-                    <div className="flex items-center gap-1">
-                      <GraduationCap className="w-3 h-3" />
-                      <span className="text-[10px] font-bold truncate max-w-[80px]">{model.name}</span>
-                    </div>
-                    <span className="text-[9px]" style={{ opacity: 0.8 }}>LoRA</span>
-                    <span className="text-[8px]" style={{ opacity: 0.7 }}>{LORA_INFERENCE_CREDITS} cr</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Trained LoRA models section — always visible */}
+      <div style={{ borderTop: `1px solid ${WIN95.bgDark}` }}>
+        <button
+          onClick={() => setShowLoraModels(!showLoraModels)}
+          className="flex items-center gap-1.5 w-full px-2 py-1 text-left"
+          style={{
+            background: isLoraSelected
+              ? 'linear-gradient(90deg, #000080 0%, #1084d0 100%)'
+              : WIN95.bgDark,
+            color: isLoraSelected ? '#ffffff' : WIN95.text,
+            border: 'none',
+            fontFamily: 'Tahoma, "MS Sans Serif", sans-serif',
+            cursor: 'pointer'
+          }}
+        >
+          <GraduationCap className="w-3.5 h-3.5" />
+          <span className="text-[10px] font-bold flex-1">
+            My Trained Models
+            {trainedModels.length > 0 && ` (${trainedModels.length})`}
+          </span>
+          <span className="text-[9px]">{showLoraModels ? '▾' : '▸'}</span>
+        </button>
+
+        {showLoraModels && (
+          <div className="p-2">
+            {trainedModels.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {trainedModels.map(model => {
+                  const isSelected = currentModel === `lora:${model.id}`;
+                  return (
+                    <button
+                      key={model.id}
+                      type="button"
+                      onClick={() => {
+                        logger.debug('Selected LoRA model', { modelId: model.id, name: model.name });
+                        setMultiImageModel(`lora:${model.id}`);
+                      }}
+                      className="flex-1 flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 min-w-[80px]"
+                      style={isSelected ? {
+                        background: WIN95.highlight,
+                        color: WIN95.highlightText,
+                        border: 'none',
+                        boxShadow: `inset 1px 1px 0 ${WIN95.border.darker}, inset -1px -1px 0 ${WIN95.border.light}`,
+                        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                      } : {
+                        background: WIN95.buttonFace,
+                        color: WIN95.text,
+                        border: 'none',
+                        boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}`,
+                        fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) e.currentTarget.style.background = '#d4d4d4';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) e.currentTarget.style.background = WIN95.buttonFace;
+                      }}
+                      title={model.triggerWord ? `Trigger: ${model.triggerWord}` : model.name}
+                    >
+                      <div className="flex items-center gap-1">
+                        <GraduationCap className="w-3 h-3" />
+                        <span className="text-[10px] font-bold truncate max-w-[90px]">{model.name}</span>
+                      </div>
+                      {model.triggerWord && (
+                        <span className="text-[8px] truncate max-w-[90px]" style={{ opacity: 0.8 }}>
+                          &quot;{model.triggerWord}&quot;
+                        </span>
+                      )}
+                      <span className="text-[8px]" style={{ opacity: 0.7 }}>{LORA_INFERENCE_CREDITS} cr</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              /* Empty state — nudge user to training tab */
+              <div
+                className="flex items-center gap-2 px-2 py-1.5"
+                style={{
+                  background: WIN95.inputBg,
+                  boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}, inset -1px -1px 0 ${WIN95.border.light}`,
+                  fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+                }}
+              >
+                <GraduationCap className="w-3.5 h-3.5 flex-shrink-0" style={{ color: WIN95.textDisabled }} />
+                <span className="text-[9px]" style={{ color: WIN95.textDisabled }}>
+                  No trained models yet. Go to the <strong style={{ color: WIN95.text }}>Training</strong> tab to fine-tune a custom LoRA model on your own images.
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

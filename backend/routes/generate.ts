@@ -17,6 +17,7 @@ import { calculateVideoCredits, calculateMusicCredits, calculateUpscaleCredits, 
 import { applyClawMarkup } from '../middleware/credits';
 import { encrypt, isEncryptionConfigured } from '../utils/encryption';
 import { withRetry } from '../utils/mongoRetry';
+import { ethers } from 'ethers';
 import { recordProvenance, getProvenanceAgentRegistry, isProvenanceConfigured } from '../services/provenanceService';
 import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
 import config from '../config/env';
@@ -1366,22 +1367,6 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
       }
       
-      // Record provenance for x402 requests (minimal on-chain anchor)
-      if (x402Req.isX402Paid && images.length > 0 && isProvenanceConfigured()) {
-        const agentRegistry = getProvenanceAgentRegistry();
-        const chainId = config.ERC8004_CHAIN_ID;
-        const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
-        if (agentRegistry && chainId) {
-          recordProvenance({
-            agentId,
-            agentRegistry,
-            chainId,
-            type: 'image',
-            resultUrl: images[0],
-          }).catch(() => {}); // Fire-and-forget
-        }
-      }
-
       // Build response with optional prompt optimization info
       const responseData: Record<string, unknown> = {
         success: true,
@@ -1406,6 +1391,22 @@ export function createGenerationRoutes(deps: Dependencies) {
           optimizedPrompt: promptOptimizationResult.optimizedPrompt,
           reasoning: promptOptimizationResult.reasoning
         };
+      }
+
+      // Provenance: always include contentHash; mint NFT for x402 (fire-and-forget)
+      // Platform pays gas; NFT goes to user's wallet if available, else platform vault
+      if (images.length > 0) {
+        const contentHash = ethers.keccak256(ethers.toUtf8Bytes(images[0]));
+        responseData.provenance = { contentHash };
+        if (x402Req.isX402Paid && isProvenanceConfigured()) {
+          const agentRegistry = getProvenanceAgentRegistry();
+          const chainId = config.ERC8004_CHAIN_ID;
+          const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
+          if (agentRegistry && chainId) {
+            recordProvenance({ agentId, agentRegistry, chainId, type: 'image', resultUrl: images[0], recipient: req.user?.walletAddress })
+              .catch(() => {});
+          }
+        }
       }
       
       res.json(responseData);
@@ -1757,22 +1758,6 @@ export function createGenerationRoutes(deps: Dependencies) {
         }
       }
       
-      // Record provenance for x402 requests
-      if (x402Req.isX402Paid && images.length > 0 && isProvenanceConfigured()) {
-        const agentRegistry = getProvenanceAgentRegistry();
-        const chainId = config.ERC8004_CHAIN_ID;
-        const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
-        if (agentRegistry && chainId) {
-          recordProvenance({
-            agentId,
-            agentRegistry,
-            chainId,
-            type: 'image',
-            resultUrl: images[0],
-          }).catch(() => {});
-        }
-      }
-
       const completeData: Record<string, unknown> = {
         success: true,
         images,
@@ -1786,6 +1771,22 @@ export function createGenerationRoutes(deps: Dependencies) {
           settled: x402Req.x402Payment.settled,
           transactionHash: x402Req.x402Payment.transactionHash,
         };
+      }
+
+      // Provenance: always include contentHash; mint NFT for x402 (fire-and-forget)
+      // Platform pays gas; NFT goes to user's wallet if available, else platform vault
+      if (images.length > 0) {
+        const contentHash = ethers.keccak256(ethers.toUtf8Bytes(images[0]));
+        completeData.provenance = { contentHash };
+        if (x402Req.isX402Paid && isProvenanceConfigured()) {
+          const agentRegistry = getProvenanceAgentRegistry();
+          const chainId = config.ERC8004_CHAIN_ID;
+          const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
+          if (agentRegistry && chainId) {
+            recordProvenance({ agentId, agentRegistry, chainId, type: 'image', resultUrl: images[0], recipient: req.user?.walletAddress })
+              .catch(() => {});
+          }
+        }
       }
 
       sendEvent('complete', completeData);
@@ -2384,22 +2385,6 @@ export function createGenerationRoutes(deps: Dependencies) {
               }
             }
             
-            // Record provenance for x402 requests
-            if (x402Req.isX402Paid && isProvenanceConfigured()) {
-              const agentRegistry = getProvenanceAgentRegistry();
-              const chainId = config.ERC8004_CHAIN_ID;
-              const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
-              if (agentRegistry && chainId) {
-                recordProvenance({
-                  agentId,
-                  agentRegistry,
-                  chainId,
-                  type: 'video',
-                  resultUrl: videoUrl,
-                }).catch(() => {});
-              }
-            }
-            
             const responseData: Record<string, unknown> = {
               success: true,
               video: {
@@ -2417,6 +2402,22 @@ export function createGenerationRoutes(deps: Dependencies) {
                 settled: x402Req.x402Payment.settled,
                 transactionHash: x402Req.x402Payment.transactionHash,
               };
+            }
+
+            // Provenance: always include contentHash; mint NFT for x402 (fire-and-forget)
+            // Platform pays gas; NFT goes to user's wallet if available, else platform vault
+            {
+              const contentHash = ethers.keccak256(ethers.toUtf8Bytes(videoUrl));
+              responseData.provenance = { contentHash };
+              if (x402Req.isX402Paid && isProvenanceConfigured()) {
+                const agentRegistry = getProvenanceAgentRegistry();
+                const chainId = config.ERC8004_CHAIN_ID;
+                const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
+                if (agentRegistry && chainId) {
+                  recordProvenance({ agentId, agentRegistry, chainId, type: 'video', resultUrl: videoUrl, recipient: req.user?.walletAddress })
+                    .catch(() => {});
+                }
+              }
             }
             
             res.json(responseData);
@@ -2679,22 +2680,6 @@ export function createGenerationRoutes(deps: Dependencies) {
                 }
               }
               
-              // Record provenance for x402 requests
-              if (x402Req.isX402Paid && isProvenanceConfigured()) {
-                const agentRegistry = getProvenanceAgentRegistry();
-                const chainId = config.ERC8004_CHAIN_ID;
-                const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
-                if (agentRegistry && chainId) {
-                  recordProvenance({
-                    agentId,
-                    agentRegistry,
-                    chainId,
-                    type: 'music',
-                    resultUrl: resultData.audio_file.url,
-                  }).catch(() => {});
-                }
-              }
-
               // Build response
               const responseData: Record<string, unknown> = {
                 success: true,
@@ -2719,6 +2704,23 @@ export function createGenerationRoutes(deps: Dependencies) {
                   optimizedPrompt: promptOptimizationResult.optimizedPrompt,
                   reasoning: promptOptimizationResult.reasoning
                 };
+              }
+
+              // Provenance: always include contentHash; mint NFT for x402 (fire-and-forget)
+              // Platform pays gas; NFT goes to user's wallet if available, else platform vault
+              {
+                const musicUrl = resultData.audio_file.url;
+                const contentHash = ethers.keccak256(ethers.toUtf8Bytes(musicUrl));
+                responseData.provenance = { contentHash };
+                if (x402Req.isX402Paid && isProvenanceConfigured()) {
+                  const agentRegistry = getProvenanceAgentRegistry();
+                  const chainId = config.ERC8004_CHAIN_ID;
+                  const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
+                  if (agentRegistry && chainId) {
+                    recordProvenance({ agentId, agentRegistry, chainId, type: 'music', resultUrl: musicUrl, recipient: req.user?.walletAddress })
+                      .catch(() => {});
+                  }
+                }
               }
 
               res.json(responseData);
@@ -3539,20 +3541,27 @@ export function createGenerationRoutes(deps: Dependencies) {
         hasVideo: !!videoUrl
       });
 
-      // Minimal provenance: on-chain only, no prompt/user/DB. Fire-and-forget.
+      // Provenance: compute contentHash for any output; mint NFT if configured
+      // Platform pays gas; NFT goes to user's wallet if available, else platform vault
       const resultUrl = imageUrl || videoUrl;
-      if (resultUrl && isProvenanceConfigured()) {
-        const agentRegistry = getProvenanceAgentRegistry();
-        const chainId = config.ERC8004_CHAIN_ID;
-        const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
-        if (agentRegistry && chainId) {
-          recordProvenance({
-            agentId,
-            agentRegistry,
-            chainId,
-            type: imageUrl ? 'image' : 'video',
-            resultUrl,
-          }).catch(() => {});
+      const provenanceData: Record<string, unknown> = {};
+      if (resultUrl) {
+        const contentHash = ethers.keccak256(ethers.toUtf8Bytes(resultUrl));
+        provenanceData.contentHash = contentHash;
+        if (isProvenanceConfigured()) {
+          const agentRegistry = getProvenanceAgentRegistry();
+          const chainId = config.ERC8004_CHAIN_ID;
+          const agentId = config.ERC8004_DEFAULT_AGENT_ID ?? 1;
+          if (agentRegistry && chainId) {
+            recordProvenance({
+              agentId,
+              agentRegistry,
+              chainId,
+              type: imageUrl ? 'image' : 'video',
+              resultUrl,
+              recipient: req.user?.walletAddress,
+            }).catch(() => {});
+          }
         }
       }
 
@@ -3561,7 +3570,8 @@ export function createGenerationRoutes(deps: Dependencies) {
         generationId,
         credits: user.credits,
         totalCreditsEarned: user.totalCreditsEarned,
-        totalCreditsSpent: user.totalCreditsSpent
+        totalCreditsSpent: user.totalCreditsSpent,
+        ...(provenanceData.contentHash ? { provenance: provenanceData } : {})
       });
     } catch (error) {
       const err = error as Error;

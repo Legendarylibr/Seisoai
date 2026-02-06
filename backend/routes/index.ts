@@ -34,6 +34,7 @@ import createAchievementRoutes from './achievements';
 import createTrainingRoutes from './training';
 // DISABLED: ERC-8004 Agent Registry - not used initially
 // import agentRoutes from './agents';
+import createProvenanceRoutes from './provenance';
 import { adminIPAllowlist } from '../middleware/ipAllowlist';
 import { getCSRFToken } from '../middleware/csrf';
 
@@ -122,6 +123,12 @@ export function createApiRoutes(deps: Dependencies) {
   // Uncomment when ready to enable agent functionality
   // ============================================
   // router.use('/agents', agentRoutes);
+
+  // ============================================
+  // Provenance Verification (ERC-8004 + ERC-721)
+  // Public endpoints to verify AI output provenance
+  // ============================================
+  router.use('/provenance', createProvenanceRoutes(deps as never));
 
   // ============================================
   // Payments

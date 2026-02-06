@@ -32,6 +32,14 @@ async function main() {
   const validationRegistryAddress = await validationRegistry.getAddress();
   console.log("ValidationRegistry deployed to:", validationRegistryAddress);
 
+  // Deploy AI Output Provenance
+  console.log("\n4. Deploying AIOutputProvenance...");
+  const AIOutputProvenance = await ethers.getContractFactory("AIOutputProvenance");
+  const aiOutputProvenance = await AIOutputProvenance.deploy(identityRegistryAddress);
+  await aiOutputProvenance.waitForDeployment();
+  const aiOutputProvenanceAddress = await aiOutputProvenance.getAddress();
+  console.log("AIOutputProvenance deployed to:", aiOutputProvenanceAddress);
+
   // Summary
   console.log("\n========================================");
   console.log("ERC-8004 Deployment Complete!");
@@ -40,9 +48,10 @@ async function main() {
   console.log("Chain ID:", (await ethers.provider.getNetwork()).chainId.toString());
   console.log("");
   console.log("Contract Addresses:");
-  console.log("  IdentityRegistry:   ", identityRegistryAddress);
-  console.log("  ReputationRegistry: ", reputationRegistryAddress);
-  console.log("  ValidationRegistry: ", validationRegistryAddress);
+  console.log("  IdentityRegistry:     ", identityRegistryAddress);
+  console.log("  ReputationRegistry:   ", reputationRegistryAddress);
+  console.log("  ValidationRegistry:   ", validationRegistryAddress);
+  console.log("  AIOutputProvenance:   ", aiOutputProvenanceAddress);
   console.log("");
   console.log("Agent Registry Format: eip155:{chainId}:" + identityRegistryAddress);
   console.log("========================================");
@@ -57,6 +66,7 @@ async function main() {
       IdentityRegistry: identityRegistryAddress,
       ReputationRegistry: reputationRegistryAddress,
       ValidationRegistry: validationRegistryAddress,
+      AIOutputProvenance: aiOutputProvenanceAddress,
     },
     agentRegistry: `eip155:${(await ethers.provider.getNetwork()).chainId}:${identityRegistryAddress}`,
   };
@@ -110,6 +120,16 @@ async function main() {
       console.log("ValidationRegistry verified!");
     } catch (e: any) {
       console.log("ValidationRegistry verification failed:", e.message);
+    }
+
+    try {
+      await run("verify:verify", {
+        address: aiOutputProvenanceAddress,
+        constructorArguments: [identityRegistryAddress],
+      });
+      console.log("AIOutputProvenance verified!");
+    } catch (e: any) {
+      console.log("AIOutputProvenance verification failed:", e.message);
     }
   }
 }

@@ -134,6 +134,11 @@ export interface Config {
   ERC8004_VALIDATOR_ADDRESS?: string;
   /** Private key for agent-approved + validator (provenance: submit request + response) */
   ERC8004_PROVENANCE_SIGNER_PRIVATE_KEY?: string;
+  /** AIOutputProvenance ERC-721 contract address */
+  ERC8004_PROVENANCE_NFT?: string;
+  // Pinata Private IPFS (provenance file storage)
+  PINATA_JWT?: string;
+  PINATA_GATEWAY?: string;
   // Agent deployment signer (optional)
   DEPLOYER_PRIVATE_KEY?: string;
   // Coinbase CDP API (for x402 payment facilitation)
@@ -206,6 +211,10 @@ export const config: Config = {
   ERC8004_DEFAULT_AGENT_ID: process.env.ERC8004_DEFAULT_AGENT_ID ? parseInt(process.env.ERC8004_DEFAULT_AGENT_ID, 10) : 1,
   ERC8004_VALIDATOR_ADDRESS: process.env.ERC8004_VALIDATOR_ADDRESS,
   ERC8004_PROVENANCE_SIGNER_PRIVATE_KEY: process.env.ERC8004_PROVENANCE_SIGNER_PRIVATE_KEY,
+  ERC8004_PROVENANCE_NFT: process.env.ERC8004_PROVENANCE_NFT,
+  // Pinata Private IPFS
+  PINATA_JWT: process.env.PINATA_JWT,
+  PINATA_GATEWAY: process.env.PINATA_GATEWAY,
   // Agent deployment signer (optional)
   DEPLOYER_PRIVATE_KEY: process.env.DEPLOYER_PRIVATE_KEY,
   
