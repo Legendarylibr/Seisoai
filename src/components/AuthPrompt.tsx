@@ -162,10 +162,20 @@ const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
                         setShowProfile(true);
                       }, 0);
                     }
+                    
+                    // Handler that sets the userInitiatedConnection flag via context
+                    // and then opens RainbowKit modal
+                    const handleActivateAgents = () => {
+                      // Call connectWallet from context to set the flag
+                      wallet.connectWallet().catch(() => {
+                        // Ignore errors - the modal will show them
+                      });
+                    };
+                    
                     return (
                       <div {...(!ready && { 'aria-hidden': true, style: { opacity: 0, pointerEvents: 'none' as const, userSelect: 'none' as const } })}>
                         <button
-                          onClick={openConnectModal}
+                          onClick={handleActivateAgents}
                           className="w-full generate-btn cta-glow flex items-center justify-center gap-3 px-6 py-4 text-base font-bold min-h-[48px]"
                           style={{ fontFamily: font, border: 'none', cursor: 'pointer' }}
                         >

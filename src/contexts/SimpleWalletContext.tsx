@@ -118,6 +118,10 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
 
   // Track if we've done initial disconnect to clear stale connections
   const hasDisconnectedOnMount = useRef(false);
+  
+  // Track if user has intentionally initiated connection (clicked "Activate Agents")
+  // This prevents auto-triggering auth on page load from persisted wallet state
+  const userInitiatedConnection = useRef(false);
 
   // Disconnect any persisted wallet on mount to require fresh connection each visit
   // EXCEPT when in a wallet's in-app browser (like Base app) where the wallet is injected
@@ -125,6 +129,8 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     // Skip disconnect logic if we're in a wallet's in-app browser
     if (isInWalletBrowser) {
       hasDisconnectedOnMount.current = true;
+      // In-app browsers: user intentionally opened the app in their wallet
+      userInitiatedConnection.current = true;
       if (wagmiConnected) {
         logger.info('In-app browser detected - keeping wallet connection', { 
           connectorId: connector?.id 
@@ -418,6 +424,10 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
       setIsLoading(true);
       setError(null);
       
+      // Mark that user intentionally initiated connection
+      // This allows the auth effect to proceed after wallet connects
+      userInitiatedConnection.current = true;
+      
       // Open RainbowKit modal - it handles all wallet selection
       if (openConnectModal) {
         openConnectModal();
@@ -454,8 +464,10 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
   }, [disconnect]);
 
   // Authenticate and fetch data when wallet connects
+  // IMPORTANT: Only proceed if user intentionally initiated the connection (clicked "Activate Agents")
+  // This prevents auto-triggering wallet signing popup on page load from persisted wallet state
   useEffect(() => {
-    if (isConnected && address) {
+    if (isConnected && address && userInitiatedConnection.current) {
       // Authenticate wallet if not already authenticated
       authenticateWallet(address).then((authenticated) => {
         if (authenticated) {
@@ -469,7 +481,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
         fetchCredits(address, 0, true);
         checkTokenGateAccess(address).catch(() => { /* ignore */ });
       });
-    } else {
+    } else if (!isConnected) {
       // Reset state when disconnected
       setIsAuthenticated(false);
       authAttemptedRef.current = null;

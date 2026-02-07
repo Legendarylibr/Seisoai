@@ -172,7 +172,7 @@ function AppContentInner(): JSX.Element {
 
 // Sign-in gate - shows AuthPrompt until user is fully authenticated with JWT
 function SignInGate(): JSX.Element {
-  const { isConnected, isLoading, error } = useSimpleWallet();
+  const { isConnected, error } = useSimpleWallet();
   const { preferences } = useUserPreferences();
   const [csrfReady, setCsrfReady] = useState(false);
 
@@ -216,41 +216,12 @@ function SignInGate(): JSX.Element {
     );
   }
 
-  // Show loading spinner while authenticating
-  if (isLoading) {
-    return (
-      <div 
-        style={{ 
-          position: 'fixed', 
-          top: 0, 
-          left: 0, 
-          right: 0, 
-          bottom: 0, 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          background: 'var(--win95-teal)',
-          zIndex: 50 
-        }}
-      >
-        <div 
-          className="p-6 text-center"
-          style={{
-            background: 'var(--win95-bg)',
-            boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), 4px 4px 8px rgba(0,0,0,0.3)'
-          }}
-        >
-          <div className="w-8 h-8 mx-auto mb-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--win95-highlight)', borderTopColor: 'transparent' }} />
-          <p className="text-[12px] font-bold" style={{ color: 'var(--win95-text)', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
-            Authenticating...
-          </p>
-          <p className="text-[10px] mt-1" style={{ color: 'var(--win95-text-disabled)' }}>
-            Please sign the message in your wallet
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // Note: We don't show a loading spinner here because:
+  // 1. Wallet selection happens in RainbowKit's modal (handled by AuthPrompt)
+  // 2. Message signing happens in the wallet's popup
+  // 3. We only want to block the UI when actually processing server auth
+  // The isLoading state includes isConnecting which is true during wallet selection,
+  // which would incorrectly show a spinner while the user is picking their wallet.
 
   // Show error if authentication failed
   if (error) {
