@@ -110,6 +110,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     return isInWalletBrowser && hasStoredAuth();
   });
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const isAuthenticatingRef = useRef(false);
   const authAttemptedRef = useRef<string | null>(null);
   const [totalCreditsEarned, setTotalCreditsEarned] = useState(0);
   const [totalCreditsSpent, setTotalCreditsSpent] = useState(0);
@@ -136,11 +137,16 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     // Skip disconnect logic if we're in a wallet's in-app browser
     if (isInWalletBrowser) {
       hasDisconnectedOnMount.current = true;
-      // In-app browsers: user intentionally opened the app in their wallet
-      userInitiatedConnection.current = true;
+      // Only auto-allow auth for returning users who already have a stored token.
+      // First-time users must click "Activate Agents" to initiate the sign flow.
+      // This prevents the sign popup from appearing immediately on page load.
+      if (hasStoredAuth()) {
+        userInitiatedConnection.current = true;
+      }
       if (wagmiConnected) {
         logger.info('In-app browser detected - keeping wallet connection', { 
-          connectorId: connector?.id 
+          connectorId: connector?.id,
+          hasStoredAuth: hasStoredAuth()
         });
       }
       return;
@@ -352,27 +358,32 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
   }, [fetchCredits]);
 
   // Authenticate wallet with signature (SIWE-style)
+  // Uses refs for guards (isAuthenticatingRef, authAttemptedRef) to keep this callback stable
+  // and avoid re-triggering effects when auth state changes.
   const authenticateWallet = useCallback(async (walletAddress: string): Promise<boolean> => {
-    // Prevent concurrent auth attempts for the same wallet (only block while in-flight)
-    if (isAuthenticating) {
+    // Prevent concurrent auth attempts (use ref to avoid recreating callback on state change)
+    if (isAuthenticatingRef.current) {
       logger.debug('Auth already in progress');
       return false;
     }
     
-    // Already successfully authenticated for this wallet
-    if (authAttemptedRef.current === walletAddress.toLowerCase() && isAuthenticated) {
+    const normalized = walletAddress.toLowerCase();
+    
+    // Already completed auth for this wallet (ref-based check, no state dependency)
+    if (authAttemptedRef.current === normalized) {
       logger.debug('Already authenticated for this wallet');
       return true;
     }
     
-    // Check if we already have a valid token
+    // Check if we already have a valid token (e.g., returning user in in-app browser)
     if (hasStoredAuth()) {
       logger.debug('Already have stored auth token');
       setIsAuthenticated(true);
-      authAttemptedRef.current = walletAddress.toLowerCase();
+      authAttemptedRef.current = normalized;
       return true;
     }
     
+    isAuthenticatingRef.current = true;
     setIsAuthenticating(true);
     setError(null);
     
@@ -417,7 +428,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
       }
       
       // Success! Only now mark this wallet as auth-completed
-      authAttemptedRef.current = walletAddress.toLowerCase();
+      authAttemptedRef.current = normalized;
       setIsAuthenticated(true);
       setError(null);
       
@@ -436,9 +447,10 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
       setError('Authentication failed');
       return false;
     } finally {
+      isAuthenticatingRef.current = false;
       setIsAuthenticating(false);
     }
-  }, [signMessageAsync, isAuthenticated, isAuthenticating]);
+  }, [signMessageAsync]);
 
   // Connect wallet - opens RainbowKit modal
   const connectWallet = useCallback(async (_selectedWallet?: string): Promise<void> => {
@@ -513,26 +525,67 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
   // Authenticate and fetch data when wallet connects
   // IMPORTANT: Only proceed if user intentionally initiated the connection (clicked "Activate Agents")
   // This prevents auto-triggering wallet signing popup on page load from persisted wallet state
+  //
+  // Uses refs to access latest callbacks without including them as dependencies.
+  // This prevents the effect from re-firing when auth state changes recreate callbacks,
+  // which was causing the sign popup to reappear after successful authentication.
+  const authenticateWalletRef = useRef(authenticateWallet);
+  authenticateWalletRef.current = authenticateWallet;
+  const fetchCreditsRef = useRef(fetchCredits);
+  fetchCreditsRef.current = fetchCredits;
+  const checkHolderStatusRef = useRef(checkHolderStatus);
+  checkHolderStatusRef.current = checkHolderStatus;
+  const checkTokenGateAccessRef = useRef(checkTokenGateAccess);
+  checkTokenGateAccessRef.current = checkTokenGateAccess;
+
   useEffect(() => {
     if (isConnected && address && userInitiatedConnection.current) {
-      // Authenticate wallet if not already authenticated
-      authenticateWallet(address).then((authenticated) => {
+      // Guard: already authenticated for this address — don't re-trigger
+      if (authAttemptedRef.current === address) {
+        return;
+      }
+      
+      // If we have a stored auth token (e.g., returning user in in-app browser,
+      // or reconnecting after a transient disconnect), restore auth without re-signing
+      if (hasStoredAuth()) {
+        authAttemptedRef.current = address;
+        setIsAuthenticated(true);
+        fetchCreditsRef.current(address, 0, true);
+        checkHolderStatusRef.current(address).catch(() => { /* ignore */ });
+        checkTokenGateAccessRef.current(address).catch(() => { /* ignore */ });
+        return;
+      }
+      
+      // No stored token — run full authentication (will prompt for signature)
+      authenticateWalletRef.current(address).then((authenticated) => {
         if (authenticated) {
           // Fetch additional data after authentication
-          fetchCredits(address, 0, true);
-          checkHolderStatus(address).catch(() => { /* ignore */ });
-          checkTokenGateAccess(address).catch(() => { /* ignore */ });
+          fetchCreditsRef.current(address, 0, true);
+          checkHolderStatusRef.current(address).catch(() => { /* ignore */ });
+          checkTokenGateAccessRef.current(address).catch(() => { /* ignore */ });
         }
       }).catch(() => {
         // Still try to fetch some data even if auth fails
-        fetchCredits(address, 0, true);
-        checkTokenGateAccess(address).catch(() => { /* ignore */ });
+        fetchCreditsRef.current(address, 0, true);
+        checkTokenGateAccessRef.current(address).catch(() => { /* ignore */ });
       });
     } else if (!isConnected) {
-      // Reset state when disconnected
-      setIsAuthenticated(false);
-      authAttemptedRef.current = null;
-      clearTokens();
+      // For in-app browsers (Base app, Coinbase Wallet), preserve auth tokens
+      // across transient disconnections. The wallet connection can flicker in
+      // mobile browsers, and we don't want to force re-signing each time.
+      // Explicit disconnects are handled by disconnectWallet() which clears everything.
+      if (isInWalletBrowser) {
+        // Keep tokens and authAttemptedRef — auth will be restored on reconnect
+        // Only reset isAuthenticated if we don't have stored auth (prevents UI flicker)
+        if (!hasStoredAuth()) {
+          setIsAuthenticated(false);
+        }
+      } else {
+        // Regular browsers: clear everything on disconnect
+        setIsAuthenticated(false);
+        authAttemptedRef.current = null;
+        clearTokens();
+      }
       setCredits(0);
       setTotalCreditsEarned(0);
       setTotalCreditsSpent(0);
@@ -542,7 +595,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
       setTokenHoldings([]);
       setTokenGateStatus(DEFAULT_TOKEN_GATE_STATUS);
     }
-  }, [isConnected, address, authenticateWallet, fetchCredits, checkHolderStatus, checkTokenGateAccess]);
+  }, [isConnected, address]);
 
   // PERFORMANCE: Smarter polling
   useEffect(() => {
