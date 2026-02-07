@@ -232,7 +232,7 @@ export interface TokenGateConfig {
 }
 
 export const TOKEN_GATE: TokenGateConfig = {
-  enabled: true,
+  enabled: false,
   contractAddress: '0xe9b67cB49FD08c81c06C6c728b4359bD56b98B07',
   chainId: '8453',         // Base
   chainName: 'Base',
