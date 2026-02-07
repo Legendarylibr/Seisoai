@@ -58,7 +58,7 @@ export const CHAT_MODELS = [
 ] as const;
 
 const DEFAULT_PREFERENCES: UserPreferences = {
-  theme: 'system',
+  theme: 'dark',
   accentColor: '#000080', // Win95 blue
   enabledTabs: ['workbench'], // Agent Builder only — users add capabilities via Build Your UI
   defaultModel: null,
