@@ -1,6 +1,9 @@
 /**
  * Image Tools routes
  * Face swap, inpainting, image description, and other image utilities
+ * 
+ * Supports x402 pay-per-request via the x402 middleware.
+ * When isX402Paid is true, credit deduction is skipped.
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
@@ -11,6 +14,7 @@ import llmProvider, { DEFAULT_MODELS } from '../services/llmProvider';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 import { applyClawMarkup } from '../middleware/credits';
+import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
 
 // Types
 interface Dependencies {
@@ -20,6 +24,10 @@ interface Dependencies {
 
 interface AuthenticatedRequest extends Request {
   user?: IUser;
+  isX402Paid?: boolean;
+  x402Payment?: X402Request['x402Payment'];
+  creditsRequired?: number;
+  hasFreeAccess?: boolean;
 }
 
 /**
@@ -75,6 +83,44 @@ async function refundCredits(
   }
 }
 
+/**
+ * Deduct credits with x402 bypass support
+ * Returns { success, remainingCredits, actualCreditsDeducted } or { error } for 402
+ */
+async function deductCreditsWithX402(
+  req: AuthenticatedRequest,
+  user: IUser,
+  baseCredits: number
+): Promise<{ success: true; remainingCredits: number; actualCreditsDeducted: number } | { success: false; error: string }> {
+  const isX402Paid = !!req.isX402Paid;
+  
+  // Skip credit deduction for x402 payments
+  if (isX402Paid) {
+    logger.info('x402 payment detected, skipping credit deduction');
+    return { success: true, remainingCredits: user.credits || 0, actualCreditsDeducted: 0 };
+  }
+  
+  const creditsRequired = applyClawMarkup(req, baseCredits);
+  const User = mongoose.model<IUser>('User');
+  const updateQuery = buildUserUpdateQuery(user);
+  
+  if (!updateQuery) {
+    return { success: false, error: 'User account required' };
+  }
+
+  const updateResult = await User.findOneAndUpdate(
+    { ...updateQuery, credits: { $gte: creditsRequired } },
+    { $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired } },
+    { new: true }
+  );
+
+  if (!updateResult) {
+    return { success: false, error: 'Insufficient credits' };
+  }
+  
+  return { success: true, remainingCredits: updateResult.credits, actualCreditsDeducted: creditsRequired };
+}
+
 export function createImageToolsRoutes(deps: Dependencies) {
   const router = Router();
   const { rateLimiter, requireCredits } = deps;
@@ -124,28 +170,39 @@ export function createImageToolsRoutes(deps: Dependencies) {
       }
 
       const creditsRequired = applyClawMarkup(req, 2);
+      const isX402Paid = !!(req as AuthenticatedRequest).isX402Paid;
 
-      // Deduct credits
-      const User = mongoose.model<IUser>('User');
-      const updateQuery = buildUserUpdateQuery(user);
-      
-      if (!updateQuery) {
-        res.status(400).json({ success: false, error: 'User account required' });
-        return;
+      // Skip credit deduction for x402 payments (already verified by middleware)
+      let actualCreditsDeducted = 0;
+      let remainingCredits = user.credits || 0;
+
+      if (!isX402Paid) {
+        // Deduct credits for non-x402 requests
+        const User = mongoose.model<IUser>('User');
+        const updateQuery = buildUserUpdateQuery(user);
+        
+        if (!updateQuery) {
+          res.status(400).json({ success: false, error: 'User account required' });
+          return;
+        }
+
+        const updateResult = await User.findOneAndUpdate(
+          { ...updateQuery, credits: { $gte: creditsRequired } },
+          { $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired } },
+          { new: true }
+        );
+
+        if (!updateResult) {
+          res.status(402).json({ success: false, error: 'Insufficient credits' });
+          return;
+        }
+        actualCreditsDeducted = creditsRequired;
+        remainingCredits = updateResult.credits;
+      } else {
+        logger.info('x402 payment detected, skipping credit deduction for face swap');
       }
 
-      const updateResult = await User.findOneAndUpdate(
-        { ...updateQuery, credits: { $gte: creditsRequired } },
-        { $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired } },
-        { new: true }
-      );
-
-      if (!updateResult) {
-        res.status(402).json({ success: false, error: 'Insufficient credits' });
-        return;
-      }
-
-      logger.info('Face swap request', { userId: user.userId });
+      logger.info('Face swap request', { userId: user.userId, isX402Paid });
 
       // Submit to face-swap model
       const result = await submitToQueue<{ request_id?: string }>('fal-ai/face-swap', {
@@ -156,7 +213,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
       const requestId = result.request_id;
 
       if (!requestId) {
-        await refundCredits(user, creditsRequired, 'No request ID returned');
+        if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'No request ID returned');
         res.status(500).json({ success: false, error: 'Failed to submit face swap request' });
         return;
       }
@@ -182,21 +239,31 @@ export function createImageToolsRoutes(deps: Dependencies) {
             const imageUrl = resultData.image?.url || resultData.images?.[0]?.url;
 
             if (imageUrl) {
-              logger.info('Face swap completed', { requestId, userId: user.userId });
-              res.json({
+              // Settle x402 payment if applicable
+              const x402Req = req as X402Request;
+              if (x402Req.isX402Paid && x402Req.x402Payment) {
+                await settleX402Payment(x402Req);
+              }
+
+              logger.info('Face swap completed', { requestId, userId: user.userId, isX402Paid });
+              const responseData: Record<string, unknown> = {
                 success: true,
                 image_url: imageUrl,
-                remainingCredits: updateResult.credits,
-                creditsDeducted: creditsRequired
-              });
+                remainingCredits,
+                creditsDeducted: actualCreditsDeducted
+              };
+              if (x402Req.isX402Paid && x402Req.x402Payment) {
+                responseData.x402 = { settled: x402Req.x402Payment.settled, transactionHash: x402Req.x402Payment.transactionHash };
+              }
+              res.json(responseData);
               return;
             } else {
-              await refundCredits(user, creditsRequired, 'No image URL in response');
+              if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'No image URL in response');
               res.status(500).json({ success: false, error: 'No image generated' });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
-            await refundCredits(user, creditsRequired, 'Face swap failed');
+            if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'Face swap failed');
             res.status(500).json({ success: false, error: 'Face swap failed' });
             return;
           }
@@ -205,7 +272,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
         }
       }
 
-      await refundCredits(user, creditsRequired, 'Face swap timed out');
+      if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'Face swap timed out');
       res.status(504).json({ success: false, error: 'Face swap timed out' });
     } catch (error) {
       const err = error as Error;
@@ -273,31 +340,20 @@ export function createImageToolsRoutes(deps: Dependencies) {
         return;
       }
 
-      const creditsRequired = applyClawMarkup(req, 2);
-
-      // Deduct credits
-      const User = mongoose.model<IUser>('User');
-      const updateQuery = buildUserUpdateQuery(user);
-      
-      if (!updateQuery) {
-        res.status(400).json({ success: false, error: 'User account required' });
+      // Deduct credits with x402 bypass support
+      const creditResult = await deductCreditsWithX402(req, user, 2);
+      if (!creditResult.success) {
+        const statusCode = creditResult.error === 'Insufficient credits' ? 402 : 400;
+        res.status(statusCode).json({ success: false, error: creditResult.error });
         return;
       }
-
-      const updateResult = await User.findOneAndUpdate(
-        { ...updateQuery, credits: { $gte: creditsRequired } },
-        { $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired } },
-        { new: true }
-      );
-
-      if (!updateResult) {
-        res.status(402).json({ success: false, error: 'Insufficient credits' });
-        return;
-      }
+      const { remainingCredits, actualCreditsDeducted } = creditResult;
+      const isX402Paid = !!req.isX402Paid;
 
       logger.info('Inpaint request', { 
         prompt: prompt.substring(0, 50), 
-        userId: user.userId 
+        userId: user.userId,
+        isX402Paid
       });
 
       // Submit to FLUX inpaint
@@ -315,7 +371,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
       const requestId = result.request_id;
 
       if (!requestId) {
-        await refundCredits(user, creditsRequired, 'No request ID returned');
+        if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'No request ID returned');
         res.status(500).json({ success: false, error: 'Failed to submit inpaint request' });
         return;
       }
@@ -347,21 +403,31 @@ export function createImageToolsRoutes(deps: Dependencies) {
             }
 
             if (imageUrl) {
-              logger.info('Inpaint completed', { requestId, userId: user.userId });
-              res.json({
+              // Settle x402 payment if applicable
+              const x402Req = req as X402Request;
+              if (x402Req.isX402Paid && x402Req.x402Payment) {
+                await settleX402Payment(x402Req);
+              }
+
+              logger.info('Inpaint completed', { requestId, userId: user.userId, isX402Paid });
+              const responseData: Record<string, unknown> = {
                 success: true,
                 image_url: imageUrl,
-                remainingCredits: updateResult.credits,
-                creditsDeducted: creditsRequired
-              });
+                remainingCredits,
+                creditsDeducted: actualCreditsDeducted
+              };
+              if (x402Req.isX402Paid && x402Req.x402Payment) {
+                responseData.x402 = { settled: x402Req.x402Payment.settled, transactionHash: x402Req.x402Payment.transactionHash };
+              }
+              res.json(responseData);
               return;
             } else {
-              await refundCredits(user, creditsRequired, 'No image URL in response');
+              if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'No image URL in response');
               res.status(500).json({ success: false, error: 'No image generated' });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
-            await refundCredits(user, creditsRequired, 'Inpaint failed');
+            if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'Inpaint failed');
             res.status(500).json({ success: false, error: 'Inpaint failed' });
             return;
           }
@@ -370,7 +436,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
         }
       }
 
-      await refundCredits(user, creditsRequired, 'Inpaint timed out');
+      if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'Inpaint timed out');
       res.status(504).json({ success: false, error: 'Inpaint timed out' });
     } catch (error) {
       const err = error as Error;
@@ -416,29 +482,17 @@ export function createImageToolsRoutes(deps: Dependencies) {
         return;
       }
 
-      const creditsRequired = applyClawMarkup(req, 0.5);
-
-      // Deduct credits
-      const User = mongoose.model<IUser>('User');
-      const updateQuery = buildUserUpdateQuery(user);
-      
-      if (!updateQuery) {
-        res.status(400).json({ success: false, error: 'User account required' });
+      // Deduct credits with x402 bypass support
+      const creditResult = await deductCreditsWithX402(req, user, 0.5);
+      if (!creditResult.success) {
+        const statusCode = creditResult.error === 'Insufficient credits' ? 402 : 400;
+        res.status(statusCode).json({ success: false, error: creditResult.error });
         return;
       }
+      const { remainingCredits, actualCreditsDeducted } = creditResult;
+      const isX402Paid = !!req.isX402Paid;
 
-      const updateResult = await User.findOneAndUpdate(
-        { ...updateQuery, credits: { $gte: creditsRequired } },
-        { $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired } },
-        { new: true }
-      );
-
-      if (!updateResult) {
-        res.status(402).json({ success: false, error: 'Insufficient credits' });
-        return;
-      }
-
-      logger.info('Image describe request', { userId: user.userId, detail_level });
+      logger.info('Image describe request', { userId: user.userId, detail_level, isX402Paid });
 
       // Use LLaVA for image understanding
       const response = await fetch('https://fal.run/fal-ai/llavav15-13b', {
@@ -459,7 +513,7 @@ export function createImageToolsRoutes(deps: Dependencies) {
       if (!response.ok) {
         const errorText = await response.text();
         logger.error('Image describe API error', { status: response.status, error: errorText });
-        await refundCredits(user, creditsRequired, `API error: ${response.status}`);
+        if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, `API error: ${response.status}`);
         res.status(500).json({ success: false, error: 'Image description failed' });
         return;
       }
@@ -468,20 +522,30 @@ export function createImageToolsRoutes(deps: Dependencies) {
       const description = data.output || data.text || data.response || '';
 
       if (!description) {
-        await refundCredits(user, creditsRequired, 'No description generated');
+        if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'No description generated');
         res.status(500).json({ success: false, error: 'No description generated' });
         return;
       }
 
-      logger.info('Image describe completed', { userId: user.userId });
+      // Settle x402 payment if applicable
+      const x402Req = req as X402Request;
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        await settleX402Payment(x402Req);
+      }
 
-      res.json({
+      logger.info('Image describe completed', { userId: user.userId, isX402Paid });
+
+      const responseData: Record<string, unknown> = {
         success: true,
         description,
         prompt: description, // Alias for convenience
-        remainingCredits: updateResult.credits,
-        creditsDeducted: creditsRequired
-      });
+        remainingCredits,
+        creditsDeducted: actualCreditsDeducted
+      };
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        responseData.x402 = { settled: x402Req.x402Payment.settled, transactionHash: x402Req.x402Payment.transactionHash };
+      }
+      res.json(responseData);
     } catch (error) {
       const err = error as Error;
       logger.error('Image describe error:', { error: err.message });
@@ -534,29 +598,18 @@ export function createImageToolsRoutes(deps: Dependencies) {
 
       const validNumOutputs = Math.min(Math.max(1, num_outputs), 100);
       const useControlNet = !!use_controlnet;
-      const creditsRequired = applyClawMarkup(req, 0.5); // Just for the analysis, generation costs are separate
 
-      // Deduct credits
-      const User = mongoose.model<IUser>('User');
-      const updateQuery = buildUserUpdateQuery(user);
-      
-      if (!updateQuery) {
-        res.status(400).json({ success: false, error: 'User account required' });
+      // Deduct credits with x402 bypass support (just for analysis, generation costs are separate)
+      const creditResult = await deductCreditsWithX402(req, user, 0.5);
+      if (!creditResult.success) {
+        const statusCode = creditResult.error === 'Insufficient credits' ? 402 : 400;
+        res.status(statusCode).json({ success: false, error: creditResult.error });
         return;
       }
+      const { remainingCredits, actualCreditsDeducted } = creditResult;
+      const isX402Paid = !!req.isX402Paid;
 
-      const updateResult = await User.findOneAndUpdate(
-        { ...updateQuery, credits: { $gte: creditsRequired } },
-        { $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired } },
-        { new: true }
-      );
-
-      if (!updateResult) {
-        res.status(402).json({ success: false, error: 'Insufficient credits' });
-        return;
-      }
-
-      logger.info('Batch variation request', { userId: user.userId, num_outputs: validNumOutputs });
+      logger.info('Batch variation request', { userId: user.userId, num_outputs: validNumOutputs, isX402Paid });
 
       // Step 1: Describe the image using LLaVA - focus on character details and pose
       const describeResponse = await fetch('https://fal.run/fal-ai/llavav15-13b', {
@@ -583,7 +636,7 @@ Be specific and detailed about each element.`,
       if (!describeResponse.ok) {
         const errorText = await describeResponse.text();
         logger.error('Image describe API error', { status: describeResponse.status, error: errorText });
-        await refundCredits(user, creditsRequired, `API error: ${describeResponse.status}`);
+        if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, `API error: ${describeResponse.status}`);
         res.status(500).json({ success: false, error: 'Image analysis failed' });
         return;
       }
@@ -592,7 +645,7 @@ Be specific and detailed about each element.`,
       const description = describeData.output || describeData.text || describeData.response || '';
 
       if (!description) {
-        await refundCredits(user, creditsRequired, 'No description generated');
+        if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'No description generated');
         res.status(500).json({ success: false, error: 'Failed to analyze image' });
         return;
       }
@@ -648,13 +701,22 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
       } catch (llmError) {
         // Fallback: return the description as the prompt for all variations
         logger.warn('Variation prompt generation failed, using description as fallback', { error: (llmError as Error).message });
-        res.json({
+        // Settle x402 payment even on fallback (we still did the work)
+        const x402Req = req as X402Request;
+        if (x402Req.isX402Paid && x402Req.x402Payment) {
+          await settleX402Payment(x402Req);
+        }
+        const fallbackResponse: Record<string, unknown> = {
           success: true,
           description,
           prompts: Array(validNumOutputs).fill(description),
-          remainingCredits: updateResult.credits,
-          creditsDeducted: creditsRequired
-        });
+          remainingCredits,
+          creditsDeducted: actualCreditsDeducted
+        };
+        if (x402Req.isX402Paid && x402Req.x402Payment) {
+          fallbackResponse.x402 = { settled: x402Req.x402Payment.settled, transactionHash: x402Req.x402Payment.transactionHash };
+        }
+        res.json(fallbackResponse);
         return;
       }
 
@@ -715,16 +777,26 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
         delivering: prompts.length 
       });
 
-      logger.info('Batch variation completed', { userId: user.userId, promptCount: prompts.length, useControlNet });
+      // Settle x402 payment if applicable
+      const x402Req = req as X402Request;
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        await settleX402Payment(x402Req);
+      }
 
-      res.json({
+      logger.info('Batch variation completed', { userId: user.userId, promptCount: prompts.length, useControlNet, isX402Paid });
+
+      const responseData: Record<string, unknown> = {
         success: true,
         description,
         prompts,
         useControlNet,
-        remainingCredits: updateResult.credits,
-        creditsDeducted: creditsRequired
-      });
+        remainingCredits,
+        creditsDeducted: actualCreditsDeducted
+      };
+      if (x402Req.isX402Paid && x402Req.x402Payment) {
+        responseData.x402 = { settled: x402Req.x402Payment.settled, transactionHash: x402Req.x402Payment.transactionHash };
+      }
+      res.json(responseData);
     } catch (error) {
       const err = error as Error;
       logger.error('Batch variation error:', { error: err.message });
@@ -778,32 +850,21 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
         return;
       }
 
-      const creditsRequired = applyClawMarkup(req, 2);
-
-      // Deduct credits
-      const User = mongoose.model<IUser>('User');
-      const updateQuery = buildUserUpdateQuery(user);
-      
-      if (!updateQuery) {
-        res.status(400).json({ success: false, error: 'User account required' });
+      // Deduct credits with x402 bypass support
+      const creditResult = await deductCreditsWithX402(req, user, 2);
+      if (!creditResult.success) {
+        const statusCode = creditResult.error === 'Insufficient credits' ? 402 : 400;
+        res.status(statusCode).json({ success: false, error: creditResult.error });
         return;
       }
-
-      const updateResult = await User.findOneAndUpdate(
-        { ...updateQuery, credits: { $gte: creditsRequired } },
-        { $inc: { credits: -creditsRequired, totalCreditsSpent: creditsRequired } },
-        { new: true }
-      );
-
-      if (!updateResult) {
-        res.status(402).json({ success: false, error: 'Insufficient credits' });
-        return;
-      }
+      const { remainingCredits, actualCreditsDeducted } = creditResult;
+      const isX402Paid = !!req.isX402Paid;
 
       logger.info('Outpaint request', { 
         direction,
         expansion_ratio,
-        userId: user.userId 
+        userId: user.userId,
+        isX402Paid
       });
 
       // Calculate padding based on direction and ratio
@@ -837,7 +898,7 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
       const requestId = result.request_id;
 
       if (!requestId) {
-        await refundCredits(user, creditsRequired, 'No request ID returned');
+        if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'No request ID returned');
         res.status(500).json({ success: false, error: 'Failed to submit outpaint request' });
         return;
       }
@@ -869,21 +930,31 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
             }
 
             if (imageUrl) {
-              logger.info('Outpaint completed', { requestId, userId: user.userId });
-              res.json({
+              // Settle x402 payment if applicable
+              const x402Req = req as X402Request;
+              if (x402Req.isX402Paid && x402Req.x402Payment) {
+                await settleX402Payment(x402Req);
+              }
+
+              logger.info('Outpaint completed', { requestId, userId: user.userId, isX402Paid });
+              const responseData: Record<string, unknown> = {
                 success: true,
                 image_url: imageUrl,
-                remainingCredits: updateResult.credits,
-                creditsDeducted: creditsRequired
-              });
+                remainingCredits,
+                creditsDeducted: actualCreditsDeducted
+              };
+              if (x402Req.isX402Paid && x402Req.x402Payment) {
+                responseData.x402 = { settled: x402Req.x402Payment.settled, transactionHash: x402Req.x402Payment.transactionHash };
+              }
+              res.json(responseData);
               return;
             } else {
-              await refundCredits(user, creditsRequired, 'No image URL in response');
+              if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'No image URL in response');
               res.status(500).json({ success: false, error: 'No image generated' });
               return;
             }
           } else if (isStatusFailed(normalizedStatus)) {
-            await refundCredits(user, creditsRequired, 'Outpaint failed');
+            if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'Outpaint failed');
             res.status(500).json({ success: false, error: 'Outpaint failed' });
             return;
           }
@@ -892,7 +963,7 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
         }
       }
 
-      await refundCredits(user, creditsRequired, 'Outpaint timed out');
+      if (!isX402Paid) await refundCredits(user, actualCreditsDeducted, 'Outpaint timed out');
       res.status(504).json({ success: false, error: 'Outpaint timed out' });
     } catch (error) {
       const err = error as Error;

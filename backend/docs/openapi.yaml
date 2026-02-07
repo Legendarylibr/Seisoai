@@ -4,15 +4,68 @@ info:
   description: |
     AI Image, Video, and Music Generation API with blockchain payment support.
     
-    ## Authentication
-    Most endpoints require authentication via JWT token or wallet address.
+    ## Authentication Methods
+    SeisoAI supports three authentication methods:
+    
+    ### 1. JWT Bearer Token
+    Most endpoints accept JWT tokens in the `Authorization: Bearer <token>` header.
+    
+    ### 2. API Key
+    For agents/services, use `X-API-Key: <key>` header. Create keys at `/api/api-keys`.
+    
+    ### 3. x402 Pay-Per-Request (USDC on Base)
+    For stateless, pay-per-request access without an account:
+    - Make a request without auth to get `402 Payment Required` with pricing info
+    - Include `payment-signature` header with the x402 payment proof
+    - Payment is in USDC on Base (chain ID: 8453)
+    - On success, the response includes `x402.settled: true` and transaction hash
+    
+    ## x402 Payment Protocol
+    When you receive a `402 Payment Required` response, the body contains:
+    ```json
+    {
+      "x402Version": 2,
+      "error": "Payment required",
+      "resource": { "url": "...", "description": "..." },
+      "accepts": [{
+        "scheme": "exact",
+        "network": "eip155:8453",
+        "maxAmountRequired": "65000",
+        "asset": "USDC",
+        "payTo": "0x..."
+      }]
+    }
+    ```
+    
+    The `maxAmountRequired` is in USDC's smallest unit (6 decimals), so 65000 = $0.065.
+    
+    ## x402-Enabled Endpoints
+    These endpoints support pay-per-request without authentication:
+    
+    | Endpoint | Description | Price (USD) |
+    |----------|-------------|-------------|
+    | `POST /generate/image` | Generate AI image | $0.033-0.33 |
+    | `POST /generate/image-stream` | Streaming image gen | $0.033-0.33 |
+    | `POST /generate/video` | Generate AI video | $0.13-1.30/sec |
+    | `POST /generate/music` | Generate music | $0.03/min |
+    | `POST /generate/upscale` | Upscale image | $0.04 |
+    | `POST /generate/video-to-audio` | Video to audio | $0.07 |
+    | `POST /audio/sfx` | Sound effects | $0.04 |
+    | `POST /audio/transcribe` | Transcription | $0.01 |
+    | `POST /image-tools/face-swap` | Face swap | $0.03 |
+    | `POST /image-tools/describe` | Image to text | $0.01 |
+    | `POST /model3d/generate` | 3D model | $0.10-0.20 |
+    | `POST /training/start` | LoRA training | $0.65-2.00 |
+    | `POST /gateway/invoke/:toolId` | Any tool | varies |
+    | `POST /gateway/batch` | Batch invoke | varies |
+    | `POST /gateway/orchestrate` | Orchestration | varies |
     
     ## Rate Limiting
     - General: 500 requests per 15 minutes
     - Auth: 10 attempts per 15 minutes
     - Free images: 5 per hour per IP
     
-    ## Credits
+    ## Credits (for authenticated users)
     - 1 credit = $0.10
     - Image generation: 0.3-1.25 credits
     - Video generation: 2+ credits
@@ -44,6 +97,23 @@ tags:
     description: Gallery management
   - name: Payments
     description: Payment processing
+  - name: Gateway
+    description: |
+      Agentic Gateway - Unified AI tool invocation API.
+      
+      The gateway provides a single interface for AI agents to discover and invoke
+      all SeisoAI capabilities. Supports x402 pay-per-request for stateless usage.
+      
+      **Discovery endpoints** (no auth required):
+      - `GET /gateway/tools` - List all available tools
+      - `GET /gateway/tools/:toolId` - Get tool details
+      - `GET /gateway/price/:toolId` - Calculate price for invocation
+      - `GET /gateway/mcp-manifest` - MCP-compatible tool manifest
+      
+      **Invocation endpoints** (auth or x402 required):
+      - `POST /gateway/invoke/:toolId` - Invoke a single tool
+      - `POST /gateway/batch` - Batch invoke multiple tools
+      - `POST /gateway/orchestrate` - Natural language orchestration
 
 paths:
   /health:
@@ -190,10 +260,20 @@ paths:
       tags:
         - Generate
       summary: Generate image
-      description: Generate an AI image from a text prompt
+      description: |
+        Generate an AI image from a text prompt.
+        
+        **Authentication Options:**
+        - JWT Bearer token (uses account credits)
+        - API Key (uses API key credits)
+        - x402 Payment (pay-per-request with USDC on Base)
+        
+        For x402, omit auth to receive pricing, then include payment-signature header.
       operationId: generateImage
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
+        - x402Payment: []
       requestBody:
         required: true
         content:
@@ -207,13 +287,15 @@ paths:
                   type: string
                   maxLength: 2000
                   description: Text description of the image to generate
-                style:
+                model:
                   type: string
-                  description: Optional style preset
-                imageSize:
+                  enum: [flux-pro, flux-2, nano-banana-pro]
+                  default: flux-pro
+                  description: Model to use (affects pricing)
+                aspect_ratio:
                   type: string
-                  enum: [square, portrait, landscape]
-                  default: square
+                  enum: ['1:1', '4:3', '16:9', '3:4', '9:16']
+                  default: '4:3'
                 numImages:
                   type: integer
                   minimum: 1
@@ -224,19 +306,169 @@ paths:
                   minimum: 1
                   maximum: 20
                   default: 7.5
+                seed:
+                  type: integer
+                  description: Random seed for reproducibility
       responses:
         '200':
           description: Image generated successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenerationResponse'
+                allOf:
+                  - $ref: '#/components/schemas/GenerationResponse'
+                  - type: object
+                    properties:
+                      x402:
+                        $ref: '#/components/schemas/X402SettlementInfo'
         '402':
-          description: Insufficient credits
+          description: |
+            Payment required or insufficient credits.
+            
+            For x402 clients: Response contains payment info with `accepts` array.
+            Include the x402 payment signature in subsequent request.
+            
+            For authenticated users: Insufficient credits to perform generation.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/PaymentRequired'
+                  - $ref: '#/components/schemas/ErrorResponse'
+
+  /gateway/tools:
+    get:
+      tags:
+        - Gateway
+      summary: List all available tools
+      description: |
+        Discover all AI capabilities available through the gateway.
+        No authentication required for discovery.
+      operationId: listGatewayTools
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [image-generation, image-editing, video-generation, audio-generation, music-generation, 3d-generation]
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search query
+      responses:
+        '200':
+          description: List of available tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  gateway:
+                    type: string
+                    example: "seisoai"
+                  toolCount:
+                    type: integer
+                  categories:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        category:
+                          type: string
+                        count:
+                          type: integer
+                  tools:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ToolSummary'
+                  protocols:
+                    type: object
+                    properties:
+                      mcp:
+                        type: object
+                      x402:
+                        type: object
+
+  /gateway/invoke/{toolId}:
+    post:
+      tags:
+        - Gateway
+      summary: Invoke a tool
+      description: |
+        Invoke any AI tool by ID. Supports all authentication methods including x402.
+        
+        For x402 pay-per-request:
+        1. Call without auth to get 402 with pricing
+        2. Include `payment-signature` header with x402 payment proof
+        3. Response includes `x402.settled: true` on success
+      operationId: invokeGatewayTool
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - x402Payment: []
+      parameters:
+        - name: toolId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Tool ID (e.g., "image.generate.flux-pro-kontext")
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Tool-specific input parameters (see tool schema)
+      responses:
+        '200':
+          description: Tool executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  toolId:
+                    type: string
+                  toolName:
+                    type: string
+                  executionMode:
+                    type: string
+                    enum: [sync, queue]
+                  result:
+                    type: object
+                    description: Tool-specific result
+                  job:
+                    type: object
+                    description: For queue mode - job info for polling
+                    properties:
+                      id:
+                        type: string
+                      statusUrl:
+                        type: string
+                      resultUrl:
+                        type: string
+                  pricing:
+                    type: object
+                  x402:
+                    $ref: '#/components/schemas/X402SettlementInfo'
+        '402':
+          description: Payment required (x402) or insufficient credits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentRequired'
+        '404':
+          description: Tool not found
 
   /gallery:
     get:
@@ -333,8 +565,77 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    x402Payment:
+      type: apiKey
+      in: header
+      name: payment-signature
+      description: x402 payment signature for pay-per-request access
 
   schemas:
+    PaymentRequired:
+      type: object
+      description: 402 Payment Required response for x402 protocol
+      properties:
+        x402Version:
+          type: integer
+          example: 2
+        error:
+          type: string
+          example: "Payment required"
+        resource:
+          type: object
+          properties:
+            url:
+              type: string
+              format: uri
+            description:
+              type: string
+            mimeType:
+              type: string
+        accepts:
+          type: array
+          items:
+            type: object
+            properties:
+              scheme:
+                type: string
+                example: "exact"
+              network:
+                type: string
+                example: "eip155:8453"
+              maxAmountRequired:
+                type: string
+                description: Amount in USDC smallest units (6 decimals)
+                example: "65000"
+              asset:
+                type: string
+                example: "USDC"
+              payTo:
+                type: string
+                description: Payment recipient address
+                example: "0x..."
+              extra:
+                type: object
+                properties:
+                  priceUsd:
+                    type: string
+                    example: "$0.0650"
+
+    X402SettlementInfo:
+      type: object
+      description: x402 payment settlement info included in successful responses
+      properties:
+        settled:
+          type: boolean
+          example: true
+        transactionHash:
+          type: string
+          example: "0x..."
+
     HealthResponse:
       type: object
       properties:
@@ -432,3 +733,48 @@ components:
         requestId:
           type: string
 
+    ToolSummary:
+      type: object
+      description: Summary of an AI tool available through the gateway
+      properties:
+        id:
+          type: string
+          example: "image.generate.flux-pro-kontext"
+        name:
+          type: string
+          example: "FLUX Pro Kontext - Text to Image"
+        description:
+          type: string
+        category:
+          type: string
+          enum: [image-generation, image-editing, video-generation, audio-generation, music-generation, 3d-generation]
+        tags:
+          type: array
+          items:
+            type: string
+        executionMode:
+          type: string
+          enum: [sync, queue]
+        pricing:
+          type: object
+          properties:
+            baseUsd:
+              type: number
+              description: Base price in USD
+            credits:
+              type: number
+              description: Credit cost for authenticated users
+            perUnit:
+              type: object
+              properties:
+                usd:
+                  type: number
+                credits:
+                  type: number
+                unitType:
+                  type: string
+                  enum: [second, minute, image, step]
+        enabled:
+          type: boolean
+        version:
+          type: string

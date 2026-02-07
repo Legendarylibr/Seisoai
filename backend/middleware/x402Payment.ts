@@ -196,6 +196,42 @@ function getGatewayToolPrice(context: { body?: { toolId?: string; [key: string]:
   return priceInUsdcUnits(FAL_API_COSTS.FLUX_PRO_KONTEXT);
 }
 
+// Fal.ai costs for additional capabilities
+const ADDITIONAL_COSTS = {
+  FACE_SWAP: 0.02,           // Face swap
+  BACKGROUND_REMOVE: 0.015,   // Background removal
+  OBJECT_REMOVE: 0.02,        // Object/text removal
+  IMAGE_DESCRIBE: 0.01,       // Image to text description
+  DEPTH_MAP: 0.015,           // Depth map generation
+  MODEL_3D_NORMAL: 0.15,      // 3D model generation (normal)
+  MODEL_3D_GEOMETRY: 0.10,    // 3D model generation (geometry only)
+  MODEL_3D_LOWPOLY: 0.08,     // 3D model generation (low poly)
+  TRAINING_PER_STEP: 0.0015,  // LoRA training per step
+  VIDEO_TO_AUDIO: 0.05,       // Generate audio from video
+  TTS: 0.02,                  // Text to speech
+  LAYER_EXTRACTION: 0.03,     // Extract layers from image
+};
+
+// Dynamic price for 3D generation based on type
+function get3DPrice(context: { body?: { generate_type?: string } }): string {
+  const generateType = context.body?.generate_type || 'Normal';
+  let cost: number;
+  switch (generateType) {
+    case 'Geometry': cost = ADDITIONAL_COSTS.MODEL_3D_GEOMETRY; break;
+    case 'LowPoly': cost = ADDITIONAL_COSTS.MODEL_3D_LOWPOLY; break;
+    default: cost = ADDITIONAL_COSTS.MODEL_3D_NORMAL;
+  }
+  return priceInUsdcUnits(cost);
+}
+
+// Dynamic price for training based on steps
+function getTrainingPrice(context: { body?: { steps?: number; num_steps?: number } }): string {
+  const steps = context.body?.steps || context.body?.num_steps || 1000;
+  const clampedSteps = Math.min(3000, Math.max(500, steps));
+  const cost = ADDITIONAL_COSTS.TRAINING_PER_STEP * clampedSteps;
+  return priceInUsdcUnits(cost);
+}
+
 // x402 route configuration with dynamic pricing
 // Uses the new x402 API format with 'accepts' array
 function buildRoutesConfig(): X402RoutesConfig {
@@ -203,7 +239,7 @@ function buildRoutesConfig(): X402RoutesConfig {
   
   return {
     // ============================================
-    // Original generation routes
+    // Image Generation routes
     // ============================================
     'POST /generate/image': {
       accepts: [{
@@ -221,6 +257,17 @@ function buildRoutesConfig(): X402RoutesConfig {
       }],
       description: 'Generate an AI image (streaming)',
     },
+    'POST /generate/upscale': {
+      accepts: [{
+        price: priceInUsdcUnits(FAL_API_COSTS.UPSCALE),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Upscale an image',
+    },
+    // ============================================
+    // Video Generation routes
+    // ============================================
     'POST /generate/video': {
       accepts: [{
         price: getVideoPrice,
@@ -229,6 +276,17 @@ function buildRoutesConfig(): X402RoutesConfig {
       }],
       description: 'Generate an AI video',
     },
+    'POST /generate/video-to-audio': {
+      accepts: [{
+        price: priceInUsdcUnits(ADDITIONAL_COSTS.VIDEO_TO_AUDIO),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Generate audio from video',
+    },
+    // ============================================
+    // Audio/Music routes
+    // ============================================
     'POST /generate/music': {
       accepts: [{
         price: getMusicPrice,
@@ -253,14 +311,149 @@ function buildRoutesConfig(): X402RoutesConfig {
       }],
       description: 'Transcribe audio/video to text',
     },
-    'POST /generate/upscale': {
+    'POST /audio/tts': {
       accepts: [{
-        price: priceInUsdcUnits(FAL_API_COSTS.UPSCALE),
+        price: priceInUsdcUnits(ADDITIONAL_COSTS.TTS),
         network: 'eip155:8453' as const,
         payTo: PAYMENT_WALLET,
       }],
-      description: 'Upscale an image',
+      description: 'Convert text to speech',
     },
+    // ============================================
+    // Image Tools routes
+    // ============================================
+    'POST /image-tools/face-swap': {
+      accepts: [{
+        price: priceInUsdcUnits(ADDITIONAL_COSTS.FACE_SWAP),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Swap faces between images',
+    },
+    'POST /image-tools/background-remove': {
+      accepts: [{
+        price: priceInUsdcUnits(ADDITIONAL_COSTS.BACKGROUND_REMOVE),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Remove background from image',
+    },
+    'POST /image-tools/object-remove': {
+      accepts: [{
+        price: priceInUsdcUnits(ADDITIONAL_COSTS.OBJECT_REMOVE),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Remove objects or text from image',
+    },
+    'POST /image-tools/describe': {
+      accepts: [{
+        price: priceInUsdcUnits(FAL_API_COSTS.DESCRIBE),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Generate text description of image',
+    },
+    'POST /image-tools/depth-map': {
+      accepts: [{
+        price: priceInUsdcUnits(ADDITIONAL_COSTS.DEPTH_MAP),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Generate depth map from image',
+    },
+    'POST /extract/layers': {
+      accepts: [{
+        price: priceInUsdcUnits(ADDITIONAL_COSTS.LAYER_EXTRACTION),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Extract layers from image',
+    },
+    // ============================================
+    // 3D Model Generation routes
+    // ============================================
+    'POST /model3d/generate': {
+      accepts: [{
+        price: get3DPrice,
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Generate 3D model from image',
+    },
+    'POST /model3d/texture': {
+      accepts: [{
+        price: priceInUsdcUnits(ADDITIONAL_COSTS.MODEL_3D_GEOMETRY),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Generate textures for 3D model',
+    },
+    // ============================================
+    // Training routes
+    // ============================================
+    'POST /training/start': {
+      accepts: [{
+        price: getTrainingPrice,
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Train a custom LoRA model',
+    },
+    'POST /training/inference': {
+      accepts: [{
+        price: priceInUsdcUnits(FAL_API_COSTS.FLUX_PRO_KONTEXT),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Run inference with trained LoRA',
+    },
+    // ============================================
+    // Workflow routes
+    // ============================================
+    'POST /workflows/ai-influencer/voice': {
+      accepts: [{
+        price: priceInUsdcUnits(ADDITIONAL_COSTS.TTS),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Generate voice for AI influencer',
+    },
+    'POST /workflows/ai-influencer/avatar': {
+      accepts: [{
+        price: priceInUsdcUnits(FAL_API_COSTS.FLUX_PRO_KONTEXT),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Generate avatar for AI influencer',
+    },
+    'POST /workflows/ai-influencer/video': {
+      accepts: [{
+        price: getVideoPrice,
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Generate video for AI influencer',
+    },
+    'POST /workflows/ad-creative': {
+      accepts: [{
+        price: priceInUsdcUnits(FAL_API_COSTS.FLUX_PRO_KONTEXT * 2),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Generate ad creative with variations',
+    },
+    'POST /workflows/product-shoot': {
+      accepts: [{
+        price: priceInUsdcUnits(FAL_API_COSTS.FLUX_PRO_KONTEXT * 3),
+        network: 'eip155:8453' as const,
+        payTo: PAYMENT_WALLET,
+      }],
+      description: 'Generate product photography',
+    },
+    // ============================================
+    // Prompt Lab routes
+    // ============================================
     'POST /prompt-lab/chat': {
       accepts: [{
         price: priceInUsdcUnits(FAL_API_COSTS.PROMPT_LAB),
