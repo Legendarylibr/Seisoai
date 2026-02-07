@@ -4,12 +4,17 @@
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
-import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import config from '../config/env';
-import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 import { applyClawMarkup } from '../middleware/credits';
+import {
+  deductCredits,
+  refundCredits,
+  validateUser,
+  handleCreditError,
+  ServiceNotConfiguredError
+} from '../services/creditTransaction';
 
 // Types
 interface Dependencies {
@@ -18,62 +23,10 @@ interface Dependencies {
 
 interface AuthenticatedRequest extends Request {
   user?: IUser;
+  hasFreeAccess?: boolean;
 }
 
 const FAL_API_KEY = config.FAL_API_KEY;
-
-/**
- * Refund credits to a user after a failed generation
- */
-async function refundCredits(
-  user: IUser,
-  credits: number,
-  reason: string
-): Promise<IUser | null> {
-  try {
-    // Validate credits is a valid positive number
-    if (!Number.isFinite(credits) || credits <= 0) {
-      logger.error('Cannot refund invalid credits amount', { credits, reason, userId: user.userId });
-      return null;
-    }
-    
-    const User = mongoose.model<IUser>('User');
-    const updateQuery = buildUserUpdateQuery(user);
-    
-    if (!updateQuery) {
-      logger.error('Cannot refund credits: no valid user identifier', { userId: user.userId });
-      return null;
-    }
-
-    const updatedUser = await User.findOneAndUpdate(
-      updateQuery,
-      {
-        $inc: { credits: credits, totalCreditsSpent: -credits }
-      },
-      { new: true }
-    );
-
-    if (updatedUser) {
-      logger.info('Credits refunded for failed layer extraction', {
-        userId: user.userId || user.email || user.walletAddress,
-        creditsRefunded: credits,
-        newBalance: updatedUser.credits,
-        reason
-      });
-    }
-
-    return updatedUser;
-  } catch (error) {
-    const err = error as Error;
-    logger.error('Failed to refund credits', {
-      userId: user.userId,
-      credits,
-      reason,
-      error: err.message
-    });
-    return null;
-  }
-}
 
 export function createExtractRoutes(deps: Dependencies) {
   const router = Router();
@@ -86,43 +39,14 @@ export function createExtractRoutes(deps: Dependencies) {
   router.post('/extract-layers', 
     requireCredits(1), 
     async (req: AuthenticatedRequest, res: Response) => {
+      let user: IUser | undefined;
+      let actualCreditsDeducted = 0;
+      let remainingCredits = 0;
+      
       try {
-        const user = req.user;
-        if (!user) {
-          res.status(401).json({ 
-            success: false, 
-            error: 'User authentication required' 
-          });
-          return;
-        }
-
-        const creditsToDeduct = applyClawMarkup(req, 1);
-
-        // Deduct credits
-        const User = mongoose.model<IUser>('User');
-        const updateQuery = buildUserUpdateQuery(user);
-        
-        if (!updateQuery) {
-          res.status(400).json({ 
-            success: false, 
-            error: 'User account required' 
-          });
-          return;
-        }
-
-        const updateResult = await User.findOneAndUpdate(
-          { ...updateQuery, credits: { $gte: creditsToDeduct } },
-          { $inc: { credits: -creditsToDeduct, totalCreditsSpent: creditsToDeduct } },
-          { new: true }
-        );
-
-        if (!updateResult) {
-          res.status(400).json({
-            success: false,
-            error: 'Insufficient credits'
-          });
-          return;
-        }
+        user = req.user;
+        validateUser(user);
+        if (!FAL_API_KEY) throw new ServiceNotConfiguredError();
 
         const { image_url } = req.body as { image_url?: string; prompt?: string };
 
@@ -134,13 +58,11 @@ export function createExtractRoutes(deps: Dependencies) {
           return;
         }
 
-        if (!FAL_API_KEY) {
-          res.status(503).json({
-            success: false,
-            error: 'AI service not configured'
-          });
-          return;
-        }
+        const creditsToDeduct = applyClawMarkup(req, 1);
+        const hasFreeAccess = req.hasFreeAccess || false;
+        const deductResult = await deductCredits(user, creditsToDeduct, hasFreeAccess);
+        remainingCredits = deductResult.remainingCredits;
+        actualCreditsDeducted = deductResult.actualCreditsDeducted;
 
         // Call FAL API for layer extraction
         const response = await fetch('https://queue.fal.run/fal-ai/birefnet', {
@@ -160,11 +82,11 @@ export function createExtractRoutes(deps: Dependencies) {
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({})) as { detail?: string };
           // Refund credits on API failure
-          await refundCredits(user, creditsToDeduct, `Layer extraction API error: ${response.status}`);
+          await refundCredits(user, actualCreditsDeducted, `Layer extraction API error: ${response.status}`);
           res.status(response.status).json({
             success: false,
             error: errorData.detail || 'Failed to extract layers',
-            creditsRefunded: creditsToDeduct
+            creditsRefunded: actualCreditsDeducted
           });
           return;
         }
@@ -181,11 +103,11 @@ export function createExtractRoutes(deps: Dependencies) {
 
         if (!imageUrl) {
           // Refund credits if no image returned
-          await refundCredits(user, creditsToDeduct, 'No image returned from layer extraction');
+          await refundCredits(user, actualCreditsDeducted, 'No image returned from layer extraction');
           res.status(500).json({
             success: false,
             error: 'No image returned from layer extraction',
-            creditsRefunded: creditsToDeduct
+            creditsRefunded: actualCreditsDeducted
           });
           return;
         }
@@ -194,22 +116,21 @@ export function createExtractRoutes(deps: Dependencies) {
         res.json({
           success: true,
           images: [imageUrl],
-          remainingCredits: updateResult.credits,
-          creditsDeducted: creditsToDeduct
+          remainingCredits,
+          creditsDeducted: actualCreditsDeducted
         });
       } catch (error) {
         const err = error as Error;
         logger.error('Extract layers error', { error: err.message });
+        if (handleCreditError(error, res)) return;
         // Refund credits on unexpected error
-        const user = req.user;
-        const creditsToRefund = applyClawMarkup(req, 1);
-        if (user) {
-          await refundCredits(user, creditsToRefund, `Layer extraction error: ${err.message}`);
+        if (user && actualCreditsDeducted > 0) {
+          await refundCredits(user, actualCreditsDeducted, `Layer extraction error: ${err.message}`);
         }
         res.status(500).json({ 
           success: false, 
           error: 'Failed to extract layers',
-          creditsRefunded: user ? creditsToRefund : 0
+          creditsRefunded: actualCreditsDeducted
         });
       }
     }

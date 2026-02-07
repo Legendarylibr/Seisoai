@@ -74,9 +74,20 @@ function Win95LoadingFallback({ text }: { text: string }): JSX.Element {
   );
 }
 
+/** Get the tab ID from URL hash */
+function getTabFromHash(): string | null {
+  const hash = window.location.hash.slice(1); // Remove '#'
+  return hash || null;
+}
+
+/** Update URL hash without triggering navigation */
+function updateUrlHash(tabId: string): void {
+  const newUrl = `${window.location.pathname}#${tabId}`;
+  window.history.pushState({ tab: tabId }, '', newUrl);
+}
+
 function AppContentInner(): JSX.Element {
   const { preferences } = useUserPreferences();
-  const [activeTab, setActiveTab] = useState(preferences.defaultTab || 'workbench');
   const { t } = useLanguage();
 
   const allTabs: Tab[] = [
@@ -97,11 +108,50 @@ function AppContentInner(): JSX.Element {
   // Filter tabs to only show user-enabled features
   const enabledSet = new Set(preferences.enabledTabs);
   const tabs = allTabs.filter((tab) => enabledSet.has(tab.id));
+  const validTabIds = new Set(tabs.map(t => t.id));
+
+  // Initialize tab from URL hash, fallback to preferences, then first enabled tab
+  const [activeTab, setActiveTab] = useState(() => {
+    const hashTab = getTabFromHash();
+    if (hashTab && validTabIds.has(hashTab)) return hashTab;
+    if (preferences.defaultTab && validTabIds.has(preferences.defaultTab)) return preferences.defaultTab;
+    return tabs[0]?.id || 'workbench';
+  });
+
+  // Sync URL hash when tab changes
+  const handleSetActiveTab = useCallback((tabId: string) => {
+    setActiveTab(tabId);
+    updateUrlHash(tabId);
+  }, []);
+
+  // Listen for browser back/forward navigation
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const hashTab = getTabFromHash();
+      if (hashTab && validTabIds.has(hashTab)) {
+        setActiveTab(hashTab);
+      } else if (event.state?.tab && validTabIds.has(event.state.tab)) {
+        setActiveTab(event.state.tab);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [validTabIds]);
+
+  // Set initial URL hash if not present
+  useEffect(() => {
+    if (!window.location.hash && activeTab) {
+      window.history.replaceState({ tab: activeTab }, '', `${window.location.pathname}#${activeTab}`);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // If current activeTab was disabled, switch to the first enabled tab
   useEffect(() => {
     if (tabs.length > 0 && !enabledSet.has(activeTab)) {
-      setActiveTab(tabs[0].id);
+      const newTab = tabs[0].id;
+      setActiveTab(newTab);
+      updateUrlHash(newTab);
     }
   }, [preferences.enabledTabs]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -112,7 +162,7 @@ function AppContentInner(): JSX.Element {
     >
       <AppWithCreditsCheck 
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleSetActiveTab}
         tabs={tabs}
       />
     </ImageGeneratorProvider>
@@ -392,9 +442,11 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         {activeTab === 'workbench' && (
           <ErrorBoundary fallbackText="Agent workbench encountered an error">
             <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-              <Suspense fallback={<Win95LoadingFallback text="Loading Agent Workbench..." />}>
-                <AgentMarketplace onNavigate={setActiveTab} />
-              </Suspense>
+              <AuthGuard onNavigate={setActiveTab}>
+                <Suspense fallback={<Win95LoadingFallback text="Loading Agent Workbench..." />}>
+                  <AgentMarketplace onNavigate={setActiveTab} />
+                </Suspense>
+              </AuthGuard>
             </div>
           </ErrorBoundary>
         )}
@@ -426,9 +478,11 @@ function AppWithCreditsCheck({ activeTab, setActiveTab, tabs }: AppWithCreditsCh
         {activeTab === 'community' && (
           <ErrorBoundary fallbackText="Community gallery encountered an error">
             <div style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-              <Suspense fallback={<Win95LoadingFallback text="Loading Community Gallery..." />}>
-                <PublicGallery showHeader={true} />
-              </Suspense>
+              <AuthGuard onNavigate={setActiveTab}>
+                <Suspense fallback={<Win95LoadingFallback text="Loading Community Gallery..." />}>
+                  <PublicGallery showHeader={true} />
+                </Suspense>
+              </AuthGuard>
             </div>
           </ErrorBoundary>
         )}
