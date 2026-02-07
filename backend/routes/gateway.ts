@@ -250,11 +250,25 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
       });
     }
 
-    // Deduct API key credits if authenticated via API key
+    // SECURITY FIX: Atomically deduct API key credits before processing
+    // Previously credits were only checked but never deducted, allowing free usage
     if (req.isApiKeyAuth && req.apiKey) {
       const price = toolRegistry.calculatePrice(toolId, input);
       const creditsNeeded = price?.credits || tool.pricing.credits;
-      if (req.apiKey.credits < creditsNeeded) {
+
+      const ApiKeyModel = (await import('mongoose')).default.model('ApiKey');
+      const updatedKey = await ApiKeyModel.findOneAndUpdate(
+        { _id: req.apiKey._id, credits: { $gte: creditsNeeded } },
+        {
+          $inc: {
+            credits: -creditsNeeded,
+            totalCreditsSpent: creditsNeeded,
+          },
+        },
+        { new: true }
+      );
+
+      if (!updatedKey) {
         return res.status(402).json({
           success: false,
           error: 'Insufficient API key credits',
@@ -263,6 +277,9 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
           topUpUrl: '/api/api-keys/top-up',
         });
       }
+
+      // Update the request's apiKey reference with the new balance
+      req.apiKey = updatedKey as typeof req.apiKey;
     }
 
     // Calculate price
@@ -279,10 +296,18 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
           body: JSON.stringify(input),
         });
 
-        // Settle x402 payment if applicable
+        // SECURITY FIX: Only settle x402 payment AFTER successful generation
+        // Previously, payment could be settled even if the response was malformed
         const x402Req = req as X402Request;
-        if (x402Req.isX402Paid) {
-          await settleX402Payment(x402Req);
+        if (x402Req.isX402Paid && result) {
+          try {
+            await settleX402Payment(x402Req);
+          } catch (settleErr) {
+            logger.error('x402 settlement failed after successful generation', {
+              toolId, requestId, error: (settleErr as Error).message
+            });
+            // Don't fail the request — the generation succeeded, settlement can be retried
+          }
         }
 
         // Send webhook callback if configured
@@ -349,6 +374,29 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
     } catch (error) {
       const err = error as Error;
       logger.error('Gateway invoke failed', { toolId, error: err.message, requestId });
+
+      // SECURITY FIX: Refund API key credits on generation failure
+      if (req.isApiKeyAuth && req.apiKey) {
+        try {
+          const { refundApiKeyCredits } = await import('../middleware/apiKeyAuth.js');
+          const creditsToRefund = price?.credits || tool.pricing.credits;
+          await refundApiKeyCredits(
+            (req.apiKey as any)._id?.toString(),
+            creditsToRefund,
+            `Gateway invoke failed: ${err.message}`
+          );
+          logger.info('API key credits refunded after gateway failure', {
+            keyPrefix: req.apiKey.keyPrefix,
+            credits: creditsToRefund,
+            toolId,
+          });
+        } catch (refundErr) {
+          logger.error('Failed to refund API key credits after gateway failure', {
+            error: (refundErr as Error).message,
+            toolId,
+          });
+        }
+      }
 
       // Send failure webhook if configured
       if (webhookUrl) {

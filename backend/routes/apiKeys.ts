@@ -594,6 +594,15 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
         });
       }
 
+      // SECURITY FIX: Verify API key exists and is valid BEFORE deducting user credits.
+      // Previously, user credits were deducted first, and if the API key update failed
+      // for any reason other than "not found", credits were permanently lost.
+      const ApiKey = mongoose.model<IApiKey>('ApiKey');
+      const keyExists = await ApiKey.findOne({ _id: req.params.keyId, ownerId: user.userId, active: true }).select('_id keyPrefix');
+      if (!keyExists) {
+        return res.status(404).json({ success: false, error: 'API key not found or inactive' });
+      }
+
       // Deduct from user
       const User = mongoose.model<IUser>('User');
       const updatedUser = await User.findOneAndUpdate(
@@ -606,8 +615,7 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
         return res.status(400).json({ success: false, error: 'Insufficient credits' });
       }
 
-      // Add to API key
-      const ApiKey = mongoose.model<IApiKey>('ApiKey');
+      // Add to API key (key is pre-validated above)
       const key = await ApiKey.findOneAndUpdate(
         { _id: req.params.keyId, ownerId: user.userId, active: true },
         { $inc: { credits: credits, totalCreditsLoaded: credits } },
@@ -615,12 +623,18 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
       ).select('-keyHash -webhookSecret');
 
       if (!key) {
-        // Refund user if key not found
+        // SECURITY FIX: Refund on ANY failure, not just "not found"
+        // This handles edge cases like the key being deactivated between the check and update
+        logger.warn('API key top-up: key update failed after credit deduction, refunding', {
+          userId: user.userId,
+          keyId: req.params.keyId,
+          credits,
+        });
         await User.findOneAndUpdate(
           { userId: user.userId },
           { $inc: { credits: credits } }
         );
-        return res.status(404).json({ success: false, error: 'API key not found' });
+        return res.status(500).json({ success: false, error: 'Failed to top up API key. Credits have been refunded.' });
       }
 
       logger.info('API key topped up', {

@@ -96,6 +96,12 @@ export const stripVideoMetadata = async (
   try {
     // Download video if URL, or write buffer to temp file
     if (typeof videoInput === 'string') {
+      // SECURITY FIX: Validate URL to prevent SSRF attacks
+      const { isValidPublicUrl } = await import('./validation.js');
+      if (!isValidPublicUrl(videoInput)) {
+        throw new Error('Invalid video URL - SSRF protection: URL must be a public HTTP(S) URL');
+      }
+
       const response = await fetch(videoInput);
       if (!response.ok) {
         throw new Error(`Failed to download video: ${response.status} ${response.statusText}`);

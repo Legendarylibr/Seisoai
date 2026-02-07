@@ -32,6 +32,7 @@ import {
   type PromptOptimizationResult
 } from '../services/promptOptimizer';
 import { isValidPublicUrl, sanitizeString } from '../utils/validation';
+import { requireVerifiedIdentity } from '../middleware/auth';
 
 // Re-export prompt optimizers (used by chatAssistant.ts)
 export {
@@ -317,8 +318,9 @@ export function createGenerationRoutes(deps: Dependencies) {
 
   // ==========================================================================
   // POST /api/generate/image — Generate image
+  // SECURITY FIX: requireVerifiedIdentity blocks body-only wallet auth
   // ==========================================================================
-  router.post('/image', flexibleAuth, generationTokenGate(), requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/image', flexibleAuth, requireVerifiedIdentity, generationTokenGate(), requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       validateUser(user);
@@ -759,7 +761,7 @@ export function createGenerationRoutes(deps: Dependencies) {
   // ==========================================================================
   // POST /api/generate/video — Video generation (Veo 3.1 / LTX-2)
   // ==========================================================================
-  router.post('/video', flexibleAuth, generationTokenGate(), requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/video', flexibleAuth, requireVerifiedIdentity, generationTokenGate(), requireCreditsForVideo(), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       validateUser(user);
@@ -1043,7 +1045,7 @@ export function createGenerationRoutes(deps: Dependencies) {
   // ==========================================================================
   // POST /api/generate/music — Music generation
   // ==========================================================================
-  router.post('/music', flexibleAuth, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/music', flexibleAuth, requireVerifiedIdentity, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       validateUser(user);
@@ -1224,7 +1226,7 @@ export function createGenerationRoutes(deps: Dependencies) {
   // ==========================================================================
   // POST /api/generate/upscale — Upscale image
   // ==========================================================================
-  router.post('/upscale', flexibleAuth, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/upscale', flexibleAuth, requireVerifiedIdentity, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       validateUser(user);
@@ -1299,7 +1301,7 @@ export function createGenerationRoutes(deps: Dependencies) {
   // ==========================================================================
   // POST /api/generate/video-to-audio — Generate audio from video (MMAudio V2)
   // ==========================================================================
-  router.post('/video-to-audio', flexibleAuth, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/video-to-audio', flexibleAuth, requireVerifiedIdentity, generationTokenGate(), requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       validateUser(user);

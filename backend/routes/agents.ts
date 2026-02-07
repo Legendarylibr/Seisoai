@@ -21,35 +21,48 @@ interface JWTDecoded extends JwtPayload {
 }
 
 /**
- * Optional auth middleware: tries JWT auth to set req.user,
- * but always calls next() so wallet-only users can still proceed.
- * The route handler is responsible for requiring wallet address.
+ * SECURITY FIX: Require JWT auth for agent mutation operations.
+ * No longer falls through to wallet-from-body or x-wallet-address header,
+ * which were trivially spoofable.
  */
-const optionalAuth = async (req: Request & { user?: IUser }, _res: Response, next: NextFunction): Promise<void> => {
+const requireJwtAuth = async (req: Request & { user?: IUser }, res: Response, next: NextFunction): Promise<void> => {
   try {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
-    if (token && config.JWT_SECRET) {
-      const blacklisted = await isTokenBlacklisted(token);
-      if (!blacklisted) {
-        const decoded = jwt.verify(token, config.JWT_SECRET, { algorithms: ['HS256'] }) as JWTDecoded;
-        if (decoded.type !== 'refresh') {
-          const User = mongoose.model<IUser>('User');
-          let user = null;
-          if (decoded.userId) {
-            user = await User.findOne({ userId: decoded.userId });
-          }
-          if (user) {
-            req.user = user;
-          }
-        }
-      }
+    if (!token || !config.JWT_SECRET) {
+      res.status(401).json({ success: false, error: 'JWT authentication required. Please sign in.' });
+      return;
     }
+
+    const blacklisted = await isTokenBlacklisted(token);
+    if (blacklisted) {
+      res.status(401).json({ success: false, error: 'Token has been revoked. Please sign in again.' });
+      return;
+    }
+
+    const decoded = jwt.verify(token, config.JWT_SECRET, { algorithms: ['HS256'] }) as JWTDecoded;
+    if (decoded.type === 'refresh') {
+      res.status(403).json({ success: false, error: 'Refresh tokens cannot be used for authentication.' });
+      return;
+    }
+
+    const User = mongoose.model<IUser>('User');
+    let user = null;
+    if (decoded.userId) {
+      user = await User.findOne({ userId: decoded.userId });
+    }
+
+    if (!user) {
+      res.status(401).json({ success: false, error: 'User not found. Please connect your wallet.' });
+      return;
+    }
+
+    req.user = user;
+    next();
   } catch {
-    // JWT auth failed — that's fine, route will check for wallet address
+    res.status(403).json({ success: false, error: 'Invalid or expired token.' });
   }
-  next();
 };
 import { toolRegistry } from '../services/toolRegistry';
 import { getTrace, getTracesForUser } from '../services/agentTracer';
@@ -108,6 +121,8 @@ router.get('/list', async (_req: Request, res: Response) => {
     const agents = await getAllCustomAgents();
     const baseUrl = `${_req.protocol}://${_req.get('host')}`;
 
+    // SECURITY FIX: Redact owner wallet addresses from public listing
+    // Owner addresses were previously exposed, enabling targeted attacks
     res.json({
       success: true,
       agents: agents.map(a => ({
@@ -116,7 +131,6 @@ router.get('/list', async (_req: Request, res: Response) => {
         description: a.description,
         type: a.type,
         tools: a.tools,
-        owner: a.owner,
         createdAt: a.createdAt,
         agentURI: a.agentURI,
         invokeUrl: `${baseUrl}/api/gateway/agent/${a.agentId}/invoke`,
@@ -284,18 +298,17 @@ router.get('/:agentId/reputation', async (req: Request, res: Response) => {
  * - Rate limited to prevent abuse (10 agents/hour/wallet)
  * - systemPrompt and skillMd are sanitized to prevent prompt injection
  */
-router.post('/create', agentCreationLimiter, optionalAuth, async (req: Request, res: Response) => {
+router.post('/create', agentCreationLimiter, requireJwtAuth, async (req: Request, res: Response) => {
   try {
-    const { name, description, type, tools, image, services, skillMd, systemPrompt, walletAddress: bodyWallet } = req.body;
+    const { name, description, type, tools, image, services, skillMd, systemPrompt } = req.body;
 
-    // Get wallet address: JWT user first, then body, then header
+    // SECURITY FIX: Only use wallet address from JWT-authenticated user
+    // Removed body/header wallet fallbacks which allowed impersonation
     const user = (req as Request & { user?: IUser }).user;
-    const walletAddress = user?.walletAddress
-      || bodyWallet as string
-      || req.headers['x-wallet-address'] as string;
+    const walletAddress = user?.walletAddress;
 
     if (!walletAddress) {
-      res.status(401).json({ success: false, error: 'Wallet address required. Please connect your wallet.' });
+      res.status(401).json({ success: false, error: 'Wallet address required. Please connect your wallet and sign in.' });
       return;
     }
 
@@ -493,15 +506,16 @@ router.get('/custom/:address', async (req: Request, res: Response) => {
  * Delete a custom agent
  * DELETE /api/agents/custom/:agentId
  */
-router.delete('/custom/:agentId', optionalAuth, async (req: Request, res: Response) => {
+router.delete('/custom/:agentId', requireJwtAuth, async (req: Request, res: Response) => {
   try {
     const { agentId } = req.params;
+    // SECURITY FIX: Only use wallet address from JWT-authenticated user
+    // Removed x-wallet-address header fallback which allowed anyone to delete anyone's agents
     const user = (req as Request & { user?: IUser }).user;
-    const walletAddress = user?.walletAddress
-      || req.headers['x-wallet-address'] as string;
+    const walletAddress = user?.walletAddress;
 
     if (!walletAddress) {
-      res.status(401).json({ success: false, error: 'Wallet address required. Please connect your wallet.' });
+      res.status(401).json({ success: false, error: 'Wallet address required. Please connect your wallet and sign in.' });
       return;
     }
 

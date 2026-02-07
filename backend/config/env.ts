@@ -79,6 +79,13 @@ if (process.env.ADMIN_SECRET) {
   }
 }
 
+// SECURITY FIX: Warn if INTERNAL_REQUEST_SECRET is not configured in production
+if (process.env.NODE_ENV === 'production' && !process.env.INTERNAL_REQUEST_SECRET) {
+  console.warn('SECURITY WARNING: INTERNAL_REQUEST_SECRET is not configured.');
+  console.warn('Internal server-to-server CSRF bypass will be disabled in production.');
+  console.warn('Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+}
+
 // Warn about permissive CORS in production
 if (process.env.NODE_ENV === 'production') {
   const allowedOrigins = process.env.ALLOWED_ORIGINS;
@@ -241,10 +248,14 @@ export const config: Config = {
   ORCHESTRATOR_QUEUE_POLL_INTERVAL_MS: parseInt(process.env.ORCHESTRATOR_QUEUE_POLL_INTERVAL_MS || '3000', 10),
   ORCHESTRATOR_MAX_RETRIES: parseInt(process.env.ORCHESTRATOR_MAX_RETRIES || '1', 10),
 
-  // SECURITY: Internal request token for server-to-server CSRF bypass
+  // SECURITY FIX: Internal request token for server-to-server CSRF bypass
+  // MUST be configured separately in production — deriving from JWT_SECRET is insecure
+  // because compromising JWT_SECRET would also compromise internal auth.
   // Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   INTERNAL_REQUEST_SECRET: process.env.INTERNAL_REQUEST_SECRET || 
-    (process.env.JWT_SECRET ? crypto.createHash('sha256').update(process.env.JWT_SECRET + '_internal_request_salt').digest('hex') : undefined),
+    (process.env.NODE_ENV === 'production' 
+      ? undefined  // SECURITY: Refuse to derive in production — must be set explicitly
+      : (process.env.JWT_SECRET ? crypto.createHash('sha256').update(process.env.JWT_SECRET + '_internal_request_salt').digest('hex') : undefined)),
   
   // Admin secret
   ADMIN_SECRET: process.env.ADMIN_SECRET,

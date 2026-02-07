@@ -9,7 +9,7 @@ import logger from '../utils/logger';
 import { LRUCache } from '../services/cache';
 import type { IApiKey } from '../models/ApiKey';
 
-// Rate limiting tracking (in-memory, per-key)
+// Rate limiting tracking (Redis-backed with in-memory fallback)
 interface RateLimitEntry {
   minuteCount: number;
   minuteResetAt: number;
@@ -18,6 +18,15 @@ interface RateLimitEntry {
 }
 
 const rateLimitCache = new LRUCache<string, RateLimitEntry>(10000);
+
+// SECURITY FIX: Lazy-load Redis for distributed rate limiting across instances
+let redisService: typeof import('../services/redis.js') | null = null;
+async function getRedisForRateLimit() {
+  if (!redisService) {
+    try { redisService = await import('../services/redis.js'); } catch { /* Redis not available */ }
+  }
+  return redisService;
+}
 
 // Extend Express Request to include API key info
 declare global {
@@ -58,12 +67,35 @@ function extractApiKey(req: Request): string | null {
 }
 
 /**
- * Check rate limits for an API key
+ * SECURITY FIX: Check rate limits for an API key using Redis (distributed) with in-memory fallback.
+ * This ensures rate limits are shared across all server instances and survive restarts.
  */
-function checkRateLimit(apiKey: IApiKey): { allowed: boolean; retryAfter?: number } {
+async function checkRateLimit(apiKey: IApiKey): Promise<{ allowed: boolean; retryAfter?: number }> {
   const now = Date.now();
   const keyId = apiKey.keyHash || (apiKey as any)._id?.toString();
-  
+
+  // Try Redis-based rate limiting first (shared across instances)
+  try {
+    const redis = await getRedisForRateLimit();
+    if (redis && redis.isRedisConnected()) {
+      // Use rateLimitIncrement which handles INCR + EXPIRE atomically
+      const minuteCount = await redis.rateLimitIncrement(`apikey:min:${keyId}`, 60);
+      if (minuteCount > apiKey.rateLimitPerMinute) {
+        return { allowed: false, retryAfter: 60 };
+      }
+
+      const dayCount = await redis.rateLimitIncrement(`apikey:day:${keyId}`, 86400);
+      if (dayCount > apiKey.rateLimitPerDay) {
+        return { allowed: false, retryAfter: 86400 };
+      }
+
+      return { allowed: true };
+    }
+  } catch {
+    // Redis unavailable — fall through to in-memory
+  }
+
+  // Fallback: in-memory rate limiting (per-instance only)
   let entry = rateLimitCache.get(keyId);
   
   if (!entry) {
@@ -154,8 +186,8 @@ export function authenticateApiKey(req: Request, res: Response, next: NextFuncti
         }
       }
 
-      // Check rate limits
-      const rateCheck = checkRateLimit(apiKey);
+      // Check rate limits (async for Redis support)
+      const rateCheck = await checkRateLimit(apiKey);
       if (!rateCheck.allowed) {
         res.setHeader('Retry-After', String(rateCheck.retryAfter || 60));
         res.status(429).json({

@@ -289,6 +289,54 @@ export const createAuthenticateFlexible = (
 };
 
 /**
+ * SECURITY FIX: Middleware that rejects wallet-only (body) auth for credit-spending operations.
+ * Must be used AFTER authenticateFlexible. Ensures the user proved identity via JWT or x402,
+ * not just by supplying a walletAddress in the request body (which anyone can do).
+ * 
+ * This prevents attackers from impersonating any wallet address and draining their credits.
+ */
+export const requireVerifiedIdentity = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+  // x402 payments are cryptographically verified — always allowed
+  if ((req as any)[X402_VERIFIED_SYMBOL] === true) {
+    next();
+    return;
+  }
+
+  // API key auth is cryptographically verified — always allowed
+  if ((req as any).isApiKeyAuth === true && (req as any).apiKey) {
+    next();
+    return;
+  }
+
+  // JWT auth is cryptographically verified — allowed
+  if (req.authType === 'jwt' && req.user) {
+    next();
+    return;
+  }
+
+  // Body-only auth (walletAddress from request body) — REJECTED for credit-spending ops
+  if (req.authType === 'body') {
+    logger.warn('SECURITY: Blocked body-only auth on credit-spending endpoint', {
+      path: req.path,
+      method: req.method,
+      ip: req.ip,
+      walletAddress: req.user?.walletAddress ? req.user.walletAddress.substring(0, 10) + '...' : 'unknown',
+    });
+    res.status(401).json({
+      success: false,
+      error: 'Verified authentication required. Please sign in with a JWT token or use x402 payment.',
+    });
+    return;
+  }
+
+  // No auth at all
+  res.status(401).json({
+    success: false,
+    error: 'Authentication required. Please connect your wallet and sign in.',
+  });
+};
+
+/**
  * Create wallet ownership verification middleware
  */
 export const createVerifyWalletOwnership = () => {
@@ -345,6 +393,7 @@ export default {
   createVerifyWalletOwnership,
   authenticateToken,
   authenticateFlexible,
-  requireVerifiedAuth
+  requireVerifiedAuth,
+  requireVerifiedIdentity
 };
 

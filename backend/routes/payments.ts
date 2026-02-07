@@ -468,52 +468,62 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
         logger.debug('Redis transaction check failed, using database only', { error: (redisError as Error).message });
       }
 
-      // SECURITY FIX: Use $addToSet to prevent duplicate payment processing (atomic operation)
-      // This prevents race conditions where the same transaction is processed multiple times
-      const paymentRecord = {
-        txHash,
-        tokenSymbol: tokenSymbol || 'USDC',
-        amount,
-        credits,
-        chainId: String(chainId),
-        walletType,
-        timestamp: new Date()
-      };
+      // SECURITY FIX: If Redis flagged as duplicate, reject immediately without crediting
+      if (isDuplicate) {
+        logger.info('Payment already processed (Redis dedup)', { txHash, userId: user.userId });
+        res.json({
+          success: true,
+          credits: 0,
+          totalCredits: user.credits,
+          message: 'Payment already processed'
+        });
+        return;
+      }
 
-      // Try to add payment record atomically - if txHash already exists, $addToSet won't add it
+      // SECURITY FIX: Use atomic check-and-set to prevent duplicate payment processing.
+      // First check if txHash already exists in paymentHistory, and only credit if it doesn't.
+      // The query condition ensures atomicity: only matches if txHash is NOT already in history.
       const updatedUser = await User.findOneAndUpdate(
-        updateQuery,
+        {
+          ...updateQuery,
+          'paymentHistory.txHash': { $ne: txHash }, // SECURITY: Only update if txHash not yet recorded
+        },
         {
           $inc: { credits, totalCreditsEarned: credits },
-          $addToSet: {
-            paymentHistory: paymentRecord
+          $push: {
+            paymentHistory: {
+              txHash,
+              tokenSymbol: tokenSymbol || 'USDC',
+              amount,
+              credits,
+              chainId: String(chainId),
+              walletType,
+              timestamp: new Date()
+            }
           }
         },
         { new: true }
       );
 
-      // SECURITY: Check if payment was actually added (not a duplicate)
-      const wasAdded = updatedUser?.paymentHistory?.some(
-        (p: { txHash?: string; timestamp?: Date }) => 
-          p.txHash === txHash && 
-          Math.abs(new Date(p.timestamp || 0).getTime() - paymentRecord.timestamp.getTime()) < 1000
-      );
-
-      if (!wasAdded || isDuplicate) {
-        // Payment was already processed (duplicate detected)
-        logger.info('Payment already processed (duplicate detected)', { 
-          txHash, 
-          userId: user.userId,
-          wasAdded,
-          isDuplicate,
-          redisCheck: isDuplicate
-        });
-        res.json({
-          success: true,
-          credits: 0,
-          totalCredits: updatedUser?.credits || user.credits,
-          message: 'Payment already processed'
-        });
+      if (!updatedUser) {
+        // Query didn't match — either user not found or txHash already exists
+        // Check if it's a duplicate
+        const existingUser = await User.findOne(updateQuery);
+        const alreadyHasTx = existingUser?.paymentHistory?.some(
+          (p: { txHash?: string }) => p.txHash === txHash
+        );
+        if (alreadyHasTx) {
+          logger.info('Payment already processed (database dedup)', { txHash, userId: user.userId });
+          res.json({
+            success: true,
+            credits: 0,
+            totalCredits: existingUser?.credits || user.credits,
+            message: 'Payment already processed'
+          });
+          return;
+        }
+        // User not found
+        res.status(404).json({ success: false, error: 'User not found' });
         return;
       }
 

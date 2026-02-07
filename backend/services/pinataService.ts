@@ -13,6 +13,7 @@
  */
 import logger from '../utils/logger.js';
 import config from '../config/env.js';
+import { isValidPublicUrl } from '../utils/validation.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -64,6 +65,12 @@ export async function uploadToPrivateIPFS(
   if (!pinata) return null;
 
   try {
+    // SECURITY FIX: Validate URL to prevent SSRF attacks
+    if (!isValidPublicUrl(sourceUrl)) {
+      logger.warn('SSRF attempt blocked in uploadToPrivateIPFS', { sourceUrl: sourceUrl.substring(0, 100) });
+      return null;
+    }
+
     // Download the file from the source URL
     const response = await fetch(sourceUrl);
     if (!response.ok) {
@@ -180,6 +187,12 @@ export async function downloadAndHash(
   sourceUrl: string,
 ): Promise<{ buffer: Buffer; contentHash: string; contentType: string } | null> {
   try {
+    // SECURITY FIX: Validate URL to prevent SSRF attacks
+    if (!isValidPublicUrl(sourceUrl)) {
+      logger.warn('SSRF attempt blocked in downloadAndHash', { sourceUrl: sourceUrl.substring(0, 100) });
+      return null;
+    }
+
     const { ethers } = await import('ethers');
     const response = await fetch(sourceUrl);
     if (!response.ok) return null;
