@@ -117,7 +117,7 @@ export interface WelcomeEmailData {
 }
 
 export function welcomeEmail(data: WelcomeEmailData): { html: string; text: string; subject: string } {
-  const { userName, referralCode, credits } = data;
+  const { userName, referralCode, credits: _credits } = data;
   
   const html = baseTemplate(`
 ${headerComponent('Welcome to SeisoAI!', '🎨')}

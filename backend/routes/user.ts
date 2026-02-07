@@ -47,10 +47,9 @@ function getPricing() {
 
 export function createUserRoutes(deps: Dependencies = {}) {
   const router = Router();
-  const { authenticateFlexible, authenticateToken } = deps;
+  const { authenticateFlexible } = deps;
 
   const authMiddleware = authenticateFlexible || ((_req: Request, _res: Response, next: () => void) => next());
-  const strictAuth = authenticateToken || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
    * Get user info

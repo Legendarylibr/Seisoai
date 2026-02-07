@@ -202,7 +202,7 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
               userAgent: req.headers['user-agent'],
             },
             action: 'API key webhook URL blocked',
-            outcome: 'blocked',
+            outcome: 'failure',
             metadata: {
               error: webhookValidation.error,
               webhookUrlPreview: String(webhookUrl).substring(0, 100),

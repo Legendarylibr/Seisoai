@@ -32,6 +32,7 @@ async function getPinata() {
 
   // Dynamic import — pinata is an optional dependency
   try {
+    // @ts-ignore - pinata is an optional peer dependency
     const { PinataSDK } = await import('pinata');
     pinataInstance = new PinataSDK({
       pinataJwt: config.PINATA_JWT,

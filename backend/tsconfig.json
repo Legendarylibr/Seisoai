@@ -35,7 +35,9 @@
   "exclude": [
     "node_modules",
     "dist",
-    "**/*.js"
+    "**/*.js",
+    "__tests__",
+    "scripts"
   ]
 }
 

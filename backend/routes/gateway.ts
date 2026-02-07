@@ -21,7 +21,7 @@ import { authenticateApiKey } from '../middleware/apiKeyAuth';
 import { sendGenerationWebhook } from '../services/webhook';
 import { getCustomAgentById, getAllCustomAgents } from './agents';
 import logger from '../utils/logger';
-import { isValidWebhookUrl, deepSanitize } from '../utils/validation';
+import { isValidWebhookUrl } from '../utils/validation';
 
 // Dependencies injected from parent
 interface Dependencies {
