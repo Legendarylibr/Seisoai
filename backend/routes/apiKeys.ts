@@ -29,6 +29,77 @@ interface AuthenticatedRequest extends Request {
 // SECURITY: Rate limiter for API key creation
 const apiKeyCreationLimiter = createApiKeyCreationLimiter();
 
+/**
+ * SECURITY: Validate that a string is a valid MongoDB ObjectId
+ * Prevents MongoDB CastError and potential injection
+ */
+function isValidObjectId(id: string): boolean {
+  return mongoose.Types.ObjectId.isValid(id) && new mongoose.Types.ObjectId(id).toString() === id;
+}
+
+/**
+ * SECURITY: Validate rate limit values are within acceptable bounds
+ */
+function validateRateLimits(perMinute?: unknown, perDay?: unknown): { valid: boolean; error?: string } {
+  if (perMinute !== undefined) {
+    if (typeof perMinute !== 'number' || !Number.isInteger(perMinute) || perMinute < 1 || perMinute > 1000) {
+      return { valid: false, error: 'rateLimitPerMinute must be an integer between 1 and 1000' };
+    }
+  }
+  if (perDay !== undefined) {
+    if (typeof perDay !== 'number' || !Number.isInteger(perDay) || perDay < 1 || perDay > 1000000) {
+      return { valid: false, error: 'rateLimitPerDay must be an integer between 1 and 1,000,000' };
+    }
+  }
+  return { valid: true };
+}
+
+/**
+ * SECURITY: Validate IP allowlist entries are valid IPv4/IPv6 addresses or CIDR ranges
+ */
+function validateIpAllowlist(ips: unknown): { valid: boolean; error?: string } {
+  if (!Array.isArray(ips)) {
+    return { valid: false, error: 'ipAllowlist must be an array' };
+  }
+  if (ips.length > 50) {
+    return { valid: false, error: 'ipAllowlist cannot exceed 50 entries' };
+  }
+  // IPv4, IPv6, and CIDR notation
+  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/;
+  const ipv6Regex = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(\/\d{1,3})?$/;
+  for (const ip of ips) {
+    if (typeof ip !== 'string' || ip.length > 45) {
+      return { valid: false, error: `Invalid IP address entry: must be a string` };
+    }
+    if (!ipv4Regex.test(ip) && !ipv6Regex.test(ip)) {
+      return { valid: false, error: `Invalid IP address format: ${ip}` };
+    }
+  }
+  return { valid: true };
+}
+
+/**
+ * SECURITY: Validate allowedTools and allowedCategories are arrays of safe strings
+ */
+function validateStringArray(arr: unknown, fieldName: string, maxLength = 100, maxItems = 50): { valid: boolean; error?: string } {
+  if (!Array.isArray(arr)) {
+    return { valid: false, error: `${fieldName} must be an array` };
+  }
+  if (arr.length > maxItems) {
+    return { valid: false, error: `${fieldName} cannot exceed ${maxItems} items` };
+  }
+  for (const item of arr) {
+    if (typeof item !== 'string' || item.length === 0 || item.length > maxLength) {
+      return { valid: false, error: `${fieldName} entries must be non-empty strings (max ${maxLength} chars)` };
+    }
+    // Only allow alphanumeric, dots, hyphens, underscores (tool IDs / category names)
+    if (!/^[a-zA-Z0-9._-]+$/.test(item)) {
+      return { valid: false, error: `${fieldName} entry contains invalid characters: ${item}` };
+    }
+  }
+  return { valid: true };
+}
+
 export default function createApiKeyRoutes(deps: Dependencies): Router {
   const router = Router();
   const { authenticateToken } = deps;
@@ -36,9 +107,9 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
   /**
    * POST /api/api-keys
    * Create a new API key
-   * SECURITY: Rate limited to prevent abuse
+   * SECURITY: Rate limited to prevent abuse, auth runs first so rate limiter can use userId
    */
-  router.post('/', apiKeyCreationLimiter, authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/', authenticateToken, apiKeyCreationLimiter, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -57,12 +128,57 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
         ipAllowlist,
       } = req.body;
 
+      // --- Input validation ---
+
       if (!name || typeof name !== 'string' || name.trim().length === 0) {
         return res.status(400).json({ success: false, error: 'Key name is required' });
       }
 
-      if (name.length > 100) {
+      if (name.trim().length > 100) {
         return res.status(400).json({ success: false, error: 'Key name must be 100 characters or less' });
+      }
+
+      // SECURITY: Validate rate limits
+      const rateLimitCheck = validateRateLimits(rateLimitPerMinute, rateLimitPerDay);
+      if (!rateLimitCheck.valid) {
+        return res.status(400).json({ success: false, error: rateLimitCheck.error });
+      }
+
+      // SECURITY: Validate credits
+      if (credits !== undefined && credits !== null) {
+        if (typeof credits !== 'number' || credits < 0 || !Number.isFinite(credits)) {
+          return res.status(400).json({ success: false, error: 'Credits must be a non-negative finite number' });
+        }
+      }
+
+      // SECURITY: Validate expiresInDays
+      if (expiresInDays !== undefined && expiresInDays !== null) {
+        if (typeof expiresInDays !== 'number' || expiresInDays <= 0 || expiresInDays > 365 || !Number.isFinite(expiresInDays)) {
+          return res.status(400).json({ success: false, error: 'expiresInDays must be a number between 1 and 365' });
+        }
+      }
+
+      // SECURITY: Validate allowedTools and allowedCategories
+      if (allowedTools !== undefined && allowedTools !== null) {
+        const toolsCheck = validateStringArray(allowedTools, 'allowedTools');
+        if (!toolsCheck.valid) {
+          return res.status(400).json({ success: false, error: toolsCheck.error });
+        }
+      }
+
+      if (allowedCategories !== undefined && allowedCategories !== null) {
+        const catsCheck = validateStringArray(allowedCategories, 'allowedCategories');
+        if (!catsCheck.valid) {
+          return res.status(400).json({ success: false, error: catsCheck.error });
+        }
+      }
+
+      // SECURITY: Validate ipAllowlist
+      if (ipAllowlist !== undefined && ipAllowlist !== null) {
+        const ipCheck = validateIpAllowlist(ipAllowlist);
+        if (!ipCheck.valid) {
+          return res.status(400).json({ success: false, error: ipCheck.error });
+        }
       }
 
       // SECURITY: Validate webhook URL to prevent data exfiltration
@@ -265,6 +381,11 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
         return res.status(401).json({ success: false, error: 'Authentication required' });
       }
 
+      // SECURITY: Validate ObjectId to prevent MongoDB CastError
+      if (!isValidObjectId(req.params.keyId)) {
+        return res.status(400).json({ success: false, error: 'Invalid API key ID format' });
+      }
+
       const ApiKey = mongoose.model<IApiKey>('ApiKey');
       const key = await ApiKey.findOne({ _id: req.params.keyId, ownerId: user.userId })
         .select('-keyHash -webhookSecret');
@@ -314,6 +435,11 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
         return res.status(401).json({ success: false, error: 'Authentication required' });
       }
 
+      // SECURITY: Validate ObjectId to prevent MongoDB CastError
+      if (!isValidObjectId(req.params.keyId)) {
+        return res.status(400).json({ success: false, error: 'Invalid API key ID format' });
+      }
+
       const {
         name,
         rateLimitPerMinute,
@@ -324,6 +450,52 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
         ipAllowlist,
         active,
       } = req.body;
+
+      // --- Input validation ---
+
+      // SECURITY: Validate name length
+      if (name !== undefined) {
+        if (typeof name !== 'string' || name.trim().length === 0) {
+          return res.status(400).json({ success: false, error: 'Key name must be a non-empty string' });
+        }
+        if (name.trim().length > 100) {
+          return res.status(400).json({ success: false, error: 'Key name must be 100 characters or less' });
+        }
+      }
+
+      // SECURITY: Validate rate limits
+      const rateLimitCheck = validateRateLimits(rateLimitPerMinute, rateLimitPerDay);
+      if (!rateLimitCheck.valid) {
+        return res.status(400).json({ success: false, error: rateLimitCheck.error });
+      }
+
+      // SECURITY: Validate active is boolean
+      if (active !== undefined && typeof active !== 'boolean') {
+        return res.status(400).json({ success: false, error: 'active must be a boolean' });
+      }
+
+      // SECURITY: Validate allowedTools and allowedCategories
+      if (allowedTools !== undefined && allowedTools !== null) {
+        const toolsCheck = validateStringArray(allowedTools, 'allowedTools');
+        if (!toolsCheck.valid) {
+          return res.status(400).json({ success: false, error: toolsCheck.error });
+        }
+      }
+
+      if (allowedCategories !== undefined && allowedCategories !== null) {
+        const catsCheck = validateStringArray(allowedCategories, 'allowedCategories');
+        if (!catsCheck.valid) {
+          return res.status(400).json({ success: false, error: catsCheck.error });
+        }
+      }
+
+      // SECURITY: Validate ipAllowlist
+      if (ipAllowlist !== undefined && ipAllowlist !== null) {
+        const ipCheck = validateIpAllowlist(ipAllowlist);
+        if (!ipCheck.valid) {
+          return res.status(400).json({ success: false, error: ipCheck.error });
+        }
+      }
 
       // SECURITY: Validate webhook URL if provided
       if (webhookUrl !== undefined && webhookUrl !== null && webhookUrl !== '') {
@@ -403,9 +575,14 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
         return res.status(401).json({ success: false, error: 'Authentication required' });
       }
 
+      // SECURITY: Validate ObjectId
+      if (!isValidObjectId(req.params.keyId)) {
+        return res.status(400).json({ success: false, error: 'Invalid API key ID format' });
+      }
+
       const { credits } = req.body;
-      if (!credits || typeof credits !== 'number' || credits <= 0) {
-        return res.status(400).json({ success: false, error: 'Credits must be a positive number' });
+      if (!credits || typeof credits !== 'number' || credits <= 0 || !Number.isFinite(credits)) {
+        return res.status(400).json({ success: false, error: 'Credits must be a positive finite number' });
       }
 
       if (credits > user.credits) {
@@ -479,6 +656,11 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
       const user = req.user;
       if (!user) {
         return res.status(401).json({ success: false, error: 'Authentication required' });
+      }
+
+      // SECURITY: Validate ObjectId
+      if (!isValidObjectId(req.params.keyId)) {
+        return res.status(400).json({ success: false, error: 'Invalid API key ID format' });
       }
 
       const ApiKey = mongoose.model<IApiKey>('ApiKey');

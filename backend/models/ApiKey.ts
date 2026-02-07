@@ -155,12 +155,13 @@ const apiKeySchema = new mongoose.Schema<IApiKey>({
         if (!v) return true;
         try {
           const url = new URL(v);
-          return url.protocol === 'https:' || url.protocol === 'http:';
+          // SECURITY: Only allow HTTPS — defense-in-depth alongside route-level validation
+          return url.protocol === 'https:';
         } catch {
           return false;
         }
       },
-      message: 'Webhook URL must be a valid HTTP(S) URL',
+      message: 'Webhook URL must be a valid HTTPS URL',
     },
   },
   webhookSecret: {
