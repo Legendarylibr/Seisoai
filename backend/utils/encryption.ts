@@ -196,32 +196,18 @@ export function generateEncryptionKey(): string {
  * Encrypt sensitive fields in user data for storage
  */
 export function encryptUserData(userData: {
-  email?: string;
   prompts?: string[];
   [key: string]: unknown;
-}): typeof userData & { emailHash?: string } {
+}): typeof userData {
   const result = { ...userData };
-  
-  // Encrypt email and create blind index
-  if (result.email) {
-    const emailHash = createBlindIndex(result.email);
-    result.email = encrypt(result.email);
-    (result as typeof userData & { emailHash?: string }).emailHash = emailHash;
-  }
-  
-  return result as typeof userData & { emailHash?: string };
+  return result;
 }
 
 /**
  * Decrypt sensitive fields in user data for use
  */
-export function decryptUserData<T extends { email?: string }>(userData: T): T {
+export function decryptUserData<T extends Record<string, unknown>>(userData: T): T {
   const result = { ...userData };
-  
-  if (result.email) {
-    result.email = decrypt(result.email);
-  }
-  
   return result;
 }
 

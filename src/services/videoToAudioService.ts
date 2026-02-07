@@ -13,7 +13,6 @@ export interface VideoToAudioOptions {
   duration?: number;
   userId?: string | null;
   walletAddress?: string | null;
-  email?: string | null;
 }
 
 export interface VideoToAudioResult {
@@ -48,16 +47,15 @@ export const generateAudioFromVideo = async ({
   cfgStrength = 4.5,
   duration = 8,
   userId,
-  walletAddress,
-  email
+  walletAddress
 }: VideoToAudioOptions): Promise<VideoToAudioResult> => {
   // Validate required inputs
   if (!videoUrl || typeof videoUrl !== 'string' || videoUrl.trim().length === 0) {
     throw new Error('Video URL is required');
   }
   
-  if (!userId && !walletAddress && !email) {
-    throw new Error('User identification required. Please sign in.');
+  if (!userId && !walletAddress) {
+    throw new Error('User identification required. Please connect your wallet.');
   }
 
   try {
@@ -76,8 +74,7 @@ export const generateAudioFromVideo = async ({
       cfg_strength: Math.min(10, Math.max(1, cfgStrength)),
       duration: Math.min(30, Math.max(1, duration)),
       userId,
-      walletAddress,
-      email
+      walletAddress
     };
 
     // Ensure CSRF token is available

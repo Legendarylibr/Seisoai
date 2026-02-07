@@ -61,7 +61,7 @@ async function refundCredits(
 
     if (updatedUser) {
       logger.info('Credits refunded for failed WAN generation', {
-        userId: user.userId || user.email || user.walletAddress,
+        userId: user.userId || user.walletAddress,
         creditsRefunded: credits,
         newBalance: updatedUser.credits,
         reason
@@ -419,7 +419,7 @@ export function createWanAnimateRoutes(deps: Dependencies) {
       if (!updateQuery) {
         res.status(400).json({ 
           success: false, 
-          error: 'User account must have wallet address, userId, or email' 
+          error: 'User account must have wallet address or userId' 
         });
         return;
       }

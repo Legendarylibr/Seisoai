@@ -1,15 +1,10 @@
 /**
  * User service
- * Handles user lookup and creation
- * 
- * NOTE: Email addresses are encrypted at rest. Use emailHash for lookups.
- * Uses multiple fallback methods for cross-environment compatibility.
+ * Handles user lookup and creation (wallet-based only)
  */
 import mongoose, { type Model } from 'mongoose';
-import crypto from 'crypto';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
-import { buildEmailLookupConditions, createEmailHash } from '../utils/emailHash';
 import { normalizeWalletAddress } from '../utils/validation';
 
 // Re-export for backwards compatibility
@@ -44,15 +39,13 @@ export async function extendUserExpiry(user: IUser): Promise<void> {
 }
 
 /**
- * Find user by any identifier
- * NOTE: Email lookups use emailHash (blind index) since emails are encrypted
+ * Find user by wallet address or userId
  */
 export async function findUserByIdentifier(
   walletAddress: string | null = null, 
-  email: string | null = null, 
   userId: string | null = null
 ): Promise<IUser | null> {
-  if (!walletAddress && !email && !userId) {
+  if (!walletAddress && !userId) {
     return null;
   }
 
@@ -64,12 +57,6 @@ export async function findUserByIdentifier(
     if (normalized) {
       query.$or!.push({ walletAddress: normalized });
     }
-  }
-
-  if (email) {
-    // Use robust email lookup with multiple fallback methods
-    const emailConditions = buildEmailLookupConditions(email);
-    query.$or!.push(...emailConditions);
   }
 
   if (userId) {
@@ -90,10 +77,7 @@ export async function findUserByIdentifier(
 /**
  * Get or create user by wallet address
  */
-export async function getOrCreateUser(
-  walletAddress: string, 
-  email: string | null = null
-): Promise<IUser> {
+export async function getOrCreateUser(walletAddress: string): Promise<IUser> {
   const User = getUserModel();
   const normalized = normalizeWalletAddress(walletAddress);
   
@@ -105,11 +89,6 @@ export async function getOrCreateUser(
   let user = await User.findOne({ walletAddress: normalized });
   
   if (user) {
-    // Link email if provided and not already set
-    if (email && !user.email) {
-      user.email = email.toLowerCase();
-      await user.save();
-    }
     // DATA MINIMIZATION: Extend expiry on activity
     await extendUserExpiry(user);
     return user;
@@ -118,7 +97,6 @@ export async function getOrCreateUser(
   // Create new user with 10 free credits
   user = new User({
     walletAddress: normalized,
-    email: email ? email.toLowerCase() : undefined,
     credits: 10,
     totalCreditsEarned: 10,
     totalCreditsSpent: 0,
@@ -134,75 +112,26 @@ export async function getOrCreateUser(
 }
 
 /**
- * Get or create user by email
- * NOTE: Uses emailHash for lookups, email will be encrypted on save
+ * Build update query for user (wallet-based only)
  */
-export async function getOrCreateUserByEmail(email: string): Promise<IUser> {
-  const User = getUserModel();
-  const normalized = email.toLowerCase().trim();
-  const emailHash = createEmailHash(normalized);
-  const emailHashPlain = crypto.createHash('sha256').update(normalized).digest('hex');
-
-  // Use robust lookup with multiple fallback methods
-  const emailConditions = buildEmailLookupConditions(normalized);
-  let user = await User.findOne({ $or: emailConditions });
-  
-  if (user) {
-    // DATA MINIMIZATION: Extend expiry on activity
-    await extendUserExpiry(user);
-    return user;
-  }
-
-  // New email users get 10 free credits
-  // Email will be encrypted in pre-save hook
-  // Store multiple lookup fields for cross-environment compatibility
-  user = new User({
-    email: normalized,           // Will be encrypted on save
-    emailHash: emailHash,        // HMAC hash (set explicitly for safety)
-    emailHashPlain: emailHashPlain, // Plain SHA-256 for cross-env compatibility
-    emailLookup: normalized,     // Plain email for fallback lookup
-    credits: 10,
-    totalCreditsEarned: 10,
-    totalCreditsSpent: 0,
-    nftCollections: [],
-    paymentHistory: [],
-    generationHistory: [],
-    gallery: []
-  });
-
-  await user.save();
-  logger.info('New email user created with 10 credits', { emailHash: emailHash.substring(0, 8) + '...' });
-  return user;
-}
-
-/**
- * Build update query for user
- * NOTE: For email queries, uses emailHash since emails are encrypted
- */
-export function buildUserUpdateQuery(user: { walletAddress?: string; userId?: string; email?: string; emailHash?: string }): { walletAddress?: string; userId?: string; emailHash?: string } | null {
+export function buildUserUpdateQuery(user: { walletAddress?: string; userId?: string }): { walletAddress?: string; userId?: string } | null {
   if (user.walletAddress) {
     const normalized = normalizeWalletAddress(user.walletAddress);
     if (!normalized) return null;
     return { walletAddress: normalized };
   } else if (user.userId) {
     return { userId: user.userId };
-  } else if (user.emailHash) {
-    // Prefer emailHash if available
-    return { emailHash: user.emailHash };
-  } else if (user.email) {
-    // Create emailHash from email for lookup
-    return { emailHash: createEmailHash(user.email) };
   }
   return null;
 }
 
 /**
- * Get user from request body
+ * Get user from request body (wallet-based only)
  */
-export async function getUserFromRequest(req: { body: { walletAddress?: string; userId?: string; email?: string } }): Promise<IUser | null> {
-  const { walletAddress, userId, email } = req.body;
+export async function getUserFromRequest(req: { body: { walletAddress?: string; userId?: string } }): Promise<IUser | null> {
+  const { walletAddress, userId } = req.body;
   
-  let user = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
+  let user = await findUserByIdentifier(walletAddress || null, userId || null);
   
   if (user) {
     return user;
@@ -210,11 +139,7 @@ export async function getUserFromRequest(req: { body: { walletAddress?: string; 
 
   // Create new user if wallet address provided
   if (walletAddress) {
-    return await getOrCreateUser(walletAddress, email || null);
-  }
-  
-  if (email) {
-    return await getOrCreateUserByEmail(email);
+    return await getOrCreateUser(walletAddress);
   }
 
   return null;
@@ -224,7 +149,6 @@ export default {
   normalizeWalletAddress,
   findUserByIdentifier,
   getOrCreateUser,
-  getOrCreateUserByEmail,
   buildUserUpdateQuery,
   getUserFromRequest,
   extendUserExpiry

@@ -1,12 +1,12 @@
 /**
  * User Model - MongoDB Schema
- * Supports both wallet-based and email-based authentication
+ * Wallet-based authentication only
  * Includes field-level encryption for database breach protection
  */
 import mongoose, { type Document, type Model } from 'mongoose';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
-import { encrypt, decrypt, createBlindIndex, isEncrypted, isEncryptionConfigured } from '../utils/encryption.js';
+import { decrypt, isEncrypted } from '../utils/encryption.js';
 
 // Types
 interface NFTCollection {
@@ -74,7 +74,6 @@ interface UserSettings {
   preferredStyle?: string;
   defaultImageSize?: string;
   enableNotifications?: boolean;
-  emailMarketing?: boolean;
 }
 
 interface SocialShare {
@@ -91,11 +90,6 @@ interface Achievement {
 
 export interface IUser extends Document {
   walletAddress?: string;
-  email?: string;
-  emailHash?: string;       // Blind index for searching encrypted emails (HMAC)
-  emailHashPlain?: string;  // Plain SHA-256 hash for cross-environment compatibility
-  emailLookup?: string;     // Plain email for fallback lookup
-  password?: string;
   userId?: string;
   credits: number;
   totalCreditsEarned: number;
@@ -118,16 +112,8 @@ export interface IUser extends Document {
   // Discord account linking code (secure verification flow)
   discordLinkCode?: string;
   discordLinkCodeExpires?: Date;
-  // SECURITY: Account lockout fields for brute force protection
-  failedLoginAttempts?: number;
-  lockoutUntil?: Date;
-  // Password reset fields
-  passwordResetToken?: string;
-  passwordResetExpires?: Date;
   // Stripe integration
   stripeCustomerId?: string;
-  // Virtual field to track if email was decrypted
-  _emailDecrypted?: boolean;
   // Referral system fields
   referralCode?: string;
   referredBy?: string;  // userId of the referrer
@@ -159,7 +145,7 @@ export interface IUser extends Document {
 }
 
 interface UserModel extends Model<IUser> {
-  buildUserUpdateQuery(user: { walletAddress?: string; userId?: string; email?: string }): { walletAddress?: string; userId?: string; email?: string } | null;
+  buildUserUpdateQuery(user: { walletAddress?: string; userId?: string }): { walletAddress?: string; userId?: string } | null;
 }
 
 // Array size limits for embedded documents
@@ -186,41 +172,6 @@ const userSchema = new mongoose.Schema<IUser>({
     unique: true, 
     sparse: true,
     index: true
-  },
-  // Email is stored encrypted - use emailHash for lookups
-  email: {
-    type: String,
-    required: false,
-    sparse: true
-    // Note: No validation here - encrypted emails won't match patterns
-    // Validation happens before encryption in pre-save hook
-  },
-  // Blind index for searching by email (HMAC hash, not reversible)
-  emailHash: {
-    type: String,
-    required: false,
-    unique: true,
-    sparse: true,
-    index: true
-  },
-  // Plain SHA-256 hash for cross-environment compatibility (no encryption key needed)
-  emailHashPlain: {
-    type: String,
-    required: false,
-    sparse: true,
-    index: true
-  },
-  // Plain email for fallback lookup (normalized lowercase)
-  emailLookup: {
-    type: String,
-    required: false,
-    sparse: true,
-    index: true
-  },
-  password: {
-    type: String,
-    required: false,
-    select: false
   },
   userId: {
     type: String,
@@ -358,12 +309,6 @@ const userSchema = new mongoose.Schema<IUser>({
   // Discord account linking code (secure verification flow)
   discordLinkCode: { type: String, sparse: true },
   discordLinkCodeExpires: { type: Date },
-  // SECURITY: Account lockout fields for brute force protection
-  failedLoginAttempts: { type: Number, default: 0, min: 0 },
-  lockoutUntil: { type: Date, required: false },
-  // Password reset fields
-  passwordResetToken: { type: String, sparse: true, select: false },
-  passwordResetExpires: { type: Date, select: false },
   // Stripe integration - store customer ID for reliable subscription lookups
   stripeCustomerId: {
     type: String,
@@ -463,7 +408,7 @@ const userSchema = new mongoose.Schema<IUser>({
 });
 
 // Indexes for performance
-// NOTE: walletAddress, emailHash, userId, discordId already have indexes via field definitions
+// NOTE: walletAddress, userId, discordId already have indexes via field definitions
 // Only define additional compound/special indexes here to avoid duplicates
 userSchema.index({ createdAt: 1 });
 userSchema.index({ lastActive: 1 }); // For querying inactive users
@@ -480,77 +425,20 @@ userSchema.index({ totalGenerations: -1 }); // For achievement leaderboards
 // Users with credits/activity have expiresAt extended on each login
 userSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-// Helper to validate email format (before encryption)
-function isValidEmail(email: string): boolean {
-  return /^\S+@\S+\.\S+$/.test(email);
-}
-
-// Pre-save hook: Encrypt email and generate userId
+// Pre-save hook: Generate userId
 userSchema.pre('save', async function(next) {
   try {
-    // Handle email encryption
-    if (this.email && this.isModified('email')) {
-      const plainEmail = this.email;
-      
-      // Skip if already encrypted
-      if (!isEncrypted(plainEmail)) {
-        // Validate email format before encryption
-        if (!isValidEmail(plainEmail)) {
-          return next(new Error('Please enter a valid email address'));
-        }
-        
-        // Normalize email
-        const normalizedEmail = plainEmail.toLowerCase().trim();
-        
-        // Always set fallback lookup fields for cross-environment compatibility
-        this.emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
-        this.emailLookup = normalizedEmail;
-        
-        // Create blind index for searching (before encryption)
-        if (isEncryptionConfigured()) {
-          this.emailHash = createBlindIndex(normalizedEmail);
-          // Encrypt the email
-          this.email = encrypt(normalizedEmail);
-          logger.debug('Email encrypted for user', { 
-            emailHash: this.emailHash.substring(0, 8) + '...',
-            userId: this.userId 
-          });
-        } else {
-          // Encryption not configured - store plaintext but log warning
-          this.email = normalizedEmail;
-          this.emailHash = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
-          logger.warn('Email stored without encryption - ENCRYPTION_KEY not configured');
-        }
-      }
-    }
-    
     // Generate unique userId for new users
     if (this.isNew && !this.userId) {
-      let hash: string;
-      let prefix: string;
-      
-      // Use emailHash if available (for encrypted emails), otherwise decrypt or use raw
-      if (this.emailHash) {
-        hash = this.emailHash.substring(0, 16);
-        prefix = 'email_';
-      } else if (this.email) {
-        // Email might be encrypted or plain
-        const emailForHash = isEncrypted(this.email) 
-          ? decrypt(this.email) 
-          : this.email;
-        hash = crypto.createHash('sha256').update(emailForHash.toLowerCase()).digest('hex').substring(0, 16);
-        prefix = 'email_';
-      } else if (this.walletAddress) {
+      if (this.walletAddress) {
         const normalizedAddress = this.walletAddress.startsWith('0x') 
           ? this.walletAddress.toLowerCase() 
           : this.walletAddress;
-        hash = crypto.createHash('sha256').update(normalizedAddress).digest('hex').substring(0, 16);
-        prefix = 'wallet_';
+        const hash = crypto.createHash('sha256').update(normalizedAddress).digest('hex').substring(0, 16);
+        this.userId = `wallet_${hash}`;
       } else {
         return next();
       }
-      
-      this.userId = `${prefix}${hash}`;
     }
     
     next();
@@ -561,19 +449,9 @@ userSchema.pre('save', async function(next) {
   }
 });
 
-// Post-find hooks: Decrypt email and embedded prompts when reading from database
+// Post-find hooks: Decrypt embedded prompts when reading from database
 function decryptUserData(doc: IUser | null): void {
   if (!doc) return;
-  
-  // Decrypt email if it looks encrypted and not already decrypted
-  if (doc.email && isEncrypted(doc.email) && !doc._emailDecrypted) {
-    try {
-      doc.email = decrypt(doc.email);
-      doc._emailDecrypted = true;
-    } catch (error) {
-      logger.error('Failed to decrypt user email', { userId: doc.userId });
-    }
-  }
   
   // Decrypt embedded gallery prompts
   const gallery = (doc as any).gallery;

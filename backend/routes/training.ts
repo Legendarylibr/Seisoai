@@ -52,7 +52,7 @@ export default function createTrainingRoutes(deps: Dependencies) {
   const submitTraining: RequestHandler = async (req: Request, res: Response): Promise<void> => {
     try {
       const { trainer, images_data_url, trigger_word, steps = 1000, is_style = false, create_masks = true, default_caption } = req.body;
-      const { walletAddress, userId, email } = req.body;
+      const { walletAddress, userId } = req.body;
 
       // Validate trainer
       if (!trainer || !TRAINER_ENDPOINTS[trainer]) {
@@ -70,9 +70,9 @@ export default function createTrainingRoutes(deps: Dependencies) {
       const numSteps = Math.min(Math.max(Number(steps) || 1000, 100), 10000);
 
       // Find user & check credits
-      const userQuery = buildUserUpdateQuery({ walletAddress, userId, email });
+      const userQuery = buildUserUpdateQuery({ walletAddress, userId });
       if (!userQuery) {
-        res.status(401).json({ error: 'No valid user identification provided' });
+        res.status(401).json({ error: 'No valid user identification provided. Wallet address required.' });
         return;
       }
 
@@ -241,12 +241,11 @@ export default function createTrainingRoutes(deps: Dependencies) {
       }
 
       // Update user's trained model entry
-      const { walletAddress, userId, email } = req.query;
-      if (walletAddress || userId || email) {
+      const { walletAddress, userId } = req.query;
+      if (walletAddress || userId) {
         const userQuery = buildUserUpdateQuery({
           walletAddress: walletAddress as string,
-          userId: userId as string,
-          email: email as string
+          userId: userId as string
         });
         if (userQuery) {
           await User.updateOne(
@@ -280,11 +279,10 @@ export default function createTrainingRoutes(deps: Dependencies) {
   // ============================================================================
   const getTrainedModels: RequestHandler = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { walletAddress, userId, email } = req.query;
+      const { walletAddress, userId } = req.query;
       const userQuery = buildUserUpdateQuery({
         walletAddress: walletAddress as string,
-        userId: userId as string,
-        email: email as string
+        userId: userId as string
       });
 
       if (!userQuery) {
@@ -307,8 +305,8 @@ export default function createTrainingRoutes(deps: Dependencies) {
   const deleteTrainedModel: RequestHandler = async (req: Request, res: Response): Promise<void> => {
     try {
       const { modelId } = req.params;
-      const { walletAddress, userId, email } = req.body;
-      const userQuery = buildUserUpdateQuery({ walletAddress, userId, email });
+      const { walletAddress, userId } = req.body;
+      const userQuery = buildUserUpdateQuery({ walletAddress, userId });
 
       if (!userQuery) {
         res.status(401).json({ error: 'No valid user identification provided' });
@@ -333,7 +331,7 @@ export default function createTrainingRoutes(deps: Dependencies) {
   const generateWithLora: RequestHandler = async (req: Request, res: Response): Promise<void> => {
     try {
       const { prompt, lora_url, lora_scale = 1.0, image_size = 'landscape_4_3', num_images = 1, guidance_scale = 2.5, num_inference_steps = 28, trigger_word } = req.body;
-      const { walletAddress, userId, email } = req.body;
+      const { walletAddress, userId } = req.body;
 
       if (!prompt) {
         res.status(400).json({ error: 'Prompt is required' });
@@ -346,9 +344,9 @@ export default function createTrainingRoutes(deps: Dependencies) {
       }
 
       // Find user & check credits
-      const userQuery = buildUserUpdateQuery({ walletAddress, userId, email });
+      const userQuery = buildUserUpdateQuery({ walletAddress, userId });
       if (!userQuery) {
-        res.status(401).json({ error: 'No valid user identification provided' });
+        res.status(401).json({ error: 'No valid user identification provided. Wallet address required.' });
         return;
       }
 

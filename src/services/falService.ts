@@ -13,7 +13,6 @@ export interface AdvancedSettings {
   numImages?: number;
   walletAddress?: string | null;
   userId?: string | null;
-  email?: string | null;
   multiImageModel?: string | null;
   optimizePrompt?: boolean;
   [key: string]: unknown;
@@ -49,7 +48,6 @@ interface RequestBody {
   aspect_ratio?: string;
   walletAddress?: string;
   userId?: string;
-  email?: string;
   model?: string | null;
   optimizePrompt?: boolean;
 }
@@ -248,10 +246,10 @@ export const generateImage = async (
 
     // SECURITY: Route through backend to ensure credit checks
     // Extract user identification from advancedSettings
-    const { walletAddress, userId, email, multiImageModel, optimizePrompt = false, enhancePrompt = true } = advancedSettings;
+    const { walletAddress, userId, multiImageModel, optimizePrompt = false, enhancePrompt = true } = advancedSettings;
     
-    if (!walletAddress && !userId && !email) {
-      throw new Error('User identification required. Please provide walletAddress, userId, or email in advancedSettings.');
+    if (!walletAddress && !userId) {
+      throw new Error('User identification required. Please connect your wallet.');
     }
 
     // Determine model to use for image editing (single or multi) or prompt-only generation
@@ -282,7 +280,6 @@ export const generateImage = async (
         ...requestBody,
         walletAddress,
         userId,
-        email,
         model, // Pass model selection to backend
         optimizePrompt, // Pass prompt optimization toggle to backend
         enhancePrompt // Disable for batch variations to preserve exact prompts
@@ -414,10 +411,10 @@ export const generateImageStreaming = async (
   advancedSettings: AdvancedSettings = {},
   callbacks: StreamingCallbacks = {}
 ): Promise<ImageGenerationResult> => {
-  const { walletAddress, userId, email, numImages = 1, optimizePrompt = false } = advancedSettings;
+  const { walletAddress, userId, numImages = 1, optimizePrompt = false } = advancedSettings;
   
-  if (!walletAddress && !userId && !email) {
-    throw new Error('User identification required');
+  if (!walletAddress && !userId) {
+    throw new Error('User identification required. Please connect your wallet.');
   }
 
   // Ensure CSRF token is available before making the request
@@ -430,7 +427,6 @@ export const generateImageStreaming = async (
       numImages,
       walletAddress,
       userId,
-      email,
       optimizePrompt // Pass optimization flag to backend
     };
     

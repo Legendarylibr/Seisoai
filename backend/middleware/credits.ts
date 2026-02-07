@@ -35,7 +35,6 @@ export interface CreditsRequest extends Request {
     image_url?: string;
     walletAddress?: string;
     userId?: string;
-    email?: string;
     numImages?: number;
     num_images?: number;
   };

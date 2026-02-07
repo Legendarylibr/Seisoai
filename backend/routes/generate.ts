@@ -1,8 +1,6 @@
 /**
  * Generation routes
  * Image, video, and music generation endpoints
- * 
- * NOTE: Email addresses are encrypted at rest. Uses emailHash for lookups.
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
@@ -1402,7 +1400,6 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       logger.debug('Generation add request received', {
         authenticatedUserId: user.userId,
-        authenticatedEmail: user.email,
         authenticatedWallet: user.walletAddress,
         hasImageUrl: !!req.body?.imageUrl,
         hasVideoUrl: !!req.body?.videoUrl,
@@ -1418,8 +1415,8 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      if (!user.walletAddress && !user.email) {
-        res.status(400).json({ success: false, error: 'User account must have wallet address or email' });
+      if (!user.walletAddress) {
+        res.status(400).json({ success: false, error: 'User account must have wallet address' });
         return;
       }
 
@@ -1427,7 +1424,7 @@ export function createGenerationRoutes(deps: Dependencies) {
       const updateQuery = buildUserUpdateQuery(user);
 
       if (!updateQuery) {
-        res.status(400).json({ success: false, error: 'User account must have wallet address, userId, or email' });
+        res.status(400).json({ success: false, error: 'User account must have wallet address or userId' });
         return;
       }
 

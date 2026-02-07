@@ -55,7 +55,7 @@ async function refundCredits(
 
     if (updatedUser) {
       logger.info('Credits refunded for failed image tool', {
-        userId: user.userId || user.email || user.walletAddress,
+        userId: user.userId || user.walletAddress,
         creditsRefunded: credits,
         newBalance: updatedUser.credits,
         reason

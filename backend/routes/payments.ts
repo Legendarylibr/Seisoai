@@ -2,15 +2,13 @@
  * Payment routes
  * Blockchain payment verification and credit addition
  * 
- * NOTE: Uses encryption-aware lookups for user queries.
+ * NOTE: Uses wallet address for user identification.
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
-import crypto from 'crypto';
 import logger from '../utils/logger';
 import { verifyEVMTransaction, verifySolanaTransaction } from '../services/blockchain';
-import { createEmailHash } from '../utils/emailHash';
 import config from '../config/env';
 import type { IUser } from '../models/User';
 import type { LRUCache } from '../services/cache';
@@ -328,7 +326,7 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
         chainId,
         walletType,
         authType: req.authType,
-        authenticatedUser: req.user.userId || req.user.email
+        authenticatedUser: req.user.userId || req.user.walletAddress
       });
 
       if (!txHash || !walletAddress || !amount) {
@@ -394,23 +392,10 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
       }
 
       // Add credits to authenticated user
-      // NOTE: Use userId or emailHash for encryption-aware lookups
+      // NOTE: Use userId or walletAddress for lookups
       let updateQuery: Record<string, unknown>;
       if (user.userId) {
         updateQuery = { userId: user.userId };
-      } else if (user.email) {
-        // Use encryption-aware email lookup with multiple fallbacks
-        const normalizedEmail = user.email.toLowerCase().trim();
-        const emailHash = createEmailHash(normalizedEmail);
-        const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
-        updateQuery = { 
-          $or: [
-            { emailHash },
-            { emailHashPlain },
-            { emailLookup: normalizedEmail },
-            { email: normalizedEmail }
-          ]
-        };
       } else {
         updateQuery = { walletAddress: normalizedAddress };
       }

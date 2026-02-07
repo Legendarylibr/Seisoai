@@ -70,7 +70,7 @@ export interface TrainedModel {
  */
 export async function submitTraining(
   config: TrainingConfig,
-  userIdentity: { walletAddress?: string; userId?: string; email?: string }
+  userIdentity: { walletAddress?: string; userId?: string }
 ): Promise<TrainingSubmitResult> {
   const response = await apiFetch(`${API_URL}/api/training/submit`, {
     method: 'POST',
@@ -132,17 +132,16 @@ export async function getTrainingResult(
  * Get all trained models for the current user
  */
 export async function getTrainedModels(
-  userIdentity: { walletAddress?: string; userId?: string; email?: string }
+  userIdentity: { walletAddress?: string; userId?: string }
 ): Promise<TrainedModel[]> {
   // Skip network call entirely if no user identity is available
-  if (!userIdentity.walletAddress && !userIdentity.userId && !userIdentity.email) {
+  if (!userIdentity.walletAddress && !userIdentity.userId) {
     return [];
   }
 
   const params = new URLSearchParams();
   if (userIdentity.walletAddress) params.set('walletAddress', userIdentity.walletAddress);
   if (userIdentity.userId) params.set('userId', userIdentity.userId);
-  if (userIdentity.email) params.set('email', userIdentity.email);
 
   const response = await apiFetch(`${API_URL}/api/training/models?${params}`);
 
@@ -162,7 +161,7 @@ export async function getTrainedModels(
  */
 export async function deleteTrainedModel(
   modelId: string,
-  userIdentity: { walletAddress?: string; userId?: string; email?: string }
+  userIdentity: { walletAddress?: string; userId?: string }
 ): Promise<void> {
   const response = await apiFetch(`${API_URL}/api/training/models/${modelId}`, {
     method: 'DELETE',

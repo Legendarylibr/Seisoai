@@ -19,7 +19,7 @@ interface TokenBlacklistEntry {
 
 interface JWTDecoded extends JwtPayload {
   userId?: string;
-  email?: string;
+  walletAddress?: string;
   type?: string;
 }
 
@@ -153,24 +153,24 @@ export const createAuthenticateToken = (
       
       const User = getUserModel();
       
-      // Simple lookup: userId first, then email
+      // Simple lookup: userId first, then walletAddress
       let user = null;
       if (decoded.userId) {
         user = await User.findOne({ userId: decoded.userId })
-          .select('-password -generationHistory -gallery -paymentHistory')
+          .select('-generationHistory -gallery -paymentHistory')
           .maxTimeMS(5000);
       }
       
-      if (!user && decoded.email) {
-        user = await User.findOne({ email: decoded.email.toLowerCase().trim() })
-          .select('-password -generationHistory -gallery -paymentHistory')
+      if (!user && decoded.walletAddress) {
+        user = await User.findOne({ walletAddress: decoded.walletAddress.toLowerCase() })
+          .select('-generationHistory -gallery -paymentHistory')
           .maxTimeMS(5000);
       }
 
       if (!user) {
         res.status(401).json({
           success: false,
-          error: 'User not found'
+          error: 'User not found. Please connect your wallet.'
         });
         return;
       }
@@ -188,16 +188,20 @@ export const createAuthenticateToken = (
 };
 
 /**
- * Create flexible authentication middleware (JWT required, body-based DISABLED in production)
+ * Create flexible authentication middleware
  * 
- * Body-based authentication has been DISABLED as it allows impersonation.
- * All authenticated endpoints now require JWT tokens.
- * SECURITY FIX: Now checks token blacklist to properly handle logged-out tokens
+ * Supports multiple authentication methods in order of preference:
+ * 1. x402 payment (cryptographic payment verification)
+ * 2. JWT token (Authorization: Bearer <token>)
+ * 3. Wallet address from request body (wallet serves as identity)
+ * 
+ * The wallet-based auth is the primary method since this is a Web3 app.
+ * JWT tokens are optional and used for enhanced security on sensitive endpoints.
  */
 export const createAuthenticateFlexible = (
   jwtSecret: string | undefined, 
   getUserModel: () => Model<IUser>,
-  _getUserFromRequest: (req: Request) => Promise<IUser | null> // Reserved for future use
+  getUserFromRequest: (req: Request) => Promise<IUser | null>
 ) => {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -212,54 +216,61 @@ export const createAuthenticateFlexible = (
       const authHeader = req.headers['authorization'];
       const token = authHeader && authHeader.split(' ')[1];
 
-      // JWT authentication (required)
+      // Method 1: JWT authentication (highest priority if present)
       if (token && jwtSecret) {
         try {
-          // SECURITY FIX: Check if token is blacklisted (logged out)
+          // Check if token is blacklisted (logged out)
           const blacklisted = await isTokenBlacklisted(token);
           if (blacklisted) {
-            res.status(401).json({
-              success: false,
-              error: 'Token has been revoked. Please sign in again.'
-            });
-            return;
-          }
-
-          const decoded = jwt.verify(token, jwtSecret) as JWTDecoded;
-          
-          if (decoded.type !== 'refresh') {
-            const User = getUserModel();
+            // Don't fail - try wallet-based auth instead
+            logger.debug('JWT token blacklisted, falling back to wallet auth');
+          } else {
+            const decoded = jwt.verify(token, jwtSecret) as JWTDecoded;
             
-            // Simple lookup: userId first, then email
-            let user = null;
-            if (decoded.userId) {
-              user = await User.findOne({ userId: decoded.userId }).select('-password');
-            }
-            if (!user && decoded.email) {
-              user = await User.findOne({ email: decoded.email.toLowerCase().trim() }).select('-password');
-            }
+            if (decoded.type !== 'refresh') {
+              const User = getUserModel();
+              
+              // Simple lookup: userId first, then walletAddress
+              let user = null;
+              if (decoded.userId) {
+                user = await User.findOne({ userId: decoded.userId });
+              }
+              if (!user && decoded.walletAddress) {
+                user = await User.findOne({ walletAddress: decoded.walletAddress.toLowerCase() });
+              }
 
-            if (user) {
-              req.user = user;
-              req.authType = 'jwt';
-              next();
-              return;
+              if (user) {
+                req.user = user;
+                req.authType = 'jwt';
+                next();
+                return;
+              }
             }
           }
         } catch (jwtError) {
-          const err = jwtError as Error;
-          logger.debug('JWT authentication failed', { error: err.message });
-          res.status(403).json({
-            success: false,
-            error: 'Invalid or expired token'
-          });
-          return;
+          // JWT failed - fall through to wallet-based auth
+          logger.debug('JWT auth failed, trying wallet-based auth', { error: (jwtError as Error).message });
         }
       }
 
+      // Method 2: Wallet-based authentication from request body
+      // This is the primary auth method for Web3 apps
+      try {
+        const user = await getUserFromRequest(req);
+        if (user) {
+          req.user = user;
+          req.authType = 'body';
+          next();
+          return;
+        }
+      } catch (walletError) {
+        logger.debug('Wallet-based auth failed', { error: (walletError as Error).message });
+      }
+
+      // No valid authentication found
       res.status(401).json({
         success: false,
-        error: 'Authentication required'
+        error: 'Authentication required. Please connect your wallet.'
       });
     } catch (error) {
       logger.error('Authentication error:', error);

@@ -8,7 +8,6 @@ export interface MusicGenerationOptions {
   duration?: number;
   userId?: string | null;
   walletAddress?: string | null;
-  email?: string | null;
   optimizePrompt?: boolean;
   selectedGenre?: string | null;
 }
@@ -30,7 +29,6 @@ export const generateMusic = async ({
   duration = 30,
   userId,
   walletAddress,
-  email,
   optimizePrompt = false,
   selectedGenre = null
 }: MusicGenerationOptions): Promise<MusicGenerationResult> => {
@@ -42,8 +40,8 @@ export const generateMusic = async ({
   // Clamp duration between 10 and 180 seconds
   const clampedDuration = Math.max(10, Math.min(180, duration));
   
-  if (!userId && !walletAddress && !email) {
-    throw new Error('User identification required. Please sign in.');
+  if (!userId && !walletAddress) {
+    throw new Error('User identification required. Please connect your wallet.');
   }
 
   try {
@@ -59,7 +57,6 @@ export const generateMusic = async ({
       duration: clampedDuration,
       userId,
       walletAddress,
-      email,
       optimizePrompt,
       selectedGenre
     };

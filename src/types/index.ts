@@ -14,7 +14,6 @@ export interface VisualStyle {
 // User & Auth
 export interface User {
   id: string;
-  email?: string;
   walletAddress?: string;
   credits: number;
   subscriptionTier?: string;
@@ -26,7 +25,7 @@ export interface User {
 export interface AuthState {
   isAuthenticated: boolean;
   userId: string | null;
-  email: string | null;
+  walletAddress: string | null;
   token: string | null;
 }
 

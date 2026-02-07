@@ -61,7 +61,7 @@ export function createGDPRRoutes(deps: Dependencies) {
         severity: AuditSeverity.INFO,
         actor: {
           userId: req.user.userId,
-          email: req.user.email,
+          walletAddress: req.user.walletAddress,
           ipAddress: req.ip,
           userAgent: req.headers['user-agent'],
         },
@@ -83,7 +83,6 @@ export function createGDPRRoutes(deps: Dependencies) {
         // Identity information
         identity: {
           userId: user.userId,
-          email: user.email, // Will be decrypted by mongoose hooks
           walletAddress: user.walletAddress,
           discordId: user.discordId,
           discordUsername: user.discordUsername,
@@ -191,7 +190,6 @@ export function createGDPRRoutes(deps: Dependencies) {
         severity: AuditSeverity.WARNING,
         actor: {
           userId: req.user.userId,
-          email: req.user.email,
           walletAddress: req.user.walletAddress,
           ipAddress: req.ip,
           userAgent: req.headers['user-agent'],
@@ -381,7 +379,7 @@ export function createGDPRRoutes(deps: Dependencies) {
           'Consent (marketing, if applicable)',
         ],
         categories: [
-          'Identity data (email, wallet address)',
+          'Identity data (wallet address)',
           'Account data (credits, settings)',
           'Transaction data (payment history)',
           'Content data (prompts, generated content)',

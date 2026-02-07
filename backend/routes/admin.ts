@@ -8,7 +8,6 @@ import mongoose from 'mongoose';
 import crypto from 'crypto';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
-import { buildEmailLookupConditions } from '../utils/emailHash';
 import { alertAdminAction } from '../services/securityAlerts';
 import rateLimit from 'express-rate-limit';
 
@@ -23,15 +22,11 @@ interface Dependencies {
 type UserQuery = Record<string, unknown>;
 
 /**
- * Build a MongoDB query for user lookup by wallet, email, or userId
- * Uses robust email lookup with multiple fallback methods for encrypted emails
+ * Build a MongoDB query for user lookup by wallet or userId
  */
-function buildUserQuery(walletAddress?: string, email?: string, userId?: string): UserQuery | null {
+function buildUserQuery(walletAddress?: string, userId?: string): UserQuery | null {
   if (walletAddress) {
     return { walletAddress: walletAddress.toLowerCase() };
-  } else if (email) {
-    // Use robust email lookup with multiple fallback methods
-    return { $or: buildEmailLookupConditions(email) };
   } else if (userId) {
     return { userId };
   }
@@ -129,25 +124,24 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
   };
 
   /**
-   * Lookup user by wallet or email
+   * Lookup user by wallet address
    * POST /api/admin/user
    */
   router.post('/user', requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { walletAddress, email, userId } = req.body as {
+      const { walletAddress, userId } = req.body as {
         walletAddress?: string;
-        email?: string;
         userId?: string;
       };
 
-      const query = buildUserQuery(walletAddress, email, userId);
+      const query = buildUserQuery(walletAddress, userId);
       if (!query) {
-        res.status(400).json({ success: false, error: 'User identifier required (walletAddress, email, or userId)' });
+        res.status(400).json({ success: false, error: 'User identifier required (walletAddress or userId)' });
         return;
       }
 
       const User = mongoose.model<IUser>('User');
-      const user = await User.findOne(query).select('-password -generationHistory -gallery');
+      const user = await User.findOne(query).select('-generationHistory -gallery');
 
       if (!user) {
         res.status(404).json({ success: false, error: 'User not found' });
@@ -155,7 +149,7 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
       }
 
       logger.info('Admin user lookup', { 
-        identifier: walletAddress || email || userId 
+        identifier: walletAddress || userId 
       });
 
       res.json({
@@ -163,7 +157,6 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         user: {
           userId: user.userId,
           walletAddress: user.walletAddress,
-          email: user.email,
           credits: user.credits,
           totalCreditsEarned: user.totalCreditsEarned,
           totalCreditsSpent: user.totalCreditsSpent,
@@ -185,9 +178,8 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
    */
   router.post('/add-credits', requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { walletAddress, email, userId, credits, reason } = req.body as {
+      const { walletAddress, userId, credits, reason } = req.body as {
         walletAddress?: string;
-        email?: string;
         userId?: string;
         credits?: number;
         reason?: string;
@@ -198,9 +190,9 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         return;
       }
 
-      const query = buildUserQuery(walletAddress, email, userId);
+      const query = buildUserQuery(walletAddress, userId);
       if (!query) {
-        res.status(400).json({ success: false, error: 'User identifier required (walletAddress, email, or userId)' });
+        res.status(400).json({ success: false, error: 'User identifier required (walletAddress or userId)' });
         return;
       }
 
@@ -232,7 +224,7 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
       }
 
       logger.info('Admin added credits', { 
-        identifier: walletAddress || email || userId, 
+        identifier: walletAddress || userId, 
         credits, 
         newBalance: user.credits,
         reason: reason || 'not specified'
@@ -243,7 +235,7 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         `Added ${credits} credits to user`,
         req.ip || 'unknown',
         user.userId,
-        { credits, newBalance: user.credits, identifier: walletAddress || email || userId }
+        { credits, newBalance: user.credits, identifier: walletAddress || userId }
       );
 
       res.json({
@@ -266,9 +258,8 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
    */
   router.post('/set-credits', requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { walletAddress, email, userId, credits, reason } = req.body as {
+      const { walletAddress, userId, credits, reason } = req.body as {
         walletAddress?: string;
-        email?: string;
         userId?: string;
         credits?: number;
         reason?: string;
@@ -279,9 +270,9 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         return;
       }
 
-      const query = buildUserQuery(walletAddress, email, userId);
+      const query = buildUserQuery(walletAddress, userId);
       if (!query) {
-        res.status(400).json({ success: false, error: 'User identifier required (walletAddress, email, or userId)' });
+        res.status(400).json({ success: false, error: 'User identifier required (walletAddress or userId)' });
         return;
       }
 
@@ -326,7 +317,7 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
       );
 
       logger.info('Admin set credits', { 
-        identifier: walletAddress || email || userId, 
+        identifier: walletAddress || userId, 
         previousCredits,
         newCredits: credits,
         difference,
@@ -338,7 +329,7 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         `Set credits from ${previousCredits} to ${credits}`,
         req.ip || 'unknown',
         user!.userId,
-        { previousCredits, newCredits: credits, difference, identifier: walletAddress || email || userId }
+        { previousCredits, newCredits: credits, difference, identifier: walletAddress || userId }
       );
 
       res.json({
@@ -363,9 +354,8 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
    */
   router.post('/subtract-credits', requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { walletAddress, email, userId, credits, reason } = req.body as {
+      const { walletAddress, userId, credits, reason } = req.body as {
         walletAddress?: string;
-        email?: string;
         userId?: string;
         credits?: number;
         reason?: string;
@@ -376,9 +366,9 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         return;
       }
 
-      const query = buildUserQuery(walletAddress, email, userId);
+      const query = buildUserQuery(walletAddress, userId);
       if (!query) {
-        res.status(400).json({ success: false, error: 'User identifier required (walletAddress, email, or userId)' });
+        res.status(400).json({ success: false, error: 'User identifier required (walletAddress or userId)' });
         return;
       }
 
@@ -417,7 +407,7 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
       );
 
       logger.info('Admin subtracted credits', { 
-        identifier: walletAddress || email || userId, 
+        identifier: walletAddress || userId, 
         previousCredits,
         subtracted: credits,
         newCredits: user!.credits,
@@ -429,7 +419,7 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         `Subtracted ${credits} credits from user`,
         req.ip || 'unknown',
         user!.userId,
-        { previousCredits, subtracted: credits, newCredits: user!.credits, identifier: walletAddress || email || userId }
+        { previousCredits, subtracted: credits, newCredits: user!.credits, identifier: walletAddress || userId }
       );
 
       res.json({
@@ -454,15 +444,14 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
    */
   router.post('/fix-oversized-user', requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { walletAddress, email, userId } = req.body as {
+      const { walletAddress, userId } = req.body as {
         walletAddress?: string;
-        email?: string;
         userId?: string;
       };
 
-      const query = buildUserQuery(walletAddress, email, userId);
+      const query = buildUserQuery(walletAddress, userId);
       if (!query) {
-        res.status(400).json({ success: false, error: 'User identifier required (walletAddress, email, or userId)' });
+        res.status(400).json({ success: false, error: 'User identifier required (walletAddress or userId)' });
         return;
       }
 
@@ -481,7 +470,7 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         return;
       }
 
-      logger.info('Fixed oversized user', { identifier: walletAddress || email || userId });
+      logger.info('Fixed oversized user', { identifier: walletAddress || userId });
 
       res.json({
         success: true,
@@ -543,15 +532,14 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
    */
   router.post('/clear-all-generations', requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { walletAddress, email, userId } = req.body as {
+      const { walletAddress, userId } = req.body as {
         walletAddress?: string;
-        email?: string;
         userId?: string;
       };
 
-      const query = buildUserQuery(walletAddress, email, userId);
+      const query = buildUserQuery(walletAddress, userId);
       if (!query) {
-        res.status(400).json({ success: false, error: 'User identifier required (walletAddress, email, or userId)' });
+        res.status(400).json({ success: false, error: 'User identifier required (walletAddress or userId)' });
         return;
       }
 
@@ -566,7 +554,7 @@ export function createAdminRoutes(_deps: Dependencies = {}) {
         return;
       }
 
-      logger.info('Cleared generations for user', { identifier: walletAddress || email || userId });
+      logger.info('Cleared generations for user', { identifier: walletAddress || userId });
 
       res.json({
         success: true,

@@ -70,7 +70,7 @@ export async function getWorkflows(): Promise<WorkflowDefinition[]> {
 export async function executeAIInfluencerVoice(
   script: string,
   language: string = 'en',
-  auth: { userId?: string; email?: string; walletAddress?: string }
+  auth: { userId?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
   const data = await workflowFetch(`${API_URL}/api/workflows/ai-influencer/voice`, {
     script,
@@ -84,7 +84,7 @@ export async function executeAIInfluencerVoice(
 export async function executeAIInfluencerLipSync(
   portraitUrl: string,
   voiceUrl: string,
-  auth: { userId?: string; email?: string; walletAddress?: string }
+  auth: { userId?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
   const data = await workflowFetch(`${API_URL}/api/workflows/ai-influencer/lipsync`, {
     portraitUrl,
@@ -99,7 +99,7 @@ export async function executeAIInfluencerLipSync(
 export async function executeMusicVideoMusic(
   musicPrompt: string,
   duration: number = 30,
-  auth: { userId?: string; email?: string; walletAddress?: string }
+  auth: { userId?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
   const data = await workflowFetch(`${API_URL}/api/workflows/music-video/music`, {
     musicPrompt,
@@ -113,7 +113,7 @@ export async function executeMusicVideoMusic(
 export async function executeMusicVideoVideo(
   musicPrompt: string,
   visualPrompt: string | null,
-  auth: { userId?: string; email?: string; walletAddress?: string }
+  auth: { userId?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
   const data = await workflowFetch(`${API_URL}/api/workflows/music-video/video`, {
     musicPrompt,
@@ -127,7 +127,7 @@ export async function executeMusicVideoVideo(
 // Avatar Creator Workflow Steps
 export async function executeAvatarCreatorGenerate(
   characterDescription: string,
-  auth: { userId?: string; email?: string; walletAddress?: string }
+  auth: { userId?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
   const data = await workflowFetch(`${API_URL}/api/workflows/avatar-creator/generate`, {
     characterDescription,
@@ -141,7 +141,7 @@ export async function executeAvatarCreatorVariations(
   characterDescription: string,
   baseImageUrl: string,
   poses: string[] = ['smiling', 'serious expression', 'looking to the side'],
-  auth: { userId?: string; email?: string; walletAddress?: string }
+  auth: { userId?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
   const data = await workflowFetch(`${API_URL}/api/workflows/avatar-creator/variations`, {
     characterDescription,
@@ -156,7 +156,7 @@ export async function executeAvatarCreatorVariations(
 // Remix Visualizer Workflow Steps
 export async function executeRemixVisualizerSeparate(
   audioUrl: string,
-  auth: { userId?: string; email?: string; walletAddress?: string }
+  auth: { userId?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
   const data = await workflowFetch(`${API_URL}/api/workflows/remix-visualizer/separate`, {
     audioUrl,
@@ -168,7 +168,7 @@ export async function executeRemixVisualizerSeparate(
 
 export async function executeRemixVisualizerVisualize(
   stems: Record<string, string>,
-  auth: { userId?: string; email?: string; walletAddress?: string }
+  auth: { userId?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
   const data = await workflowFetch(`${API_URL}/api/workflows/remix-visualizer/visualize`, {
     stems,
@@ -182,7 +182,7 @@ export async function executeRemixVisualizerVisualize(
 export async function executeFullWorkflow(
   workflowId: string,
   inputs: Record<string, unknown>,
-  auth: { userId?: string; email?: string; walletAddress?: string }
+  auth: { userId?: string; walletAddress?: string }
 ): Promise<WorkflowStepResult> {
   const data = await workflowFetch(`${API_URL}/api/workflows/execute-full/${workflowId}`, {
     inputs,

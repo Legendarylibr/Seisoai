@@ -21,7 +21,6 @@ export interface Model3dGenerationParams {
   polygon_type?: 'triangle' | 'quadrilateral';
   walletAddress?: string;
   userId?: string;
-  email?: string;
   onProgress?: (status: string, elapsed: number) => void;
 }
 
@@ -83,7 +82,6 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
     polygon_type = 'triangle',
     walletAddress,
     userId,
-    email,
     onProgress
   } = params;
 
@@ -91,8 +89,8 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
     throw new Error('Input image URL is required');
   }
 
-  if (!walletAddress && !userId && !email) {
-    throw new Error('User identification required');
+  if (!walletAddress && !userId) {
+    throw new Error('User identification required. Please connect your wallet.');
   }
 
   // Step 1: Submit the generation request
@@ -120,8 +118,7 @@ export async function generate3dModel(params: Model3dGenerationParams): Promise<
       generate_type,
       polygon_type,
       walletAddress,
-      userId,
-      email
+      userId
     })
   });
 

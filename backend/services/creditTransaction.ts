@@ -155,7 +155,7 @@ export async function refundCredits(
 
     if (updatedUser) {
       logger.info('Credits refunded for failed generation', {
-        userId: user.userId || user.email || user.walletAddress,
+        userId: user.userId || user.walletAddress,
         creditsRefunded: credits,
         newBalance: updatedUser.credits,
         reason

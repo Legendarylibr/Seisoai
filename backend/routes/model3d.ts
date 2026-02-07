@@ -117,7 +117,7 @@ async function refundCredits(
 
     if (updatedUser) {
       logger.info('Credits refunded for failed 3D generation', {
-        userId: user.userId || user.email || user.walletAddress,
+        userId: user.userId || user.walletAddress,
         creditsRefunded: credits,
         newBalance: updatedUser.credits,
         reason
@@ -204,7 +204,7 @@ export function createModel3dRoutes(deps: Dependencies) {
     // Entry point logging - helps diagnose if requests reach this route
     logger.info('3D model generation request received', {
       hasUser: !!req.user,
-      userId: req.user?.userId || req.user?.email || req.user?.walletAddress,
+      userId: req.user?.userId || req.user?.walletAddress,
       hasInputImage: !!req.body?.input_image_url,
       generateType: req.body?.generate_type
     });
@@ -420,7 +420,7 @@ export function createModel3dRoutes(deps: Dependencies) {
           }
         );
         logger.info('3D generation added to gallery', { 
-          userId: user.userId || user.email || user.walletAddress,
+          userId: user.userId || user.walletAddress,
           generationId,
           requestId,
           expiresAt 

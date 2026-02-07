@@ -56,7 +56,6 @@ export function createSessionRoutes(deps: Dependencies) {
         success: true,
         session: {
           userId: req.user.userId,
-          email: req.user.email ? '***@' + req.user.email.split('@')[1] : undefined,
           walletAddress: req.user.walletAddress 
             ? req.user.walletAddress.substring(0, 6) + '...' + req.user.walletAddress.slice(-4)
             : undefined,
@@ -103,7 +102,7 @@ export function createSessionRoutes(deps: Dependencies) {
         severity: AuditSeverity.INFO,
         actor: {
           userId: req.user.userId,
-          email: req.user.email,
+          walletAddress: req.user.walletAddress,
           ipAddress: req.ip,
           userAgent: req.headers['user-agent'],
         },
@@ -162,7 +161,7 @@ export function createSessionRoutes(deps: Dependencies) {
         severity: AuditSeverity.WARNING,
         actor: {
           userId: req.user.userId,
-          email: req.user.email,
+          walletAddress: req.user.walletAddress,
           ipAddress: req.ip,
           userAgent: req.headers['user-agent'],
         },

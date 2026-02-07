@@ -13,7 +13,6 @@ import config from '../config/env';
 
 interface JWTDecoded extends JwtPayload {
   userId?: string;
-  email?: string;
   type?: string;
 }
 
@@ -35,10 +34,7 @@ const optionalAuth = async (req: Request & { user?: IUser }, _res: Response, nex
           const User = mongoose.model<IUser>('User');
           let user = null;
           if (decoded.userId) {
-            user = await User.findOne({ userId: decoded.userId }).select('-password');
-          }
-          if (!user && decoded.email) {
-            user = await User.findOne({ email: decoded.email.toLowerCase().trim() }).select('-password');
+            user = await User.findOne({ userId: decoded.userId });
           }
           if (user) {
             req.user = user;

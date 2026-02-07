@@ -567,8 +567,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
             audio_url: audioUrl,
             expression_scale: 1.0,
             walletAddress: walletContext.address,
-            userId: undefined,
-            email: undefined
+            userId: undefined
           })
         });
         
@@ -596,8 +595,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
           quality: quality as 'fast' | 'quality',
           model: model as 'veo' | 'ltx',
           userId: undefined,
-          walletAddress: walletContext.address ?? undefined,
-          email: undefined
+          walletAddress: walletContext.address ?? undefined
         });
       }
 
@@ -617,8 +615,7 @@ const VideoGenerator = memo<VideoGeneratorProps>(function VideoGenerator({
           style: `${currentMode.label}${isLipSyncMode ? '' : ` - ${quality === 'quality' ? 'Quality' : 'Fast'}`}`,
           videoUrl: result.videoUrl,
           creditsUsed: creditsUsed,
-          userId: undefined,
-          email: undefined
+          userId: undefined
         }).catch(e => logger.debug('Gallery save failed', { error: e.message }));
       }
       

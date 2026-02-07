@@ -38,7 +38,7 @@ interface Dependencies {
 interface AuthenticatedRequest extends Request {
   user?: {
     userId: string;
-    email?: string;
+    walletAddress?: string;
     isAdmin?: boolean;
   };
   requestId?: string;

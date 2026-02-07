@@ -144,7 +144,6 @@ export interface ChatResponse {
 export interface ChatContext {
   userId?: string;
   walletAddress?: string;
-  email?: string;
   credits?: number;
   // Last generated image for edit context
   lastGeneratedImageUrl?: string;

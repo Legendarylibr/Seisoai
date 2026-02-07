@@ -28,7 +28,7 @@ export interface BatchVariateResult {
 export const batchVariate = async (
   imageUrl: string,
   numOutputs: number,
-  credentials: { walletAddress?: string; userId?: string; email?: string },
+  credentials: { walletAddress?: string; userId?: string },
   options: { useControlNet?: boolean } = {}
 ): Promise<BatchVariateResult> => {
   const csrfToken = await ensureCSRFToken();
@@ -45,7 +45,6 @@ export const batchVariate = async (
       num_outputs: numOutputs,
       walletAddress: credentials.walletAddress,
       userId: credentials.userId,
-      email: credentials.email,
       use_controlnet: options.useControlNet || false
     })
   });
@@ -83,8 +82,7 @@ const faceSwap = async (
       source_image_url: sourceImage,
       target_image_url: targetImage,
       walletAddress: advancedSettings.walletAddress,
-      userId: advancedSettings.userId,
-      email: advancedSettings.email
+      userId: advancedSettings.userId
     })
   });
 
@@ -121,8 +119,7 @@ export const generateImage = async (
       prompt: customPrompt || undefined,
       num_layers: 4,
       walletAddress: advancedSettings.walletAddress,
-      userId: advancedSettings.userId,
-      email: advancedSettings.email
+      userId: advancedSettings.userId
     });
   }
   
@@ -134,8 +131,7 @@ export const generateImage = async (
     const { getTrainedModels } = await import('./trainingService');
     const models = await getTrainedModels({
       walletAddress: advancedSettings.walletAddress || undefined,
-      userId: advancedSettings.userId || undefined,
-      email: advancedSettings.email || undefined
+      userId: advancedSettings.userId || undefined
     });
     
     const loraModel = models.find(m => m.id === loraModelId);
@@ -158,8 +154,7 @@ export const generateImage = async (
         num_images: advancedSettings.numImages || 1,
         image_size: advancedSettings.imageSize || 'landscape_4_3',
         walletAddress: advancedSettings.walletAddress,
-        userId: advancedSettings.userId,
-        email: advancedSettings.email
+        userId: advancedSettings.userId
       })
     });
 

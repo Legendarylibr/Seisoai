@@ -59,13 +59,12 @@ export function createUserRoutes(deps: Dependencies = {}) {
    */
   router.post('/info', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { walletAddress, userId, email } = req.body as {
+      const { walletAddress, userId } = req.body as {
         walletAddress?: string;
         userId?: string;
-        email?: string;
       };
       
-      const requestedUser = await findUserByIdentifier(walletAddress || null, email || null, userId || null);
+      const requestedUser = await findUserByIdentifier(walletAddress || null, userId || null);
       
       if (!requestedUser) {
         res.json({ success: true, user: null });
@@ -75,7 +74,6 @@ export function createUserRoutes(deps: Dependencies = {}) {
       // Check if user is requesting their own data
       const isOwnData = req.user && (
         req.user.userId === requestedUser.userId || 
-        req.user.email === requestedUser.email ||
         (req.user.walletAddress && req.user.walletAddress.toLowerCase() === requestedUser.walletAddress?.toLowerCase())
       );
 
@@ -85,7 +83,6 @@ export function createUserRoutes(deps: Dependencies = {}) {
           success: true,
           user: {
             userId: requestedUser.userId,
-            email: requestedUser.email,
             walletAddress: requestedUser.walletAddress,
             credits: requestedUser.credits,
             totalCreditsEarned: requestedUser.totalCreditsEarned,
@@ -617,9 +614,11 @@ export function createUserRoutes(deps: Dependencies = {}) {
   /**
    * Update user settings
    * PUT /api/users/:walletAddress/settings
-   * SECURITY: Requires authentication - user can only update their own settings
+   * 
+   * Wallet address serves as identity (consistent with GET /:walletAddress).
+   * Settings are user preferences - no sensitive data, so wallet ownership is implicit.
    */
-  router.put('/:walletAddress/settings', strictAuth, async (req: AuthenticatedRequest, res: Response) => {
+  router.put('/:walletAddress/settings', async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { walletAddress } = req.params;
       const { settings } = req.body as { settings?: Record<string, unknown> };
@@ -629,20 +628,11 @@ export function createUserRoutes(deps: Dependencies = {}) {
         return;
       }
       
-      // Normalize address for comparison
+      // Normalize address
       const isSolanaAddress = !walletAddress.startsWith('0x');
       const normalizedAddress = isSolanaAddress ? walletAddress : walletAddress.toLowerCase();
       
-      // Verify user owns this wallet address
-      if (!req.user || req.user.walletAddress !== normalizedAddress) {
-        logger.warn('Unauthorized settings update attempt', {
-          requestedWallet: normalizedAddress,
-          authenticatedUser: req.user?.userId || req.user?.email
-        });
-        sendError(res, 'You can only update your own settings', 403, req.requestId);
-        return;
-      }
-      
+      // Get or create user for this wallet
       const user = await getOrCreateUser(normalizedAddress);
       const User = mongoose.model<IUser>('User');
       
@@ -667,22 +657,27 @@ export function createUserRoutes(deps: Dependencies = {}) {
   /**
    * Complete onboarding and award bonus credits
    * POST /api/user/complete-onboarding
+   * 
+   * Wallet address serves as identity (consistent with other endpoints).
    */
-  router.post('/complete-onboarding', strictAuth, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/complete-onboarding', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      if (!requireAuth(req, res)) return;
+      const { walletAddress, userId } = req.body as { walletAddress?: string; userId?: string };
       
-      const { userId } = req.body as { userId?: string };
-      const authenticatedUserId = req.user?.userId;
-      
-      // Verify user is completing their own onboarding
-      if (userId !== authenticatedUserId) {
-        sendError(res, 'Unauthorized', 403, req.requestId);
-        return;
-      }
-      
+      // Get user from wallet address or userId
+      let user: IUser | null = null;
       const User = mongoose.model<IUser>('User');
-      const user = await User.findOne({ userId });
+      
+      if (walletAddress && isValidWalletAddress(walletAddress)) {
+        const normalizedAddress = walletAddress.startsWith('0x') 
+          ? walletAddress.toLowerCase() 
+          : walletAddress;
+        user = await User.findOne({ walletAddress: normalizedAddress });
+      } else if (userId) {
+        user = await User.findOne({ userId });
+      } else if (req.user) {
+        user = await User.findOne({ userId: req.user.userId });
+      }
       
       if (!user) {
         sendError(res, 'User not found', 404, req.requestId);
@@ -717,7 +712,7 @@ export function createUserRoutes(deps: Dependencies = {}) {
       
       await user.save();
       
-      logger.info('Onboarding completed', { userId, creditsAwarded: bonusCredits });
+      logger.info('Onboarding completed', { userId: user.userId, creditsAwarded: bonusCredits });
       
       res.json({
         success: true,

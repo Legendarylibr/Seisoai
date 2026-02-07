@@ -17,7 +17,6 @@ export interface LayerExtractionOptions {
   acceleration?: 'none' | 'regular' | 'high';
   walletAddress?: string | null;
   userId?: string | null;
-  email?: string | null;
 }
 
 export interface LayerExtractionResult {
@@ -53,8 +52,7 @@ export const extractLayers = async (
       output_format: options.output_format || 'png',
       acceleration: options.acceleration || 'regular',
       walletAddress: options.walletAddress,
-      userId: options.userId,
-      email: options.email
+      userId: options.userId
     };
 
     // Add optional parameters

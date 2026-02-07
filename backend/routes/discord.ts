@@ -20,7 +20,7 @@ interface Dependencies {
 interface AuthenticatedRequest extends Request {
   user?: {
     userId?: string;
-    email?: string;
+    walletAddress?: string;
   };
 }
 
@@ -307,7 +307,6 @@ export function createDiscordRoutes(deps: Dependencies = {}) {
         const DiscordUserModel = getDiscordUserModel();
         await DiscordUserModel.syncFromMainUser({
           userId: user.userId,
-          email: user.email,
           walletAddress: user.walletAddress,
           credits: user.credits,
           totalCreditsEarned: user.totalCreditsEarned,

@@ -23,7 +23,6 @@ export interface VideoGenerationOptions {
   model?: 'veo' | 'ltx';
   userId?: string;
   walletAddress?: string;
-  email?: string;
 }
 
 export interface VideoGenerationResult {
@@ -66,8 +65,7 @@ export const generateVideo = async ({
   quality = 'fast',
   model = 'ltx',
   userId,
-  walletAddress,
-  email
+  walletAddress
 }: VideoGenerationOptions): Promise<VideoGenerationResult> => {
   // Get mode configuration
   const modeConfig = GENERATION_MODES[generationMode] || GENERATION_MODES['first-last-frame'];
@@ -85,8 +83,8 @@ export const generateVideo = async ({
     throw new Error('Last frame image is required for this mode');
   }
   
-  if (!userId && !walletAddress && !email) {
-    throw new Error('User identification required. Please sign in.');
+  if (!userId && !walletAddress) {
+    throw new Error('User identification required. Please connect your wallet.');
   }
 
   try {
@@ -112,8 +110,7 @@ export const generateVideo = async ({
       quality,
       model,
       userId,
-      walletAddress,
-      email
+      walletAddress
     };
 
     // Ensure CSRF token is available

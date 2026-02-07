@@ -37,24 +37,13 @@ export function createGalleryRoutes(deps: Dependencies) {
 
       const { identifier } = req.params;
       
-      // Validate identifier format
-      const isEmail = identifier.includes('@');
+      // Validate identifier format (wallet address or userId only)
       const isWallet = identifier.startsWith('0x') || identifier.length === 44;
-      const isUserId = !isEmail && !isWallet;
-
-      if (!isEmail && !isWallet && !isUserId) {
-        res.status(400).json({ 
-          success: false, 
-          error: 'Invalid identifier format' 
-        });
-        return;
-      }
+      const isUserId = !isWallet;
 
       // SECURITY: Verify the requested identifier matches the authenticated user
       let isAuthorized = false;
-      if (isEmail && req.user.email?.toLowerCase() === identifier.toLowerCase()) {
-        isAuthorized = true;
-      } else if (isWallet) {
+      if (isWallet) {
         const normalizedRequest = identifier.startsWith('0x') ? identifier.toLowerCase() : identifier;
         const normalizedUser = req.user.walletAddress?.startsWith('0x') 
           ? req.user.walletAddress.toLowerCase() 

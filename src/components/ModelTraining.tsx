@@ -155,7 +155,7 @@ function TrainedModelCard({ model, onDelete, onGenerate, onRefreshStatus }: Trai
 interface LoraGenerationPanelProps {
   selectedModel: TrainedModel;
   onClose: () => void;
-  userIdentity: { walletAddress?: string; userId?: string; email?: string };
+  userIdentity: { walletAddress?: string; userId?: string };
 }
 
 function LoraGenerationPanel({ selectedModel, onClose, userIdentity }: LoraGenerationPanelProps) {

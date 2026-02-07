@@ -1,23 +1,17 @@
 /**
  * Authentication routes
- * Handles signup, signin, token refresh, logout
+ * Handles wallet-based authentication, token refresh, logout
  * 
- * NOTE: Email addresses are encrypted at rest. Uses emailHash for lookups.
+ * NOTE: Email-based authentication has been removed. Only wallet authentication is supported.
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
-import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import config from '../config/env';
-import { isDisposableEmail } from '../utils/abusePrevention';
 import { blacklistToken } from '../middleware/auth';
-import { createEmailHash } from '../utils/emailHash';
-import { generateResetToken, hashResetToken, sendPasswordResetEmail } from '../services/email';
-import { alertPasswordReset, alertAccountLockout } from '../services/securityAlerts';
-import { applyReferralCode } from '../services/referralService';
 import type { IUser } from '../models/User';
 
 // Types
@@ -30,7 +24,7 @@ interface Dependencies {
 
 interface JWTDecoded extends JwtPayload {
   userId?: string;
-  email?: string;
+  walletAddress?: string;
   type?: string;
   exp?: number;
 }
@@ -38,7 +32,7 @@ interface JWTDecoded extends JwtPayload {
 interface AuthenticatedRequest extends Request {
   user?: {
     userId?: string;
-    email?: string;
+    walletAddress?: string;
   };
 }
 
@@ -50,333 +44,36 @@ export function createAuthRoutes(deps: Dependencies = {}) {
   const authMiddleware = authenticateToken || ((_req: Request, _res: Response, next: () => void) => next());
 
   /**
-   * Sign up with email and password
+   * Sign up - DEPRECATED: Email auth removed, use wallet connection
    * POST /api/auth/signup
    */
-  router.post('/signup', limiter, async (req: Request, res: Response) => {
-    try {
-      const { email, password, referralCode } = req.body as { email?: string; password?: string; referralCode?: string };
-
-      if (!email || !password) {
-        res.status(400).json({
-          success: false,
-          error: 'Email and password are required'
-        });
-        return;
-      }
-
-      // Validate email with stricter regex
-      // SECURITY FIX: More comprehensive email validation to prevent malformed inputs
-      const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
-      if (!emailRegex.test(email) || email.length > 254) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid email format'
-        });
-        return;
-      }
-
-      // Check disposable email
-      if (isDisposableEmail(email)) {
-        res.status(400).json({
-          success: false,
-          error: 'Temporary email addresses are not allowed'
-        });
-        return;
-      }
-
-      // Validate password
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{12,}$/;
-      if (!passwordRegex.test(password)) {
-        res.status(400).json({
-          success: false,
-          error: 'Password must be at least 12 characters and include uppercase, lowercase, number, and special character (@$!%*?&)'
-        });
-        return;
-      }
-
-      if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
-        res.status(500).json({
-          success: false,
-          error: 'Server configuration error'
-        });
-        return;
-      }
-
-      const User = mongoose.model<IUser>('User');
-      
-      // Check existing user with robust lookup (multiple fallback methods)
-      const normalizedEmail = email.toLowerCase().trim();
-      const emailHash = createEmailHash(normalizedEmail);
-      const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
-      
-      const existing = await User.findOne({ 
-        $or: [
-          { emailHash },                    // Primary: HMAC hash
-          { emailHashPlain },               // Fallback: plain SHA-256
-          { emailLookup: normalizedEmail }, // Fallback: plain email field
-          { email: normalizedEmail }        // Legacy: direct match
-        ]
-      });
-      if (existing) {
-        res.status(400).json({
-          success: false,
-          error: 'Email already registered'
-        });
-        return;
-      }
-
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 12);
-
-      // Create user with 10 free credits
-      const user = new User({
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        credits: 10,
-        totalCreditsEarned: 10
-      });
-
-      await user.save();
-      logger.info('New user created with 10 credits', { email: user.email, userId: user.userId });
-
-      // Apply referral code if provided (awards credits to both referrer and referee)
-      let referralBonus = 0;
-      if (referralCode && user.userId) {
-        const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip;
-        const userAgent = req.headers['user-agent'];
-        const referralResult = await applyReferralCode(user.userId, referralCode, ipAddress, userAgent);
-        if (referralResult.success) {
-          referralBonus = referralResult.bonusCredits || 0;
-          logger.info('Referral code applied during signup', { 
-            userId: user.userId, 
-            referralCode, 
-            bonusCredits: referralBonus 
-          });
-        } else {
-          logger.warn('Failed to apply referral code during signup', { 
-            userId: user.userId, 
-            referralCode, 
-            error: referralResult.error 
-          });
-        }
-      }
-
-      // Generate tokens
-      const token = jwt.sign(
-        { userId: user.userId, email: user.email, type: 'access' },
-        JWT_SECRET,
-        { expiresIn: '24h' }
-      );
-
-      const refreshToken = jwt.sign(
-        { userId: user.userId, type: 'refresh' },
-        JWT_REFRESH_SECRET,
-        { expiresIn: '30d' }
-      );
-
-      // Refetch user to get updated credits after referral bonus
-      const updatedUser = referralBonus > 0 
-        ? await User.findOne({ userId: user.userId })
-        : user;
-
-      res.json({
-        success: true,
-        token,
-        refreshToken,
-        user: {
-          userId: user.userId,
-          email: user.email,
-          credits: updatedUser?.credits ?? user.credits,
-          totalCreditsEarned: updatedUser?.totalCreditsEarned ?? user.totalCreditsEarned,
-          totalCreditsSpent: updatedUser?.totalCreditsSpent ?? 0
-        },
-        referralApplied: referralBonus > 0,
-        referralBonus
-      });
-    } catch (error) {
-      const err = error as Error;
-      logger.error('Signup error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to create account'
-      });
-    }
+  router.post('/signup', limiter, async (_req: Request, res: Response) => {
+    res.status(410).json({
+      success: false,
+      error: 'Email-based signup is no longer supported. Please connect your wallet to sign in.'
+    });
   });
 
   /**
-   * Sign in with email and password
+   * Sign in - DEPRECATED: Email auth removed, use wallet connection
    * POST /api/auth/signin
    */
-  router.post('/signin', limiter, async (req: Request, res: Response) => {
-    try {
-      const { email, password } = req.body as { email?: string; password?: string };
+  router.post('/signin', limiter, async (_req: Request, res: Response) => {
+    res.status(410).json({
+      success: false,
+      error: 'Email-based sign-in is no longer supported. Please connect your wallet to sign in.'
+    });
+  });
 
-      if (!email || !password) {
-        res.status(400).json({
-          success: false,
-          error: 'Email and password are required'
-        });
-        return;
-      }
-
-      if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
-        res.status(500).json({
-          success: false,
-          error: 'Server configuration error'
-        });
-        return;
-      }
-
-      const User = mongoose.model<IUser>('User');
-      // Look up by emailHash (encrypted emails) or fallback methods
-      const emailHash = createEmailHash(email);
-      const normalizedEmail = email.toLowerCase().trim();
-      // Plain SHA-256 hash for cross-environment compatibility
-      const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
-      
-      let user = await User.findOne({ 
-        $or: [
-          { emailHash },                    // Primary: HMAC hash (with encryption key)
-          { emailHashPlain },               // Fallback: plain SHA-256 hash
-          { emailLookup: normalizedEmail }, // Fallback: plain email lookup field
-          { email: normalizedEmail }        // Legacy: direct email match
-        ]
-      }).select('+password -generationHistory -gallery -paymentHistory');
-
-      // SECURITY FIX: Prevent timing attacks by always performing password comparison
-      // Use a dummy hash if user doesn't exist to maintain constant-time comparison
-      const dummyHash = '$2b$12$dummy.hash.that.takes.same.time.to.compare.and.is.64.chars.long';
-      const passwordToCompare = user?.password || dummyHash;
-
-      // SECURITY: Always perform password comparison to prevent user enumeration via timing
-      const isValid = await bcrypt.compare(password, passwordToCompare);
-      
-      // Only check user existence after password comparison
-      if (!user) {
-        // SECURITY: Use same response time as failed password to prevent timing attacks
-        await bcrypt.compare('dummy', dummyHash); // Additional constant-time operation
-        res.status(401).json({
-          success: false,
-          error: 'Invalid email or password'
-        });
-        return;
-      }
-
-      // SECURITY FIX: Check for account lockout (brute force protection)
-      const lockoutUntil = (user as { lockoutUntil?: Date }).lockoutUntil;
-      if (lockoutUntil && new Date(lockoutUntil) > new Date()) {
-        const minutesRemaining = Math.ceil((new Date(lockoutUntil).getTime() - Date.now()) / 60000);
-        logger.warn('Account locked - too many failed login attempts', {
-          emailHash: emailHash.substring(0, 8) + '...',
-          minutesRemaining
-        });
-        res.status(423).json({
-          success: false,
-          error: `Account temporarily locked due to too many failed login attempts. Please try again in ${minutesRemaining} minute(s).`
-        });
-        return;
-      }
-
-      // Check if user has a password set (wallet-only users may not have one)
-      if (!user.password) {
-        res.status(401).json({
-          success: false,
-          error: 'This account was created with a wallet. Please connect your wallet to sign in, or reset your password.'
-        });
-        return;
-      }
-      if (!isValid) {
-        // SECURITY FIX: Track failed login attempts and lock account after 5 failures
-        const failedAttempts = ((user as { failedLoginAttempts?: number }).failedLoginAttempts || 0) + 1;
-        const MAX_FAILED_ATTEMPTS = 5;
-        const LOCKOUT_DURATION_MINUTES = 30;
-
-        if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
-          const lockoutUntil = new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000);
-          await User.updateOne(
-            { _id: user._id },
-            {
-              $set: {
-                failedLoginAttempts: failedAttempts,
-                lockoutUntil
-              }
-            }
-          );
-          logger.warn('Account locked due to too many failed login attempts', {
-            emailHash: emailHash.substring(0, 8) + '...',
-            failedAttempts,
-            lockoutUntil
-          });
-          
-          // SECURITY: Send alert for account lockout
-          alertAccountLockout(normalizedEmail, req.ip || 'unknown', failedAttempts);
-          
-          res.status(423).json({
-            success: false,
-            error: `Too many failed login attempts. Account locked for ${LOCKOUT_DURATION_MINUTES} minutes.`
-          });
-          return;
-        } else {
-          // Increment failed attempts
-          await User.updateOne(
-            { _id: user._id },
-            { $inc: { failedLoginAttempts: 1 } }
-          );
-        }
-
-        res.status(401).json({
-          success: false,
-          error: 'Invalid email or password'
-        });
-        return;
-      }
-
-      // SECURITY FIX: Reset failed login attempts on successful login
-      if ((user as { failedLoginAttempts?: number }).failedLoginAttempts || (user as { lockoutUntil?: Date }).lockoutUntil) {
-        await User.updateOne(
-          { _id: user._id },
-          {
-            $unset: {
-              failedLoginAttempts: '',
-              lockoutUntil: ''
-            }
-          }
-        );
-      }
-
-      // Generate tokens
-      const token = jwt.sign(
-        { userId: user.userId, email: user.email, type: 'access' },
-        JWT_SECRET,
-        { expiresIn: '24h' }
-      );
-
-      const refreshToken = jwt.sign(
-        { userId: user.userId, type: 'refresh' },
-        JWT_REFRESH_SECRET,
-        { expiresIn: '30d' }
-      );
-
-      res.json({
-        success: true,
-        token,
-        refreshToken,
-        user: {
-          userId: user.userId,
-          email: user.email,
-          credits: user.credits,
-          walletAddress: user.walletAddress
-        }
-      });
-    } catch (error) {
-      const err = error as Error;
-      logger.error('Signin error:', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to sign in'
-      });
-    }
+  /**
+   * Legacy signin handler - DEPRECATED
+   * POST /api/auth/signin-legacy
+   */
+  router.post('/signin-legacy', limiter, async (_req: Request, res: Response) => {
+    res.status(410).json({
+      success: false,
+      error: 'Email-based sign-in is no longer supported. Please connect your wallet to sign in.'
+    });
   });
 
   /**
@@ -418,11 +115,10 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         success: true,
         user: {
           userId: user.userId,
-          email: user.email,
+          walletAddress: user.walletAddress,
           credits: user.credits,
           totalCreditsEarned: user.totalCreditsEarned || 0,
-          totalCreditsSpent: user.totalCreditsSpent || 0,
-          walletAddress: user.walletAddress
+          totalCreditsSpent: user.totalCreditsSpent || 0
         }
       });
     } catch (error) {
@@ -582,7 +278,7 @@ export function createAuthRoutes(deps: Dependencies = {}) {
 
       // Generate new access token
       const newAccessToken = jwt.sign(
-        { userId: user.userId, email: user.email, type: 'access' },
+        { userId: user.userId, walletAddress: user.walletAddress, type: 'access' },
         JWT_SECRET,
         { expiresIn: '24h' }
       );
@@ -631,11 +327,10 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         success: true,
         user: {
           userId: user.userId,
-          email: user.email,
+          walletAddress: user.walletAddress || null,
           credits: user.credits || 0,
           totalCreditsEarned: user.totalCreditsEarned || 0,
           totalCreditsSpent: user.totalCreditsSpent || 0,
-          walletAddress: user.walletAddress || null,
           isNFTHolder
         }
       });
@@ -885,11 +580,10 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         message: 'Discord account linked successfully!',
         user: {
           userId: user.userId,
-          email: user.email,
+          walletAddress: user.walletAddress,
           credits: user.credits,
           totalCreditsEarned: user.totalCreditsEarned,
-          totalCreditsSpent: user.totalCreditsSpent,
-          walletAddress: user.walletAddress
+          totalCreditsSpent: user.totalCreditsSpent
         }
       });
     } catch (error) {
@@ -975,274 +669,41 @@ export function createAuthRoutes(deps: Dependencies = {}) {
   });
 
   // ============================================================================
-  // Password Reset Flow
+  // Password Reset Flow - DEPRECATED
+  // Email-based authentication is no longer supported. Use wallet authentication.
   // ============================================================================
 
   /**
-   * Request password reset
+   * Request password reset - DEPRECATED
    * POST /api/auth/forgot-password
-   * 
-   * SECURITY:
-   * - Rate limited to prevent enumeration
-   * - Constant-time response to prevent timing attacks
-   * - Token hashed before storage
-   * - 30 minute expiry
    */
-  router.post('/forgot-password', limiter, async (req: Request, res: Response) => {
-    try {
-      const { email } = req.body as { email?: string };
-
-      // Always respond with same message to prevent email enumeration
-      const genericResponse = {
-        success: true,
-        message: 'If an account exists with this email, you will receive a password reset link.'
-      };
-
-      if (!email || typeof email !== 'string') {
-        // Still return success to prevent enumeration
-        res.json(genericResponse);
-        return;
-      }
-
-      const normalizedEmail = email.toLowerCase().trim();
-      
-      // Validate email format
-      const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
-      if (!emailRegex.test(normalizedEmail) || normalizedEmail.length > 254) {
-        res.json(genericResponse);
-        return;
-      }
-
-      // Find user by email hash
-      const User = mongoose.model<IUser>('User');
-      const emailHash = createEmailHash(normalizedEmail);
-      const emailHashPlain = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
-      
-      const user = await User.findOne({
-        $or: [
-          { emailHash },
-          { emailHashPlain },
-          { emailLookup: normalizedEmail },
-          { email: normalizedEmail }
-        ]
-      });
-
-      if (!user) {
-        // SECURITY: Don't reveal if user exists - use constant time delay
-        await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 100));
-        res.json(genericResponse);
-        return;
-      }
-
-      // Generate reset token
-      const { token, hash } = generateResetToken();
-      const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
-
-      // Store hashed token (so DB breach doesn't expose tokens)
-      await User.updateOne(
-        { _id: user._id },
-        {
-          $set: {
-            passwordResetToken: hash,
-            passwordResetExpires: expiresAt
-          }
-        }
-      );
-
-      // Send reset email
-      const emailResult = await sendPasswordResetEmail(
-        normalizedEmail,
-        token,
-        user.discordUsername
-      );
-
-      if (!emailResult.success) {
-        logger.error('Failed to send password reset email', { 
-          userId: user.userId,
-          error: emailResult.error 
-        });
-        // Still return success to prevent enumeration
-      } else {
-        logger.info('Password reset requested', { userId: user.userId });
-        
-        // Send security alert
-        alertPasswordReset(normalizedEmail, req.ip || 'unknown', user.userId);
-      }
-
-      res.json(genericResponse);
-    } catch (error) {
-      const err = error as Error;
-      logger.error('Forgot password error', { error: err.message });
-      // Return generic response even on error
-      res.json({
-        success: true,
-        message: 'If an account exists with this email, you will receive a password reset link.'
-      });
-    }
+  router.post('/forgot-password', limiter, async (_req: Request, res: Response) => {
+    res.status(410).json({
+      success: false,
+      error: 'Email-based authentication is no longer supported. Please use wallet authentication.'
+    });
   });
 
   /**
-   * Verify reset token (check if valid before showing form)
+   * Verify reset token - DEPRECATED
    * POST /api/auth/verify-reset-token
    */
-  router.post('/verify-reset-token', limiter, async (req: Request, res: Response) => {
-    try {
-      const { token } = req.body as { token?: string };
-
-      if (!token || typeof token !== 'string' || token.length !== 64) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid or expired reset token'
-        });
-        return;
-      }
-
-      const tokenHash = hashResetToken(token);
-      const User = mongoose.model<IUser>('User');
-
-      const user = await User.findOne({
-        passwordResetToken: tokenHash,
-        passwordResetExpires: { $gt: new Date() }
-      }).select('userId');
-
-      if (!user) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid or expired reset token'
-        });
-        return;
-      }
-
-      res.json({
-        success: true,
-        message: 'Token is valid'
-      });
-    } catch (error) {
-      const err = error as Error;
-      logger.error('Verify reset token error', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to verify token'
-      });
-    }
+  router.post('/verify-reset-token', limiter, async (_req: Request, res: Response) => {
+    res.status(410).json({
+      success: false,
+      error: 'Email-based authentication is no longer supported. Please use wallet authentication.'
+    });
   });
 
   /**
-   * Reset password with token
+   * Reset password with token - DEPRECATED
    * POST /api/auth/reset-password
-   * 
-   * SECURITY:
-   * - Validates token and expiry
-   * - Enforces password strength
-   * - Clears token after use (single-use)
-   * - Blacklists all existing tokens (force re-login)
    */
-  router.post('/reset-password', limiter, async (req: Request, res: Response) => {
-    try {
-      const { token, password } = req.body as { token?: string; password?: string };
-
-      if (!token || typeof token !== 'string' || token.length !== 64) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid or expired reset token'
-        });
-        return;
-      }
-
-      if (!password || typeof password !== 'string') {
-        res.status(400).json({
-          success: false,
-          error: 'Password is required'
-        });
-        return;
-      }
-
-      // Validate password strength
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{12,}$/;
-      if (!passwordRegex.test(password)) {
-        res.status(400).json({
-          success: false,
-          error: 'Password must be at least 12 characters and include uppercase, lowercase, number, and special character (@$!%*?&)'
-        });
-        return;
-      }
-
-      const tokenHash = hashResetToken(token);
-      const User = mongoose.model<IUser>('User');
-
-      // Find user with valid token
-      const user = await User.findOne({
-        passwordResetToken: tokenHash,
-        passwordResetExpires: { $gt: new Date() }
-      });
-
-      if (!user) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid or expired reset token'
-        });
-        return;
-      }
-
-      // Hash new password
-      const hashedPassword = await bcrypt.hash(password, 12);
-
-      // Update password and clear reset token (single-use)
-      await User.updateOne(
-        { _id: user._id },
-        {
-          $set: { password: hashedPassword },
-          $unset: {
-            passwordResetToken: '',
-            passwordResetExpires: '',
-            // Also reset lockout on password reset
-            failedLoginAttempts: '',
-            lockoutUntil: ''
-          }
-        }
-      );
-
-      logger.info('Password reset completed', { userId: user.userId });
-
-      // Generate new tokens for auto-login
-      if (JWT_SECRET && JWT_REFRESH_SECRET) {
-        const accessToken = jwt.sign(
-          { userId: user.userId, email: user.email, type: 'access' },
-          JWT_SECRET,
-          { expiresIn: '24h' }
-        );
-
-        const refreshToken = jwt.sign(
-          { userId: user.userId, type: 'refresh' },
-          JWT_REFRESH_SECRET,
-          { expiresIn: '30d' }
-        );
-
-        res.json({
-          success: true,
-          message: 'Password reset successfully',
-          token: accessToken,
-          refreshToken,
-          user: {
-            userId: user.userId,
-            email: user.email,
-            credits: user.credits
-          }
-        });
-      } else {
-        res.json({
-          success: true,
-          message: 'Password reset successfully. Please sign in with your new password.'
-        });
-      }
-    } catch (error) {
-      const err = error as Error;
-      logger.error('Reset password error', { error: err.message });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to reset password'
-      });
-    }
+  router.post('/reset-password', limiter, async (_req: Request, res: Response) => {
+    res.status(410).json({
+      success: false,
+      error: 'Email-based authentication is no longer supported. Please use wallet authentication.'
+    });
   });
 
   return router;

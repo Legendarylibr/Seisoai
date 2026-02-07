@@ -328,7 +328,6 @@ const MusicGenerator = memo(function MusicGenerator() {
         duration,
         userId: undefined,
         walletAddress: walletContext.address,
-        email: undefined,
         optimizePrompt,
         selectedGenre
       });

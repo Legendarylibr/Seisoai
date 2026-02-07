@@ -12,7 +12,6 @@ export interface GenerationData {
   model?: string;
   creditsUsed?: number;
   userId?: string | null;
-  email?: string | null;
   settings?: Record<string, unknown>;
   // 3D model fields
   modelType?: '3d' | 'image' | 'video';
@@ -84,8 +83,7 @@ export const addGeneration = async (
       isWalletAddress,
       creditsUsed: generationData.creditsUsed,
       hasImageUrl: !!generationData.imageUrl,
-      hasUserId: !!generationData.userId,
-      hasEmail: !!generationData.email
+      hasUserId: !!generationData.userId
     });
 
     // Ensure CSRF token is available
@@ -102,7 +100,6 @@ export const addGeneration = async (
       body: JSON.stringify({
         walletAddress: isWalletAddress ? normalizedIdentifier : undefined,
         userId: !isWalletAddress ? normalizedIdentifier : undefined,
-        email: generationData.email,
         ...generationData
       })
     });
@@ -126,7 +123,7 @@ export const addGeneration = async (
       let errorMessage = errorData.error || `Failed to add generation: ${response.status} ${response.statusText}`;
       
       if (response.status === 401 || response.status === 403) {
-        errorMessage = 'Authentication failed. Please provide wallet address, userId, or email.';
+        errorMessage = 'Authentication failed. Please connect your wallet.';
         logger.warn('Authentication error when saving generation', { 
           status: response.status,
           identifier: normalizedIdentifier 
@@ -172,8 +169,7 @@ export const getGallery = async (
   identifier: string, 
   page: number = 1, 
   limit: number = 20, 
-  userId: string | null = null, 
-  email: string | null = null
+  userId: string | null = null
 ): Promise<GalleryResponse> => {
   try {
     // Note: API_URL can be empty string for same-origin production deployments
@@ -184,7 +180,6 @@ export const getGallery = async (
 
     let url = `${API_URL}/api/gallery/${encodeURIComponent(identifier)}?page=${page}&limit=${limit}`;
     if (userId) url += `&userId=${encodeURIComponent(userId)}`;
-    if (email) url += `&email=${encodeURIComponent(email)}`;
 
     const response = await fetch(url, {
       headers: {

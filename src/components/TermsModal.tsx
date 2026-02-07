@@ -43,7 +43,7 @@ const TermsOfService = memo(function TermsOfService() {
       <p>AI-powered image, video, and music generation. Credits purchased with crypto only (USDC, USDT on EVM chains and Solana).</p>
 
       <h3 className="font-bold">Accounts & Credits</h3>
-      <p>Access via email or wallet. Credits are non-refundable except for technical failures. You're responsible for account security.</p>
+      <p>Access via wallet. Credits are non-refundable except for technical failures. You're responsible for account security.</p>
 
       <h3 className="font-bold">Content Rights</h3>
       <p>You retain rights to prompts. Generated content licensed for personal and commercial use. You're responsible for checking IP before commercial use.</p>
@@ -73,7 +73,7 @@ const PrivacyPolicy = memo(function PrivacyPolicy() {
 
       <h3 className="font-bold">Data We Collect (Minimized)</h3>
       <ul className="list-disc list-inside ml-2">
-        <li>Account info (email or wallet address only)</li>
+        <li>Account info (wallet address only)</li>
         <li>Prompts and generated content (auto-deleted after 30 days)</li>
         <li>Payment records (blockchain transaction hashes only)</li>
         <li>Temporary abuse prevention data (auto-deleted after 7 days)</li>
@@ -125,11 +125,9 @@ const PrivacyPolicy = memo(function PrivacyPolicy() {
       <p>You may request access, correction, or deletion of your data through our support.</p>
 
       <h3 className="font-bold">Security & Encryption</h3>
-      <p>All connections use HTTPS. Sensitive data like your email is encrypted with AES-256-GCM (military-grade, same as banks) before storage. Each value gets a unique random component, so identical emails look completely different when stored. The encryption includes tamper detection.</p>
+      <p>All connections use HTTPS. Your wallet address is the only identifier used for authentication. We never require email or personal information.</p>
       
-      <p className="mt-2">We use one-way hashes (HMAC-SHA256) for account lookups — these can't be reversed to reveal your email, even with database access. If breached, attackers would find only encrypted gibberish protected by 256-bit keys (billions of years to crack). Your plaintext never touches our database.</p>
-      
-      <p className="mt-2">Additional protections: rate limiting, input validation, automated log sanitization, and regular AI security audits.</p>
+      <p className="mt-2">Additional protections: rate limiting, input validation, automated log sanitization, and regular security audits.</p>
     </div>
   );
 });

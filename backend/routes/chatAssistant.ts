@@ -189,7 +189,6 @@ interface ChatRequestBody {
   context?: {
     userId?: string;
     walletAddress?: string;
-    email?: string;
     credits?: number;
     // Last generated image for edit context
     lastGeneratedImageUrl?: string;
@@ -264,7 +263,6 @@ interface GenerateRequestBody {
   context: {
     userId?: string;
     walletAddress?: string;
-    email?: string;
   };
 }
 
@@ -1096,10 +1094,10 @@ RULES:
         });
       }
 
-      if (!context?.userId && !context?.walletAddress && !context?.email) {
+      if (!context?.userId && !context?.walletAddress) {
         return res.status(401).json({
           success: false,
-          error: 'Authentication required'
+          error: 'Authentication required. Wallet address needed.'
         });
       }
 
@@ -1109,8 +1107,7 @@ RULES:
       const fullParams = {
         ...params,
         userId: context.userId,
-        walletAddress: context.walletAddress,
-        email: context.email
+        walletAddress: context.walletAddress
       };
 
       let result: unknown;
@@ -1319,8 +1316,7 @@ RULES:
             selectedGenre: params.genre || null,
             optimizePrompt: false, // Already optimized above
             userId: context.userId,
-            walletAddress: context.walletAddress,
-            email: context.email
+            walletAddress: context.walletAddress
           };
           
           logger.info('Music request body', { 
