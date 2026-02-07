@@ -17,6 +17,7 @@ import {
   optimizePromptForMusic 
 } from '../services/promptOptimizer';
 import { isValidPublicUrl } from '../utils/validation';
+import config from '../config/env';
 
 // System prompt for the chat assistant - optimized for Claude 3 Haiku
 const SYSTEM_PROMPT = `You are a creative AI assistant for SeisoAI. Generate images, videos, and music.
@@ -1512,20 +1513,41 @@ function getAspectRatio(imageSize?: string): string {
 
 /**
  * Call an internal API endpoint
+ * In production, uses the server's own URL. In development, uses localhost.
  */
 async function callInternalEndpoint(
   path: string, 
   body: Record<string, unknown>,
   originalReq: Request
 ): Promise<unknown> {
-  const baseUrl = `http://localhost:${process.env.PORT || 3001}`;
+  // CRITICAL FIX: In production, we need to use the actual server URL, not localhost
+  // The server can call itself via the host header from the original request,
+  // or use the configured production URL
+  const isProduction = process.env.NODE_ENV === 'production';
+  const port = process.env.PORT || 3001;
+  
+  // In production, use the host from the incoming request (preserves load balancer routing)
+  // or fall back to the production URL
+  let baseUrl: string;
+  if (isProduction) {
+    // Use the protocol and host from the original request
+    const protocol = originalReq.headers['x-forwarded-proto'] || originalReq.protocol || 'https';
+    const host = originalReq.headers['x-forwarded-host'] || originalReq.headers.host || 'seisoai.com';
+    baseUrl = `${protocol}://${host}`;
+  } else {
+    baseUrl = `http://localhost:${port}`;
+  }
   
   // Forward all relevant headers for authentication
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    // Mark as internal request to bypass CSRF (we're already authenticated via the original request)
-    'X-Internal-Request': 'true'
   };
+  
+  // SECURITY: Use internal token for server-to-server CSRF bypass (not spoofable header)
+  // This is verified via constant-time comparison in the CSRF middleware
+  if (config.INTERNAL_REQUEST_SECRET) {
+    headers['x-internal-token'] = config.INTERNAL_REQUEST_SECRET;
+  }
   
   // Forward auth headers
   if (originalReq.headers.authorization) {
