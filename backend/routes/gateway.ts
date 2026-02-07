@@ -239,8 +239,11 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
       }
     }
 
-    // Validate input against tool's JSON Schema
-    const validation = toolRegistry.validateInput(toolId, input);
+    // Normalize input: camelCase -> snake_case, string numbers -> numbers, etc.
+    const normalizedInput = toolRegistry.normalizeInput(toolId, input);
+
+    // Validate normalized input against tool's JSON Schema
+    const validation = toolRegistry.validateInput(toolId, normalizedInput);
     if (!validation.valid) {
       return res.status(400).json({
         success: false,
@@ -253,7 +256,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
     // SECURITY FIX: Atomically deduct API key credits before processing
     // Previously credits were only checked but never deducted, allowing free usage
     if (req.isApiKeyAuth && req.apiKey) {
-      const price = toolRegistry.calculatePrice(toolId, input);
+      const price = toolRegistry.calculatePrice(toolId, normalizedInput);
       const creditsNeeded = price?.credits || tool.pricing.credits;
 
       const ApiKeyModel = (await import('mongoose')).default.model('ApiKey');
@@ -283,7 +286,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
     }
 
     // Calculate price
-    const price = toolRegistry.calculatePrice(toolId, input);
+    const price = toolRegistry.calculatePrice(toolId, normalizedInput);
 
     logger.info('Gateway invoke', { toolId, executionMode: tool.executionMode, requestId, price, hasWebhook: !!webhookUrl, authType: req.isApiKeyAuth ? 'api-key' : 'other' });
 
@@ -293,7 +296,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
         const endpoint = `https://fal.run/${tool.falModel}`;
         const result = await falRequest(endpoint, {
           method: 'POST',
-          body: JSON.stringify(input),
+          body: JSON.stringify(normalizedInput),
         });
 
         // SECURITY FIX: Only settle x402 payment AFTER successful generation
@@ -334,7 +337,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
         });
       } else {
         // Queue execution - submit and return job ID
-        const queueResult = await submitToQueue(tool.falModel, input) as { request_id?: string };
+        const queueResult = await submitToQueue(tool.falModel, normalizedInput) as { request_id?: string };
 
         if (!queueResult?.request_id) {
           throw new Error('No request_id returned from queue submission');
@@ -427,10 +430,6 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
     if (!toolId) {
       return res.status(400).json({ success: false, error: 'Missing toolId in request body' });
     }
-    // Delegate to the parameterized route handler
-    req.params.toolId = toolId;
-    req.body = input;
-    // Re-route through the invoke handler
     const tool = toolRegistry.get(toolId);
     if (!tool) {
       return res.status(404).json({ success: false, error: `Tool not found: ${toolId}` });
@@ -439,7 +438,11 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
       return res.status(503).json({ success: false, error: `Tool is currently disabled: ${toolId}` });
     }
 
-    const missingFields = tool.inputSchema.required.filter(field => !(field in input));
+    // Normalize input: camelCase -> snake_case, string numbers -> numbers, etc.
+    const normalizedInput = toolRegistry.normalizeInput(toolId, input);
+
+    // Check required fields after normalization
+    const missingFields = tool.inputSchema.required.filter(field => !(field in normalizedInput));
     if (missingFields.length > 0) {
       return res.status(400).json({
         success: false,
@@ -448,7 +451,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
       });
     }
 
-    const price = toolRegistry.calculatePrice(toolId, input);
+    const price = toolRegistry.calculatePrice(toolId, normalizedInput);
     const requestId = (req as any).requestId || `gw-${Date.now()}`;
 
     try {
@@ -456,7 +459,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
         const endpoint = `https://fal.run/${tool.falModel}`;
         const result = await falRequest(endpoint, {
           method: 'POST',
-          body: JSON.stringify(input),
+          body: JSON.stringify(normalizedInput),
         });
 
         const x402Req = req as X402Request;
@@ -466,7 +469,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
 
         return res.json({ success: true, toolId, toolName: tool.name, executionMode: 'sync', requestId, result, pricing: price });
       } else {
-        const queueResult = await submitToQueue(tool.falModel, input) as { request_id?: string };
+        const queueResult = await submitToQueue(tool.falModel, normalizedInput) as { request_id?: string };
         if (!queueResult?.request_id) {
           throw new Error('No request_id returned from queue submission');
         }
@@ -989,8 +992,11 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
     const webhookSecret = (req as any).apiKey?.webhookSecret;
     const requestId = (req as any).requestId || `ag-${agent.agentId}-${Date.now()}`;
 
-    // Validate required fields
-    const missingFields = tool.inputSchema.required.filter((field: string) => !(field in input));
+    // Normalize input: camelCase -> snake_case, string numbers -> numbers, etc.
+    const normalizedInput = toolRegistry.normalizeInput(toolId, input);
+
+    // Validate required fields after normalization
+    const missingFields = tool.inputSchema.required.filter((field: string) => !(field in normalizedInput));
     if (missingFields.length > 0) {
       return res.status(400).json({
         success: false,
@@ -1001,7 +1007,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
 
     // Deduct API key credits if authenticated via API key
     if ((req as any).isApiKeyAuth && (req as any).apiKey) {
-      const price = toolRegistry.calculatePrice(toolId, input);
+      const price = toolRegistry.calculatePrice(toolId, normalizedInput);
       const creditsNeeded = price?.credits || tool.pricing.credits;
       if ((req as any).apiKey.credits < creditsNeeded) {
         return res.status(402).json({
@@ -1013,7 +1019,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
       }
     }
 
-    const price = toolRegistry.calculatePrice(toolId, input);
+    const price = toolRegistry.calculatePrice(toolId, normalizedInput);
 
     logger.info('Agent-scoped invoke', {
       agentId: agent.agentId,
@@ -1029,7 +1035,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
         const endpoint = `https://fal.run/${tool.falModel}`;
         const result = await falRequest(endpoint, {
           method: 'POST',
-          body: JSON.stringify(input),
+          body: JSON.stringify(normalizedInput),
         });
 
         // Settle x402 payment if applicable
@@ -1056,7 +1062,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
           pricing: price,
         });
       } else {
-        const queueResult = await submitToQueue(tool.falModel, input) as { request_id?: string };
+        const queueResult = await submitToQueue(tool.falModel, normalizedInput) as { request_id?: string };
         if (!queueResult?.request_id) {
           throw new Error('No request_id returned from queue submission');
         }

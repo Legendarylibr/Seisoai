@@ -1410,7 +1410,7 @@ export function createGenerationRoutes(deps: Dependencies) {
 
           if (audioUrl) {
             logger.info('MMAudio V2 completed', { requestId, audioUrl: audioUrl.substring(0, 50) });
-            res.json({
+            const responseData: Record<string, unknown> = {
               success: true,
               audio: {
                 url: audioUrl,
@@ -1419,7 +1419,11 @@ export function createGenerationRoutes(deps: Dependencies) {
                 file_size: audioMeta?.file_size,
               },
               remainingCredits, creditsDeducted: actualCreditsDeducted, freeAccess: hasFreeAccess,
-            });
+            };
+            // Settle x402 payment and record provenance
+            const provenanceResult = await settleAndRecordProvenance(req, audioUrl, 'music');
+            Object.assign(responseData, provenanceResult);
+            res.json(responseData);
             return;
           }
 

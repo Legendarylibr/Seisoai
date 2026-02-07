@@ -843,30 +843,8 @@ const TOOLS: ToolDefinition[] = [
     tags: ['vision', 'description', 'captioning', 'understanding'],
     version: '1.0.0',
   },
-  {
-    id: 'text.llm',
-    name: 'LLM Chat (Claude Models)',
-    description: 'Chat with Claude models (Opus 4.6, Sonnet 4.5, Haiku 4.5) through a unified interface. Useful for prompt optimization, text generation, and analysis.',
-    category: 'text-generation',
-    falModel: 'fal-ai/any-llm',
-    executionMode: 'sync',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        prompt: { type: 'string', description: 'The prompt/question to send to the LLM' },
-        system_prompt: { type: 'string', description: 'Optional system prompt to set the behavior' },
-        model: { type: 'string', description: 'Claude model to use: claude-opus-4-6, claude-sonnet-4-5, claude-haiku-4-5', default: 'claude-sonnet-4-5' },
-        max_tokens: { type: 'number', description: 'Maximum response tokens', default: 1024 },
-      },
-      required: ['prompt'],
-    },
-    outputDescription: 'LLM text response',
-    outputMimeTypes: ['text/plain'],
-    pricing: { baseUsdCost: FAL_API_COSTS.PROMPT_LAB, credits: 0.1, markup: 1.30 },
-    enabled: true,
-    tags: ['text', 'llm', 'chat', 'analysis', 'prompt-optimization'],
-    version: '1.0.0',
-  },
+  // DEPRECATED: text.llm tool removed - now using Anthropic API directly via llmProvider.ts
+  // The fal-ai/any-llm endpoint is no longer used; Claude models are called via the native Anthropic SDK.
 
   // ============================================
   // TRAINING
@@ -1081,8 +1059,103 @@ class ToolRegistry {
   }
 
   /**
+   * Normalize input to be flexible and forgiving.
+   * - Converts camelCase keys to snake_case
+   * - Coerces string numbers to numbers
+   * - Coerces string booleans to booleans
+   * - Applies schema defaults for missing optional fields
+   * - Normalizes common field aliases
+   */
+  normalizeInput(toolId: string, input: Record<string, unknown>): Record<string, unknown> {
+    const tool = this.get(toolId);
+    if (!tool) return input;
+
+    const schema = tool.inputSchema;
+    const normalized: Record<string, unknown> = {};
+
+    // Helper: camelCase to snake_case
+    const toSnakeCase = (str: string): string => {
+      return str.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
+    };
+
+    // Common field aliases mapping
+    const fieldAliases: Record<string, string> = {
+      'imageUrl': 'image_url',
+      'audioUrl': 'audio_url',
+      'voiceUrl': 'voice_url',
+      'sourceImageUrl': 'source_image_url',
+      'targetImageUrl': 'target_image_url',
+      'firstFrameUrl': 'first_frame_url',
+      'lastFrameUrl': 'last_frame_url',
+      'imageSize': 'image_size',
+      'numImages': 'num_images',
+      'aspectRatio': 'aspect_ratio',
+      'generateAudio': 'generate_audio',
+      'generateType': 'generate_type',
+      'selectedGenre': 'selected_genre',
+      'webhookUrl': 'webhook_url',
+    };
+
+    // First pass: normalize keys
+    for (const [key, value] of Object.entries(input)) {
+      // Check for known alias first, then convert camelCase
+      let normalizedKey = fieldAliases[key] || key;
+      
+      // If key contains uppercase and isn't an alias, convert to snake_case
+      if (normalizedKey === key && /[A-Z]/.test(key)) {
+        normalizedKey = toSnakeCase(key);
+      }
+
+      normalized[normalizedKey] = value;
+    }
+
+    // Second pass: coerce types based on schema
+    for (const [key, value] of Object.entries(normalized)) {
+      const paramDef = schema.properties[key];
+      if (!paramDef) continue;
+
+      // Coerce string numbers to numbers
+      if (paramDef.type === 'number' && typeof value === 'string') {
+        const num = Number(value);
+        if (!isNaN(num)) {
+          normalized[key] = num;
+        }
+      }
+
+      // Coerce string booleans to booleans
+      if (paramDef.type === 'boolean' && typeof value === 'string') {
+        if (value.toLowerCase() === 'true' || value === '1') {
+          normalized[key] = true;
+        } else if (value.toLowerCase() === 'false' || value === '0') {
+          normalized[key] = false;
+        }
+      }
+
+      // Coerce number to string if schema expects string (e.g., duration: 60 -> "60s")
+      if (paramDef.type === 'string' && typeof value === 'number') {
+        // Special handling for duration fields - add 's' suffix if missing
+        if (key === 'duration' || key.endsWith('_duration')) {
+          normalized[key] = `${value}s`;
+        } else {
+          normalized[key] = String(value);
+        }
+      }
+    }
+
+    // Third pass: apply defaults from schema
+    for (const [key, paramDef] of Object.entries(schema.properties)) {
+      if (normalized[key] === undefined && paramDef.default !== undefined) {
+        normalized[key] = paramDef.default;
+      }
+    }
+
+    return normalized;
+  }
+
+  /**
    * Validate input against a tool's JSON Schema.
    * Returns { valid: true } or { valid: false, errors: string[] }.
+   * Input should be normalized first via normalizeInput().
    */
   validateInput(toolId: string, input: Record<string, unknown>): { valid: boolean; errors: string[] } {
     const tool = this.get(toolId);
@@ -1091,7 +1164,7 @@ class ToolRegistry {
     const schema = tool.inputSchema;
     const errors: string[] = [];
 
-    // Check required fields
+    // Check required fields (check both snake_case and possible camelCase variants)
     for (const req of schema.required) {
       if (input[req] === undefined || input[req] === null || input[req] === '') {
         errors.push(`Missing required field: ${req}`);
@@ -1103,18 +1176,20 @@ class ToolRegistry {
       const paramDef = schema.properties[key];
       if (!paramDef) continue; // allow extra fields (pass-through to fal.ai)
 
-      // Type check
+      // Type check (after normalization, types should already be correct)
       if (paramDef.type === 'string' && typeof value !== 'string') {
         errors.push(`Field '${key}' must be a string, got ${typeof value}`);
         continue;
       }
       if (paramDef.type === 'number' && typeof value !== 'number') {
-        // Allow numeric strings
+        // Still allow numeric strings as fallback
         if (typeof value === 'string' && !isNaN(Number(value))) continue;
         errors.push(`Field '${key}' must be a number, got ${typeof value}`);
         continue;
       }
       if (paramDef.type === 'boolean' && typeof value !== 'boolean') {
+        // Still allow string booleans as fallback
+        if (typeof value === 'string' && ['true', 'false', '0', '1'].includes(value.toLowerCase())) continue;
         errors.push(`Field '${key}' must be a boolean, got ${typeof value}`);
         continue;
       }
@@ -1129,12 +1204,13 @@ class ToolRegistry {
       }
 
       // Range checks for numbers
-      if (typeof value === 'number') {
-        if (paramDef.minimum !== undefined && value < paramDef.minimum) {
-          errors.push(`Field '${key}' must be >= ${paramDef.minimum}, got ${value}`);
+      const numValue = typeof value === 'number' ? value : (typeof value === 'string' ? Number(value) : NaN);
+      if (!isNaN(numValue)) {
+        if (paramDef.minimum !== undefined && numValue < paramDef.minimum) {
+          errors.push(`Field '${key}' must be >= ${paramDef.minimum}, got ${numValue}`);
         }
-        if (paramDef.maximum !== undefined && value > paramDef.maximum) {
-          errors.push(`Field '${key}' must be <= ${paramDef.maximum}, got ${value}`);
+        if (paramDef.maximum !== undefined && numValue > paramDef.maximum) {
+          errors.push(`Field '${key}' must be <= ${paramDef.maximum}, got ${numValue}`);
         }
       }
     }

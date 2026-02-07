@@ -29,7 +29,5 @@
   "active": true,
   "registrations": [],
   "supportedTrust": ["reputation"],
-  "tools": [
-    "text.llm"
-  ]
+  "tools": []
 }

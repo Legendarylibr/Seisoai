@@ -643,7 +643,6 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
                   if (tid.startsWith('video.generate')) return 'Video';
                   if (tid === 'music.generate') return 'Music';
                   if (tid === 'audio.sfx') return 'SFX';
-                  if (tid === 'text.llm') return 'Chat';
                   return tid.split('.').pop();
                 });
 

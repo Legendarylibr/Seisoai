@@ -138,21 +138,7 @@ const TOOL_CATALOG: Record<string, AgentToolDef> = {
     ],
     responseExample: '{\n  "success": true,\n  "audio_url": "https://fal.media/files/...",\n  "x402": { "settled": true, "transactionHash": "0x..." }\n}',
   },
-  'text.llm': {
-    id: 'text.llm',
-    name: 'Prompt Lab (Chat)',
-    description: 'AI assistance for crafting prompts and creative planning',
-    category: 'text-generation',
-    endpoint: 'POST /api/prompt-lab/chat',
-    method: 'POST',
-    usdcUnits: 1300,
-    usdPrice: '$0.0013',
-    params: [
-      { name: 'message', type: 'string', required: true, description: 'Your question or request' },
-      { name: 'context.mode', type: 'string', required: false, description: '"image", "video", "music"' },
-    ],
-    responseExample: '{\n  "success": true,\n  "response": "Here\'s a prompt...",\n  "x402": { "settled": true, "transactionHash": "0x..." }\n}',
-  },
+  // text.llm removed - now using Anthropic API directly, not exposed as a tool
 };
 
 // Predefined tool sets by agent type
@@ -165,14 +151,13 @@ export const AGENT_TYPE_TOOLS: Record<string, string[]> = {
   ],
   'Video Generation': ['video.generate.veo3'],
   'Music Generation': ['music.generate', 'audio.sfx'],
-  'Chat/Assistant': ['text.llm'],
+  'Chat/Assistant': [],  // Uses Anthropic API directly via chat-assistant routes
   'Multi-Modal': [
     'image.generate.flux-pro-kontext',
     'image.generate.flux-2',
     'video.generate.veo3',
     'music.generate',
     'audio.sfx',
-    'text.llm',
   ],
   'Custom': [],
 };
