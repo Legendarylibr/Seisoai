@@ -1,12 +1,16 @@
 /**
  * Agent routes
  * API endpoints for managing Seisoai's ERC-8004 registered agents
+ * 
+ * SECURITY: Custom agent creation includes sanitization of systemPrompt and skillMd
+ * to prevent prompt injection attacks against sub-agents.
  */
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import { isTokenBlacklisted } from '../middleware/auth';
+import { sanitizeSystemPrompt, sanitizeSkillMarkdown } from '../utils/validation';
 import CustomAgent, { type ICustomAgent } from '../models/CustomAgent';
 import type { IUser } from '../models/User';
 import config from '../config/env';
@@ -59,8 +63,13 @@ import {
   parseAgentURI,
   createAgentURI,
 } from '../services/agentRegistry';
+import { createAgentCreationLimiter } from '../middleware/rateLimiter';
+import { logAuditEvent, AuditEventType, AuditSeverity } from '../services/auditLog';
 
 const router = Router();
+
+// SECURITY: Rate limiter for agent creation
+const agentCreationLimiter = createAgentCreationLimiter();
 
 // ── Custom agent type ──
 export type CustomAgentRecord = ICustomAgent;
@@ -270,8 +279,12 @@ router.get('/:agentId/reputation', async (req: Request, res: Response) => {
  * POST /api/agents/create
  * Body: { name, description, type, tools, image?, services?, skillMd?, walletAddress? }
  * Requires authentication (JWT) or wallet address in body/header
+ * 
+ * SECURITY: 
+ * - Rate limited to prevent abuse (10 agents/hour/wallet)
+ * - systemPrompt and skillMd are sanitized to prevent prompt injection
  */
-router.post('/create', optionalAuth, async (req: Request, res: Response) => {
+router.post('/create', agentCreationLimiter, optionalAuth, async (req: Request, res: Response) => {
   try {
     const { name, description, type, tools, image, services, skillMd, systemPrompt, walletAddress: bodyWallet } = req.body;
 
@@ -316,6 +329,40 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       return;
     }
 
+    // SECURITY: Sanitize systemPrompt to prevent prompt injection attacks
+    let sanitizedSystemPrompt = '';
+    const systemPromptWarnings: string[] = [];
+    if (systemPrompt) {
+      const promptResult = sanitizeSystemPrompt(systemPrompt, 10000);
+      sanitizedSystemPrompt = promptResult.sanitized;
+      systemPromptWarnings.push(...promptResult.warnings);
+      
+      if (promptResult.warnings.length > 0) {
+        logger.warn('Agent creation: system prompt sanitization warnings', {
+          walletAddress,
+          name,
+          warnings: promptResult.warnings,
+        });
+      }
+    }
+
+    // SECURITY: Sanitize skillMd to prevent injection attacks
+    let sanitizedSkillMd = '';
+    const skillMdWarnings: string[] = [];
+    if (skillMd) {
+      const skillResult = sanitizeSkillMarkdown(skillMd, 50000);
+      sanitizedSkillMd = skillResult.sanitized;
+      skillMdWarnings.push(...skillResult.warnings);
+      
+      if (skillResult.warnings.length > 0) {
+        logger.warn('Agent creation: skill markdown sanitization warnings', {
+          walletAddress,
+          name,
+          warnings: skillResult.warnings,
+        });
+      }
+    }
+
     // Generate agent URI
     const agentId = `custom-${walletAddress.slice(2, 8)}-${Date.now()}`;
     const baseUrl = `${req.protocol}://${req.get('host')}`;
@@ -342,7 +389,7 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
 
     const agentURI = createAgentURI(registration);
 
-    // Persist to MongoDB
+    // Persist to MongoDB with sanitized values
     const agent = await CustomAgent.create({
       agentId,
       name,
@@ -352,21 +399,67 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       owner: walletAddress,
       agentURI,
       registration,
-      skillMd: skillMd || '',
-      systemPrompt: systemPrompt || '',
+      skillMd: sanitizedSkillMd,
+      systemPrompt: sanitizedSystemPrompt,
       imageUrl: image || 'https://seisoai.com/seiso-logo.png',
       services: registration.services || [],
       isCustom: true,
     });
 
-    logger.info('Custom agent created', { agentId, name, owner: walletAddress, toolCount: tools.length });
+    logger.info('Custom agent created', { 
+      agentId, 
+      name, 
+      owner: walletAddress, 
+      toolCount: tools.length,
+      hasSystemPrompt: !!sanitizedSystemPrompt,
+      hasSkillMd: !!sanitizedSkillMd,
+      sanitizationWarnings: [...systemPromptWarnings, ...skillMdWarnings].length,
+    });
 
-    res.json({
+    // SECURITY: Audit log agent creation
+    const allWarnings = [...systemPromptWarnings, ...skillMdWarnings];
+    await logAuditEvent({
+      eventType: allWarnings.length > 0 ? AuditEventType.AGENT_PROMPT_SANITIZED : AuditEventType.AGENT_CREATED,
+      severity: allWarnings.length > 0 ? AuditSeverity.WARNING : AuditSeverity.INFO,
+      actor: {
+        walletAddress,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+      target: {
+        type: 'agent',
+        id: agentId,
+        description: `Custom agent: ${name}`,
+      },
+      action: 'Agent created',
+      outcome: 'success',
+      metadata: {
+        agentId,
+        name,
+        type,
+        toolCount: tools.length,
+        hasSystemPrompt: !!sanitizedSystemPrompt,
+        hasSkillMd: !!sanitizedSkillMd,
+        sanitizationWarnings: allWarnings,
+      },
+    }).catch(err => logger.warn('Failed to log agent creation audit event', { error: err.message }));
+
+    // Build response with security warnings if any
+    const response: Record<string, unknown> = {
       success: true,
       agent,
       agentURI,
-      skillMd: skillMd || '',
-    });
+      skillMd: sanitizedSkillMd,
+    };
+
+    // Include security warnings in response so users know their content was modified
+    const allWarnings = [...systemPromptWarnings, ...skillMdWarnings];
+    if (allWarnings.length > 0) {
+      response.securityWarnings = allWarnings;
+      response.securityNote = 'Some content was sanitized to prevent potential security issues. Please review the warnings.';
+    }
+
+    res.json(response);
   } catch (error) {
     const err = error as Error;
     logger.error('Failed to create custom agent', { error: err.message });
@@ -420,6 +513,26 @@ router.delete('/custom/:agentId', optionalAuth, async (req: Request, res: Respon
     }
 
     logger.info('Custom agent deleted', { agentId, owner: walletAddress });
+
+    // SECURITY: Audit log agent deletion
+    await logAuditEvent({
+      eventType: AuditEventType.AGENT_DELETED,
+      severity: AuditSeverity.INFO,
+      actor: {
+        walletAddress,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+      target: {
+        type: 'agent',
+        id: agentId,
+        description: `Custom agent deleted`,
+      },
+      action: 'Agent deleted',
+      outcome: 'success',
+      metadata: { agentId },
+    }).catch(err => logger.warn('Failed to log agent deletion audit event', { error: err.message }));
+
     res.json({ success: true });
   } catch (error) {
     const err = error as Error;

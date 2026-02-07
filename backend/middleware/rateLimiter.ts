@@ -258,6 +258,70 @@ export const createFreeImageLimiter = (): RateLimitRequestHandler => {
   });
 };
 
+/**
+ * Create agent creation rate limiter
+ * SECURITY: Prevents abuse of agent creation which could be used for:
+ * - Prompt injection attacks via systemPrompt/skillMd
+ * - Resource exhaustion
+ * - Creating malicious sub-agents at scale
+ */
+export const createAgentCreationLimiter = (): RateLimitRequestHandler => createLimiter({
+  storePrefix: 'agent-create',
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // Maximum 10 agent creations per hour per wallet
+  message: {
+    error: 'Too many agent creation requests. Please wait before creating more agents.',
+    retryAfter: '1 hour'
+  },
+  keyGenerator: (req) => {
+    // Key by wallet address if available, otherwise by IP
+    const walletAddress = 
+      (req as unknown as { user?: { walletAddress?: string } }).user?.walletAddress ||
+      req.body?.walletAddress ||
+      req.headers['x-wallet-address'] as string ||
+      req.ip ||
+      'unknown';
+    return `agent-create:${walletAddress}`;
+  },
+  handler: (_req, res, _next, options) => {
+    const retryAfterSeconds = Math.ceil(options.windowMs / 1000);
+    res.setHeader('Retry-After', retryAfterSeconds);
+    res.status(429).json({
+      success: false,
+      error: 'Too many agent creation requests. Please wait before creating more agents.',
+      retryAfter: retryAfterSeconds,
+      securityNote: 'Agent creation is rate-limited to prevent abuse.',
+    });
+  }
+});
+
+/**
+ * Create API key creation rate limiter
+ * SECURITY: Prevents abuse of API key creation
+ */
+export const createApiKeyCreationLimiter = (): RateLimitRequestHandler => createLimiter({
+  storePrefix: 'apikey-create',
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // Maximum 20 API key operations per hour
+  message: {
+    error: 'Too many API key requests. Please wait before creating more keys.',
+    retryAfter: '1 hour'
+  },
+  keyGenerator: (req) => {
+    const user = (req as unknown as { user?: { userId?: string } }).user;
+    return `apikey-create:${user?.userId || req.ip || 'unknown'}`;
+  },
+  handler: (_req, res, _next, options) => {
+    const retryAfterSeconds = Math.ceil(options.windowMs / 1000);
+    res.setHeader('Retry-After', retryAfterSeconds);
+    res.status(429).json({
+      success: false,
+      error: 'Too many API key requests. Please wait.',
+      retryAfter: retryAfterSeconds,
+    });
+  }
+});
+
 export default {
   createGeneralLimiter,
   createAuthLimiter,
@@ -266,7 +330,9 @@ export default {
   createWanSubmitLimiter,
   createWanResultLimiter,
   createBlockchainRpcLimiter,
-  createFreeImageLimiter
+  createFreeImageLimiter,
+  createAgentCreationLimiter,
+  createApiKeyCreationLimiter
 };
 
 

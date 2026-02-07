@@ -41,6 +41,36 @@ All endpoints support x402 pay-per-request. No account or API key needed.
 6. Server verifies via Coinbase CDP, executes, settles payment onchain
 7. Response includes `x402.transactionHash` as proof
 
+### Security Requirements for x402 Payments
+
+**CRITICAL: User Confirmation Required**
+
+Before signing any x402 payment transaction, the implementing agent or client MUST:
+
+1. **Display payment details clearly** to the user:
+   - Amount in USDC (e.g., "$0.065")
+   - Recipient address
+   - Network (Base/eip155:8453)
+   - Service being purchased
+
+2. **Require explicit user confirmation** before signing:
+   - Do NOT auto-sign payments without user approval
+   - Implement a confirmation dialog or approval flow
+   - Log all payment authorizations for audit purposes
+
+3. **Verify payment requirements**:
+   - Validate the `PAYMENT-REQUIRED` header comes from seisoai.com
+   - Check that amounts are within expected ranges
+   - Reject unexpectedly large payment requests
+
+Example confirmation flow:
+```
+User: Generate an image of a sunset
+Agent: This will cost $0.065 USDC on Base. Confirm payment? [Yes/No]
+User: Yes
+Agent: [Signs payment, generates image]
+```
+
 ---
 
 ## Pricing Overview (x402 - includes 30% markup)
@@ -491,6 +521,15 @@ Train custom LoRA models.
 
 Create a custom AI agent with selected tools.
 
+### Security Controls
+
+- **Rate Limited**: Maximum 10 agent creations per hour per wallet address
+- **Prompt Sanitization**: `systemPrompt` and `skillMd` are automatically sanitized to prevent prompt injection attacks:
+  - Dangerous patterns like "ignore previous instructions" are detected and flagged
+  - Script tags and event handlers are removed from skillMd
+  - Maximum length limits are enforced (10KB for systemPrompt, 50KB for skillMd)
+- **Tool Validation**: Only registered tool IDs are accepted
+
 ### Request
 
 ```json
@@ -512,8 +551,21 @@ Create a custom AI agent with selected tools.
 | `type` | string | Yes | `Image Generation`, `Video Generation`, `Music Generation`, `Chat/Assistant`, `Multi-Modal`, `Custom` |
 | `tools` | array | Yes | Array of tool IDs from the tool registry |
 | `walletAddress` | string | Yes | Owner wallet address |
-| `systemPrompt` | string | No | Custom system prompt for the agent |
-| `skillMd` | string | No | Custom skill markdown |
+| `systemPrompt` | string | No | Custom system prompt for the agent (sanitized for security) |
+| `skillMd` | string | No | Custom skill markdown (sanitized for security) |
+
+### Security Warnings
+
+If potentially dangerous patterns are detected in `systemPrompt` or `skillMd`, the response will include:
+
+```json
+{
+  "success": true,
+  "agent": { ... },
+  "securityWarnings": ["Potentially dangerous pattern detected: instruction override"],
+  "securityNote": "Some content was sanitized to prevent potential security issues."
+}
+```
 
 ### Response
 
@@ -547,6 +599,16 @@ Create a custom AI agent with selected tools.
 ## API Key Management
 
 Create API keys for programmatic access with credit allocation.
+
+### Security Controls
+
+- **Rate Limited**: Maximum 20 API key operations per hour per user
+- **Key Limit**: Maximum 10 active API keys per account
+- **Webhook Validation**: Webhook URLs are validated to prevent data exfiltration:
+  - Must use HTTPS (no HTTP)
+  - Must point to a public domain (no localhost, private IPs)
+  - Raw IP addresses are not allowed
+  - Reserved TLDs (.local, .internal, etc.) are blocked
 
 ### Create API Key
 

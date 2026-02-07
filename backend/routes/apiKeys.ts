@@ -2,11 +2,17 @@
  * API Key Management Routes
  * CRUD operations for agent API keys
  * Allows users to create, list, update, and revoke API keys for external agents
+ * 
+ * SECURITY: Webhook URLs are validated to prevent data exfiltration attacks.
+ * Only HTTPS URLs to verified public domains are allowed.
  */
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
+import { isValidWebhookUrl } from '../utils/validation';
+import { createApiKeyCreationLimiter } from '../middleware/rateLimiter';
+import { logAuditEvent, AuditEventType, AuditSeverity } from '../services/auditLog';
 import type { IApiKey } from '../models/ApiKey';
 import type { IUser } from '../models/User';
 
@@ -20,6 +26,9 @@ interface AuthenticatedRequest extends Request {
   user?: IUser;
 }
 
+// SECURITY: Rate limiter for API key creation
+const apiKeyCreationLimiter = createApiKeyCreationLimiter();
+
 export default function createApiKeyRoutes(deps: Dependencies): Router {
   const router = Router();
   const { authenticateToken } = deps;
@@ -27,8 +36,9 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
   /**
    * POST /api/api-keys
    * Create a new API key
+   * SECURITY: Rate limited to prevent abuse
    */
-  router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/', apiKeyCreationLimiter, authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -53,6 +63,42 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
 
       if (name.length > 100) {
         return res.status(400).json({ success: false, error: 'Key name must be 100 characters or less' });
+      }
+
+      // SECURITY: Validate webhook URL to prevent data exfiltration
+      if (webhookUrl) {
+        const webhookValidation = isValidWebhookUrl(webhookUrl);
+        if (!webhookValidation.valid) {
+          logger.warn('API key creation blocked - invalid webhook URL', {
+            userId: user.userId,
+            error: webhookValidation.error,
+            webhookUrl: String(webhookUrl).substring(0, 100),
+          });
+
+          // SECURITY: Audit log blocked webhook attempt
+          await logAuditEvent({
+            eventType: AuditEventType.API_KEY_WEBHOOK_BLOCKED,
+            severity: AuditSeverity.WARNING,
+            actor: {
+              userId: user.userId,
+              walletAddress: user.walletAddress,
+              ipAddress: req.ip,
+              userAgent: req.headers['user-agent'],
+            },
+            action: 'API key webhook URL blocked',
+            outcome: 'blocked',
+            metadata: {
+              error: webhookValidation.error,
+              webhookUrlPreview: String(webhookUrl).substring(0, 100),
+            },
+          }).catch(err => logger.warn('Failed to log webhook blocked audit event', { error: err.message }));
+
+          return res.status(400).json({
+            success: false,
+            error: `Invalid webhook URL: ${webhookValidation.error}`,
+            securityNote: 'Webhook URLs must use HTTPS and point to a public domain. Private IPs, localhost, and raw IP addresses are not allowed.',
+          });
+        }
       }
 
       // Check max keys per user (limit to 10)
@@ -107,6 +153,33 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
         name: apiKey.name,
         credits: creditsToAllocate,
       });
+
+      // SECURITY: Audit log API key creation
+      await logAuditEvent({
+        eventType: AuditEventType.API_KEY_CREATED,
+        severity: AuditSeverity.INFO,
+        actor: {
+          userId: user.userId,
+          walletAddress: user.walletAddress,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+        },
+        target: {
+          type: 'api_key',
+          id: apiKey.keyPrefix,
+          description: `API key: ${apiKey.name}`,
+        },
+        action: 'API key created',
+        outcome: 'success',
+        metadata: {
+          keyPrefix: apiKey.keyPrefix,
+          name: apiKey.name,
+          credits: creditsToAllocate,
+          hasWebhook: !!webhookUrl,
+          rateLimitPerMinute: apiKey.rateLimitPerMinute,
+          rateLimitPerDay: apiKey.rateLimitPerDay,
+        },
+      }).catch(err => logger.warn('Failed to log API key creation audit event', { error: err.message }));
 
       res.status(201).json({
         success: true,
@@ -251,6 +324,24 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
         ipAllowlist,
         active,
       } = req.body;
+
+      // SECURITY: Validate webhook URL if provided
+      if (webhookUrl !== undefined && webhookUrl !== null && webhookUrl !== '') {
+        const webhookValidation = isValidWebhookUrl(webhookUrl);
+        if (!webhookValidation.valid) {
+          logger.warn('API key update blocked - invalid webhook URL', {
+            userId: user.userId,
+            keyId: req.params.keyId,
+            error: webhookValidation.error,
+            webhookUrl: String(webhookUrl).substring(0, 100),
+          });
+          return res.status(400).json({
+            success: false,
+            error: `Invalid webhook URL: ${webhookValidation.error}`,
+            securityNote: 'Webhook URLs must use HTTPS and point to a public domain. Private IPs, localhost, and raw IP addresses are not allowed.',
+          });
+        }
+      }
 
       const updateFields: Record<string, unknown> = {};
       if (name !== undefined) updateFields.name = name.trim();
@@ -418,6 +509,29 @@ export default function createApiKeyRoutes(deps: Dependencies): Router {
         keyPrefix: key.keyPrefix,
         creditsReturned: remainingCredits,
       });
+
+      // SECURITY: Audit log API key revocation
+      await logAuditEvent({
+        eventType: AuditEventType.API_KEY_REVOKED,
+        severity: AuditSeverity.INFO,
+        actor: {
+          userId: user.userId,
+          walletAddress: user.walletAddress,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+        },
+        target: {
+          type: 'api_key',
+          id: key.keyPrefix,
+          description: `API key: ${key.name}`,
+        },
+        action: 'API key revoked',
+        outcome: 'success',
+        metadata: {
+          keyPrefix: key.keyPrefix,
+          creditsReturned: remainingCredits,
+        },
+      }).catch(err => logger.warn('Failed to log API key revocation audit event', { error: err.message }));
 
       res.json({
         success: true,

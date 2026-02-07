@@ -268,6 +268,176 @@ export function getSafeErrorMessage(error: unknown, defaultMessage: string = 'An
   return sanitized || defaultMessage;
 }
 
+/**
+ * SECURITY: Validate webhook URL to prevent data exfiltration
+ * Only allows HTTPS URLs to verified domains (no localhost, private IPs, or arbitrary endpoints)
+ */
+export function isValidWebhookUrl(url: unknown): { valid: boolean; error?: string } {
+  if (!url || typeof url !== 'string') {
+    return { valid: false, error: 'Webhook URL must be a string' };
+  }
+
+  if (url.length > 2048) {
+    return { valid: false, error: 'Webhook URL exceeds maximum length (2048 characters)' };
+  }
+
+  try {
+    const urlObj = new URL(url);
+
+    // SECURITY: Only allow HTTPS (no HTTP, file://, etc.)
+    if (urlObj.protocol !== 'https:') {
+      logger.warn('Webhook validation failed - non-HTTPS protocol', { protocol: urlObj.protocol, url: url.substring(0, 100) });
+      return { valid: false, error: 'Webhook URL must use HTTPS' };
+    }
+
+    // SECURITY: Block URLs with userinfo (user:pass@host)
+    if (urlObj.username || urlObj.password) {
+      logger.warn('Webhook validation failed - userinfo in URL', { url: url.substring(0, 100) });
+      return { valid: false, error: 'Webhook URL cannot contain credentials' };
+    }
+
+    const hostname = urlObj.hostname.toLowerCase();
+
+    // SECURITY: Block localhost and loopback
+    if (hostname === 'localhost' || hostname === '0.0.0.0' || hostname.startsWith('127.')) {
+      logger.warn('Webhook validation failed - localhost', { hostname, url: url.substring(0, 100) });
+      return { valid: false, error: 'Webhook URL cannot point to localhost' };
+    }
+
+    // SECURITY: Block private IPv4 addresses
+    const isPrivateIPv4 = /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.)/.test(hostname);
+    if (isPrivateIPv4) {
+      logger.warn('Webhook validation failed - private IPv4', { hostname, url: url.substring(0, 100) });
+      return { valid: false, error: 'Webhook URL cannot point to private IP addresses' };
+    }
+
+    // SECURITY: Block private IPv6 addresses
+    const isPrivateIPv6 = /^(::1|fc00:|fe80:|fd[0-9a-f]{2}:|::ffff:(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.))/.test(hostname);
+    if (isPrivateIPv6) {
+      logger.warn('Webhook validation failed - private IPv6', { hostname, url: url.substring(0, 100) });
+      return { valid: false, error: 'Webhook URL cannot point to private IP addresses' };
+    }
+
+    // SECURITY: Block raw IP addresses (require domain names for accountability)
+    const isRawIP = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.includes(':');
+    if (isRawIP) {
+      logger.warn('Webhook validation failed - raw IP address', { hostname, url: url.substring(0, 100) });
+      return { valid: false, error: 'Webhook URL must use a domain name, not an IP address' };
+    }
+
+    // SECURITY: Require at least one dot in domain (blocks 'localhost' style single-label domains)
+    if (!hostname.includes('.')) {
+      logger.warn('Webhook validation failed - single-label domain', { hostname, url: url.substring(0, 100) });
+      return { valid: false, error: 'Webhook URL must use a fully qualified domain name' };
+    }
+
+    // SECURITY: Block common internal/reserved TLDs
+    const blockedTLDs = ['.local', '.internal', '.localhost', '.test', '.invalid', '.example'];
+    if (blockedTLDs.some(tld => hostname.endsWith(tld))) {
+      logger.warn('Webhook validation failed - blocked TLD', { hostname, url: url.substring(0, 100) });
+      return { valid: false, error: 'Webhook URL cannot use reserved domain names' };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    logger.warn('Webhook validation failed - invalid URL format', { url: url.substring(0, 100), error: (error as Error).message });
+    return { valid: false, error: 'Invalid webhook URL format' };
+  }
+}
+
+/**
+ * SECURITY: Sanitize system prompt to prevent prompt injection attacks
+ * Removes or escapes potentially dangerous patterns that could override agent behavior
+ */
+export function sanitizeSystemPrompt(prompt: unknown, maxLength: number = 10000): { sanitized: string; warnings: string[] } {
+  const warnings: string[] = [];
+  
+  if (!prompt || typeof prompt !== 'string') {
+    return { sanitized: '', warnings: [] };
+  }
+
+  let sanitized = prompt.trim();
+
+  // SECURITY: Limit length to prevent resource exhaustion
+  if (sanitized.length > maxLength) {
+    sanitized = sanitized.slice(0, maxLength);
+    warnings.push(`System prompt truncated to ${maxLength} characters`);
+  }
+
+  // SECURITY: Detect and warn about potentially dangerous patterns
+  const dangerousPatterns = [
+    { pattern: /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)/gi, name: 'instruction override' },
+    { pattern: /you\s+are\s+now\s+(a\s+)?different/gi, name: 'identity override' },
+    { pattern: /forget\s+(all\s+)?(your\s+)?(previous|prior)/gi, name: 'memory wipe' },
+    { pattern: /act\s+as\s+if\s+you\s+(have\s+)?no\s+(rules?|restrictions?|guidelines?)/gi, name: 'restriction bypass' },
+    { pattern: /pretend\s+(that\s+)?(you\s+)?(are|have)\s+no\s+(safety|content)/gi, name: 'safety bypass' },
+    { pattern: /system:\s*\[/gi, name: 'system tag injection' },
+    { pattern: /<\|im_start\|>/gi, name: 'ChatML injection' },
+    { pattern: /<\|system\|>/gi, name: 'system role injection' },
+    { pattern: /\[\[SYSTEM\]\]/gi, name: 'system marker injection' },
+    { pattern: /```system/gi, name: 'code block system injection' },
+  ];
+
+  for (const { pattern, name } of dangerousPatterns) {
+    if (pattern.test(sanitized)) {
+      warnings.push(`Potentially dangerous pattern detected: ${name}`);
+      logger.warn('Prompt injection pattern detected', { pattern: name, promptPreview: sanitized.substring(0, 100) });
+    }
+  }
+
+  // SECURITY: Escape certain control sequences that might be interpreted specially
+  // Replace multiple newlines with max 2 to prevent prompt structure manipulation
+  sanitized = sanitized.replace(/\n{3,}/g, '\n\n');
+
+  return { sanitized, warnings };
+}
+
+/**
+ * SECURITY: Sanitize skill markdown to prevent injection attacks
+ * Similar to system prompt but allows markdown formatting
+ */
+export function sanitizeSkillMarkdown(skillMd: unknown, maxLength: number = 50000): { sanitized: string; warnings: string[] } {
+  const warnings: string[] = [];
+  
+  if (!skillMd || typeof skillMd !== 'string') {
+    return { sanitized: '', warnings: [] };
+  }
+
+  let sanitized = skillMd.trim();
+
+  // SECURITY: Limit length
+  if (sanitized.length > maxLength) {
+    sanitized = sanitized.slice(0, maxLength);
+    warnings.push(`Skill markdown truncated to ${maxLength} characters`);
+  }
+
+  // SECURITY: Detect dangerous patterns in skill definitions
+  const dangerousPatterns = [
+    { pattern: /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)/gi, name: 'instruction override' },
+    { pattern: /you\s+are\s+now\s+(a\s+)?different/gi, name: 'identity override' },
+    { pattern: /bypass\s+(all\s+)?(safety|security|content)/gi, name: 'safety bypass' },
+    { pattern: /<script[\s>]/gi, name: 'script injection' },
+    { pattern: /javascript:/gi, name: 'javascript protocol' },
+    { pattern: /data:text\/html/gi, name: 'data URL injection' },
+    { pattern: /on(load|error|click|mouse)/gi, name: 'event handler injection' },
+  ];
+
+  for (const { pattern, name } of dangerousPatterns) {
+    if (pattern.test(sanitized)) {
+      warnings.push(`Potentially dangerous pattern detected: ${name}`);
+      logger.warn('Skill markdown injection pattern detected', { pattern: name, skillPreview: sanitized.substring(0, 100) });
+    }
+  }
+
+  // SECURITY: Remove HTML script tags completely
+  sanitized = sanitized.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+  
+  // SECURITY: Remove HTML event handlers
+  sanitized = sanitized.replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '');
+
+  return { sanitized, warnings };
+}
+
 export default {
   isValidEthereumAddress,
   isValidSolanaAddress,
@@ -279,6 +449,9 @@ export default {
   isValidEmail,
   deepSanitize,
   isValidFalUrl,
+  isValidWebhookUrl,
+  sanitizeSystemPrompt,
+  sanitizeSkillMarkdown,
   createValidateInput,
   getSafeErrorMessage
 };
