@@ -173,7 +173,6 @@ function AppContentInner(): JSX.Element {
 // Sign-in gate - shows AuthPrompt until user is fully authenticated with JWT
 function SignInGate(): JSX.Element {
   const { isConnected, error } = useSimpleWallet();
-  const { preferences } = useUserPreferences();
   const [csrfReady, setCsrfReady] = useState(false);
 
   // Pre-fetch CSRF token on mount so it's ready before any auth attempts
@@ -285,7 +284,7 @@ function SignInGate(): JSX.Element {
   }
 
   // Not connected or not authenticated - show sign-in screen
-  if (!isConnected || !preferences.profileCompleted) {
+  if (!isConnected) {
     return <AuthPrompt />;
   }
 
