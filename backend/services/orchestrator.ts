@@ -15,6 +15,7 @@ import { falRequest, submitToQueue, checkQueueStatus, getQueueResult, isStatusCo
 import llmProvider, { type ClaudeModel, DEFAULT_MODELS } from './llmProvider';
 import logger from '../utils/logger';
 import config from '../config/env';
+import { sanitizeString } from '../utils/validation';
 
 // ============================================
 // Orchestrator Config (from environment)
@@ -132,7 +133,12 @@ Respond with ONLY a JSON object:
   "estimatedDurationSeconds": number
 }`;
 
-  const userPrompt = `Goal: ${goal}${context ? `\nContext: ${JSON.stringify(context)}` : ''}`;
+  // SECURITY FIX: Sanitize goal to prevent prompt injection
+  const sanitizedGoal = sanitizeString(goal, 2000);
+  if (!sanitizedGoal) {
+    throw new Error('Goal is required for orchestration');
+  }
+  const userPrompt = `Goal: ${sanitizedGoal}${context ? `\nContext: ${JSON.stringify(context)}` : ''}`;
   const planModel = options?.model || DEFAULT_MODELS.planning;
 
   try {

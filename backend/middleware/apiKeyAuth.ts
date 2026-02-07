@@ -32,7 +32,7 @@ declare global {
 
 /**
  * Extract API key from request
- * Supports: X-API-Key header, Authorization: Bearer sk_live_*, query param ?api_key=
+ * Supports: X-API-Key header, Authorization: Bearer sk_live_*
  */
 function extractApiKey(req: Request): string | null {
   // 1. X-API-Key header (preferred)
@@ -50,11 +50,9 @@ function extractApiKey(req: Request): string | null {
     }
   }
 
-  // 3. Query parameter (least preferred, for webhooks/redirects)
-  const queryKey = req.query.api_key;
-  if (queryKey && typeof queryKey === 'string' && queryKey.startsWith('sk_live_')) {
-    return queryKey;
-  }
+  // SECURITY FIX: Removed query parameter support (?api_key=) to prevent
+  // API key leakage via server logs, referrer headers, and browser history.
+  // API keys should only be sent via headers (X-API-Key or Authorization).
 
   return null;
 }

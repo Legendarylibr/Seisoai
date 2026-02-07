@@ -5,6 +5,7 @@
 import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import logger from '../utils/logger';
+import { isValidPublicUrl } from '../utils/validation';
 import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, uploadToFal, isStatusCompleted, isStatusFailed } from '../services/fal';
 import type { IUser } from '../models/User';
 import { applyClawMarkup } from '../middleware/credits';
@@ -67,6 +68,12 @@ export function createAudioRoutes(deps: Dependencies) {
 
       if (text.length > 5000) {
         res.status(400).json({ success: false, error: 'Text too long. Maximum 5000 characters.' });
+        return;
+      }
+
+      // SECURITY FIX: Validate URL to prevent SSRF
+      if (voice_url && !isValidPublicUrl(voice_url)) {
+        res.status(400).json({ success: false, error: 'Invalid voice URL' });
         return;
       }
 
@@ -185,6 +192,12 @@ export function createAudioRoutes(deps: Dependencies) {
 
       if (!audio_url) {
         res.status(400).json({ success: false, error: 'audio_url is required' });
+        return;
+      }
+
+      // SECURITY FIX: Validate URL to prevent SSRF
+      if (!isValidPublicUrl(audio_url)) {
+        res.status(400).json({ success: false, error: 'Invalid audio URL' });
         return;
       }
 
@@ -310,6 +323,17 @@ export function createAudioRoutes(deps: Dependencies) {
 
       if (!audio_url) {
         res.status(400).json({ success: false, error: 'audio_url is required' });
+        return;
+      }
+
+      // SECURITY FIX: Validate URLs to prevent SSRF
+      if (!isValidPublicUrl(image_url)) {
+        res.status(400).json({ success: false, error: 'Invalid image URL' });
+        return;
+      }
+
+      if (!isValidPublicUrl(audio_url)) {
+        res.status(400).json({ success: false, error: 'Invalid audio URL' });
         return;
       }
 
@@ -865,11 +889,9 @@ export function createAudioRoutes(deps: Dependencies) {
         return;
       }
 
-      // Validate URL
-      try {
-        new URL(audio_url);
-      } catch {
-        res.status(400).json({ success: false, error: 'Invalid audio_url format' });
+      // SECURITY FIX: Validate URL to prevent SSRF (replaces basic URL check)
+      if (!isValidPublicUrl(audio_url)) {
+        res.status(400).json({ success: false, error: 'Invalid audio URL' });
         return;
       }
 

@@ -92,13 +92,10 @@ function getTierFromRequest(req: Request): SubscriptionTier {
     }
   }
   
-  // Infer tier from credits if not explicitly set
-  if (user.credits !== undefined) {
-    if (user.credits >= 10000) return SubscriptionTier.ENTERPRISE;
-    if (user.credits >= 1000) return SubscriptionTier.PRO;
-    if (user.credits >= 100) return SubscriptionTier.BASIC;
-  }
-  
+  // SECURITY FIX: Don't infer tier from credits alone - credits can be manipulated.
+  // Only use explicit tier field. If no tier is set, default to FREE.
+  // Previously inferred tier from credit balance which could be exploited by
+  // temporarily inflating credits to get higher rate limits.
   return SubscriptionTier.FREE;
 }
 

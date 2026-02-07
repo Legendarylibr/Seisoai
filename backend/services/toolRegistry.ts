@@ -1256,8 +1256,30 @@ class ToolRegistry {
     }
   }
 
-  /** Register a custom tool (for plugins/extensions) */
-  register(tool: ToolDefinition): void {
+  /** 
+   * Register a custom tool (for plugins/extensions) 
+   * SECURITY FIX: Only allows registration of tools with validated IDs
+   * and blocks registration of tools that override built-in tools.
+   */
+  register(tool: ToolDefinition, options?: { allowOverride?: boolean }): void {
+    // SECURITY: Validate tool ID format (alphanumeric, dots, hyphens only)
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{2,100}$/.test(tool.id)) {
+      logger.warn('Tool registration rejected - invalid tool ID', { toolId: tool.id });
+      throw new Error(`Invalid tool ID format: ${tool.id}`);
+    }
+
+    // SECURITY: Prevent overriding built-in tools unless explicitly allowed
+    if (this.tools.has(tool.id) && !options?.allowOverride) {
+      logger.warn('Tool registration rejected - tool already exists', { toolId: tool.id });
+      throw new Error(`Tool already registered: ${tool.id}. Use allowOverride to update.`);
+    }
+
+    // SECURITY: Validate required fields
+    if (!tool.name || !tool.description || !tool.category || !tool.inputSchema) {
+      logger.warn('Tool registration rejected - missing required fields', { toolId: tool.id });
+      throw new Error(`Tool registration requires name, description, category, and inputSchema`);
+    }
+
     this.tools.set(tool.id, tool);
     this.healthStatus.set(tool.id, {
       status: 'unknown',

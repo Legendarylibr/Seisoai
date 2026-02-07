@@ -225,6 +225,75 @@ export function isValidFalUrl(url: unknown): boolean {
 }
 
 /**
+ * SECURITY FIX: Validate user-provided URLs to prevent SSRF attacks.
+ * More permissive than isValidFalUrl - allows any public HTTPS URL
+ * but blocks private IPs, localhost, and dangerous protocols.
+ * Use this for user-provided image_url, audio_url, video_url etc.
+ */
+export function isValidPublicUrl(url: unknown): boolean {
+  if (!url || typeof url !== 'string') return false;
+  
+  // Allow data URIs (for uploaded files)
+  if (url.startsWith('data:')) return true;
+  
+  try {
+    const urlObj = new URL(url);
+    
+    // SECURITY: Only allow http/https protocols
+    if (!['http:', 'https:'].includes(urlObj.protocol)) {
+      logger.warn('SSRF attempt blocked - invalid protocol', { protocol: urlObj.protocol, url: url.substring(0, 100) });
+      return false;
+    }
+    
+    // SECURITY: Block URLs with userinfo (user:pass@host)
+    if (urlObj.username || urlObj.password) {
+      logger.warn('SSRF attempt blocked - userinfo in URL', { url: url.substring(0, 100) });
+      return false;
+    }
+    
+    const hostname = urlObj.hostname.toLowerCase();
+    
+    // SECURITY: Block private IPv4 addresses
+    const isPrivateIPv4 = /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.|0\.)/.test(hostname);
+    if (isPrivateIPv4) {
+      logger.warn('SSRF attempt blocked - private IPv4', { hostname, url: url.substring(0, 100) });
+      return false;
+    }
+    
+    // SECURITY: Block private IPv6 addresses
+    const isPrivateIPv6 = /^(::1|fc00:|fd[0-9a-f]{2}:|fe80:|::ffff:(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.))/.test(hostname);
+    if (isPrivateIPv6) {
+      logger.warn('SSRF attempt blocked - private IPv6', { hostname, url: url.substring(0, 100) });
+      return false;
+    }
+    
+    // SECURITY: Block localhost variations
+    if (hostname === 'localhost' || hostname === '0.0.0.0' || hostname.startsWith('127.')) {
+      logger.warn('SSRF attempt blocked - localhost', { hostname, url: url.substring(0, 100) });
+      return false;
+    }
+    
+    // SECURITY: Block cloud metadata endpoints
+    if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') {
+      logger.warn('SSRF attempt blocked - cloud metadata', { hostname, url: url.substring(0, 100) });
+      return false;
+    }
+
+    // SECURITY: Block reserved TLDs
+    const blockedTLDs = ['.local', '.internal', '.localhost', '.test', '.invalid', '.example'];
+    if (blockedTLDs.some(tld => hostname.endsWith(tld))) {
+      logger.warn('SSRF attempt blocked - reserved TLD', { hostname, url: url.substring(0, 100) });
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    logger.warn('SSRF attempt blocked - invalid URL format', { url: url.substring(0, 100), error: (error as Error).message });
+    return false;
+  }
+}
+
+/**
  * Create input validation middleware
  */
 export function createValidateInput() {
@@ -364,24 +433,45 @@ export function sanitizeSystemPrompt(prompt: unknown, maxLength: number = 10000)
     warnings.push(`System prompt truncated to ${maxLength} characters`);
   }
 
-  // SECURITY: Detect and warn about potentially dangerous patterns
-  const dangerousPatterns = [
-    { pattern: /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)/gi, name: 'instruction override' },
-    { pattern: /you\s+are\s+now\s+(a\s+)?different/gi, name: 'identity override' },
-    { pattern: /forget\s+(all\s+)?(your\s+)?(previous|prior)/gi, name: 'memory wipe' },
-    { pattern: /act\s+as\s+if\s+you\s+(have\s+)?no\s+(rules?|restrictions?|guidelines?)/gi, name: 'restriction bypass' },
-    { pattern: /pretend\s+(that\s+)?(you\s+)?(are|have)\s+no\s+(safety|content)/gi, name: 'safety bypass' },
+  // SECURITY FIX: Detect AND REMOVE dangerous patterns (not just warn)
+  // Critical injection patterns are stripped from the prompt to prevent attacks
+  const criticalPatterns = [
     { pattern: /system:\s*\[/gi, name: 'system tag injection' },
     { pattern: /<\|im_start\|>/gi, name: 'ChatML injection' },
     { pattern: /<\|system\|>/gi, name: 'system role injection' },
     { pattern: /\[\[SYSTEM\]\]/gi, name: 'system marker injection' },
     { pattern: /```system/gi, name: 'code block system injection' },
+    { pattern: /<\|endoftext\|>/gi, name: 'end-of-text injection' },
+    { pattern: /\[INST\]/gi, name: 'instruction tag injection' },
+    { pattern: /\[\/INST\]/gi, name: 'instruction close tag injection' },
+    { pattern: /<<SYS>>/gi, name: 'system block injection' },
+    { pattern: /<<\/SYS>>/gi, name: 'system block close injection' },
   ];
 
-  for (const { pattern, name } of dangerousPatterns) {
+  // These are stripped entirely (high confidence injection attempts)
+  for (const { pattern, name } of criticalPatterns) {
     if (pattern.test(sanitized)) {
-      warnings.push(`Potentially dangerous pattern detected: ${name}`);
-      logger.warn('Prompt injection pattern detected', { pattern: name, promptPreview: sanitized.substring(0, 100) });
+      warnings.push(`Dangerous pattern blocked and removed: ${name}`);
+      logger.warn('Prompt injection pattern BLOCKED', { pattern: name, promptPreview: sanitized.substring(0, 100) });
+      sanitized = sanitized.replace(pattern, '[BLOCKED]');
+    }
+  }
+
+  // Behavioral override patterns: warn but also defang
+  const behavioralPatterns = [
+    { pattern: /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)/gi, name: 'instruction override' },
+    { pattern: /you\s+are\s+now\s+(a\s+)?different/gi, name: 'identity override' },
+    { pattern: /forget\s+(all\s+)?(your\s+)?(previous|prior)/gi, name: 'memory wipe' },
+    { pattern: /act\s+as\s+if\s+you\s+(have\s+)?no\s+(rules?|restrictions?|guidelines?)/gi, name: 'restriction bypass' },
+    { pattern: /pretend\s+(that\s+)?(you\s+)?(are|have)\s+no\s+(safety|content)/gi, name: 'safety bypass' },
+    { pattern: /disregard\s+(all\s+)?(your\s+)?(previous|prior|safety|instructions?)/gi, name: 'disregard instructions' },
+  ];
+
+  for (const { pattern, name } of behavioralPatterns) {
+    if (pattern.test(sanitized)) {
+      warnings.push(`Behavioral override pattern blocked: ${name}`);
+      logger.warn('Prompt injection behavioral pattern BLOCKED', { pattern: name, promptPreview: sanitized.substring(0, 100) });
+      sanitized = sanitized.replace(pattern, '[BLOCKED]');
     }
   }
 
@@ -411,26 +501,35 @@ export function sanitizeSkillMarkdown(skillMd: unknown, maxLength: number = 5000
     warnings.push(`Skill markdown truncated to ${maxLength} characters`);
   }
 
-  // SECURITY: Detect dangerous patterns in skill definitions
+  // SECURITY FIX: Detect AND REMOVE dangerous patterns in skill definitions
   const dangerousPatterns = [
     { pattern: /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)/gi, name: 'instruction override' },
     { pattern: /you\s+are\s+now\s+(a\s+)?different/gi, name: 'identity override' },
     { pattern: /bypass\s+(all\s+)?(safety|security|content)/gi, name: 'safety bypass' },
-    { pattern: /<script[\s>]/gi, name: 'script injection' },
-    { pattern: /javascript:/gi, name: 'javascript protocol' },
-    { pattern: /data:text\/html/gi, name: 'data URL injection' },
-    { pattern: /on(load|error|click|mouse)/gi, name: 'event handler injection' },
+    { pattern: /disregard\s+(all\s+)?(your\s+)?(previous|prior|safety|instructions?)/gi, name: 'disregard instructions' },
+    { pattern: /system:\s*\[/gi, name: 'system tag injection' },
+    { pattern: /<\|im_start\|>/gi, name: 'ChatML injection' },
+    { pattern: /<\|system\|>/gi, name: 'system role injection' },
+    { pattern: /\[\[SYSTEM\]\]/gi, name: 'system marker injection' },
+    { pattern: /<\|endoftext\|>/gi, name: 'end-of-text injection' },
   ];
 
   for (const { pattern, name } of dangerousPatterns) {
     if (pattern.test(sanitized)) {
-      warnings.push(`Potentially dangerous pattern detected: ${name}`);
-      logger.warn('Skill markdown injection pattern detected', { pattern: name, skillPreview: sanitized.substring(0, 100) });
+      warnings.push(`Dangerous pattern blocked and removed: ${name}`);
+      logger.warn('Skill markdown injection pattern BLOCKED', { pattern: name, skillPreview: sanitized.substring(0, 100) });
+      sanitized = sanitized.replace(pattern, '[BLOCKED]');
     }
   }
 
   // SECURITY: Remove HTML script tags completely
   sanitized = sanitized.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+  
+  // SECURITY: Remove javascript: protocol URLs
+  sanitized = sanitized.replace(/javascript:/gi, 'blocked:');
+  
+  // SECURITY: Remove data:text/html URLs (XSS vector)
+  sanitized = sanitized.replace(/data:text\/html/gi, 'blocked:text/html');
   
   // SECURITY: Remove HTML event handlers
   sanitized = sanitized.replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '');
@@ -449,6 +548,7 @@ export default {
   isValidEmail,
   deepSanitize,
   isValidFalUrl,
+  isValidPublicUrl,
   isValidWebhookUrl,
   sanitizeSystemPrompt,
   sanitizeSkillMarkdown,

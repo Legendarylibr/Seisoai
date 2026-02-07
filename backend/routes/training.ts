@@ -11,6 +11,7 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
+import { isValidPublicUrl } from '../utils/validation';
 import { submitToQueue, checkQueueStatus, getQueueResult, isStatusCompleted, isStatusFailed, isStatusProcessing, normalizeStatus } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
@@ -63,6 +64,12 @@ export default function createTrainingRoutes(deps: Dependencies) {
       // Validate images
       if (!images_data_url) {
         res.status(400).json({ error: 'images_data_url is required (URL to zip archive with training images)' });
+        return;
+      }
+
+      // SECURITY FIX: Validate URL to prevent SSRF
+      if (!isValidPublicUrl(images_data_url)) {
+        res.status(400).json({ error: 'Invalid images data URL' });
         return;
       }
 
@@ -340,6 +347,12 @@ export default function createTrainingRoutes(deps: Dependencies) {
 
       if (!lora_url) {
         res.status(400).json({ error: 'LoRA URL is required' });
+        return;
+      }
+
+      // SECURITY FIX: Validate URL to prevent SSRF
+      if (!isValidPublicUrl(lora_url)) {
+        res.status(400).json({ error: 'Invalid LoRA URL' });
         return;
       }
 

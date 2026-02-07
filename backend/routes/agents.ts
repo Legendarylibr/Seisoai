@@ -33,7 +33,7 @@ const optionalAuth = async (req: Request & { user?: IUser }, _res: Response, nex
     if (token && config.JWT_SECRET) {
       const blacklisted = await isTokenBlacklisted(token);
       if (!blacklisted) {
-        const decoded = jwt.verify(token, config.JWT_SECRET) as JWTDecoded;
+        const decoded = jwt.verify(token, config.JWT_SECRET, { algorithms: ['HS256'] }) as JWTDecoded;
         if (decoded.type !== 'refresh') {
           const User = mongoose.model<IUser>('User');
           let user = null;

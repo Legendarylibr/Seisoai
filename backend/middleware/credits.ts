@@ -225,10 +225,21 @@ export async function grantDailyCredits(
     return { granted: false, amount: 0, user };
   }
   
-  // Add daily credits to main credits balance (same as paid credits)
+  // SECURITY FIX: Atomic daily credit grant with date check in query
+  // This prevents race conditions where concurrent requests could grant daily credits multiple times.
+  // The query includes the date check so MongoDB's atomicity ensures only one grant per day.
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const User = getUserModel();
   const updatedUser = await User.findOneAndUpdate(
-    { userId: user.userId },
+    { 
+      userId: user.userId,
+      // SECURITY: Only grant if last grant was NOT today (prevents double-grant race condition)
+      $or: [
+        { dailyCreditsLastGrant: { $exists: false } },
+        { dailyCreditsLastGrant: null },
+        { dailyCreditsLastGrant: { $lt: new Date(today + 'T00:00:00.000Z') } }
+      ]
+    },
     {
       $inc: { 
         credits: dailyCreditsAmount,

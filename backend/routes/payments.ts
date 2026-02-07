@@ -12,6 +12,37 @@ import { verifyEVMTransaction, verifySolanaTransaction } from '../services/block
 import config from '../config/env';
 import type { IUser } from '../models/User';
 import type { LRUCache } from '../services/cache';
+import { isValidWalletAddress } from '../utils/validation';
+
+// SECURITY FIX: Redis-backed transaction deduplication for multi-instance deployments
+let redisService: typeof import('../services/redis.js') | null = null;
+async function getRedisService() {
+  if (!redisService) {
+    try { redisService = await import('../services/redis.js'); } catch { /* not available */ }
+  }
+  return redisService;
+}
+
+async function isTransactionProcessedInRedis(txHash: string): Promise<boolean> {
+  try {
+    const redis = await getRedisService();
+    if (redis && redis.isRedisConnected()) {
+      return await redis.cacheExists(`payment:tx:${txHash}`, { prefix: '' });
+    }
+  } catch { /* Redis unavailable */ }
+  return false;
+}
+
+async function markTransactionProcessedInRedis(txHash: string, walletAddress: string): Promise<void> {
+  try {
+    const redis = await getRedisService();
+    if (redis && redis.isRedisConnected()) {
+      await redis.cacheSet(`payment:tx:${txHash}`, { walletAddress, processedAt: Date.now() }, { 
+        prefix: '', ttl: 86400 * 7 // 7 days
+      });
+    }
+  } catch { /* Redis unavailable */ }
+}
 
 // Types
 interface Dependencies {
@@ -90,8 +121,20 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      // Check if already processed
-      if (processedTransactions?.has(txHash)) {
+      // SECURITY FIX: Validate wallet address format
+      if (!isValidWalletAddress(walletAddress)) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid wallet address format'
+        });
+        return;
+      }
+
+      // SECURITY FIX: Check both in-memory and Redis for processed transactions
+      // This prevents replay attacks even across multiple server instances
+      const alreadyInMemory = processedTransactions?.has(txHash);
+      const alreadyInRedis = await isTransactionProcessedInRedis(txHash);
+      if (alreadyInMemory || alreadyInRedis) {
         res.status(400).json({
           success: false,
           error: 'Transaction already processed',
@@ -182,13 +225,14 @@ export function createPaymentRoutes(deps: Dependencies = {}) {
         { new: true, upsert: true }
       );
 
-      // Mark as processed
+      // SECURITY FIX: Mark as processed in both in-memory cache AND Redis
       if (processedTransactions) {
         processedTransactions.set(txHash, {
           timestamp: new Date(),
           walletAddress
         });
       }
+      await markTransactionProcessedInRedis(txHash, walletAddress);
 
       logger.info('Payment verified and credits added', {
         txHash,

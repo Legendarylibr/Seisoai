@@ -93,7 +93,7 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const decoded = jwt.verify(token, JWT_SECRET) as JWTDecoded;
+      const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as JWTDecoded;
       const User = mongoose.model<IUser>('User');
       const user = await User.findOne({ userId: decoded.userId })
         .select('-password -generationHistory -gallery -paymentHistory');
@@ -146,7 +146,7 @@ export function createAuthRoutes(deps: Dependencies = {}) {
 
       let decoded: JWTDecoded;
       try {
-        decoded = jwt.verify(token, JWT_SECRET) as JWTDecoded;
+        decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as JWTDecoded;
       } catch (jwtErr) {
         logger.warn('Credits endpoint: Invalid JWT', { error: (jwtErr as Error).message });
         res.status(403).json({ success: false, error: 'Invalid token' });
@@ -197,7 +197,7 @@ export function createAuthRoutes(deps: Dependencies = {}) {
 
       if (accessToken && JWT_SECRET) {
         try {
-          const decoded = jwt.verify(accessToken, JWT_SECRET) as JWTDecoded;
+          const decoded = jwt.verify(accessToken, JWT_SECRET, { algorithms: ['HS256'] }) as JWTDecoded;
           await blacklistToken(accessToken, decoded.exp ? decoded.exp * 1000 : null);
           tokensRevoked++;
         } catch {
@@ -207,7 +207,7 @@ export function createAuthRoutes(deps: Dependencies = {}) {
 
       if (refreshToken && JWT_REFRESH_SECRET) {
         try {
-          const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as JWTDecoded;
+          const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET, { algorithms: ['HS256'] }) as JWTDecoded;
           await blacklistToken(refreshToken, decoded.exp ? decoded.exp * 1000 : null);
           tokensRevoked++;
         } catch {
@@ -255,7 +255,7 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as JWTDecoded;
+      const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET, { algorithms: ['HS256'] }) as JWTDecoded;
 
       if (decoded.type !== 'refresh') {
         res.status(403).json({

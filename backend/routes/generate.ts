@@ -31,6 +31,7 @@ import {
   optimizePromptForFlux2Edit,
   type PromptOptimizationResult
 } from '../services/promptOptimizer';
+import { isValidPublicUrl, sanitizeString } from '../utils/validation';
 
 // Re-export prompt optimizers (used by chatAssistant.ts)
 export {
@@ -347,11 +348,27 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       const numImages = numImagesParam || numImagesSnake || 1;
       const hasImages = image_url || (image_urls && Array.isArray(image_urls) && image_urls.length > 0);
-      let trimmedPrompt = (prompt && typeof prompt === 'string') ? prompt.trim() : '';
+      let trimmedPrompt = (prompt && typeof prompt === 'string') ? sanitizeString(prompt, 5000) : '';
 
       if (!hasImages && !trimmedPrompt) {
         res.status(400).json({ success: false, error: 'prompt is required for text-to-image generation' });
         return;
+      }
+
+      // SECURITY FIX: Validate image_url to prevent SSRF
+      if (image_url && !isValidPublicUrl(image_url)) {
+        res.status(400).json({ success: false, error: 'Invalid image URL' });
+        return;
+      }
+
+      // SECURITY FIX: Validate image_urls to prevent SSRF
+      if (image_urls && Array.isArray(image_urls)) {
+        for (const url of image_urls) {
+          if (!isValidPublicUrl(url)) {
+            res.status(400).json({ success: false, error: 'Invalid image URL in image_urls array' });
+            return;
+          }
+        }
       }
 
       // Translate Asian-language prompts
@@ -557,13 +574,31 @@ export function createGenerationRoutes(deps: Dependencies) {
         numImages?: number; aspect_ratio?: string; optimizePrompt?: boolean;
       };
 
+      // SECURITY FIX: Validate image_url to prevent SSRF
+      if (image_url && !isValidPublicUrl(image_url)) {
+        sendEvent('error', { error: 'Invalid image URL' });
+        res.end();
+        return;
+      }
+
+      // SECURITY FIX: Validate image_urls to prevent SSRF
+      if (image_urls && Array.isArray(image_urls)) {
+        for (const url of image_urls) {
+          if (!isValidPublicUrl(url)) {
+            sendEvent('error', { error: 'Invalid image URL in image_urls array' });
+            res.end();
+            return;
+          }
+        }
+      }
+
       const imageUrlsArray: string[] = [];
       if (image_urls && Array.isArray(image_urls)) imageUrlsArray.push(...image_urls);
       else if (image_url) imageUrlsArray.push(image_url);
 
       const hasImages = imageUrlsArray.length > 0;
       const isTextToImage = !hasImages;
-      const trimmedPrompt = (prompt && typeof prompt === 'string') ? prompt.trim() : '';
+      const trimmedPrompt = (prompt && typeof prompt === 'string') ? sanitizeString(prompt, 5000) : '';
       if (isTextToImage && !trimmedPrompt) {
         sendEvent('error', { error: 'prompt is required for text-to-image generation' });
         res.end();
@@ -742,6 +777,18 @@ export function createGenerationRoutes(deps: Dependencies) {
         generate_audio?: boolean; generation_mode?: string; quality?: string; model?: string;
       };
 
+      // SECURITY FIX: Validate first_frame_url to prevent SSRF
+      if (first_frame_url && !isValidPublicUrl(first_frame_url)) {
+        res.status(400).json({ success: false, error: 'Invalid first_frame_url' });
+        return;
+      }
+
+      // SECURITY FIX: Validate last_frame_url to prevent SSRF
+      if (last_frame_url && !isValidPublicUrl(last_frame_url)) {
+        res.status(400).json({ success: false, error: 'Invalid last_frame_url' });
+        return;
+      }
+
       // Mode configuration
       const VIDEO_MODES: Record<string, { requiresFirstFrame: boolean; requiresLastFrame: boolean; endpoint: string }> = {
         'text-to-video': { requiresFirstFrame: false, requiresLastFrame: false, endpoint: '' },
@@ -769,7 +816,7 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
-      const videoPrompt = await translatePromptIfNeeded(prompt.trim(), 'Video');
+      const videoPrompt = await translatePromptIfNeeded(sanitizeString(prompt, 5000), 'Video');
 
       if (modeConfig.requiresFirstFrame && !first_frame_url) {
         res.status(400).json({ success: false, error: 'first_frame_url is required for this mode' });
@@ -1190,6 +1237,12 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
+      // SECURITY FIX: Validate image_url to prevent SSRF
+      if (!isValidPublicUrl(image_url)) {
+        res.status(400).json({ success: false, error: 'Invalid image URL' });
+        return;
+      }
+
       const validScale = scale === 4 ? 4 : 2;
       const creditsRequired = applyClawMarkup(req, calculateUpscaleCredits(validScale));
       const hasFreeAccess = req.hasFreeAccess || false;
@@ -1262,6 +1315,12 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       if (!video_url) {
         res.status(400).json({ success: false, error: 'video_url is required' });
+        return;
+      }
+
+      // SECURITY FIX: Validate video_url to prevent SSRF
+      if (!isValidPublicUrl(video_url)) {
+        res.status(400).json({ success: false, error: 'Invalid video URL' });
         return;
       }
 
@@ -1415,6 +1474,18 @@ export function createGenerationRoutes(deps: Dependencies) {
         return;
       }
 
+      // SECURITY FIX: Validate imageUrl to prevent SSRF
+      if (imageUrl && !isValidPublicUrl(imageUrl)) {
+        res.status(400).json({ success: false, error: 'Invalid image URL' });
+        return;
+      }
+
+      // SECURITY FIX: Validate videoUrl to prevent SSRF
+      if (videoUrl && !isValidPublicUrl(videoUrl)) {
+        res.status(400).json({ success: false, error: 'Invalid video URL' });
+        return;
+      }
+
       if (!user.walletAddress) {
         res.status(400).json({ success: false, error: 'User account must have wallet address' });
         return;
@@ -1514,6 +1585,18 @@ export function createGenerationRoutes(deps: Dependencies) {
 
       if (!generationId) {
         res.status(400).json({ success: false, error: 'generationId is required' });
+        return;
+      }
+
+      // SECURITY FIX: Validate videoUrl to prevent SSRF
+      if (videoUrl && !isValidPublicUrl(videoUrl)) {
+        res.status(400).json({ success: false, error: 'Invalid video URL' });
+        return;
+      }
+
+      // SECURITY FIX: Validate imageUrl to prevent SSRF
+      if (imageUrl && !isValidPublicUrl(imageUrl)) {
+        res.status(400).json({ success: false, error: 'Invalid image URL' });
         return;
       }
 

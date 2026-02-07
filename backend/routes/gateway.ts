@@ -21,6 +21,7 @@ import { authenticateApiKey } from '../middleware/apiKeyAuth';
 import { sendGenerationWebhook } from '../services/webhook';
 import { getCustomAgentById, getAllCustomAgents } from './agents';
 import logger from '../utils/logger';
+import { isValidWebhookUrl, deepSanitize } from '../utils/validation';
 
 // Dependencies injected from parent
 interface Dependencies {
@@ -226,6 +227,17 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
     const webhookUrl = bodyWebhookUrl || req.apiKey?.webhookUrl;
     const webhookSecret = req.apiKey?.webhookSecret;
     const requestId = (req as any).requestId || `gw-${Date.now()}`;
+
+    // SECURITY FIX: Validate webhook URL to prevent SSRF/data exfiltration
+    if (webhookUrl) {
+      const webhookValidation = isValidWebhookUrl(webhookUrl);
+      if (!webhookValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid webhook URL: ${webhookValidation.error}`,
+        });
+      }
+    }
 
     // Validate input against tool's JSON Schema
     const validation = toolRegistry.validateInput(toolId, input);

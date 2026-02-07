@@ -68,26 +68,42 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
   }
 
   // Skip CSRF check for x402 payment requests (machine-to-machine API calls)
-  // These use cryptographic payment verification instead of CSRF tokens
-  if (req.headers['payment-signature'] || req.headers['x-payment']) {
+  // SECURITY FIX: Only skip if the Symbol-verified x402 flag is set by our middleware,
+  // not just based on the presence of a header (which can be spoofed).
+  // The payment-signature header alone is not sufficient; the x402 middleware must
+  // verify the payment cryptographically and set the Symbol flag first.
+  const X402_VERIFIED_SYMBOL = Symbol.for('seisoai.x402.verified');
+  if ((req as any)[X402_VERIFIED_SYMBOL] === true) {
     return next();
   }
 
-  // Skip CSRF check for internal server-to-server calls (e.g., chat-assistant → generate)
-  // These are authenticated via JWT and originate from within the same process
-  if (req.headers['x-internal-request'] === 'true') {
+  // Skip CSRF check for API key authenticated requests (machine-to-machine)
+  // API keys are cryptographically verified by apiKeyAuth middleware
+  if ((req as any).isApiKeyAuth === true && (req as any).apiKey) {
     return next();
   }
 
-  // Skip CSRF check for Claw/OpenClaw clients (API-only access)
-  // These are AI agents without browser context
-  const xClient = req.headers['x-client']?.toString().toLowerCase();
-  const xOrigin = req.headers['x-origin']?.toString().toLowerCase();
-  const userAgent = req.headers['user-agent']?.toLowerCase() || '';
-  if (xClient?.includes('claw') || xOrigin?.includes('claw') || 
-      userAgent.includes('clawhub') || userAgent.includes('openclaw')) {
-    return next();
+  // SECURITY FIX: Removed x-internal-request header bypass - it was spoofable.
+  // Internal server-to-server calls now use the shared internal token below.
+  const INTERNAL_SECRET = config.INTERNAL_REQUEST_SECRET;
+  if (INTERNAL_SECRET && req.headers['x-internal-token']) {
+    const internalToken = req.headers['x-internal-token']?.toString() || '';
+    // SECURITY: Use constant-time comparison for internal tokens
+    if (internalToken.length === INTERNAL_SECRET.length) {
+      try {
+        const tokenBuf = Buffer.from(internalToken, 'utf8');
+        const secretBuf = Buffer.from(INTERNAL_SECRET, 'utf8');
+        if (crypto.timingSafeEqual(tokenBuf, secretBuf)) {
+          return next();
+        }
+      } catch {
+        // Fall through to CSRF check
+      }
+    }
   }
+
+  // SECURITY FIX: Removed Claw/OpenClaw user-agent bypass - user-agent headers are trivially spoofable.
+  // External AI agents should authenticate via API keys or x402 payments instead.
 
   // Get token from cookie
   const cookieToken = req.cookies?.[CSRF_TOKEN_COOKIE] || req.headers.cookie

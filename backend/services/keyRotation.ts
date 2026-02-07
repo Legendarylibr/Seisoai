@@ -205,7 +205,7 @@ export function verifyToken(token: string): JwtPayload | null {
       const specificKey = keys.find(k => k.keyId === decoded.header.kid);
       if (specificKey) {
         try {
-          return jwt.verify(token, specificKey.secret) as JwtPayload;
+          return jwt.verify(token, specificKey.secret, { algorithms: ['HS256'] }) as JwtPayload;
         } catch {
           // Key didn't work, try others
         }
@@ -218,7 +218,7 @@ export function verifyToken(token: string): JwtPayload | null {
   // Try all keys
   for (const key of keys) {
     try {
-      return jwt.verify(token, key.secret) as JwtPayload;
+      return jwt.verify(token, key.secret, { algorithms: ['HS256'] }) as JwtPayload;
     } catch {
       // Try next key
     }

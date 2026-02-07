@@ -9,9 +9,71 @@
  * Requires CDP_API_KEY_ID and CDP_API_KEY_SECRET environment variables.
  */
 import { generateJwt } from '@coinbase/cdp-sdk/auth';
+import crypto from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
 import config from '../config/env.js';
 import logger from '../utils/logger.js';
+
+// SECURITY FIX: Import Symbol for verified x402 flag
+const X402_VERIFIED_SYMBOL = Symbol.for('seisoai.x402.verified');
+
+// SECURITY FIX: Payment signature deduplication cache (prevents replay attacks)
+// Uses Redis when available, falls back to in-memory LRU
+const PAYMENT_SIG_DEDUP_TTL = 3600; // 1 hour TTL for dedup entries
+const paymentSigDedup = new Map<string, number>(); // hash -> timestamp
+const MAX_DEDUP_SIZE = 50000;
+
+// Lazy import Redis
+let redisService: typeof import('../services/redis.js') | null = null;
+async function getRedisForDedup() {
+  if (!redisService) {
+    try { redisService = await import('../services/redis.js'); } catch { /* Redis not available */ }
+  }
+  return redisService;
+}
+
+/**
+ * SECURITY FIX: Check if a payment signature has already been used (replay protection)
+ */
+async function isPaymentSignatureUsed(signature: string): Promise<boolean> {
+  const sigHash = crypto.createHash('sha256').update(signature).digest('hex').substring(0, 32);
+  
+  // Check Redis first
+  try {
+    const redis = await getRedisForDedup();
+    if (redis && redis.isRedisConnected()) {
+      const exists = await redis.cacheExists(`x402:sig:${sigHash}`, { prefix: '' });
+      if (exists) return true;
+    }
+  } catch { /* Redis unavailable, use in-memory */ }
+  
+  // Check in-memory fallback
+  return paymentSigDedup.has(sigHash);
+}
+
+/**
+ * SECURITY FIX: Mark a payment signature as used
+ */
+async function markPaymentSignatureUsed(signature: string): Promise<void> {
+  const sigHash = crypto.createHash('sha256').update(signature).digest('hex').substring(0, 32);
+  
+  // Store in Redis
+  try {
+    const redis = await getRedisForDedup();
+    if (redis && redis.isRedisConnected()) {
+      await redis.cacheSet(`x402:sig:${sigHash}`, { usedAt: Date.now() }, { 
+        prefix: '', ttl: PAYMENT_SIG_DEDUP_TTL 
+      });
+    }
+  } catch { /* Redis unavailable */ }
+  
+  // Also store in-memory (evict old entries if too large)
+  if (paymentSigDedup.size >= MAX_DEDUP_SIZE) {
+    const oldest = [...paymentSigDedup.entries()].sort((a, b) => a[1] - b[1]).slice(0, 1000);
+    for (const [key] of oldest) paymentSigDedup.delete(key);
+  }
+  paymentSigDedup.set(sigHash, Date.now());
+}
 
 // Coinbase CDP facilitator URL (correct path format)
 const CDP_FACILITATOR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402';
@@ -680,6 +742,16 @@ export function createX402Middleware() {
     const paymentValue = typeof paymentHeader === 'string' ? paymentHeader : Array.isArray(paymentHeader) ? paymentHeader[0] : undefined;
     
     if (paymentValue) {
+      // SECURITY FIX: Check for payment replay attacks
+      const alreadyUsed = await isPaymentSignatureUsed(paymentValue);
+      if (alreadyUsed) {
+        logger.warn('x402 payment replay attempt blocked', { path: req.path });
+        return res.status(402).json({ 
+          error: 'Payment signature already used',
+          reason: 'This payment signature has already been processed. Please submit a new payment.'
+        });
+      }
+
       // Payment present - verify with CDP if configured
       if (hasCdpCredentials) {
         try {
@@ -687,9 +759,14 @@ export function createX402Middleware() {
           const result = await cdp.verify(paymentValue, requirements);
           
           if (result.valid) {
+            // SECURITY FIX: Mark signature as used to prevent replay
+            await markPaymentSignatureUsed(paymentValue);
+
             // Payment verified - store info for later settlement
             const x402Req = req as X402Request;
             x402Req.isX402Paid = true;
+            // SECURITY FIX: Set the Symbol-based verified flag
+            (x402Req as any)[X402_VERIFIED_SYMBOL] = true;
             x402Req.x402Payment = {
               amount: price,
               payload: paymentValue,

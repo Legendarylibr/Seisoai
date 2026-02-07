@@ -16,6 +16,7 @@ import {
   optimizePromptForNanoBananaEdit,
   optimizePromptForMusic 
 } from '../services/promptOptimizer';
+import { isValidPublicUrl } from '../utils/validation';
 
 // System prompt for the chat assistant - optimized for Claude 3 Haiku
 const SYSTEM_PROMPT = `You are a creative AI assistant for SeisoAI. Generate images, videos, and music.
@@ -76,55 +77,41 @@ CREDIT COSTS:
 - Videos: ltx=1/sec, veo=2.2/sec (4s=4-8.8 cr, 6s=6-13.2 cr, 8s=8-17.6 cr)
 - Music: 15-60s=0.25 cr, 120s=0.5 cr, 180s=0.75 cr
 
-IMAGE EDITING (when user wants to modify a previous image):
-Set "isEdit": true when user uses phrases like:
-- "add a hat", "put glasses on", "add sunglasses"
-- "change the background", "make the sky blue"
-- "remove the tree", "make it darker"
-- References like "it", "this", "that", "the image"
+IMAGE INPUT HANDLING (CRITICAL — read carefully):
+When a user attaches image(s), determine their INTENT before setting isEdit:
 
-For edits, write prompt as a modification instruction:
-- User: "add a red hat" → prompt: "add a red hat to the person"
-- User: "make it sunset" → prompt: "change the background to a beautiful sunset"
+**1. EDITING the image (isEdit: true)** — User wants to MODIFY the attached/previous image:
+   - "add a hat to this", "put glasses on", "change the background"
+   - "remove the tree", "make it darker", "edit this image"
+   - "make the sky blue", "give her a red dress"
+   - Any reference to "it", "this", "that", "the image" with a modification verb
+   - Prompt should be an EDIT INSTRUCTION: "add a red hat to the person"
 
-MULTI-IMAGE EDITING (when user provides multiple images):
-When user attaches multiple images and wants to combine elements:
+**2. STYLE REFERENCE (isEdit: false)** — User wants a NEW image, using the attached as inspiration:
+   - "make something like this but with dragons"
+   - "create a similar scene in winter"
+   - "generate an image in this style"
+   - "I want something like this but more colorful"
+   - Prompt should be a FULL DESCRIPTION of the new image: "A winter landscape with dragons, vibrant colors"
+
+**3. NEW GENERATION (isEdit: false)** — User wants something completely new:
+   - "create a painting of a sunset" (even if image is attached)
+   - "generate a cyberpunk city" (image may be for context but not referenced)
+   - If the message doesn't reference the attached image at all, treat as new generation
+   - Prompt should be a FULL DESCRIPTION: "A cyberpunk city at night with neon lights"
+
+**4. VIDEO from image** — User wants to animate the attached image:
+   - "animate this", "make a video from this image", "bring this to life"
+   - Use generate_video with firstFrameUrl, NOT isEdit
+
+IMPORTANT: Do NOT set isEdit: true unless the user clearly wants to MODIFY the attached image.
+Attaching an image does NOT automatically mean editing. Most users attach images as references or inspiration.
+
+MULTI-IMAGE EDITING (when user explicitly wants to combine images):
+When user says things like "put the hat from this image on that image", "combine these":
 - Set "isEdit": true AND "useMultipleImages": true
-- The FIRST image is the BASE image to edit
-- Additional images are REFERENCE images for elements to extract
-- Write the prompt OPTIMIZED FOR THE SELECTED MODEL
-
-MODEL-SPECIFIC PROMPT OPTIMIZATION FOR MULTI-IMAGE EDITS:
-
-**FLUX (default) - Best for creative blending:**
-- Use descriptive, artistic language
-- Focus on the transformation concept
-- Example: "Blend the hat from reference onto subject, artistic integration, cohesive style"
-
-**FLUX-2 - Best for photorealistic precision:**
-- Be VERY specific and literal
-- Describe exact placement, lighting, shadows
-- Use technical photography terms
-- Keep under 150 characters for best results
-- Example: "Add reference hat to subject's head, match lighting angle, realistic shadow, seamless blend"
-
-**For FLUX-2 multi-image, write SHORT, DIRECT prompts:**
-- "Transfer hat from ref to subject, natural placement"
-- "Apply outfit from reference, maintain pose"  
-- "Swap background with reference scene, preserve subject"
-- "Composite elements: subject from base, background from ref"
-
-GENERAL MULTI-IMAGE PROMPT STRUCTURE:
-1. ACTION verb (add, transfer, apply, swap, blend, composite)
-2. ELEMENT being transferred (be specific)
-3. TARGET location/subject
-4. QUALITY instruction (natural, seamless, realistic)
-
-When user says things like "edit the previous image with this one", "combine these", "add stuff from this to that":
-- The previously generated image becomes the BASE
-- The newly attached image becomes the REFERENCE
-- Set isEdit: true and useMultipleImages: true
-- Choose model: flux-2 for photorealistic, flux for creative/artistic
+- Write the prompt describing what to transfer and where
+- Example: "Transfer the hat from the reference image onto the person in the base image"
 
 360° PANORAMAS:
 - When user mentions "360" or "panorama", use model: "nano-banana-pro"
@@ -348,6 +335,25 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         });
       }
 
+      // SECURITY FIX: Validate referenceImage URL to prevent SSRF
+      if (referenceImage && !isValidPublicUrl(referenceImage)) {
+        return res.status(400).json({ success: false, error: 'Invalid reference image URL' });
+      }
+
+      // SECURITY FIX: Validate referenceImages URLs to prevent SSRF
+      if (referenceImages && Array.isArray(referenceImages)) {
+        for (const url of referenceImages) {
+          if (!isValidPublicUrl(url)) {
+            return res.status(400).json({ success: false, error: 'Invalid URL in referenceImages array' });
+          }
+        }
+      }
+
+      // SECURITY FIX: Validate lastGeneratedImageUrl to prevent SSRF
+      if (context?.lastGeneratedImageUrl && !isValidPublicUrl(context.lastGeneratedImageUrl)) {
+        return res.status(400).json({ success: false, error: 'Invalid lastGeneratedImageUrl' });
+      }
+
       // Validate LLM is configured (Anthropic API or fal.ai proxy)
       if (!llmProvider.isLLMConfigured()) {
         logger.error('No LLM provider configured for chat assistant');
@@ -447,40 +453,34 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
         contextInfo += `\nUser has ${context.credits} credits available.`;
       }
       
-      // Add multi-image edit context
-      if (isMultiImageEdit && effectiveReferenceImages.length > 1) {
-        contextInfo += `\n\nMULTI-IMAGE EDIT MODE: The user wants to combine elements from multiple images.
-Number of images available: ${effectiveReferenceImages.length}
-- Image 1 (BASE): ${isAutoEdit ? 'Previously generated image' : 'First attached image'}
-- Images 2-${effectiveReferenceImages.length} (REFERENCES): ${isAutoEdit ? 'Newly attached images' : 'Additional attached images'}
-${context?.lastGeneratedPrompt && isAutoEdit ? `\nOriginal base image prompt was: "${context.lastGeneratedPrompt}"` : ''}
-
-IMPORTANT: 
-- Set "isEdit": true AND "useMultipleImages": true in your JSON params
-- Write the prompt describing what elements to take FROM the reference images and add TO the base image
-- Example: "Add the hat from the reference image to the person in the base image"`;
-      } else if (isAutoEdit && context?.lastGeneratedImageUrl) {
-        // Single image edit (editing previous image)
-        contextInfo += `\n\nEDIT MODE DETECTED: The user is asking to modify a previously generated image.
-Previous image URL available: YES (will be auto-attached)
+      // Add image context — let Claude decide intent
+      if (isAutoEdit && context?.lastGeneratedImageUrl) {
+        // Auto-detected edit of a previous image (user said "add X", "change Y", etc.)
+        contextInfo += `\n\nEDIT MODE: The user appears to be modifying a previously generated image.
+Previous image is available and will be auto-attached.
 ${context.lastGeneratedPrompt ? `Original image prompt was: "${context.lastGeneratedPrompt}"` : ''}
-
-IMPORTANT: Set "isEdit": true in your JSON params. The referenceImage will be automatically attached.
-Write the prompt as an EDIT INSTRUCTION describing what to change or add.`;
+Set "isEdit": true. Write the prompt as an EDIT INSTRUCTION (e.g., "add a red hat to the person").`;
+      } else if (isMultiImageEdit && effectiveReferenceImages.length > 1) {
+        // Multiple images and edit-like language detected
+        contextInfo += `\n\nMULTIPLE IMAGES AVAILABLE (${effectiveReferenceImages.length} images).
+${isAutoEdit ? 'Image 1 is the previously generated image. Others are newly attached.' : 'First image is the base, others are references.'}
+${context?.lastGeneratedPrompt && isAutoEdit ? `Original base image prompt: "${context.lastGeneratedPrompt}"` : ''}
+If the user wants to COMBINE or EDIT these images together, set "isEdit": true and "useMultipleImages": true.
+If the user wants a NEW image merely inspired by them, set "isEdit": false.
+Determine intent from the user's message.`;
       } else if (effectiveReferenceImages.length === 1) {
-        // Single explicit reference image
-        contextInfo += `\n\nIMPORTANT: User has attached a REFERENCE IMAGE to this message. When generating, you should:
-- For images: Use this as an image-to-image reference (set referenceImage in params)
-- For videos: Use this as the first frame (set firstFrameUrl in params, use image-to-video mode)
-Include the reference in your JSON response params.`;
+        // Single image attached — DO NOT assume it's for editing
+        contextInfo += `\n\nUser has attached an image. Determine their intent from the message:
+- To EDIT/MODIFY the image → set "isEdit": true, write prompt as edit instruction
+- To create something NEW inspired by it → set "isEdit": false, write a full description prompt
+- To animate it as video → use generate_video with firstFrameUrl
+The image will be passed to the model automatically.`;
       } else if (effectiveReferenceImages.length > 1) {
-        // Multiple explicit reference images without previous image context
-        contextInfo += `\n\nIMPORTANT: User has attached ${effectiveReferenceImages.length} REFERENCE IMAGES.
-- Image 1: The BASE image to edit
-- Images 2-${effectiveReferenceImages.length}: REFERENCE images with elements to extract
-
-Set "isEdit": true AND "useMultipleImages": true in your JSON params.
-Write the prompt describing what to take from reference images and add to the base.`;
+        // Multiple images attached without edit-like language
+        contextInfo += `\n\nUser has attached ${effectiveReferenceImages.length} images. Determine their intent:
+- To COMBINE/EDIT images → set "isEdit": true, "useMultipleImages": true
+- To create something NEW inspired by them → set "isEdit": false
+Determine intent from the user's message. Do NOT assume editing.`;
       }
 
       // Build messages array for multi-turn conversation
@@ -554,19 +554,25 @@ Write the prompt describing what to take from reference images and add to the ba
       // Parse for action JSON
       let action = parseActionFromResponse(assistantResponse);
       
-      // If there are reference images (explicit or auto-detected) and an action, inject them into the params
+      // Inject reference images into action params if present
       if (action && effectiveReferenceImages.length > 0) {
         if (action.action === 'generate_image') {
+          // Determine isEdit: trust Claude's decision, but override for auto-detected edits
+          // isAutoEdit = user is clearly editing a previous image (detected by edit patterns)
+          // Otherwise, Claude's isEdit decision stands
+          const shouldBeEdit = isAutoEdit || !!action.params.isEdit;
+          const shouldBeMulti = (isMultiImageEdit && shouldBeEdit) || 
+            (effectiveReferenceImages.length > 1 && !!action.params.useMultipleImages);
+          
           action = {
             ...action,
             params: {
               ...action.params,
-              // Primary reference image (base for editing)
+              // Always pass the images so the model can use them
               referenceImage: effectiveReferenceImages[0],
-              // All reference images for multi-image editing
               referenceImages: effectiveReferenceImages.length > 1 ? effectiveReferenceImages : undefined,
-              isEdit: isAutoEdit || isMultiImageEdit || !!action.params.isEdit,
-              useMultipleImages: isMultiImageEdit || effectiveReferenceImages.length > 1,
+              isEdit: shouldBeEdit,
+              useMultipleImages: shouldBeMulti,
               // Pass original prompt for context-aware optimization
               originalImagePrompt: isAutoEdit ? context?.lastGeneratedPrompt : undefined
             }
@@ -1101,6 +1107,24 @@ RULES:
         });
       }
 
+      // SECURITY FIX: Validate all URL parameters in action.params to prevent SSRF
+      if (action.params.referenceImage && !isValidPublicUrl(action.params.referenceImage as string)) {
+        return res.status(400).json({ success: false, error: 'Invalid referenceImage URL' });
+      }
+      if (action.params.referenceImages && Array.isArray(action.params.referenceImages)) {
+        for (const url of action.params.referenceImages as string[]) {
+          if (!isValidPublicUrl(url)) {
+            return res.status(400).json({ success: false, error: 'Invalid URL in referenceImages array' });
+          }
+        }
+      }
+      if (action.params.firstFrameUrl && !isValidPublicUrl(action.params.firstFrameUrl as string)) {
+        return res.status(400).json({ success: false, error: 'Invalid firstFrameUrl' });
+      }
+      if (action.params.lastFrameUrl && !isValidPublicUrl(action.params.lastFrameUrl as string)) {
+        return res.status(400).json({ success: false, error: 'Invalid lastFrameUrl' });
+      }
+
       const { action: actionType, params } = action;
       
       // Add user context to params
@@ -1144,13 +1168,17 @@ RULES:
             hasReferenceImage,
             hasMultipleImages,
             numReferenceImages: imageUrls.length,
+            isEdit: !!params.isEdit,
             isFlux2,
             is360Request
           });
           
           // Optimize prompt per model before API call
           let optimizedPrompt = imagePrompt;
-          const isEdit = hasReferenceImage || params.isEdit;
+          // IMPORTANT: Only treat as edit if Claude (or auto-detection) explicitly set isEdit: true
+          // Do NOT derive isEdit from the mere presence of reference images —
+          // users often attach images as style references for new generation, not for editing
+          const isEdit = !!params.isEdit;
           const originalImagePrompt = params.originalImagePrompt as string | undefined;
           
           // Model-specific prompt optimization

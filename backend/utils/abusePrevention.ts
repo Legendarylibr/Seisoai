@@ -245,7 +245,7 @@ export function createFreeImageRateLimiter(rateLimit: (options: unknown) => Rate
         const secret = process.env.JWT_SECRET;
         if (!secret) return false;
         
-        const decoded = jwt.verify(token, secret);
+        const decoded = jwt.verify(token, secret, { algorithms: ['HS256'] });
         // Token is valid - skip rate limiting for authenticated users
         // The requireCredits middleware will handle credit validation
         return !!decoded;

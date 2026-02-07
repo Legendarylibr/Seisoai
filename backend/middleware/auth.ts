@@ -11,6 +11,10 @@ import { CACHE } from '../config/constants';
 import type { IUser } from '../models/User';
 import type { Model } from 'mongoose';
 
+// SECURITY FIX: Use a Symbol to prevent isX402Paid from being spoofed via request manipulation.
+// Only code that has access to this Symbol can set the x402 verified flag.
+export const X402_VERIFIED_SYMBOL = Symbol.for('seisoai.x402.verified');
+
 // Types
 interface TokenBlacklistEntry {
   blacklistedAt: number;
@@ -105,9 +109,9 @@ export const createAuthenticateToken = (
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       // x402 BYPASS: If request was paid via x402, skip auth check
-      // Payment verification replaces the need for account authentication
-      if ((req as any).isX402Paid) {
-        logger.debug('x402 payment detected, bypassing token auth', { path: req.path });
+      // SECURITY FIX: Use Symbol-based check to prevent spoofing via request properties
+      if ((req as any)[X402_VERIFIED_SYMBOL] === true) {
+        logger.debug('x402 payment detected (verified via Symbol), bypassing token auth', { path: req.path });
         next();
         return;
       }
@@ -141,7 +145,8 @@ export const createAuthenticateToken = (
         return;
       }
 
-      const decoded = jwt.verify(token, jwtSecret) as JWTDecoded;
+      // SECURITY FIX: Specify algorithm to prevent algorithm confusion attacks
+      const decoded = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as JWTDecoded;
       
       if (decoded.type === 'refresh') {
         res.status(403).json({
@@ -206,9 +211,9 @@ export const createAuthenticateFlexible = (
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       // x402 BYPASS: If request was paid via x402, skip auth check
-      // Payment verification replaces the need for account authentication
-      if ((req as any).isX402Paid) {
-        logger.debug('x402 payment detected, bypassing auth check', { path: req.path });
+      // SECURITY FIX: Use Symbol-based check to prevent spoofing via request properties
+      if ((req as any)[X402_VERIFIED_SYMBOL] === true) {
+        logger.debug('x402 payment detected (verified via Symbol), bypassing auth check', { path: req.path });
         next();
         return;
       }
@@ -225,7 +230,8 @@ export const createAuthenticateFlexible = (
             // Don't fail - try wallet-based auth instead
             logger.debug('JWT token blacklisted, falling back to wallet auth');
           } else {
-            const decoded = jwt.verify(token, jwtSecret) as JWTDecoded;
+            // SECURITY FIX: Specify algorithm to prevent algorithm confusion attacks
+            const decoded = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as JWTDecoded;
             
             if (decoded.type !== 'refresh') {
               const User = getUserModel();

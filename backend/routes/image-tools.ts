@@ -15,6 +15,7 @@ import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 import { applyClawMarkup } from '../middleware/credits';
 import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
+import { isValidPublicUrl } from '../utils/validation';
 
 // Types
 interface Dependencies {
@@ -166,6 +167,16 @@ export function createImageToolsRoutes(deps: Dependencies) {
 
       if (!target_image_url) {
         res.status(400).json({ success: false, error: 'target_image_url is required (destination image)' });
+        return;
+      }
+
+      // SECURITY FIX: Validate URLs to prevent SSRF
+      if (source_image_url && !isValidPublicUrl(source_image_url)) {
+        res.status(400).json({ success: false, error: 'Invalid source image URL' });
+        return;
+      }
+      if (target_image_url && !isValidPublicUrl(target_image_url)) {
+        res.status(400).json({ success: false, error: 'Invalid target image URL' });
         return;
       }
 
@@ -340,6 +351,16 @@ export function createImageToolsRoutes(deps: Dependencies) {
         return;
       }
 
+      // SECURITY FIX: Validate URLs to prevent SSRF
+      if (image_url && !isValidPublicUrl(image_url)) {
+        res.status(400).json({ success: false, error: 'Invalid image URL' });
+        return;
+      }
+      if (mask_url && !isValidPublicUrl(mask_url)) {
+        res.status(400).json({ success: false, error: 'Invalid mask URL' });
+        return;
+      }
+
       // Deduct credits with x402 bypass support
       const creditResult = await deductCreditsWithX402(req, user, 2);
       if (!creditResult.success) {
@@ -482,6 +503,12 @@ export function createImageToolsRoutes(deps: Dependencies) {
         return;
       }
 
+      // SECURITY FIX: Validate URLs to prevent SSRF
+      if (image_url && !isValidPublicUrl(image_url)) {
+        res.status(400).json({ success: false, error: 'Invalid image URL' });
+        return;
+      }
+
       // Deduct credits with x402 bypass support
       const creditResult = await deductCreditsWithX402(req, user, 0.5);
       if (!creditResult.success) {
@@ -593,6 +620,12 @@ export function createImageToolsRoutes(deps: Dependencies) {
 
       if (!image_url) {
         res.status(400).json({ success: false, error: 'image_url is required' });
+        return;
+      }
+
+      // SECURITY FIX: Validate URLs to prevent SSRF
+      if (image_url && !isValidPublicUrl(image_url)) {
+        res.status(400).json({ success: false, error: 'Invalid image URL' });
         return;
       }
 
@@ -847,6 +880,12 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
 
       if (!image_url) {
         res.status(400).json({ success: false, error: 'image_url is required' });
+        return;
+      }
+
+      // SECURITY FIX: Validate URLs to prevent SSRF
+      if (image_url && !isValidPublicUrl(image_url)) {
+        res.status(400).json({ success: false, error: 'Invalid image URL' });
         return;
       }
 

@@ -151,6 +151,10 @@ export interface Config {
   ORCHESTRATOR_QUEUE_MAX_WAIT_MS?: number;
   ORCHESTRATOR_QUEUE_POLL_INTERVAL_MS?: number;
   ORCHESTRATOR_MAX_RETRIES?: number;
+  // SECURITY: Internal request authentication token (for server-to-server calls)
+  INTERNAL_REQUEST_SECRET?: string;
+  // Admin secret
+  ADMIN_SECRET?: string;
   isProduction: boolean;
   isDevelopment: boolean;
 }
@@ -236,6 +240,14 @@ export const config: Config = {
   ORCHESTRATOR_QUEUE_MAX_WAIT_MS: parseInt(process.env.ORCHESTRATOR_QUEUE_MAX_WAIT_MS || '300000', 10),
   ORCHESTRATOR_QUEUE_POLL_INTERVAL_MS: parseInt(process.env.ORCHESTRATOR_QUEUE_POLL_INTERVAL_MS || '3000', 10),
   ORCHESTRATOR_MAX_RETRIES: parseInt(process.env.ORCHESTRATOR_MAX_RETRIES || '1', 10),
+
+  // SECURITY: Internal request token for server-to-server CSRF bypass
+  // Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  INTERNAL_REQUEST_SECRET: process.env.INTERNAL_REQUEST_SECRET || 
+    (process.env.JWT_SECRET ? crypto.createHash('sha256').update(process.env.JWT_SECRET + '_internal_request_salt').digest('hex') : undefined),
+  
+  // Admin secret
+  ADMIN_SECRET: process.env.ADMIN_SECRET,
 
   // Flags
   isProduction: process.env.NODE_ENV === 'production',

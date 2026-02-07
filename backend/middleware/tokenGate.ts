@@ -9,6 +9,7 @@ import { getProvider } from '../services/blockchain';
 import { LRUCache } from '../services/cache';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
+import { isValidWalletAddress } from '../utils/validation';
 
 // Types
 interface AuthenticatedRequest extends Request {
@@ -267,6 +268,18 @@ export const requireTokenGate = () => {
       });
       return;
     }
+
+    // SECURITY FIX: Validate wallet address format to prevent injection
+    if (!isValidWalletAddress(walletAddress)) {
+      logger.warn('Token gate: invalid wallet address format', { walletAddress: walletAddress.substring(0, 20) });
+      res.status(400).json({
+        success: false,
+        error: 'Invalid wallet address format'
+      });
+      return;
+    }
+
+    // Wallet address is valid, proceed with token gate check
 
     // Check token gate access
     const status = await checkTokenGateAccess(walletAddress);

@@ -98,8 +98,11 @@ export function decrypt(ciphertext: string): string {
     return decrypted;
   } catch (error) {
     logger.error('Decryption failed', { error: (error as Error).message });
-    // Return original value if decryption fails (might not be encrypted)
-    return ciphertext;
+    // SECURITY FIX: Throw error instead of silently returning ciphertext.
+    // Returning ciphertext on failure can mask errors and process unencrypted data.
+    // Callers that need backward compatibility with unencrypted data should use
+    // the isEncrypted() check before calling decrypt().
+    throw new Error('Decryption failed - data may be corrupted or key may have changed');
   }
 }
 
