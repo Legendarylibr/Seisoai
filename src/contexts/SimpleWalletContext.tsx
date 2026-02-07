@@ -66,6 +66,8 @@ interface SimpleWalletContextValue {
   refreshCredits: () => Promise<void>;
   checkHolderStatus: (walletAddress: string) => Promise<void>;
   setCreditsManually: (credits: number) => void;
+  clearError: () => void;
+  retryAuth: () => Promise<void>;
 }
 
 const SimpleWalletContext = createContext<SimpleWalletContextValue | null>(null);
@@ -351,21 +353,28 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
 
   // Authenticate wallet with signature (SIWE-style)
   const authenticateWallet = useCallback(async (walletAddress: string): Promise<boolean> => {
-    // Prevent duplicate auth attempts for the same wallet
-    if (authAttemptedRef.current === walletAddress.toLowerCase()) {
-      logger.debug('Auth already attempted for this wallet');
-      return isAuthenticated;
+    // Prevent concurrent auth attempts for the same wallet (only block while in-flight)
+    if (isAuthenticating) {
+      logger.debug('Auth already in progress');
+      return false;
+    }
+    
+    // Already successfully authenticated for this wallet
+    if (authAttemptedRef.current === walletAddress.toLowerCase() && isAuthenticated) {
+      logger.debug('Already authenticated for this wallet');
+      return true;
     }
     
     // Check if we already have a valid token
     if (hasStoredAuth()) {
       logger.debug('Already have stored auth token');
       setIsAuthenticated(true);
+      authAttemptedRef.current = walletAddress.toLowerCase();
       return true;
     }
     
     setIsAuthenticating(true);
-    authAttemptedRef.current = walletAddress.toLowerCase();
+    setError(null);
     
     try {
       // Step 1: Request nonce from server
@@ -385,7 +394,8 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
         const errorMsg = signError instanceof Error ? signError.message : 'Unknown error';
         if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
           logger.info('User rejected signature request');
-          setError('Please sign the message to continue');
+          // Don't set a blocking error for user rejections — just clear state so they can retry
+          setError(null);
         } else {
           logger.error('Failed to sign message', { error: errorMsg });
           setError('Failed to sign message');
@@ -406,7 +416,8 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
         return false;
       }
       
-      // Success!
+      // Success! Only now mark this wallet as auth-completed
+      authAttemptedRef.current = walletAddress.toLowerCase();
       setIsAuthenticated(true);
       setError(null);
       
@@ -427,7 +438,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     } finally {
       setIsAuthenticating(false);
     }
-  }, [signMessageAsync, isAuthenticated]);
+  }, [signMessageAsync, isAuthenticated, isAuthenticating]);
 
   // Connect wallet - opens RainbowKit modal
   const connectWallet = useCallback(async (_selectedWallet?: string): Promise<void> => {
@@ -451,6 +462,31 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
       setIsLoading(false);
     }
   }, [openConnectModal]);
+
+  // Retry authentication - for when wallet is connected but JWT auth failed/was rejected
+  const retryAuth = useCallback(async (): Promise<void> => {
+    if (!wagmiConnected || !wagmiAddress) {
+      // Wallet not connected — open the connect modal instead
+      userInitiatedConnection.current = true;
+      if (openConnectModal) {
+        openConnectModal();
+      }
+      return;
+    }
+    
+    const addr = wagmiAddress.toLowerCase();
+    setError(null);
+    userInitiatedConnection.current = true;
+    // Clear the attempted ref so authenticateWallet will actually run
+    authAttemptedRef.current = null;
+    
+    const authenticated = await authenticateWallet(addr);
+    if (authenticated) {
+      fetchCredits(addr, 0, true);
+      checkHolderStatus(addr).catch(() => { /* ignore */ });
+      checkTokenGateAccess(addr).catch(() => { /* ignore */ });
+    }
+  }, [wagmiConnected, wagmiAddress, openConnectModal, authenticateWallet, fetchCredits, checkHolderStatus, checkTokenGateAccess]);
 
   // Disconnect wallet
   const disconnectWallet = useCallback(async (): Promise<void> => {
@@ -531,6 +567,10 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     setCredits(Math.max(0, Math.floor(Number(n) || 0)));
   }, []);
 
+  const clearError = useCallback((): void => {
+    setError(null);
+  }, []);
+
   // PERFORMANCE: Memoize context value
   const value = useMemo<SimpleWalletContextValue>(() => ({
     isConnected: isConnected && isAuthenticated, // Only truly connected when authenticated 
@@ -555,12 +595,14 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     checkHolderStatus, 
     walletType, 
     connectedWalletId, 
-    setCreditsManually
+    setCreditsManually,
+    clearError,
+    retryAuth
   }), [isConnected, isAuthenticated, address, credits, totalCreditsEarned, totalCreditsSpent, isLoading, isConnecting, isAuthenticating, error,
       isNFTHolder, isTokenHolder, hasFreeAccess, nftCollections, tokenHoldings,
       tokenGateStatus, tokenGateConfig, refreshTokenGate,
       connectWallet, disconnectWallet, fetchCredits, refreshCredits,
-      checkHolderStatus, walletType, connectedWalletId, setCreditsManually]);
+      checkHolderStatus, walletType, connectedWalletId, setCreditsManually, clearError, retryAuth]);
 
   return <SimpleWalletContext.Provider value={value}>{children}</SimpleWalletContext.Provider>;
 };

@@ -108,12 +108,12 @@ const AuthPrompt: React.FC<AuthPromptProps> = () => {
               {({ mounted }) => {
                 const ready = mounted;
                 
-                // Handler that sets the userInitiatedConnection flag via context
-                // and then opens RainbowKit modal
+                // Use retryAuth which handles both cases:
+                // 1. Wallet not connected → opens RainbowKit modal
+                // 2. Wallet connected but not authenticated → triggers signing flow directly
                 const handleActivateAgents = () => {
-                  // Call connectWallet from context to set the flag
-                  wallet.connectWallet().catch(() => {
-                    // Ignore errors - the modal will show them
+                  wallet.retryAuth().catch(() => {
+                    // Ignore errors - they'll be shown in the error state
                   });
                 };
                 

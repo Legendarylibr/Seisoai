@@ -172,7 +172,7 @@ function AppContentInner(): JSX.Element {
 
 // Sign-in gate - shows AuthPrompt until user is fully authenticated with JWT
 function SignInGate(): JSX.Element {
-  const { isConnected, error } = useSimpleWallet();
+  const { isConnected, error, clearError } = useSimpleWallet();
   const [csrfReady, setCsrfReady] = useState(false);
 
   // Pre-fetch CSRF token on mount so it's ready before any auth attempts
@@ -265,19 +265,34 @@ function SignInGate(): JSX.Element {
           <p className="text-[11px] mb-4 break-words" style={{ color: 'var(--win95-text)' }}>
             {error}
           </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-5 py-2.5 text-[11px] font-bold touch-manipulation min-h-[44px] active:scale-[0.98] transition-transform"
-            style={{
-              background: 'var(--win95-bg)',
-              boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)',
-              border: 'none',
-              cursor: 'pointer',
-              fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
-            }}
-          >
-            Try Again
-          </button>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={clearError}
+              className="px-5 py-2.5 text-[11px] font-bold touch-manipulation min-h-[44px] active:scale-[0.98] transition-transform"
+              style={{
+                background: 'var(--win95-bg)',
+                boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+              }}
+            >
+              Back
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-5 py-2.5 text-[11px] font-bold touch-manipulation min-h-[44px] active:scale-[0.98] transition-transform"
+              style={{
+                background: 'var(--win95-bg)',
+                boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+              }}
+            >
+              Reload Page
+            </button>
+          </div>
         </div>
       </div>
     );
