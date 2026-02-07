@@ -10,7 +10,7 @@ import {
   logout as logoutService 
 } from '../services/walletAuthService';
 import logger from '../utils/logger';
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken, getApiHeaders } from '../utils/apiConfig';
 import { isInWalletBrowser } from '../config/wagmi';
 
 // Token Gate Types
@@ -182,9 +182,13 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     setTokenGateStatus(prev => ({ ...prev, isLoading: true }));
 
     try {
+      // Ensure CSRF token is available before making POST request
+      await ensureCSRFToken();
+      
       const response = await fetch(`${API_URL}/api/user/token-gate/check`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders('POST'),
+        credentials: 'include',
         body: JSON.stringify({ walletAddress: walletAddress.toLowerCase() })
       });
 
@@ -223,9 +227,13 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     setTokenGateStatus(prev => ({ ...prev, isLoading: true }));
 
     try {
+      // Ensure CSRF token is available before making POST request
+      await ensureCSRFToken();
+      
       const response = await fetch(`${API_URL}/api/user/token-gate/refresh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders('POST'),
+        credentials: 'include',
         body: JSON.stringify({ walletAddress: address.toLowerCase() })
       });
 

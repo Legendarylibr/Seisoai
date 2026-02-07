@@ -14,6 +14,7 @@ import MultiImageModelSelector from './components/MultiImageModelSelector';
 import AspectRatioSelector from './components/AspectRatioSelector';
 import PromptOptimizer from './components/PromptOptimizer';
 import AuthGuard from './components/AuthGuard';
+import AuthPrompt from './components/AuthPrompt';
 import GenerateButton from './components/GenerateButton';
 import GenerationQueue from './components/GenerationQueue';
 import PromptLab from './components/PromptLab';
@@ -169,12 +170,156 @@ function AppContentInner(): JSX.Element {
   );
 }
 
+// Sign-in gate - shows AuthPrompt until user is fully authenticated with JWT
+function SignInGate(): JSX.Element {
+  const { isConnected, isLoading, error } = useSimpleWallet();
+  const { preferences } = useUserPreferences();
+  const [csrfReady, setCsrfReady] = useState(false);
+
+  // Pre-fetch CSRF token on mount so it's ready before any auth attempts
+  useEffect(() => {
+    ensureCSRFToken()
+      .then(() => setCsrfReady(true))
+      .catch(() => setCsrfReady(true)); // Continue anyway, will retry on request
+  }, []);
+
+  // Show loading spinner while CSRF token is being fetched
+  if (!csrfReady) {
+    return (
+      <div 
+        style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          background: 'var(--win95-teal)',
+          zIndex: 50 
+        }}
+      >
+        <div 
+          className="p-6 text-center"
+          style={{
+            background: 'var(--win95-bg)',
+            boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), 4px 4px 8px rgba(0,0,0,0.3)'
+          }}
+        >
+          <div className="w-8 h-8 mx-auto mb-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--win95-highlight)', borderTopColor: 'transparent' }} />
+          <p className="text-[12px] font-bold" style={{ color: 'var(--win95-text)', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+            Initializing...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading spinner while authenticating
+  if (isLoading) {
+    return (
+      <div 
+        style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          background: 'var(--win95-teal)',
+          zIndex: 50 
+        }}
+      >
+        <div 
+          className="p-6 text-center"
+          style={{
+            background: 'var(--win95-bg)',
+            boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), 4px 4px 8px rgba(0,0,0,0.3)'
+          }}
+        >
+          <div className="w-8 h-8 mx-auto mb-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--win95-highlight)', borderTopColor: 'transparent' }} />
+          <p className="text-[12px] font-bold" style={{ color: 'var(--win95-text)', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+            Authenticating...
+          </p>
+          <p className="text-[10px] mt-1" style={{ color: 'var(--win95-text-disabled)' }}>
+            Please sign the message in your wallet
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error if authentication failed
+  if (error) {
+    return (
+      <div 
+        style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          background: 'var(--win95-teal)',
+          zIndex: 50 
+        }}
+      >
+        <div 
+          className="p-6 text-center max-w-md"
+          style={{
+            background: 'var(--win95-bg)',
+            boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), 4px 4px 8px rgba(0,0,0,0.3)'
+          }}
+        >
+          <div className="w-10 h-10 mx-auto mb-3 flex items-center justify-center" style={{ color: '#c00' }}>
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-10 h-10">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
+          </div>
+          <p className="text-[12px] font-bold mb-2" style={{ color: 'var(--win95-text)', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
+            Authentication Error
+          </p>
+          <p className="text-[11px] mb-4" style={{ color: 'var(--win95-text)' }}>
+            {error}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 text-[11px] font-bold"
+            style={{
+              background: 'var(--win95-bg)',
+              boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)',
+              border: 'none',
+              cursor: 'pointer',
+              fontFamily: 'Tahoma, "MS Sans Serif", sans-serif'
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Not connected or not authenticated - show sign-in screen
+  if (!isConnected || !preferences.profileCompleted) {
+    return <AuthPrompt />;
+  }
+
+  // Authenticated - show the main app
+  return <AppContentInner />;
+}
+
 function AppContent(): JSX.Element {
   return (
     <WalletProvider>
       <SimpleWalletProvider>
         <UserPreferencesProvider>
-          <AppContentInner />
+          <SignInGate />
         </UserPreferencesProvider>
       </SimpleWalletProvider>
     </WalletProvider>

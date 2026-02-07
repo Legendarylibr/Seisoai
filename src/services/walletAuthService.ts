@@ -2,7 +2,7 @@
  * Wallet Authentication Service
  * Handles SIWE-style wallet authentication to obtain JWT tokens
  */
-import { API_URL } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken, getApiHeaders } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
 // Storage keys
@@ -100,9 +100,13 @@ export interface AuthWalletResponse {
  */
 export async function requestNonce(walletAddress: string): Promise<AuthNonceResponse> {
   try {
+    // Ensure CSRF token is available before making POST request
+    await ensureCSRFToken();
+    
     const response = await fetch(`${API_URL}/api/auth/nonce`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders('POST'),
+      credentials: 'include',
       body: JSON.stringify({ walletAddress: walletAddress.toLowerCase() })
     });
 
@@ -128,9 +132,13 @@ export async function authenticateWithSignature(
   message: string
 ): Promise<AuthWalletResponse> {
   try {
+    // Ensure CSRF token is available before making POST request
+    await ensureCSRFToken();
+    
     const response = await fetch(`${API_URL}/api/auth/wallet`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders('POST'),
+      credentials: 'include',
       body: JSON.stringify({
         walletAddress: walletAddress.toLowerCase(),
         signature,
@@ -167,9 +175,13 @@ export async function refreshAccessToken(): Promise<AuthWalletResponse> {
   }
   
   try {
+    // Ensure CSRF token is available before making POST request
+    await ensureCSRFToken();
+    
     const response = await fetch(`${API_URL}/api/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders('POST'),
+      credentials: 'include',
       body: JSON.stringify({ refreshToken })
     });
 
@@ -205,12 +217,18 @@ export async function logout(): Promise<void> {
   
   // Notify server to blacklist tokens
   try {
+    // Ensure CSRF token is available before making POST request
+    await ensureCSRFToken();
+    
+    const headers = getApiHeaders('POST');
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+    
     await fetch(`${API_URL}/api/auth/logout`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {})
-      },
+      headers,
+      credentials: 'include',
       body: JSON.stringify({ refreshToken })
     });
   } catch {
