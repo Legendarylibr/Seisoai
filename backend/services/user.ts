@@ -94,11 +94,11 @@ export async function getOrCreateUser(walletAddress: string): Promise<IUser> {
     return user;
   }
 
-  // Create new user with 10 free credits
+  // Create new user with 0 credits (users must purchase credits)
   user = new User({
     walletAddress: normalized,
-    credits: 10,
-    totalCreditsEarned: 10,
+    credits: 0,
+    totalCreditsEarned: 0,
     totalCreditsSpent: 0,
     nftCollections: [],
     paymentHistory: [],
@@ -107,7 +107,7 @@ export async function getOrCreateUser(walletAddress: string): Promise<IUser> {
   });
 
   await user.save();
-  logger.info('New user created with 10 credits', { walletAddress: normalized });
+  logger.info('New user created', { walletAddress: normalized });
   return user;
 }
 

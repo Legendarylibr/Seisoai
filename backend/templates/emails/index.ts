@@ -127,9 +127,8 @@ ${contentWrapper(`
   <p>Welcome to SeisoAI! You've joined a community of creators using AI to generate amazing images, videos, and music.</p>
   
   <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
-    <p style="margin: 0 0 10px 0; font-size: 14px; color: #166534;">You've received</p>
-    <p style="margin: 0; font-size: 32px; font-weight: bold; color: #16a34a;">${credits} FREE Credits</p>
-    <p style="margin: 10px 0 0 0; font-size: 14px; color: #166534;">to start creating</p>
+    <p style="margin: 0; font-size: 18px; font-weight: bold; color: #16a34a;">You're ready to start creating!</p>
+    <p style="margin: 10px 0 0 0; font-size: 14px; color: #166534;">Purchase credits to begin generating amazing content</p>
   </div>
   
   ${buttonComponent('Start Creating', FRONTEND_URL)}
@@ -138,7 +137,7 @@ ${contentWrapper(`
   
   <h3 style="color: #333; margin: 0 0 15px 0;">Share & Earn More Credits</h3>
   
-  <p>Invite friends and earn <strong>5 credits</strong> for each signup. They'll get the standard <strong>10 credits</strong> on signup!</p>
+  <p>Invite friends and earn <strong>5 credits</strong> for each signup!</p>
   
   <div style="background: #faf5ff; border: 1px solid #c084fc; border-radius: 8px; padding: 15px; text-align: center; margin: 20px 0;">
     <p style="margin: 0 0 5px 0; font-size: 12px; color: #7c3aed;">Your Referral Code</p>
@@ -172,7 +171,7 @@ ${contentWrapper(`
     </tr>
   </table>
 `)}
-`, 'Welcome! You have ' + credits + ' free credits waiting.');
+`, 'Welcome to SeisoAI - start creating amazing content!');
 
   const text = `
 Welcome to SeisoAI!
@@ -181,7 +180,7 @@ Hi${userName ? ` ${userName}` : ''},
 
 Welcome to SeisoAI! You've joined a community of creators using AI to generate amazing images, videos, and music.
 
-You've received ${credits} FREE Credits to start creating!
+You're ready to start creating! Purchase credits to begin generating amazing content.
 
 Get started: ${FRONTEND_URL}
 
@@ -189,7 +188,7 @@ Get started: ${FRONTEND_URL}
 
 Share & Earn More Credits
 
-Invite friends and earn 5 credits for each signup. They'll get the standard 10 credits on signup!
+Invite friends and earn 5 credits for each signup!
 
 Your Referral Code: ${referralCode}
 Share this link: ${FRONTEND_URL}?ref=${referralCode}
@@ -206,7 +205,7 @@ What Can You Create?
 © ${CURRENT_YEAR} SeisoAI. All rights reserved.
 `;
 
-  return { html, text, subject: '🎨 Welcome to SeisoAI! Your free credits are waiting' };
+  return { html, text, subject: '🎨 Welcome to SeisoAI!' };
 }
 
 // ==========================================
@@ -231,7 +230,7 @@ export function onboardingEmail1(data: OnboardingEmail1Data): { html: string; te
       </ul>
     `
     : `
-      <p>You haven't used your free credits yet! Here's how to get started in just 60 seconds:</p>
+      <p>Ready to start creating? Here's how to get started in just 60 seconds:</p>
       
       <ol style="padding-left: 20px;">
         <li><strong>Choose a style</strong> - Pick from anime, cyberpunk, or 20+ other styles</li>
@@ -257,7 +256,7 @@ ${contentWrapper(`
   
   <p style="color: #6b7280; font-size: 14px;">Need help? Check out our <a href="${FRONTEND_URL}/help" style="color: #667eea;">getting started guide</a>.</p>
 `)}
-`, hasGenerated ? 'Tips to level up your AI creations' : 'Your free credits are waiting - start creating!');
+`, hasGenerated ? 'Tips to level up your AI creations' : 'Get started creating amazing content!');
 
   const text = `
 ${hasGenerated ? 'Level Up Your Creations' : 'Get Started in 60 Seconds'}
@@ -269,7 +268,7 @@ ${hasGenerated
 - Use detailed prompts - The more specific, the better results
 - Try different styles - Experiment with anime, cyberpunk, or watercolor
 - Upload reference images - Guide the AI with your own images`
-  : `You haven't used your free credits yet! Here's how to get started:
+  : `Ready to start creating? Here's how to get started:
 1. Choose a style - Pick from anime, cyberpunk, or 20+ other styles
 2. Enter a prompt - Describe what you want to create
 3. Click Generate - Watch the AI bring your idea to life!`
@@ -286,7 +285,7 @@ Our AI prompt optimizer can enhance your prompts for better results.
   return { 
     html, 
     text, 
-    subject: hasGenerated ? '✨ Tips to level up your AI creations' : '✨ Your free credits are waiting!' 
+    subject: hasGenerated ? '✨ Tips to level up your AI creations' : '✨ Get started with SeisoAI!' 
   };
 }
 
@@ -381,7 +380,7 @@ ${contentWrapper(`
   <p>You have <strong>${credits} credit${credits !== 1 ? 's' : ''}</strong> remaining. Here's how to get more:</p>
   
   <div style="background: #faf5ff; border: 1px solid #c084fc; border-radius: 8px; padding: 20px; margin: 20px 0;">
-    <h4 style="margin: 0 0 10px 0; color: #7c3aed;">🎁 Earn Free Credits</h4>
+    <h4 style="margin: 0 0 10px 0; color: #7c3aed;">🎁 Earn Credits</h4>
     <p style="margin: 0; font-size: 14px;">Invite friends with your code <strong>${referralCode}</strong> and earn 5 credits for each signup!</p>
   </div>
   
@@ -400,7 +399,7 @@ Hi${userName ? ` ${userName}` : ''},
 
 You have ${credits} credit${credits !== 1 ? 's' : ''} remaining. Here's how to get more:
 
-Earn Free Credits:
+Earn Credits:
 Invite friends with your code ${referralCode} and earn 5 credits for each signup!
 
 Or view our plans: ${FRONTEND_URL}/pricing

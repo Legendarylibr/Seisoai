@@ -66,9 +66,9 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'complete',
     title: 'You\'re All Set!',
-    description: 'You\'ve completed the tour and earned bonus credits. Start creating amazing content!',
+    description: 'You\'ve completed the tour. Start creating amazing content!',
     icon: <Gift className="w-8 h-8" />,
-    credits: 5,
+    credits: 0,
     action: 'Start Creating'
   }
 ];
@@ -227,7 +227,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onClose, on
                 }}
               >
                 <Gift className="w-4 h-4" />
-                +{step.credits} Bonus Credits!
+                Bonus Reward!
               </div>
             )}
           </div>
@@ -314,7 +314,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onClose, on
             }}
           >
             <Gift className="w-6 h-6 mx-auto mb-2" />
-            <p className="font-bold">You earned {totalCreditsEarned} bonus credits!</p>
+            <p className="font-bold">Tour complete! You're ready to create.</p>
           </div>
         )}
       </div>

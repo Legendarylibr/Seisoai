@@ -4,6 +4,7 @@ import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { checkNFTHoldings, checkTokenHoldings, NFTCollection, TokenHolding } from '../services/nftVerificationService';
 import logger from '../utils/logger';
 import { API_URL } from '../utils/apiConfig';
+import { isInWalletBrowser } from '../config/wagmi';
 
 // Token Gate Types
 export interface TokenGateConfig {
@@ -108,7 +109,19 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
   const hasDisconnectedOnMount = useRef(false);
 
   // Disconnect any persisted wallet on mount to require fresh connection each visit
+  // EXCEPT when in a wallet's in-app browser (like Base app) where the wallet is injected
   useEffect(() => {
+    // Skip disconnect logic if we're in a wallet's in-app browser
+    if (isInWalletBrowser) {
+      hasDisconnectedOnMount.current = true;
+      if (wagmiConnected) {
+        logger.info('In-app browser detected - keeping wallet connection', { 
+          connectorId: connector?.id 
+        });
+      }
+      return;
+    }
+    
     if (!hasDisconnectedOnMount.current && wagmiConnected) {
       hasDisconnectedOnMount.current = true;
       disconnect();
@@ -116,7 +129,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     } else {
       hasDisconnectedOnMount.current = true;
     }
-  }, [wagmiConnected, disconnect]);
+  }, [wagmiConnected, disconnect, connector?.id]);
 
   // Derived state from wagmi
   const isConnected = wagmiConnected;

@@ -694,29 +694,17 @@ export function createUserRoutes(deps: Dependencies = {}) {
         return;
       }
       
-      // Award 5 bonus credits for completing onboarding
-      const bonusCredits = 5;
-      
-      user.credits += bonusCredits;
-      user.totalCreditsEarned += bonusCredits;
+      // Mark onboarding as complete (no bonus credits)
       user.onboardingCompleted = true;
       user.onboardingStep = 99; // Mark as fully complete
       
-      // Add to payment history
-      user.paymentHistory.push({
-        amount: 0,
-        credits: bonusCredits,
-        timestamp: new Date(),
-        type: 'admin' // Using 'admin' type for onboarding bonus
-      });
-      
       await user.save();
       
-      logger.info('Onboarding completed', { userId: user.userId, creditsAwarded: bonusCredits });
+      logger.info('Onboarding completed', { userId: user.userId });
       
       res.json({
         success: true,
-        creditsAwarded: bonusCredits,
+        creditsAwarded: 0,
         newBalance: user.credits
       });
     } catch (error) {

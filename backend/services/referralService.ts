@@ -10,7 +10,7 @@ import Referral from '../models/Referral';
 
 // Configuration
 const REFERRER_CREDITS = 5;  // Credits awarded to the referrer
-const REFEREE_BONUS_CREDITS = 0;  // Extra credits for referee (on top of normal 10, total 10)
+const REFEREE_BONUS_CREDITS = 0;  // No bonus credits for referee (users must purchase credits)
 const REFERRAL_CODE_LENGTH = 8;
 const MAX_WEEKLY_SHARE_CREDITS = 5;
 
