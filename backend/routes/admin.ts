@@ -5,6 +5,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
 import { buildEmailLookupConditions } from '../utils/emailHash';

@@ -17,7 +17,7 @@ import { toolRegistry, type ToolCategory, type ToolDefinition } from '../service
 import { falRequest, submitToQueue, checkQueueStatus, getQueueResult, isStatusCompleted, isStatusFailed } from '../services/fal';
 import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
 import { generatePlan, executePlan, orchestrate, WORKFLOW_TEMPLATES } from '../services/orchestrator';
-import { authenticateApiKey, requireApiKeyCredits } from '../middleware/apiKeyAuth';
+import { authenticateApiKey } from '../middleware/apiKeyAuth';
 import { sendGenerationWebhook } from '../services/webhook';
 import { getCustomAgentById, getAllCustomAgents } from './agents';
 import logger from '../utils/logger';
@@ -599,7 +599,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
 
       // Plan and execute
       const result = await orchestrate(goal, context);
-      return res.json({ success: true, ...result });
+      return res.json(result);
     } catch (error) {
       const err = error as Error;
       logger.error('Orchestration failed', { goal, error: err.message });
@@ -640,7 +640,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
 
     try {
       const result = await executePlan(plan);
-      return res.json({ success: true, ...result });
+      return res.json(result);
     } catch (error) {
       const err = error as Error;
       return res.status(500).json({ success: false, error: `Plan execution failed: ${err.message}` });
@@ -682,7 +682,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
     try {
       const plan = template(req.body);
       const result = await executePlan(plan);
-      return res.json({ success: true, ...result });
+      return res.json(result);
     } catch (error) {
       const err = error as Error;
       return res.status(500).json({ success: false, error: `Workflow execution failed: ${err.message}` });
@@ -1080,7 +1080,7 @@ export default function createGatewayRoutes(_deps: Dependencies): Router {
         await settleX402Payment(x402Req);
       }
 
-      return res.json({ success: true, agentId: agent.agentId, agentName: agent.name, ...result });
+      return res.json({ agentId: agent.agentId, agentName: agent.name, ...result });
     } catch (error) {
       const err = error as Error;
       logger.error('Agent-scoped orchestration failed', { agentId: agent.agentId, goal, error: err.message });

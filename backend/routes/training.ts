@@ -11,7 +11,6 @@ import { Router, type Request, type Response } from 'express';
 import type { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
-import { requireAuth } from '../utils/responses';
 import { submitToQueue, checkQueueStatus, getQueueResult, isStatusCompleted, isStatusFailed, isStatusProcessing, normalizeStatus } from '../services/fal';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
@@ -71,15 +70,15 @@ export default function createTrainingRoutes(deps: Dependencies) {
       const numSteps = Math.min(Math.max(Number(steps) || 1000, 100), 10000);
 
       // Find user & check credits
-      const userQuery = buildUserUpdateQuery(walletAddress, userId, email);
+      const userQuery = buildUserUpdateQuery({ walletAddress, userId, email });
       if (!userQuery) {
-        requireAuth(res, 'No valid user identification provided');
+        res.status(401).json({ error: 'No valid user identification provided' });
         return;
       }
 
       const user = await User.findOne(userQuery);
       if (!user) {
-        requireAuth(res, 'User not found');
+        res.status(401).json({ error: 'User not found' });
         return;
       }
 
@@ -244,11 +243,11 @@ export default function createTrainingRoutes(deps: Dependencies) {
       // Update user's trained model entry
       const { walletAddress, userId, email } = req.query;
       if (walletAddress || userId || email) {
-        const userQuery = buildUserUpdateQuery(
-          walletAddress as string,
-          userId as string,
-          email as string
-        );
+        const userQuery = buildUserUpdateQuery({
+          walletAddress: walletAddress as string,
+          userId: userId as string,
+          email: email as string
+        });
         if (userQuery) {
           await User.updateOne(
             { ...userQuery, 'trainedModels.requestId': requestId },
@@ -282,14 +281,14 @@ export default function createTrainingRoutes(deps: Dependencies) {
   const getTrainedModels: RequestHandler = async (req: Request, res: Response): Promise<void> => {
     try {
       const { walletAddress, userId, email } = req.query;
-      const userQuery = buildUserUpdateQuery(
-        walletAddress as string,
-        userId as string,
-        email as string
-      );
+      const userQuery = buildUserUpdateQuery({
+        walletAddress: walletAddress as string,
+        userId: userId as string,
+        email: email as string
+      });
 
       if (!userQuery) {
-        requireAuth(res, 'No valid user identification provided');
+        res.status(401).json({ error: 'No valid user identification provided' });
         return;
       }
 
@@ -309,10 +308,10 @@ export default function createTrainingRoutes(deps: Dependencies) {
     try {
       const { modelId } = req.params;
       const { walletAddress, userId, email } = req.body;
-      const userQuery = buildUserUpdateQuery(walletAddress, userId, email);
+      const userQuery = buildUserUpdateQuery({ walletAddress, userId, email });
 
       if (!userQuery) {
-        requireAuth(res, 'No valid user identification provided');
+        res.status(401).json({ error: 'No valid user identification provided' });
         return;
       }
 
@@ -347,15 +346,15 @@ export default function createTrainingRoutes(deps: Dependencies) {
       }
 
       // Find user & check credits
-      const userQuery = buildUserUpdateQuery(walletAddress, userId, email);
+      const userQuery = buildUserUpdateQuery({ walletAddress, userId, email });
       if (!userQuery) {
-        requireAuth(res, 'No valid user identification provided');
+        res.status(401).json({ error: 'No valid user identification provided' });
         return;
       }
 
       const user = await User.findOne(userQuery);
       if (!user) {
-        requireAuth(res, 'User not found');
+        res.status(401).json({ error: 'User not found' });
         return;
       }
 
@@ -480,7 +479,6 @@ export default function createTrainingRoutes(deps: Dependencies) {
         return;
       }
 
-      const contentType = req.headers['content-type'] || 'application/zip';
       const filename = `training-${Date.now()}.zip`;
 
       // Step 1: Initiate upload to FAL storage

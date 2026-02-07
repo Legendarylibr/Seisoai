@@ -129,14 +129,6 @@ function priceInUsdcUnits(falCost: number): string {
   return usdToUsdcUnits(usdWithMarkup);
 }
 
-/**
- * Get human-readable price string for logging
- */
-function priceUsdReadable(falCost: number): string {
-  const usd = falCost * MARKUP;
-  return `$${usd.toFixed(4)}`;
-}
-
 // Payment wallet address (receives USDC payments)
 const PAYMENT_WALLET = config.EVM_PAYMENT_WALLET || '';
 

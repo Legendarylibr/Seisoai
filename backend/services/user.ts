@@ -6,9 +6,10 @@
  * Uses multiple fallback methods for cross-environment compatibility.
  */
 import mongoose, { type Model } from 'mongoose';
+import crypto from 'crypto';
 import logger from '../utils/logger';
 import type { IUser } from '../models/User';
-import { buildEmailLookupConditions } from '../utils/emailHash';
+import { buildEmailLookupConditions, createEmailHash } from '../utils/emailHash';
 import { normalizeWalletAddress } from '../utils/validation';
 
 // Re-export for backwards compatibility

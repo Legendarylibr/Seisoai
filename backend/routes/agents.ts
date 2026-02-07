@@ -22,7 +22,7 @@ interface JWTDecoded extends JwtPayload {
  * but always calls next() so wallet-only users can still proceed.
  * The route handler is responsible for requiring wallet address.
  */
-const optionalAuth = async (req: Request & { user?: IUser }, res: Response, next: NextFunction): Promise<void> => {
+const optionalAuth = async (req: Request & { user?: IUser }, _res: Response, next: NextFunction): Promise<void> => {
   try {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];

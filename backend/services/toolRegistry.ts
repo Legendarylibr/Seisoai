@@ -15,7 +15,7 @@ import { FAL_API_COSTS } from '../middleware/x402Payment';
 
 export interface ToolParameter {
   type: string;
-  description: string;
+  description?: string;
   enum?: string[];
   default?: unknown;
   minimum?: number;
