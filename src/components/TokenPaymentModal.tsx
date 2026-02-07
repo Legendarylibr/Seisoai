@@ -8,7 +8,7 @@ import { ethers } from 'ethers';
 import logger from '../utils/logger';
 import { API_URL, apiFetch } from '../utils/apiConfig';
 import { getPaymentWalletFromBackend } from '../services/paymentService';
-import { getLatestBlockhash as proxyGetBlockhash, getAccountInfo as proxyGetAccountInfo } from '../services/rpcProxyService';
+import { getLatestBlockhash as proxyGetBlockhash, getAccountInfo as proxyGetAccountInfo, getUsdcBalance as proxyGetUsdcBalance } from '../services/rpcProxyService';
 import { X, Coins, RefreshCw, Check } from 'lucide-react';
 
 interface TokenPaymentModalProps {
