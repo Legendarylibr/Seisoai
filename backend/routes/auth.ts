@@ -168,31 +168,63 @@ export function createAuthRoutes(deps: Dependencies = {}) {
         return;
       }
       
-      // Verify the signature
-      let recoveredAddress: string;
+      // Verify the signature - supports both EOA and Smart Wallet (EIP-1271)
+      let isValidSignature = false;
+      
+      // First, try EOA signature verification
       try {
-        recoveredAddress = ethers.verifyMessage(message, signature).toLowerCase();
-      } catch (sigError) {
-        logger.warn('Signature verification failed', { 
+        const recoveredAddress = ethers.verifyMessage(message, signature).toLowerCase();
+        if (recoveredAddress === normalizedAddress) {
+          isValidSignature = true;
+          logger.debug('EOA signature verified', { wallet: normalizedAddress.substring(0, 10) + '...' });
+        }
+      } catch (eoaError) {
+        // EOA verification failed, will try EIP-1271 next
+        logger.debug('EOA signature verification failed, trying EIP-1271', { 
           wallet: normalizedAddress.substring(0, 10) + '...',
-          error: (sigError as Error).message 
+          error: (eoaError as Error).message 
         });
-        res.status(401).json({
-          success: false,
-          error: 'Invalid signature'
-        });
-        return;
       }
       
-      // Check if recovered address matches claimed address
-      if (recoveredAddress !== normalizedAddress) {
-        logger.warn('Wallet address mismatch in signature', {
-          claimed: normalizedAddress.substring(0, 10) + '...',
-          recovered: recoveredAddress.substring(0, 10) + '...'
+      // If EOA failed, try EIP-1271 Smart Wallet verification
+      if (!isValidSignature) {
+        try {
+          // EIP-1271 magic value for valid signature
+          const EIP1271_MAGIC_VALUE = '0x1626ba7e';
+          
+          // Minimal EIP-1271 interface
+          const EIP1271_ABI = ['function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)'];
+          
+          // Use Base RPC for Smart Wallet verification (most common for Coinbase Smart Wallet)
+          const provider = new ethers.JsonRpcProvider('https://mainnet.base.org');
+          const contract = new ethers.Contract(walletAddress, EIP1271_ABI, provider);
+          
+          // Hash the message the same way personal_sign does
+          const messageHash = ethers.hashMessage(message);
+          
+          const result = await contract.isValidSignature(messageHash, signature);
+          if (result === EIP1271_MAGIC_VALUE) {
+            isValidSignature = true;
+            logger.debug('EIP-1271 Smart Wallet signature verified', { 
+              wallet: normalizedAddress.substring(0, 10) + '...' 
+            });
+          }
+        } catch (eip1271Error) {
+          // EIP-1271 verification also failed
+          logger.debug('EIP-1271 verification failed', { 
+            wallet: normalizedAddress.substring(0, 10) + '...',
+            error: (eip1271Error as Error).message 
+          });
+        }
+      }
+      
+      if (!isValidSignature) {
+        logger.warn('All signature verification methods failed', {
+          wallet: normalizedAddress.substring(0, 10) + '...'
         });
         res.status(401).json({
           success: false,
-          error: 'Signature does not match wallet address'
+          error: 'Invalid signature. If using a Smart Wallet, please ensure you are on the Base network.'
         });
         return;
       }

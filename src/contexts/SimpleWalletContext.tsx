@@ -545,6 +545,12 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
         return;
       }
       
+      // Guard: don't start another auth if one is already in progress
+      // This prevents nonce being replaced during signing (which causes "invalid signature")
+      if (isAuthenticatingRef.current) {
+        return;
+      }
+      
       // If we have a stored auth token (e.g., returning user in in-app browser,
       // or reconnecting after a transient disconnect), restore auth without re-signing
       if (hasStoredAuth()) {
