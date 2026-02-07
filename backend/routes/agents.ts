@@ -466,7 +466,6 @@ router.post('/create', agentCreationLimiter, requireJwtAuth, async (req: Request
     };
 
     // Include security warnings in response so users know their content was modified
-    const allWarnings = [...systemPromptWarnings, ...skillMdWarnings];
     if (allWarnings.length > 0) {
       response.securityWarnings = allWarnings;
       response.securityNote = 'Some content was sanitized to prevent potential security issues. Please review the warnings.';
