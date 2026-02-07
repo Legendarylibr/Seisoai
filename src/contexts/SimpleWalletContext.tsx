@@ -1,7 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, ReactNode } from 'react';
-import { useAccount, useDisconnect, useConnect } from 'wagmi';
+import { useAccount, useDisconnect, useConnect, useSignMessage } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { checkNFTHoldings, checkTokenHoldings, NFTCollection, TokenHolding } from '../services/nftVerificationService';
+import { 
+  requestNonce, 
+  authenticateWithSignature, 
+  clearTokens, 
+  hasStoredAuth,
+  logout as logoutService 
+} from '../services/walletAuthService';
 import logger from '../utils/logger';
 import { API_URL } from '../utils/apiConfig';
 import { isInWalletBrowser } from '../config/wagmi';
@@ -90,9 +97,13 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
   const { disconnect } = useDisconnect();
   const { openConnectModal } = useConnectModal();
   const { isPending: isConnecting } = useConnect();
+  const { signMessageAsync } = useSignMessage();
 
   // Local state for app-specific data
   const [credits, setCredits] = useState(0);
+  const [isAuthenticated, setIsAuthenticated] = useState(hasStoredAuth());
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const authAttemptedRef = useRef<string | null>(null);
   const [totalCreditsEarned, setTotalCreditsEarned] = useState(0);
   const [totalCreditsSpent, setTotalCreditsSpent] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -313,6 +324,86 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     }
   }, [fetchCredits]);
 
+  // Authenticate wallet with signature (SIWE-style)
+  const authenticateWallet = useCallback(async (walletAddress: string): Promise<boolean> => {
+    // Prevent duplicate auth attempts for the same wallet
+    if (authAttemptedRef.current === walletAddress.toLowerCase()) {
+      logger.debug('Auth already attempted for this wallet');
+      return isAuthenticated;
+    }
+    
+    // Check if we already have a valid token
+    if (hasStoredAuth()) {
+      logger.debug('Already have stored auth token');
+      setIsAuthenticated(true);
+      return true;
+    }
+    
+    setIsAuthenticating(true);
+    authAttemptedRef.current = walletAddress.toLowerCase();
+    
+    try {
+      // Step 1: Request nonce from server
+      const nonceResponse = await requestNonce(walletAddress);
+      if (!nonceResponse.success || !nonceResponse.message) {
+        logger.error('Failed to get nonce', { error: nonceResponse.error });
+        setError('Failed to start authentication');
+        return false;
+      }
+      
+      // Step 2: Sign the message with wallet
+      let signature: string;
+      try {
+        signature = await signMessageAsync({ message: nonceResponse.message });
+      } catch (signError) {
+        // User rejected signature or wallet error
+        const errorMsg = signError instanceof Error ? signError.message : 'Unknown error';
+        if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
+          logger.info('User rejected signature request');
+          setError('Please sign the message to continue');
+        } else {
+          logger.error('Failed to sign message', { error: errorMsg });
+          setError('Failed to sign message');
+        }
+        return false;
+      }
+      
+      // Step 3: Send signature to server for verification
+      const authResponse = await authenticateWithSignature(
+        walletAddress,
+        signature,
+        nonceResponse.message
+      );
+      
+      if (!authResponse.success) {
+        logger.error('Authentication failed', { error: authResponse.error });
+        setError(authResponse.error || 'Authentication failed');
+        return false;
+      }
+      
+      // Success!
+      setIsAuthenticated(true);
+      setError(null);
+      
+      // Update credits from auth response
+      if (authResponse.user) {
+        setCredits(authResponse.user.credits || 0);
+        setTotalCreditsEarned(authResponse.user.totalCreditsEarned || 0);
+        setTotalCreditsSpent(authResponse.user.totalCreditsSpent || 0);
+      }
+      
+      logger.info('Wallet authenticated successfully');
+      return true;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      logger.error('Wallet authentication error', { error: errorMessage });
+      setError('Authentication failed');
+      return false;
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }, [signMessageAsync, isAuthenticated]);
+
   // Connect wallet - opens RainbowKit modal
   const connectWallet = useCallback(async (_selectedWallet?: string): Promise<void> => {
     try {
@@ -334,7 +425,15 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
 
   // Disconnect wallet
   const disconnectWallet = useCallback(async (): Promise<void> => {
+    // Clear auth tokens
+    await logoutService();
+    setIsAuthenticated(false);
+    authAttemptedRef.current = null;
+    
+    // Disconnect wagmi
     disconnect();
+    
+    // Reset all state
     setCredits(0);
     setTotalCreditsEarned(0);
     setTotalCreditsSpent(0);
@@ -346,14 +445,27 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     setTokenGateStatus(DEFAULT_TOKEN_GATE_STATUS);
   }, [disconnect]);
 
-  // Fetch data when wallet connects
+  // Authenticate and fetch data when wallet connects
   useEffect(() => {
     if (isConnected && address) {
-      fetchCredits(address, 0, true);
-      checkHolderStatus(address).catch(() => { /* ignore */ });
-      checkTokenGateAccess(address).catch(() => { /* ignore */ });
+      // Authenticate wallet if not already authenticated
+      authenticateWallet(address).then((authenticated) => {
+        if (authenticated) {
+          // Fetch additional data after authentication
+          fetchCredits(address, 0, true);
+          checkHolderStatus(address).catch(() => { /* ignore */ });
+          checkTokenGateAccess(address).catch(() => { /* ignore */ });
+        }
+      }).catch(() => {
+        // Still try to fetch some data even if auth fails
+        fetchCredits(address, 0, true);
+        checkTokenGateAccess(address).catch(() => { /* ignore */ });
+      });
     } else {
       // Reset state when disconnected
+      setIsAuthenticated(false);
+      authAttemptedRef.current = null;
+      clearTokens();
       setCredits(0);
       setTotalCreditsEarned(0);
       setTotalCreditsSpent(0);
@@ -363,7 +475,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
       setTokenHoldings([]);
       setTokenGateStatus(DEFAULT_TOKEN_GATE_STATUS);
     }
-  }, [isConnected, address, fetchCredits, checkHolderStatus, checkTokenGateAccess]);
+  }, [isConnected, address, authenticateWallet, fetchCredits, checkHolderStatus, checkTokenGateAccess]);
 
   // PERFORMANCE: Smarter polling
   useEffect(() => {
@@ -390,12 +502,12 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
 
   // PERFORMANCE: Memoize context value
   const value = useMemo<SimpleWalletContextValue>(() => ({
-    isConnected, 
+    isConnected: isConnected && isAuthenticated, // Only truly connected when authenticated 
     address, 
     credits, 
     totalCreditsEarned, 
     totalCreditsSpent, 
-    isLoading: isLoading || isConnecting, 
+    isLoading: isLoading || isConnecting || isAuthenticating, 
     error,
     isNFTHolder, 
     isTokenHolder, 
@@ -413,7 +525,7 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
     walletType, 
     connectedWalletId, 
     setCreditsManually
-  }), [isConnected, address, credits, totalCreditsEarned, totalCreditsSpent, isLoading, isConnecting, error,
+  }), [isConnected, isAuthenticated, address, credits, totalCreditsEarned, totalCreditsSpent, isLoading, isConnecting, isAuthenticating, error,
       isNFTHolder, isTokenHolder, hasFreeAccess, nftCollections, tokenHoldings,
       tokenGateStatus, tokenGateConfig, refreshTokenGate,
       connectWallet, disconnectWallet, fetchCredits, refreshCredits,
