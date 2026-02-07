@@ -913,12 +913,15 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ onNavigate }) => {
                     className="flex-1 px-1.5 py-1 text-[9px]"
                     style={{ background: '#fff', boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}`, border: 'none', color: WIN95.text, fontFamily: font, outline: 'none' }}
                   />
-                  <input type="number" value={newKeyCredits}
-                    onChange={e => setNewKeyCredits(Math.max(0, parseInt(e.target.value) || 0))}
-                    min={0} className="w-14 px-1.5 py-1 text-[9px] text-right"
-                    style={{ background: '#fff', boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}`, border: 'none', color: WIN95.text, fontFamily: mono, outline: 'none' }}
-                    title="Credits to load"
-                  />
+                  <div className="flex items-center gap-1">
+                    <span className="text-[8px]" style={{ color: WIN95.textDisabled }}>$</span>
+                    <input type="number" value={newKeyCredits}
+                      onChange={e => setNewKeyCredits(Math.max(0, parseInt(e.target.value) || 0))}
+                      min={0} className="w-12 px-1.5 py-1 text-[9px] text-right"
+                      style={{ background: '#fff', boxShadow: `inset 1px 1px 0 ${WIN95.border.dark}`, border: 'none', color: WIN95.text, fontFamily: mono, outline: 'none' }}
+                      title="Credits (USD) to load onto this key"
+                    />
+                  </div>
                   <button onClick={handleCreateKey} disabled={!newKeyName.trim() || isCreatingKey}
                     className="px-2 py-1 text-[9px] font-bold generate-btn"
                     style={{ border: 'none', cursor: newKeyName.trim() && !isCreatingKey ? 'pointer' : 'default', fontFamily: font, opacity: newKeyName.trim() && !isCreatingKey ? 1 : 0.5 }}>
