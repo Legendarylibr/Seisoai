@@ -8,7 +8,6 @@
  */
 import { Router, type Request, type Response } from 'express';
 import createAuthRoutes from './auth';
-import createDiscordRoutes from './discord';
 import createUtilityRoutes from './utility';
 import createGenerationRoutes from './generate';
 import createPaymentRoutes from './payments';
@@ -71,7 +70,6 @@ export function createApiRoutes(deps: Dependencies) {
   // Authentication
   // ============================================
   router.use('/auth', createAuthRoutes(deps));
-  router.use('/auth/discord', createDiscordRoutes(deps));
 
   // ============================================
   // User Management

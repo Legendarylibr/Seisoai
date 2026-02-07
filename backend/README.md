@@ -141,15 +141,6 @@ The API will be available at `http://localhost:3001`
 | GET | `/api/gallery/:walletAddress` | Get user gallery | JWT |
 | DELETE | `/api/gallery/:id` | Delete from gallery | JWT |
 
-### Discord Integration
-
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| GET | `/api/auth/discord` | Start Discord OAuth | None |
-| GET | `/api/auth/discord/callback` | Discord OAuth callback | None |
-| POST | `/api/auth/discord-link-code` | Generate link code | JWT |
-| POST | `/api/auth/verify-discord-link` | Verify link code | Bot API Key |
-
 ### GDPR Compliance
 
 | Method | Endpoint | Description | Auth |

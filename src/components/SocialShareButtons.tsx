@@ -24,22 +24,20 @@ interface SocialShareButtonsProps {
   compact?: boolean;
 }
 
-type Platform = 'twitter' | 'facebook' | 'linkedin' | 'reddit' | 'discord';
+type Platform = 'twitter' | 'facebook' | 'linkedin' | 'reddit';
 
 const PLATFORM_ICONS: Record<Platform, React.ReactNode> = {
   twitter: <Twitter className="w-3 h-3" />,
   facebook: <span className="text-xs font-bold">f</span>,
   linkedin: <span className="text-xs font-bold">in</span>,
-  reddit: <span className="text-xs font-bold">r/</span>,
-  discord: <span className="text-xs font-bold">D</span>
+  reddit: <span className="text-xs font-bold">r/</span>
 };
 
 const PLATFORM_LABELS: Record<Platform, string> = {
   twitter: 'Twitter',
   facebook: 'Facebook',
   linkedin: 'LinkedIn',
-  reddit: 'Reddit',
-  discord: 'Discord'
+  reddit: 'Reddit'
 };
 
 const SocialShareButtons: React.FC<SocialShareButtonsProps> = ({ 
@@ -72,19 +70,8 @@ const SocialShareButtons: React.FC<SocialShareButtonsProps> = ({
     
     try {
       const shareUrls = generateShareUrls(content, referralCode || undefined);
-      const contentId = getContentId();
-      
-      if (platform === 'discord') {
-        // For Discord, just copy the share URL
-        const success = await copyToClipboard(shareUrls.discord);
-        if (success) {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        }
-      } else {
-        // Open share URL in new window
-        window.open(shareUrls[platform], '_blank', 'width=600,height=400');
-      }
+      // Open share URL in new window
+      window.open(shareUrls[platform], '_blank', 'width=600,height=400');
     } catch (error) {
       logger.error('Share failed', { error: (error as Error).message });
     } finally {
@@ -95,7 +82,7 @@ const SocialShareButtons: React.FC<SocialShareButtonsProps> = ({
   // Copy share link
   const handleCopyLink = async () => {
     const shareUrls = generateShareUrls(content, referralCode || undefined);
-    const success = await copyToClipboard(shareUrls.discord);
+    const success = await copyToClipboard(shareUrls.twitter);
     if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);

@@ -24,7 +24,7 @@ export const getAuthToken = (): string | null => {
   } catch {
     // localStorage blocked (e.g., in-app browsers) - check window fallback
   }
-  // Fallback to window property (set by emailAuthService for in-app browsers)
+  // Fallback to window property (for in-app browsers)
   if (typeof window !== 'undefined' && window.__seisoAuthToken) {
     return window.__seisoAuthToken;
   }

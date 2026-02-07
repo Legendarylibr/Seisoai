@@ -16,9 +16,7 @@ import {
   encryptFields,
   decryptFields,
   isEncryptionConfigured,
-  generateEncryptionKey,
-  encryptUserData,
-  decryptUserData
+  generateEncryptionKey
 } from '../../utils/encryption.js';
 
 describe('Encryption Utility', () => {
@@ -117,9 +115,8 @@ describe('Encryption Utility', () => {
       parts[2] = 'dGFtcGVyZWQ='; // 'tampered' in base64
       const tampered = parts.join(':');
       
-      // Should return tampered string (decryption fails, returns original)
-      const result = decrypt(tampered);
-      expect(result).toBe(tampered);
+      // SECURITY: Should throw error on tampered data (not silently return)
+      expect(() => decrypt(tampered)).toThrow('Decryption failed');
     });
   });
 
@@ -208,62 +205,7 @@ describe('Encryption Utility', () => {
     });
   });
 
-  describe('encryptUserData()', () => {
-    it('should encrypt email and create emailHash', () => {
-      const userData = {
-        email: 'user@example.com',
-        credits: 100
-      };
-      
-      const encrypted = encryptUserData(userData);
-      
-      expect(encrypted.email).not.toBe('user@example.com');
-      expect(encrypted.email).toContain(':');
-      expect(encrypted.emailHash).toBeDefined();
-      expect(encrypted.emailHash).toHaveLength(64);
-      expect(encrypted.credits).toBe(100);
-    });
-
-    it('should handle missing email gracefully', () => {
-      const userData = { credits: 50 };
-      const encrypted = encryptUserData(userData);
-      
-      expect(encrypted.credits).toBe(50);
-      expect(encrypted.emailHash).toBeUndefined();
-    });
-  });
-
-  describe('decryptUserData()', () => {
-    it('should decrypt email in user data', () => {
-      const original = {
-        email: 'user@example.com',
-        credits: 100
-      };
-      
-      const encrypted = encryptUserData(original);
-      const decrypted = decryptUserData(encrypted);
-      
-      expect(decrypted.email).toBe('user@example.com');
-      expect(decrypted.credits).toBe(100);
-    });
-  });
-
   describe('Round-trip encryption', () => {
-    it('should handle email encryption/decryption cycle', () => {
-      const emails = [
-        'simple@example.com',
-        'user+tag@example.org',
-        'unicode.日本語@example.com',
-        'very.long.email.address.with.many.parts@subdomain.example.com'
-      ];
-      
-      emails.forEach(email => {
-        const encrypted = encrypt(email);
-        const decrypted = decrypt(encrypted);
-        expect(decrypted).toBe(email);
-      });
-    });
-
     it('should handle prompt encryption/decryption cycle', () => {
       const prompts = [
         'A simple prompt',

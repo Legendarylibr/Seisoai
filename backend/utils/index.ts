@@ -12,7 +12,6 @@ export {
   sanitizeString,
   sanitizeNumber,
   isValidRequestId,
-  isValidEmail,
   getSafeErrorMessage,
   deepSanitize,
   // Note: isValidFalUrl is exported from ./upload, not here (avoid duplicate)

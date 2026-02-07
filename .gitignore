@@ -137,6 +137,3 @@ SECURITY_CHECKLIST.md
 railway.json
 create-webhook-with-url.sh
 
-# Operational docs (local only)
-RESTART_DISCORD_BOT.md
-discord-bot/RESTART.md

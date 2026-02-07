@@ -38,7 +38,6 @@ export function useCredits() {
     isConnected,
     credits,
     refreshCredits,
-    isEmailAuth: false,
     isWalletAuth: wallet.isConnected,
   };
 }

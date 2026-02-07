@@ -13,7 +13,6 @@ AI-powered creative platform for generating images, videos, music, and more. Bui
 - **Public Gallery** - Share and browse community creations
 - **Referral System** - Earn credits by referring friends
 - **Achievements** - Gamified progression system
-- **Discord Bot** - Full Discord integration
 
 ## Tech Stack
 
@@ -100,8 +99,6 @@ seisoai/
 │   ├── services/           # Business logic
 │   ├── middleware/         # Express middleware
 │   └── models/             # Mongoose models
-├── discord-bot/            # Discord bot
-│   └── src/                # Bot source
 └── k8s/                    # Kubernetes configs
 ```
 
@@ -126,7 +123,6 @@ kubectl apply -f k8s/
 
 - [Contributing Guide](./CONTRIBUTING.md)
 - [Backend Security](./backend/SECURITY.md)
-- [Discord Bot](./discord-bot/README.md)
 
 ## Environment Variables
 

@@ -251,7 +251,6 @@ export const QUEUES = {
   VIDEO_GENERATION: 'video-generation',
   MUSIC_GENERATION: 'music-generation',
   PAYMENT_VERIFICATION: 'payment-verification',
-  EMAIL_NOTIFICATION: 'email-notification',
   WEBHOOK_DELIVERY: 'webhook-delivery',
   CLEANUP: 'cleanup',
 } as const;

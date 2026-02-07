@@ -156,79 +156,6 @@ paths:
                     items:
                       type: string
 
-  /auth/signup:
-    post:
-      tags:
-        - Auth
-      summary: Sign up with email
-      description: Create a new account with email and password
-      operationId: signUp
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - email
-                - password
-              properties:
-                email:
-                  type: string
-                  format: email
-                password:
-                  type: string
-                  minLength: 8
-      responses:
-        '201':
-          description: Account created successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '400':
-          description: Invalid input
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /auth/signin:
-    post:
-      tags:
-        - Auth
-      summary: Sign in with email
-      description: Authenticate with email and password
-      operationId: signIn
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - email
-                - password
-              properties:
-                email:
-                  type: string
-                  format: email
-                password:
-                  type: string
-      responses:
-        '200':
-          description: Authentication successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
-          description: Invalid credentials
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   /user/credits:
     get:
       tags:
@@ -669,8 +596,6 @@ components:
       type: object
       properties:
         userId:
-          type: string
-        email:
           type: string
         walletAddress:
           type: string

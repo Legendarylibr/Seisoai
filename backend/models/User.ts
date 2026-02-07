@@ -77,7 +77,7 @@ interface UserSettings {
 }
 
 interface SocialShare {
-  platform: 'twitter' | 'discord' | 'reddit' | 'facebook' | 'linkedin';
+  platform: 'twitter' | 'reddit' | 'facebook' | 'linkedin';
   contentId: string;
   sharedAt: Date;
   creditsAwarded: boolean;
@@ -105,13 +105,6 @@ export interface IUser extends Document {
   lastActive: Date;
   createdAt: Date;
   expiresAt: Date;
-  // Discord OAuth fields (DATA MINIMIZATION: removed avatar)
-  discordId?: string;
-  discordUsername?: string;
-  discordLinkedAt?: Date;
-  // Discord account linking code (secure verification flow)
-  discordLinkCode?: string;
-  discordLinkCodeExpires?: Date;
   // Stripe integration
   stripeCustomerId?: string;
   // Referral system fields
@@ -295,20 +288,6 @@ const userSchema = new mongoose.Schema<IUser>({
   // DATA MINIMIZATION: Accounts with 0 credits expire after 90 days of inactivity
   // Active/paying users get extended automatically on activity
   expiresAt: { type: Date, default: () => new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) },
-  // Discord OAuth fields
-  // DATA MINIMIZATION: Only store discordId for linking, username for display
-  // Removed: discordAvatar (not needed, can fetch from Discord API if needed)
-  discordId: {
-    type: String,
-    unique: true,
-    sparse: true,
-    index: true
-  },
-  discordUsername: String,
-  discordLinkedAt: Date,
-  // Discord account linking code (secure verification flow)
-  discordLinkCode: { type: String, sparse: true },
-  discordLinkCodeExpires: { type: Date },
   // Stripe integration - store customer ID for reliable subscription lookups
   stripeCustomerId: {
     type: String,
@@ -340,7 +319,7 @@ const userSchema = new mongoose.Schema<IUser>({
   // Social sharing tracking (limited to prevent abuse)
   socialShares: {
     type: [{
-      platform: { type: String, enum: ['twitter', 'discord', 'reddit', 'facebook', 'linkedin'] },
+      platform: { type: String, enum: ['twitter', 'reddit', 'facebook', 'linkedin'] },
       contentId: String,
       sharedAt: { type: Date, default: Date.now },
       creditsAwarded: { type: Boolean, default: false }
@@ -408,7 +387,7 @@ const userSchema = new mongoose.Schema<IUser>({
 });
 
 // Indexes for performance
-// NOTE: walletAddress, userId, discordId already have indexes via field definitions
+// NOTE: walletAddress, userId already have indexes via field definitions
 // Only define additional compound/special indexes here to avoid duplicates
 userSchema.index({ createdAt: 1 });
 userSchema.index({ lastActive: 1 }); // For querying inactive users

@@ -29,7 +29,7 @@ interface AuthenticatedRequest extends Request {
  * Update gallery item with 3D generation result
  */
 async function updateGalleryItemWithResult(
-  updateQuery: { walletAddress?: string; userId?: string; emailHash?: string },
+  updateQuery: { walletAddress?: string; userId?: string },
   generationId: string,
   result: {
     model_glb?: { url?: string };

@@ -120,15 +120,8 @@ export interface Config {
   ALCHEMY_API_KEY?: string;
   EVM_PAYMENT_WALLET?: string;
   SOLANA_PAYMENT_WALLET?: string;
-  // Discord OAuth
-  DISCORD_CLIENT_ID?: string;
-  DISCORD_CLIENT_SECRET?: string;
-  DISCORD_REDIRECT_URI?: string;
   // Frontend URL
   FRONTEND_URL?: string;
-  // Email service
-  RESEND_API_KEY?: string;
-  EMAIL_FROM?: string;
   // Security alerts
   SECURITY_DISCORD_WEBHOOK?: string;
   // ERC-8004 Agent Registry
@@ -209,14 +202,6 @@ export const config: Config = {
                       process.env.POLYGON_PAYMENT_WALLET,
   SOLANA_PAYMENT_WALLET: process.env.SOLANA_PAYMENT_WALLET_ADDRESS ||
                          process.env.SOLANA_PAYMENT_WALLET,
-  
-  // Discord OAuth
-  DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
-  DISCORD_CLIENT_SECRET: process.env.DISCORD_CLIENT_SECRET,
-  DISCORD_REDIRECT_URI: process.env.DISCORD_REDIRECT_URI || 
-    (process.env.NODE_ENV === 'production' 
-      ? `${PRODUCTION_URL}/api/auth/discord/callback`
-      : 'http://localhost:3001/api/auth/discord/callback'),
   
   // Frontend URL
   FRONTEND_URL: process.env.FRONTEND_URL || 

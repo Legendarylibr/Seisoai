@@ -232,7 +232,7 @@ export function createReferralRoutes(deps: Dependencies = {}) {
       }
 
       const { platform, contentId } = req.body as { 
-        platform?: 'twitter' | 'discord' | 'reddit' | 'facebook' | 'linkedin';
+        platform?: 'twitter' | 'reddit' | 'facebook' | 'linkedin';
         contentId?: string;
       };
       
@@ -241,7 +241,7 @@ export function createReferralRoutes(deps: Dependencies = {}) {
         return;
       }
 
-      const validPlatforms = ['twitter', 'discord', 'reddit', 'facebook', 'linkedin'];
+      const validPlatforms = ['twitter', 'reddit', 'facebook', 'linkedin'];
       if (!validPlatforms.includes(platform)) {
         sendError(res, 'Invalid platform', 400);
         return;

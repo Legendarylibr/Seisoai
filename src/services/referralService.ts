@@ -200,7 +200,7 @@ export async function getReferralLeaderboard(limit: number = 10): Promise<Leader
  * Track a social share
  */
 export async function trackSocialShare(
-  platform: 'twitter' | 'discord' | 'reddit' | 'facebook' | 'linkedin',
+  platform: 'twitter' | 'reddit' | 'facebook' | 'linkedin',
   contentId: string
 ): Promise<{ success: boolean; creditsAwarded: number; message?: string }> {
   try {
@@ -249,8 +249,7 @@ export function generateShareUrls(
     twitter: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
     facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
     linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
-    reddit: `https://www.reddit.com/submit?url=${encodedUrl}&title=${encodedText}`,
-    discord: shareUrl // Discord doesn't have a share URL, we copy to clipboard
+    reddit: `https://www.reddit.com/submit?url=${encodedUrl}&title=${encodedText}`
   };
 }
 

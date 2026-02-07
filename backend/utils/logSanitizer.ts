@@ -37,12 +37,8 @@ const SENSITIVE_FIELDS = [
   'cookie',
   'sessionId',
   'session_id',
-  'discordLinkCode',
-  'discordToken',
   'oauthToken',
-  'oauth_token',
-  'botApiKey',
-  'bot_api_key'
+  'oauth_token'
 ];
 
 // Patterns to detect and redact

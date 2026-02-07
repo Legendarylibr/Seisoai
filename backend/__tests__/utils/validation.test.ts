@@ -2,34 +2,9 @@
  * Validation utility tests
  */
 import { describe, it, expect } from '@jest/globals';
-import { isDisposableEmail, generateBrowserFingerprint } from '../../utils/abusePrevention.js';
+import { generateBrowserFingerprint } from '../../utils/abusePrevention.js';
 
 describe('Validation Utilities', () => {
-  describe('isDisposableEmail', () => {
-    it('should detect disposable email domains', () => {
-      expect(isDisposableEmail('test@tempmail.com')).toBe(true);
-      expect(isDisposableEmail('test@mailinator.com')).toBe(true);
-      expect(isDisposableEmail('test@guerrillamail.com')).toBe(true);
-    });
-
-    it('should allow legitimate email domains', () => {
-      expect(isDisposableEmail('test@gmail.com')).toBe(false);
-      expect(isDisposableEmail('test@yahoo.com')).toBe(false);
-      expect(isDisposableEmail('test@company.io')).toBe(false);
-    });
-
-    it('should handle invalid inputs', () => {
-      expect(isDisposableEmail(null)).toBe(false);
-      expect(isDisposableEmail(undefined)).toBe(false);
-      expect(isDisposableEmail('')).toBe(false);
-      expect(isDisposableEmail(123 as unknown as string)).toBe(false);
-    });
-
-    it('should handle emails without domain', () => {
-      expect(isDisposableEmail('nodomain')).toBe(false);
-    });
-  });
-
   describe('generateBrowserFingerprint', () => {
     it('should generate consistent fingerprints for same headers', () => {
       const mockReq = {

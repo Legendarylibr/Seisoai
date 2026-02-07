@@ -15,7 +15,6 @@ export {
   sanitizeString,
   sanitizeNumber,
   isValidRequestId,
-  isValidEmail,
   deepSanitize,
   isValidFalUrl,
   createValidateInput,

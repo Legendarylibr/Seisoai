@@ -84,8 +84,6 @@ export function createGDPRRoutes(deps: Dependencies) {
         identity: {
           userId: user.userId,
           walletAddress: user.walletAddress,
-          discordId: user.discordId,
-          discordUsername: user.discordUsername,
           createdAt: user.createdAt,
           lastActive: user.lastActive,
         },
@@ -261,13 +259,12 @@ export function createGDPRRoutes(deps: Dependencies) {
     try {
       if (!requireAuth(req, res)) return;
 
-      const { settings, discordUsername } = req.body as {
+      const { settings } = req.body as {
         settings?: {
           preferredStyle?: string;
           defaultImageSize?: string;
           enableNotifications?: boolean;
         };
-        discordUsername?: string;
       };
 
       // Only allow updating non-sensitive fields
@@ -288,25 +285,6 @@ export function createGDPRRoutes(deps: Dependencies) {
         }
         if (typeof settings.enableNotifications === 'boolean') {
           updates['settings.enableNotifications'] = settings.enableNotifications;
-        }
-      }
-      
-      // SECURITY FIX: Sanitize discordUsername to prevent XSS and injection
-      if (discordUsername && typeof discordUsername === 'string') {
-        // Discord usernames: 2-32 chars, alphanumeric, underscores, periods
-        const sanitized = discordUsername
-          .replace(/[<>'"&]/g, '') // Remove XSS chars
-          .substring(0, 32); // Max length
-        
-        // Validate it looks like a Discord username
-        if (/^[\w.]{2,32}$/.test(sanitized)) {
-          updates.discordUsername = sanitized;
-        } else {
-          res.status(400).json({
-            success: false,
-            error: 'Invalid Discord username format',
-          });
-          return;
         }
       }
 

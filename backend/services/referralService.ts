@@ -283,7 +283,7 @@ export async function getReferralLeaderboard(
  */
 export async function trackSocialShare(
   userId: string,
-  platform: 'twitter' | 'discord' | 'reddit' | 'facebook' | 'linkedin',
+  platform: 'twitter' | 'reddit' | 'facebook' | 'linkedin',
   contentId: string
 ): Promise<{ success: boolean; creditsAwarded: number; error?: string }> {
   const User = getUserModel();

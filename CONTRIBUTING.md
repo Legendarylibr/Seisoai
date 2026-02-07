@@ -22,7 +22,6 @@ Thank you for your interest in contributing to SeisoAI! This document provides g
    ```bash
    npm install
    cd backend && npm install
-   cd ../discord-bot && npm install
    ```
 
 3. **Configure environment**
@@ -57,9 +56,6 @@ seisoai/
 │   ├── middleware/         # Express middleware
 │   ├── models/             # Mongoose models
 │   └── utils/              # Backend utilities
-├── discord-bot/            # Discord bot
-│   ├── src/commands/       # Slash commands
-│   └── src/services/       # Bot services
 └── docs/                   # Documentation
 ```
 
@@ -133,7 +129,6 @@ cd backend && npm run typecheck
 
 - Check existing issues and discussions
 - Create a new issue with the `question` label
-- Join our Discord for community support
 
 ## License
 

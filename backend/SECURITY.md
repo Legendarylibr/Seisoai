@@ -98,7 +98,6 @@ Secure password reset implementation:
 |------|--------------|
 | User | Own data access, generation, payments |
 | Admin | User management, credit adjustment |
-| Bot | Discord integration endpoints |
 
 ### Endpoint Protection
 
@@ -229,14 +228,9 @@ Used for:
 ### Token Generation
 
 ```typescript
-// Reset tokens
+// Secure tokens
 crypto.randomBytes(32).toString('hex')
-
-// Discord link codes
-8 chars from: ABCDEFGHJKLMNPQRSTUVWXYZ23456789
 ```
-
-### Password Hashing
 
 ```typescript
 bcrypt.hash(password, 12) // 12 rounds
@@ -364,4 +358,3 @@ Before deployment, verify:
 - [ ] Rate limiting configured
 - [ ] Security webhook URL set
 - [ ] Admin secret is strong
-- [ ] Discord bot API key set

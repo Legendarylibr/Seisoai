@@ -156,7 +156,7 @@ const ContentPolicy = memo(function ContentPolicy() {
       <h3 className="font-bold">Abuse Prevention (Privacy-Preserving)</h3>
       <ul className="list-disc list-inside ml-2">
         <li>Rate limits and cooldowns apply</li>
-        <li>Disposable emails blocked</li>
+        <li>Wallet-based authentication only</li>
         <li>Minimal fingerprinting (one-way hash only, auto-deleted after 7 days)</li>
       </ul>
 

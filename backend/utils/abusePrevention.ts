@@ -10,141 +10,6 @@ import type { Model } from 'mongoose';
 import logger from './logger';
 
 /**
- * List of known temporary/disposable email domains
- * SECURITY ENHANCED: Comprehensive list with pattern matching
- */
-const DISPOSABLE_EMAIL_DOMAINS = [
-  'tempmail.com',
-  '10minutemail.com',
-  '10minutemail.net',
-  '10minutemail.org',
-  'guerrillamail.com',
-  'guerrillamail.org',
-  'guerrillamail.net',
-  'guerrillamail.biz',
-  'mailinator.com',
-  'throwaway.email',
-  'temp-mail.org',
-  'temp-mail.io',
-  'mohmal.com',
-  'yopmail.com',
-  'yopmail.fr',
-  'getnada.com',
-  'fakeinbox.com',
-  'trashmail.com',
-  'trashmail.net',
-  'mintemail.com',
-  'sharklasers.com',
-  'grr.la',
-  'guerrillamailblock.com',
-  'pokemail.net',
-  'spam4.me',
-  'bccto.me',
-  'chitthi.in',
-  'dispostable.com',
-  'emailondeck.com',
-  'fakemailgenerator.com',
-  'maildrop.cc',
-  'meltmail.com',
-  'mytemp.email',
-  'tempail.com',
-  'tempinbox.co.uk',
-  'tempinbox.com',
-  'tempmail.co',
-  'tempmail.de',
-  'tempmail.net',
-  'tempmailo.com',
-  'tmpmail.org',
-  'tmpmail.net',
-  'tmail.ws',
-  'tmailinator.com',
-  'trashmailer.com',
-  'trashymail.com',
-  'tyldd.com',
-  'yapped.net',
-  'zoemail.org',
-  // Additional common disposable domains
-  'mailnesia.com',
-  'mailnator.com',
-  'getairmail.com',
-  'fakemailgenerator.net',
-  'emailfake.com',
-  'crazymailing.com',
-  'tempsky.com',
-  'emailtemporanea.com',
-  'disposableemailaddresses.com',
-  'throwawaymail.com',
-  'spamgourmet.com',
-  'mailcatch.com',
-  'jetable.org',
-  'nospam.ze.tc',
-  'uggsrock.com',
-  'mailexpire.com',
-  'incognitomail.com',
-  'anonymbox.com',
-  'spamavert.com',
-  'spamfree24.org',
-  'spamherelots.com',
-  'tempr.email',
-  'burnermail.io',
-  'dropmail.me',
-  'harakirimail.com',
-  'mailsac.com'
-];
-
-/**
- * SECURITY ENHANCED: Regex patterns to detect disposable email services
- * Catches variations and subdomains
- */
-const DISPOSABLE_EMAIL_PATTERNS = [
-  /^temp/i,           // tempmail, temporary, temp-*
-  /^fake/i,           // fakemail, fakeinbox
-  /^trash/i,          // trashmail, trashy
-  /^throw/i,          // throwaway
-  /^disposable/i,     // disposable*
-  /^spam/i,           // spammail, spam*
-  /^junk/i,           // junkmail
-  /^burner/i,         // burnermail
-  /^10min/i,          // 10minute*, 10min*
-  /minute.*mail/i,    // *minutemail
-  /^guerrilla/i,      // guerrillamail
-  /mailinator/i,      // *mailinator*
-  /yopmail/i,         // *yopmail*
-  /nospam/i,          // *nospam*
-  /tmpmail/i,         // *tmpmail*
-  /tempinbox/i,       // *tempinbox*
-  /maildrop/i,        // *maildrop*
-  /mailnesia/i,       // *mailnesia*
-  /anonymbox/i,       // *anonymbox*
-  /incognitomail/i,   // *incognitomail*
-];
-
-/**
- * Check if email is from a disposable/temporary email service
- * SECURITY ENHANCED: Uses both domain list and pattern matching
- */
-export function isDisposableEmail(email: unknown): boolean {
-  if (!email || typeof email !== 'string') return false;
-  
-  const domain = email.toLowerCase().split('@')[1];
-  if (!domain) return false;
-  
-  // Check against explicit domain list
-  const matchesDomain = DISPOSABLE_EMAIL_DOMAINS.some(disposableDomain => 
-    domain === disposableDomain || domain.endsWith(`.${disposableDomain}`)
-  );
-  
-  if (matchesDomain) return true;
-  
-  // Check against pattern matching (catches variations)
-  const matchesPattern = DISPOSABLE_EMAIL_PATTERNS.some(pattern => 
-    pattern.test(domain)
-  );
-  
-  return matchesPattern;
-}
-
-/**
  * Generate a privacy-preserving browser fingerprint from request headers
  * DATA MINIMIZATION: Only creates a one-way hash - original data is never stored
  * Uses minimal headers to reduce uniqueness while still preventing abuse
@@ -317,7 +182,6 @@ export function checkAccountAge(user: IUser | null): { allowed: boolean; reason:
  */
 export async function checkSuspiciousPatterns(
   ipAddress: string, 
-  email: string | null, 
   User: Model<IUser>, 
   _IPFreeImage: Model<IIPFreeImage>
 ): Promise<{ suspicious: boolean; reason?: string }> {
@@ -333,8 +197,7 @@ export async function checkSuspiciousPatterns(
   if (recentAccounts > 10) {
     logger.warn('Suspicious pattern detected: Many recent account creations', {
       ipAddress,
-      recentAccounts,
-      email
+      recentAccounts
     });
     return {
       suspicious: true,

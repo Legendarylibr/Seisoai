@@ -4,7 +4,6 @@
  */
 import { describe, it, expect } from '@jest/globals';
 import { 
-  isValidEmail, 
   isValidWalletAddress, 
   isValidRequestId,
   deepSanitize,
@@ -12,47 +11,6 @@ import {
 } from '../../utils/validation.js';
 
 describe('Input Validation Security', () => {
-  describe('Email Validation', () => {
-    describe('Valid emails', () => {
-      const validEmails = [
-        'test@example.com',
-        'user.name@domain.com',
-        'user+tag@example.org',
-        'user123@sub.domain.co.uk',
-        'a@b.co'
-      ];
-
-      validEmails.forEach(email => {
-        it(`should accept valid email: ${email}`, () => {
-          expect(isValidEmail(email)).toBe(true);
-        });
-      });
-    });
-
-    describe('Invalid emails', () => {
-      const invalidEmails = [
-        '',
-        'notanemail',
-        '@nodomain.com',
-        'noat.com',
-        'spaces in@email.com',
-        'missing@.com',
-        'a'.repeat(255) + '@toolong.com', // Too long
-        null,
-        undefined,
-        123,
-        {},
-        []
-      ];
-
-      invalidEmails.forEach(email => {
-        it(`should reject invalid email: ${String(email)}`, () => {
-          expect(isValidEmail(email)).toBe(false);
-        });
-      });
-    });
-  });
-
   describe('Wallet Address Validation', () => {
     describe('Valid addresses', () => {
       it('should accept valid Ethereum address', () => {
