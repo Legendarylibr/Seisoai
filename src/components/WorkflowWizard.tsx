@@ -4,7 +4,7 @@ import {
   Sparkles, User, Film, Music, Upload, X, Check, ChevronRight, 
   Download, AlertCircle, RefreshCw, Wand2, Video, Volume2
 } from 'lucide-react';
-import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken, getAuthToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 import StemMixer from './StemMixer';
 import { Win95Button, Win95Panel, WIN95_COLORS as WIN95 } from './ui/Win95';
@@ -237,11 +237,13 @@ const WorkflowWizard: React.FC<WorkflowWizardProps> = ({ onClose }) => {
     const step = selectedWorkflow.steps[currentStep];
     
     try {
-      // Get CSRF token for all API calls
+      // Get CSRF token and auth token for all API calls
       const csrfToken = await ensureCSRFToken();
+      const authToken = getAuthToken();
       const csrfHeaders = {
         'Content-Type': 'application/json',
         ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
       };
       
       // AI Influencer workflow

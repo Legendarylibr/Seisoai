@@ -7,7 +7,7 @@ import { addGeneration } from '../services/galleryService';
 import { X, Sparkles, Layers, Image as ImageIcon, AlertTriangle, Brain, ZoomIn } from 'lucide-react';
 import SocialShareButtons from './SocialShareButtons';
 import { BTN, WIN95, hoverHandlers } from '../utils/buttonStyles';
-import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken, getAuthToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
 interface ActionButtonProps {
@@ -83,14 +83,16 @@ const ImageOutput: React.FC = () => {
     setError(null);
 
     try {
-      // Get CSRF token for secure API call
+      // Get CSRF token and auth token for secure API call
       const csrfToken = await ensureCSRFToken();
+      const authToken = getAuthToken();
       
       const response = await fetch(`${API_URL}/api/generate/upscale`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+          ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
         },
         credentials: 'include',
         body: JSON.stringify({

@@ -1,7 +1,7 @@
 // Video-to-Audio service using fal.ai MMAudio V2
 // Generates synchronized audio from video content
 import logger from '../utils/logger';
-import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken, getAuthToken } from '../utils/apiConfig';
 
 // Types
 export interface VideoToAudioOptions {
@@ -79,13 +79,15 @@ export const generateAudioFromVideo = async ({
 
     // Ensure CSRF token is available
     const csrfToken = await ensureCSRFToken();
+    const authToken = getAuthToken();
 
     // Call backend endpoint
     const response = await fetch(`${API_URL}/api/generate/video-to-audio`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
       },
       credentials: 'include',
       body: JSON.stringify(requestBody)

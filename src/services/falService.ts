@@ -3,7 +3,7 @@
 import { VISUAL_STYLES } from '../utils/styles';
 import logger from '../utils/logger';
 import { optimizeImages, stripImagesMetadataToDataUri } from '../utils/imageOptimizer';
-import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken, getAuthToken } from '../utils/apiConfig';
 import type { VisualStyle } from '../types';
 
 // Types
@@ -267,13 +267,15 @@ export const generateImage = async (
 
     // Ensure CSRF token is available
     const csrfToken = await ensureCSRFToken();
+    const authToken = getAuthToken();
 
     // Call backend endpoint which checks credits before making external API call
     const response = await fetch(`${API_URL}/api/generate/image`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
       },
       credentials: 'include',
       body: JSON.stringify({
@@ -419,6 +421,7 @@ export const generateImageStreaming = async (
 
   // Ensure CSRF token is available before making the request
   const csrfToken = await ensureCSRFToken();
+  const authToken = getAuthToken();
 
   return new Promise((resolve, reject) => {
     const requestBody = {
@@ -436,7 +439,8 @@ export const generateImageStreaming = async (
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
-        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
       },
       credentials: 'include',
       body: JSON.stringify(requestBody)

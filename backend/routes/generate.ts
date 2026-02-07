@@ -535,8 +535,9 @@ export function createGenerationRoutes(deps: Dependencies) {
 
   // ==========================================================================
   // POST /api/generate/image-stream — FLUX 2 with SSE streaming
+  // SECURITY FIX: requireVerifiedIdentity blocks body-only wallet auth
   // ==========================================================================
-  router.post('/image-stream', flexibleAuth, generationTokenGate(), requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/image-stream', flexibleAuth, requireVerifiedIdentity, generationTokenGate(), requireCreditsForModel(), async (req: AuthenticatedRequest, res: Response) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');

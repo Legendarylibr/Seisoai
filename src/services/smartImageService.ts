@@ -4,7 +4,7 @@
 import { generateImage as generateWithFAL, ImageGenerationResult, type AdvancedSettings } from './falService';
 import { extractLayers } from './layerExtractionService';
 import type { VisualStyle } from '../types';
-import { API_URL, ensureCSRFToken } from '../utils/apiConfig';
+import { API_URL, ensureCSRFToken, getAuthToken } from '../utils/apiConfig';
 import logger from '../utils/logger';
 
 /**
@@ -32,12 +32,14 @@ export const batchVariate = async (
   options: { useControlNet?: boolean } = {}
 ): Promise<BatchVariateResult> => {
   const csrfToken = await ensureCSRFToken();
+  const authToken = getAuthToken();
   
   const response = await fetch(`${API_URL}/api/image-tools/batch-variate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+      ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+      ...(authToken && { 'Authorization': `Bearer ${authToken}` })
     },
     credentials: 'include',
     body: JSON.stringify({
@@ -68,14 +70,16 @@ const faceSwap = async (
   targetImage: string,
   advancedSettings: AdvancedSettings
 ): Promise<ImageGenerationResult> => {
-  // Ensure CSRF token is available
+  // Ensure CSRF token and auth token are available
   const csrfToken = await ensureCSRFToken();
+  const authToken = getAuthToken();
   
   const response = await fetch(`${API_URL}/api/image-tools/face-swap`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+      ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+      ...(authToken && { 'Authorization': `Bearer ${authToken}` })
     },
     credentials: 'include',
     body: JSON.stringify({
@@ -140,11 +144,13 @@ export const generateImage = async (
     }
 
     const csrfToken = await ensureCSRFToken();
+    const authToken = getAuthToken();
     const response = await fetch(`${API_URL}/api/training/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken && { 'X-CSRF-Token': csrfToken })
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
       },
       credentials: 'include',
       body: JSON.stringify({
