@@ -10,6 +10,7 @@ import config from '../config/env';
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 import { applyClawMarkup } from '../middleware/credits';
+import { authenticateFlexible, requireVerifiedIdentity } from '../middleware/auth';
 
 const FAL_API_KEY = config.FAL_API_KEY;
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
@@ -399,8 +400,9 @@ export function createWanAnimateRoutes(deps: Dependencies) {
   /**
    * Submit animation job
    * POST /api/wan-animate/submit
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/submit', submitLimiter, requireCredits(2), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/submit', submitLimiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(2), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {

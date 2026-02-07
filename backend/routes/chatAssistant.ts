@@ -18,6 +18,8 @@ import {
 } from '../services/promptOptimizer';
 import { isValidPublicUrl } from '../utils/validation';
 import config from '../config/env';
+import { authenticateFlexible, requireVerifiedIdentity } from '../middleware/auth';
+import type { IUser } from '../models/User';
 
 // System prompt for the chat assistant - optimized for Claude 3 Haiku
 const SYSTEM_PROMPT = `You are a creative AI assistant for SeisoAI. Generate images, videos, and music.
@@ -306,6 +308,12 @@ function cleanResponseForDisplay(response: string): string {
   return cleaned;
 }
 
+// Extended request type with user from auth middleware
+interface AuthenticatedRequest extends Request {
+  user?: IUser;
+  authType?: 'jwt' | 'body';
+}
+
 /**
  * Create chat assistant routes
  */
@@ -315,8 +323,9 @@ export default function createChatAssistantRoutes(_deps: Record<string, unknown>
   /**
    * POST /message
    * Send a message to the chat assistant
+   * SECURITY: Requires verified identity (JWT or x402) for credit-spending operations
    */
-  router.post('/message', async (req: Request, res: Response) => {
+  router.post('/message', authenticateFlexible, requireVerifiedIdentity, async (req: AuthenticatedRequest, res: Response) => {
     const startTime = Date.now();
     
     try {
@@ -853,8 +862,9 @@ RULES:
    * Agentic chat endpoint with observe-think-act loop.
    * Uses Claude's native tool_use for reliable action parsing.
    * Supports SSE streaming of intermediate steps.
+   * SECURITY: Requires verified identity (JWT or x402) for credit-spending operations
    */
-  router.post('/agent-message', async (req: Request, res: Response) => {
+  router.post('/agent-message', authenticateFlexible, requireVerifiedIdentity, async (req: AuthenticatedRequest, res: Response) => {
     const startTime = Date.now();
 
     try {
@@ -1087,8 +1097,9 @@ RULES:
   /**
    * POST /generate
    * Execute a confirmed generation action
+   * SECURITY: Requires verified identity (JWT or x402) for credit-spending operations
    */
-  router.post('/generate', async (req: Request, res: Response) => {
+  router.post('/generate', authenticateFlexible, requireVerifiedIdentity, async (req: AuthenticatedRequest, res: Response) => {
     const startTime = Date.now();
     
     try {

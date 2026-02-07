@@ -8,6 +8,7 @@ import logger from '../utils/logger';
 import config from '../config/env';
 import type { IUser } from '../models/User';
 import { applyClawMarkup } from '../middleware/credits';
+import { authenticateFlexible, requireVerifiedIdentity } from '../middleware/auth';
 import {
   deductCredits,
   refundCredits,
@@ -35,8 +36,11 @@ export function createExtractRoutes(deps: Dependencies) {
   /**
    * Extract layers from image
    * POST /api/extract-layers
+   * SECURITY: Requires verified identity (JWT or x402)
    */
   router.post('/extract-layers', 
+    authenticateFlexible,
+    requireVerifiedIdentity,
     requireCredits(1), 
     async (req: AuthenticatedRequest, res: Response) => {
       let user: IUser | undefined;

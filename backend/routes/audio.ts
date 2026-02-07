@@ -10,6 +10,7 @@ import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, uploadTo
 import type { IUser } from '../models/User';
 import { applyClawMarkup } from '../middleware/credits';
 import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
+import { authenticateFlexible, requireVerifiedIdentity } from '../middleware/auth';
 import {
   deductCredits,
   refundCredits,
@@ -48,8 +49,9 @@ export function createAudioRoutes(deps: Dependencies) {
    * - text: Text to speak
    * - voice_url: Reference audio for voice cloning (optional)
    * - language: Language code (default: 'en')
+   * SECURITY: Requires verified identity (JWT or x402) for credit-spending operations
    */
-  router.post('/voice-clone', limiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/voice-clone', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       validateUser(user);
@@ -176,8 +178,9 @@ export function createAudioRoutes(deps: Dependencies) {
    * Inputs:
    * - audio_url: URL of audio file to separate
    * - stems: Which stems to extract (default: all)
+   * SECURITY: Requires verified identity (JWT or x402) for credit-spending operations
    */
-  router.post('/separate', limiter, requireCredits(2), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/separate', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(2), async (req: AuthenticatedRequest, res: Response) => {
     let user: IUser | undefined;
     let actualCreditsDeducted = 0;
     
@@ -294,8 +297,9 @@ export function createAudioRoutes(deps: Dependencies) {
    * - image_url: Portrait image URL
    * - audio_url: Audio file URL
    * - expression_scale: How expressive (0.0-1.0, default 1.0)
+   * SECURITY: Requires verified identity (JWT or x402) for credit-spending operations
    */
-  router.post('/lip-sync', limiter, requireCredits(3), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/lip-sync', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(3), async (req: AuthenticatedRequest, res: Response) => {
     let user: IUser | undefined;
     let actualCreditsDeducted = 0;
     
@@ -436,8 +440,9 @@ export function createAudioRoutes(deps: Dependencies) {
    * Inputs:
    * - prompt: Description of sound effect
    * - duration: Duration in seconds (1-30)
+   * SECURITY: Requires verified identity (JWT or x402) for credit-spending operations
    */
-  router.post('/sfx', limiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/sfx', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     let user: IUser | undefined;
     let actualCreditsDeducted = 0;
     let remainingCredits = 0;
@@ -578,13 +583,9 @@ export function createAudioRoutes(deps: Dependencies) {
   /**
    * Extract audio from video file
    * POST /api/audio/extract-audio
+   * SECURITY: Requires verified identity (JWT or x402) for credit-spending operations
    */
-  /**
-   * Extract audio from video file
-   * POST /api/audio/extract-audio
-   * SECURITY: Requires authentication to prevent abuse
-   */
-  router.post('/extract-audio', limiter, requireCredits(0.5), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/extract-audio', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(0.5), async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user;
     if (!user) {
       res.status(401).json({ success: false, error: 'Authentication required' });
@@ -780,9 +781,9 @@ export function createAudioRoutes(deps: Dependencies) {
   /**
    * Upload audio file
    * POST /api/audio/upload
-   * SECURITY: Requires authentication to prevent abuse
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/upload', limiter, requireCredits(0), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/upload', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(0), async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user;
     if (!user) {
       res.status(401).json({ success: false, error: 'Authentication required' });
@@ -861,8 +862,9 @@ export function createAudioRoutes(deps: Dependencies) {
    * - language: Language code hint (optional, auto-detected if omitted)
    * - task: 'transcribe' (default) or 'translate' (translate to English)
    * - chunk_level: 'segment' (default) or 'word' for word-level timestamps
+   * SECURITY: Requires verified identity (JWT or x402) for credit-spending operations
    */
-  router.post('/transcribe', limiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/transcribe', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(1), async (req: AuthenticatedRequest, res: Response) => {
     let user: IUser | undefined;
     let actualCreditsDeducted = 0;
     let remainingCredits = 0;

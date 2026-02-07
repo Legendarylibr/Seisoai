@@ -10,6 +10,7 @@ import { submitToQueue, checkQueueStatus, getQueueResult, getFalApiKey, isStatus
 import { buildUserUpdateQuery } from '../services/user';
 import type { IUser } from '../models/User';
 import { applyClawMarkup } from '../middleware/credits';
+import { authenticateFlexible, requireVerifiedIdentity } from '../middleware/auth';
 
 // Types
 interface Dependencies {
@@ -168,8 +169,9 @@ export function createWorkflowRoutes(deps: Dependencies) {
   /**
    * Generate voice from script
    * POST /api/workflows/ai-influencer/voice
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/ai-influencer/voice', limiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  router.post('/ai-influencer/voice', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(1), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const user = req.user;
       if (!user) {
@@ -282,8 +284,9 @@ export function createWorkflowRoutes(deps: Dependencies) {
   /**
    * Generate lip sync video
    * POST /api/workflows/ai-influencer/lipsync
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/ai-influencer/lipsync', limiter, requireCredits(3), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  router.post('/ai-influencer/lipsync', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(3), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const user = req.user;
       if (!user) {
@@ -407,8 +410,9 @@ export function createWorkflowRoutes(deps: Dependencies) {
   /**
    * Generate music for music video
    * POST /api/workflows/music-video/music
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/music-video/music', limiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  router.post('/music-video/music', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(1), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const user = req.user;
       if (!user) {
@@ -524,8 +528,9 @@ export function createWorkflowRoutes(deps: Dependencies) {
   /**
    * Generate base character
    * POST /api/workflows/avatar-creator/generate
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/avatar-creator/generate', limiter, requireCredits(1), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  router.post('/avatar-creator/generate', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(1), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const user = req.user;
       if (!user) {
@@ -643,8 +648,9 @@ export function createWorkflowRoutes(deps: Dependencies) {
   /**
    * Separate stems
    * POST /api/workflows/remix-visualizer/separate
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/remix-visualizer/separate', limiter, requireCredits(2), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  router.post('/remix-visualizer/separate', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(2), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const user = req.user;
       if (!user) {

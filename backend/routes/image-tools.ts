@@ -16,6 +16,7 @@ import type { IUser } from '../models/User';
 import { applyClawMarkup } from '../middleware/credits';
 import { settleX402Payment, type X402Request } from '../middleware/x402Payment';
 import { isValidPublicUrl } from '../utils/validation';
+import { authenticateFlexible, requireVerifiedIdentity } from '../middleware/auth';
 
 // Types
 interface Dependencies {
@@ -140,8 +141,9 @@ export function createImageToolsRoutes(deps: Dependencies) {
    * Inputs:
    * - source_image_url: Image with face to use
    * - target_image_url: Image where face will be placed
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/face-swap', limiter, requireCredits(2), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/face-swap', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(2), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -305,8 +307,9 @@ export function createImageToolsRoutes(deps: Dependencies) {
    * - image_url: Original image
    * - mask_url: Mask image (white = edit, black = keep)
    * - prompt: What to generate in masked area
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/inpaint', limiter, requireCredits(2), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/inpaint', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(2), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -478,8 +481,9 @@ export function createImageToolsRoutes(deps: Dependencies) {
    * Inputs:
    * - image_url: Image to describe
    * - detail_level: 'brief' | 'detailed' (default: 'detailed')
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/describe', limiter, requireCredits(0.5), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/describe', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(0.5), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -597,8 +601,9 @@ export function createImageToolsRoutes(deps: Dependencies) {
    * 1. Use LLaVA to describe the image
    * 2. Use LLM to create varied prompts based on description
    * 3. Return the description and variation prompts for the frontend to generate
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/batch-variate', limiter, requireCredits(0.5), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/batch-variate', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(0.5), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
@@ -851,8 +856,9 @@ Respond with ONLY a JSON array of ${validNumOutputs} prompts. Each prompt must b
    * - prompt: Description for extended areas
    * - direction: 'left' | 'right' | 'up' | 'down' | 'all' (default: 'all')
    * - expansion_ratio: How much to expand (1.5 = 50% more, 2.0 = double)
+   * SECURITY: Requires verified identity (JWT or x402)
    */
-  router.post('/outpaint', limiter, requireCredits(2), async (req: AuthenticatedRequest, res: Response) => {
+  router.post('/outpaint', limiter, authenticateFlexible, requireVerifiedIdentity, requireCredits(2), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const user = req.user;
       if (!user) {
