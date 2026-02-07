@@ -101,7 +101,12 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
 
   // Local state for app-specific data
   const [credits, setCredits] = useState(0);
-  const [isAuthenticated, setIsAuthenticated] = useState(hasStoredAuth());
+  // Start unauthenticated - we clear tokens on mount to require fresh auth each session
+  // Exception: in-app browsers where we trust the wallet's persisted state
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    // Only trust stored auth in in-app browsers (user opened app via wallet)
+    return isInWalletBrowser && hasStoredAuth();
+  });
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const authAttemptedRef = useRef<string | null>(null);
   const [totalCreditsEarned, setTotalCreditsEarned] = useState(0);
@@ -139,12 +144,18 @@ export const SimpleWalletProvider: React.FC<SimpleWalletProviderProps> = ({ chil
       return;
     }
     
-    if (!hasDisconnectedOnMount.current && wagmiConnected) {
+    if (!hasDisconnectedOnMount.current) {
       hasDisconnectedOnMount.current = true;
-      disconnect();
-      logger.info('Cleared persisted wallet connection - fresh auth required');
-    } else {
-      hasDisconnectedOnMount.current = true;
+      
+      // Clear stored auth tokens on mount to require fresh authentication
+      // This ensures the sign-in screen appears even if there's a stale token
+      clearTokens();
+      setIsAuthenticated(false);
+      
+      if (wagmiConnected) {
+        disconnect();
+        logger.info('Cleared persisted wallet connection - fresh auth required');
+      }
     }
   }, [wagmiConnected, disconnect, connector?.id]);
 

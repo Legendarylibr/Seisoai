@@ -54,12 +54,15 @@ const THEMES = [
 
 const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
   const wallet = useSimpleWallet();
-  // If user is already connected (AuthGuard showing us for profile setup), start in profile mode
-  const alreadyConnected = wallet.isConnected && !!wallet.address;
-  const [isConnected, setIsConnected] = useState(alreadyConnected);
-  const [connectedAddress, setConnectedAddress] = useState<string | null>(alreadyConnected ? wallet.address : null);
-  const [showProfile, setShowProfile] = useState(alreadyConnected);
   const { preferences, updatePreference } = useUserPreferences();
+  
+  // IMPORTANT: Don't auto-show profile on mount based on stored auth.
+  // Only show profile after user explicitly connects via the "Activate Agents" button.
+  // The wallet context may report isConnected=true from a stale stored token,
+  // but we want fresh authentication each session.
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   const preConnectMessage = '> Authenticate to activate your agents. Connect a wallet to begin.';
   const profileMessage = '> Build your workspace. Toggle the features you want.';
