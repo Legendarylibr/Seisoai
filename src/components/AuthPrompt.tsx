@@ -102,16 +102,22 @@ const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
 
   return (
     <div
+      className="p-3 sm:p-4"
       style={{
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        overflow: 'auto', padding: '16px',
+        overflow: 'auto',
         background: 'var(--win95-teal)', zIndex: 30,
+        // Safe area for devices with notches
+        paddingTop: 'max(12px, env(safe-area-inset-top))',
+        paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+        paddingLeft: 'max(12px, env(safe-area-inset-left))',
+        paddingRight: 'max(12px, env(safe-area-inset-right))',
       }}
     >
-      {/* Win95 Window */}
+      {/* Win95 Window - constrained height on mobile to ensure scrollability */}
       <div
-        className="w-full max-w-lg win95-window-open"
+        className="w-full max-w-lg win95-window-open max-h-full overflow-y-auto"
         style={{
           background: WIN95.bg,
           boxShadow: `inset 1px 1px 0 ${WIN95.border.light}, inset -1px -1px 0 ${WIN95.border.darker}, inset 2px 2px 0 ${WIN95.bgLight}, inset -2px -2px 0 ${WIN95.bgDark}, 4px 4px 8px rgba(0,0,0,0.3)`,
@@ -128,8 +134,8 @@ const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
           </span>
         </div>
 
-        {/* Window Content */}
-        <div style={{ padding: '20px' }}>
+        {/* Window Content - responsive padding */}
+        <div className="p-3 sm:p-5">
           {!showProfile ? (
             /* ===== PRE-CONNECT STATE ===== */
             <>
@@ -176,10 +182,10 @@ const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
                       <div {...(!ready && { 'aria-hidden': true, style: { opacity: 0, pointerEvents: 'none' as const, userSelect: 'none' as const } })}>
                         <button
                           onClick={handleActivateAgents}
-                          className="w-full generate-btn cta-glow flex items-center justify-center gap-3 px-6 py-4 text-base font-bold min-h-[48px]"
+                          className="w-full generate-btn cta-glow flex items-center justify-center gap-3 px-4 sm:px-6 py-4 text-sm sm:text-base font-bold min-h-[52px] touch-manipulation active:scale-[0.98] transition-transform"
                           style={{ fontFamily: font, border: 'none', cursor: 'pointer' }}
                         >
-                          <Wallet className="w-5 h-5" />
+                          <Wallet className="w-5 h-5 flex-shrink-0" />
                           <span>Activate Agents</span>
                         </button>
                       </div>
@@ -246,23 +252,26 @@ const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
                   <Settings className="w-3.5 h-3.5" />
                   Your Features
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-1.5">
                   {ALL_FEATURES.map((feature) => {
                     const enabled = preferences.enabledTabs.includes(feature.id);
                     const isDefault = preferences.defaultTab === feature.id;
                     const Icon = ICON_MAP[feature.icon] || Bot;
+                    
+                    // Handle setting as home (works on tap for mobile)
+                    const setAsHome = (e: React.MouseEvent | React.TouchEvent) => {
+                      e.stopPropagation();
+                      if (!preferences.enabledTabs.includes(feature.id)) {
+                        updatePreference('enabledTabs', [...preferences.enabledTabs, feature.id]);
+                      }
+                      updatePreference('defaultTab', feature.id);
+                    };
+                    
                     return (
                       <button
                         key={feature.id}
                         onClick={() => toggleTab(feature.id)}
-                        onDoubleClick={() => {
-                          // Double-click to set as default
-                          if (!preferences.enabledTabs.includes(feature.id)) {
-                            updatePreference('enabledTabs', [...preferences.enabledTabs, feature.id]);
-                          }
-                          updatePreference('defaultTab', feature.id);
-                        }}
-                        className="p-2 text-center relative"
+                        className="p-1.5 sm:p-2 text-center relative touch-manipulation"
                         style={{
                           background: enabled ? 'var(--win95-info-green)' : WIN95.inputBg,
                           boxShadow: enabled
@@ -272,41 +281,54 @@ const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
                           cursor: 'pointer',
                           fontFamily: font,
                           opacity: enabled ? 1 : 0.55,
+                          // Minimum touch target size for mobile
+                          minHeight: '44px',
                         }}
-                        title={`${feature.description}${enabled ? ' — Double-click to set as home' : ''}`}
+                        title={feature.description}
                       >
                         <Icon
-                          className="w-5 h-5 mx-auto mb-1"
+                          className="w-4 h-4 sm:w-5 sm:h-5 mx-auto mb-0.5 sm:mb-1"
                           style={{ color: enabled ? 'var(--win95-success-text)' : WIN95.textDisabled }}
                         />
-                        <div className="text-[10px] font-bold" style={{ color: WIN95.text }}>
+                        <div className="text-[9px] sm:text-[10px] font-bold leading-tight" style={{ color: WIN95.text }}>
                           {feature.label}
                         </div>
                         {enabled && (
-                          <div className="flex items-center justify-center gap-0.5 mt-0.5">
+                          <button
+                            onClick={setAsHome}
+                            className="flex items-center justify-center gap-0.5 mt-0.5 w-full touch-manipulation"
+                            style={{ 
+                              background: isDefault ? 'var(--win95-success-text)' : 'transparent',
+                              color: isDefault ? '#fff' : 'var(--win95-success-text)',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '2px 4px',
+                              borderRadius: '2px',
+                            }}
+                          >
                             <span className="agent-status-dot" style={{ width: 4, height: 4 }} />
-                            <span className="text-[8px]" style={{ color: 'var(--win95-success-text)' }}>
-                              {isDefault ? 'Home' : 'On'}
+                            <span className="text-[8px]">
+                              {isDefault ? 'Home' : 'Set Home'}
                             </span>
-                          </div>
+                          </button>
                         )}
                       </button>
                     );
                   })}
                 </div>
                 <p className="text-[9px] mt-1.5" style={{ color: WIN95.textDisabled, fontFamily: font }}>
-                  Click to toggle features. Double-click to set as your home page. {preferences.enabledTabs.length}/{ALL_FEATURES.length} enabled.
+                  Tap to toggle. Tap "Set Home" to choose your start page. {preferences.enabledTabs.length}/{ALL_FEATURES.length} enabled.
                 </p>
               </div>
 
               {/* ===== THEME & COLOR (compact) ===== */}
-              <div className="grid grid-cols-2 gap-3 mb-4 agent-reveal-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 agent-reveal-4">
                 {/* Theme */}
                 <div>
                   <label className="block text-[10px] font-bold mb-1.5" style={{ fontFamily: font, color: WIN95.text }}>
                     Theme
                   </label>
-                  <div className="grid grid-cols-2 gap-1">
+                  <div className="grid grid-cols-4 sm:grid-cols-2 gap-1">
                     {THEMES.map((theme) => {
                       const ThIcon = theme.icon;
                       const isActive = preferences.theme === theme.id;
@@ -314,7 +336,7 @@ const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
                         <button
                           key={theme.id}
                           onClick={() => updatePreference('theme', theme.id)}
-                          className="p-1.5 text-center"
+                          className="p-1.5 sm:p-2 text-center touch-manipulation min-h-[40px]"
                           style={{
                             background: isActive ? 'var(--win95-info-green)' : WIN95.inputBg,
                             boxShadow: isActive
@@ -323,7 +345,7 @@ const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
                             border: 'none', cursor: 'pointer', fontFamily: font,
                           }}
                         >
-                          <ThIcon className="w-3 h-3 mx-auto" style={{ color: isActive ? 'var(--win95-success-text)' : WIN95.text }} />
+                          <ThIcon className="w-3.5 h-3.5 sm:w-3 sm:h-3 mx-auto" style={{ color: isActive ? 'var(--win95-success-text)' : WIN95.text }} />
                           <span className="text-[8px] font-bold block mt-0.5" style={{ color: WIN95.text }}>{theme.label}</span>
                         </button>
                       );
@@ -341,7 +363,7 @@ const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
                       <button
                         key={color.value}
                         onClick={() => updatePreference('accentColor', color.value)}
-                        className="w-6 h-6 flex items-center justify-center"
+                        className="w-7 h-7 sm:w-6 sm:h-6 flex items-center justify-center touch-manipulation"
                         style={{
                           background: color.value,
                           boxShadow: preferences.accentColor === color.value
@@ -370,7 +392,7 @@ const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
                       <button
                         key={lang.id}
                         onClick={() => updatePreference('language', lang.id)}
-                        className="px-2 py-1 text-[9px] font-bold"
+                        className="px-3 py-1.5 sm:px-2 sm:py-1 text-[9px] font-bold touch-manipulation min-h-[32px]"
                         style={{
                           background: preferences.language === lang.id ? WIN95.bgDark : WIN95.inputBg,
                           color: preferences.language === lang.id ? WIN95.highlightText : WIN95.text,
@@ -391,12 +413,12 @@ const AuthPrompt: React.FC<AuthPromptProps> = ({ onNavigate }) => {
               <div className="agent-reveal-5">
                 <button
                   onClick={handleLaunch}
-                  className="w-full flex items-center justify-center gap-2.5 px-6 py-3 text-sm font-bold generate-btn cta-glow"
+                  className="w-full flex items-center justify-center gap-2 sm:gap-2.5 px-4 sm:px-6 py-3 sm:py-4 text-sm font-bold generate-btn cta-glow min-h-[52px] touch-manipulation active:scale-[0.98] transition-transform"
                   style={{ fontFamily: font, border: 'none', cursor: 'pointer' }}
                 >
-                  <Bot className="w-5 h-5" />
-                  Launch My Workspace
-                  <ChevronRight className="w-4 h-4" />
+                  <Bot className="w-5 h-5 flex-shrink-0" />
+                  <span>Launch My Workspace</span>
+                  <ChevronRight className="w-4 h-4 flex-shrink-0" />
                 </button>
                 <p className="text-center mt-2 text-[9px]" style={{ color: WIN95.textDisabled, fontFamily: font }}>
                   You can change all of this later from the toolbar gear icon.

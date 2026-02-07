@@ -187,6 +187,7 @@ function SignInGate(): JSX.Element {
   if (!csrfReady) {
     return (
       <div 
+        className="p-4"
         style={{ 
           position: 'fixed', 
           top: 0, 
@@ -197,11 +198,14 @@ function SignInGate(): JSX.Element {
           alignItems: 'center', 
           justifyContent: 'center',
           background: 'var(--win95-teal)',
-          zIndex: 50 
+          zIndex: 50,
+          // Safe area for devices with notches
+          paddingTop: 'max(16px, env(safe-area-inset-top))',
+          paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
         }}
       >
         <div 
-          className="p-6 text-center"
+          className="p-4 sm:p-6 text-center"
           style={{
             background: 'var(--win95-bg)',
             boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), 4px 4px 8px rgba(0,0,0,0.3)'
@@ -227,6 +231,7 @@ function SignInGate(): JSX.Element {
   if (error) {
     return (
       <div 
+        className="p-4"
         style={{ 
           position: 'fixed', 
           top: 0, 
@@ -237,11 +242,14 @@ function SignInGate(): JSX.Element {
           alignItems: 'center', 
           justifyContent: 'center',
           background: 'var(--win95-teal)',
-          zIndex: 50 
+          zIndex: 50,
+          // Safe area for devices with notches
+          paddingTop: 'max(16px, env(safe-area-inset-top))',
+          paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
         }}
       >
         <div 
-          className="p-6 text-center max-w-md"
+          className="p-4 sm:p-6 text-center max-w-md mx-4"
           style={{
             background: 'var(--win95-bg)',
             boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker), 4px 4px 8px rgba(0,0,0,0.3)'
@@ -255,12 +263,12 @@ function SignInGate(): JSX.Element {
           <p className="text-[12px] font-bold mb-2" style={{ color: 'var(--win95-text)', fontFamily: 'Tahoma, "MS Sans Serif", sans-serif' }}>
             Authentication Error
           </p>
-          <p className="text-[11px] mb-4" style={{ color: 'var(--win95-text)' }}>
+          <p className="text-[11px] mb-4 break-words" style={{ color: 'var(--win95-text)' }}>
             {error}
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 text-[11px] font-bold"
+            className="px-5 py-2.5 text-[11px] font-bold touch-manipulation min-h-[44px] active:scale-[0.98] transition-transform"
             style={{
               background: 'var(--win95-bg)',
               boxShadow: 'inset 1px 1px 0 var(--win95-border-light), inset -1px -1px 0 var(--win95-border-darker)',
